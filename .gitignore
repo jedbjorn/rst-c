@@ -1,0 +1,55 @@
+## .NET build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userprefs
+*.usertasks
+.vs/
+.vscode/
+.idea/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Build artefacts
+*.pdb
+*.dll.config
+*.exe.config
+publish/
+*.binlog
+
+## RST-specific
+src/**/Resources/Profiles/*.json
+!src/**/Resources/Profiles/.gitkeep
+src/**/Resources/Users/*.json
+!src/**/Resources/Users/.gitkeep
+*.RSTdisabled
+
+## OS / editor crud
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+## WiX
+*.wixobj
+*.wixpdb
+*.msi
+*.cab
+
+## Code-signing artefacts (never commit certs/keys)
+*.pfx
+*.p12
+*.snk
+sign/
