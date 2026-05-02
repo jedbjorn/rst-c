@@ -1,11 +1,13 @@
 <Project>
 
   <!--
-    Centralised package versions. Keeps Revit-API package versions in
-    lockstep with $(RevitVersion) selected by Configuration.
+    Centralised package versions.
 
-    Note: Nice3point.Revit.Api.* packages are versioned as <RevitMajor>.x.y.
-    We use exact-major float so a `Debug R25` build resolves 2025.* etc.
+    Note: Revit API packages (Nice3point.Revit.Api.*) are NOT centrally
+    managed here, because CPM (NU1011) forbids floating versions and we
+    pick a different version per Revit major. They live inline in
+    RST.Engine.csproj inside conditional ItemGroups keyed off
+    $(RevitVersion).
   -->
 
   <PropertyGroup>
@@ -14,17 +16,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Revit API references — version floats track $(RevitVersion). -->
-    <PackageVersion Include="Nice3point.Revit.Api.RevitAPI"   Version="$(RevitVersion).*" />
-    <PackageVersion Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
-    <PackageVersion Include="Nice3point.Revit.Api.AdWindows"  Version="$(RevitVersion).*" />
-    <PackageVersion Include="Nice3point.Revit.Api.UIFramework" Version="$(RevitVersion).*" />
-
     <!-- net48 reference assemblies for cross-platform builds. -->
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
 
     <!-- JSON / model. -->
-    <PackageVersion Include="System.Text.Json" Version="8.0.4" />
+    <PackageVersion Include="System.Text.Json" Version="8.0.5" />
 
     <!-- Logging. -->
     <PackageVersion Include="Serilog"               Version="4.0.1" />
@@ -35,10 +31,10 @@
     <PackageVersion Include="System.Management"     Version="8.0.0" />
 
     <!-- Test stack. -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
-    <PackageVersion Include="xunit"                  Version="2.9.0" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="FluentAssertions"       Version="6.12.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk"     Version="17.10.0" />
+    <PackageVersion Include="xunit"                      Version="2.9.0" />
+    <PackageVersion Include="xunit.runner.visualstudio"  Version="2.8.2" />
+    <PackageVersion Include="FluentAssertions"           Version="6.12.0" />
   </ItemGroup>
 
 </Project>

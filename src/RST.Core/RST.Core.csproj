@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RST.Core — pure-managed library, no Revit dependencies.
+    Hosts the JSON profile model, validators, schema migrations, the
+    in-memory command/addin catalog, and the profile↔ribbon mapping
+    that does NOT touch Autodesk.* types.
+
+    Multi-targets so it can be consumed both by net48 (Revit 2024) and
+    net8.0-windows (Revit 2025+).
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <RootNamespace>RST.Core</RootNamespace>
+    <AssemblyName>RST.Core</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+</Project>

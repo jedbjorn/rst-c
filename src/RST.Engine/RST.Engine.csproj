@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RST.Engine — Revit-bound logic.
+
+    TargetFramework selected from $(RevitVersion) (set by Configuration in
+    Directory.Build.props):
+      RevitVersion=2024 → net48
+      RevitVersion>=2025 → net8.0-windows
+
+    Revit API package versions are pinned per Revit major below, OUTSIDE
+    central package management — CPM (NU1011) refuses floating versions.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>RST.Engine</RootNamespace>
+    <AssemblyName>RST.Engine</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PlatformTarget>x64</PlatformTarget>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <OutputType>Library</OutputType>
+    <!-- Allow Linux + macOS to build the Windows-targeted TFM (net8.0-windows). -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <!-- net48 cross-platform reference assemblies (so Linux can build). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Revit 2024 (latest verified stable on NuGet 2026-05) -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2024'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2024.3.40" PrivateAssets="all" VersionOverride="2024.3.40" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.3.40" PrivateAssets="all" VersionOverride="2024.3.40" />
+  </ItemGroup>
+
+  <!-- Revit 2025 -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2025'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.4.41" PrivateAssets="all" VersionOverride="2025.4.41" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.4.41" PrivateAssets="all" VersionOverride="2025.4.41" />
+  </ItemGroup>
+
+  <!-- Revit 2026 -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.4.0" PrivateAssets="all" VersionOverride="2026.4.0" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.4.0" PrivateAssets="all" VersionOverride="2026.4.0" />
+  </ItemGroup>
+
+  <!-- Revit 2027 -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2027'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.10" PrivateAssets="all" VersionOverride="2027.0.10" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.10" PrivateAssets="all" VersionOverride="2027.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\..\build\sign.targets" />
+
+</Project>

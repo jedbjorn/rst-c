@@ -1,0 +1,20 @@
+{
+  "id": "00000000-0000-0000-0000-000000000099",
+  "profile": "Legacy",
+  "tab": "Legacy",
+  "min_version": "0.5.0",
+  "exportDate": "2024-09-15",
+  "panelOpacity": 100,
+  "requiredAddins": [],
+  "hideRules": [],
+  "stacks": {},
+  "panels": [
+    {
+      "name": "Demo",
+      "color": "#4f8ef7",
+      "slots": [
+        { "type": "tool", "name": "Move", "commandId": "ID_BUTTON_MOVE" }
+      ]
+    }
+  ]
+}
