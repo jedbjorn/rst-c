@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "11111111-2222-3333-4444-555555555555",
+  "profile": "Minimal",
+  "tab": "RST",
+  "min_version": "0.1.0",
+  "exportDate": "2026-05-02",
+  "panelOpacity": 100,
+  "requiredAddins": [],
+  "hideRules": [],
+  "stacks": {},
+  "panels": [
+    {
+      "name": "Modify",
+      "color": "#4f8ef7",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Move",
+          "baseName": "Move",
+          "commandId": "ID_BUTTON_MOVE",
+          "sourceTab": "Modify",
+          "sourcePanel": "Modify"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "profile": "Full Studio",
+  "tab": "Studio",
+  "min_version": "0.1.0",
+  "exportDate": "2026-05-02",
+  "panelOpacity": 80,
+  "requiredAddins": [
+    {
+      "tabName": "Kinship",
+      "displayName": "Kinship",
+      "addinFile": "Kinship.addin",
+      "addinId": "12345678-1234-1234-1234-123456789abc"
+    }
+  ],
+  "hideRules": [
+    { "tab": "Architecture", "disabled": false },
+    { "tab": "Massing & Site", "disabled": true }
+  ],
+  "stacks": {
+    "Drawing": {
+      "tools": [
+        { "type": "tool", "name": "Line",       "commandId": "ID_BUTTON_LINE" },
+        { "type": "tool", "name": "Rectangle",  "commandId": "ID_BUTTON_RECTANGLE" },
+        { "type": "tool", "name": "Polygon",    "commandId": "ID_BUTTON_POLYGON" }
+      ]
+    }
+  },
+  "panels": [
+    {
+      "name": "Modify",
+      "color": "#4f8ef7",
+      "cornerRadius": 6,
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Move",
+          "baseName": "Move",
+          "commandId": "ID_BUTTON_MOVE",
+          "sourceTab": "Modify",
+          "sourcePanel": "Modify",
+          "iconFile": "pack:move"
+        },
+        {
+          "type": "tool",
+          "name": "Copy",
+          "commandId": "ID_BUTTON_COPY"
+        },
+        {
+          "type": "stack",
+          "name": "Drawing"
+        }
+      ]
+    },
+    {
+      "name": "Links",
+      "color": "#1f8a3c",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Wiki",
+          "commandId": "URL:https://wiki.example.com",
+          "iconFile": "pack:link_external"
+        },
+        {
+          "type": "tool",
+          "name": "Email IT",
+          "commandId": "URL:mailto:it@example.com",
+          "iconFile": "pack:at"
+        }
+      ]
+    }
+  ],
+  "branding": {
+    "logoFile": "branding.png",
+    "url": "https://example.com"
+  }
+}
