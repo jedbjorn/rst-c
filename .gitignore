@@ -35,6 +35,7 @@ src/**/Resources/Profiles/*.json
 src/**/Resources/Users/*.json
 !src/**/Resources/Users/.gitkeep
 *.RSTdisabled
+!src/RST.Tests/Fixtures/**/*.RSTdisabled
 
 ## OS / editor crud
 .DS_Store

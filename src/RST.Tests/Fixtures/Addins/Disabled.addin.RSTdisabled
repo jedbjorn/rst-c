@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Disabled By RST</Name>
+    <Assembly>C:\Some\Path\Disabled.dll</Assembly>
+    <AddInId>33333333-3333-3333-3333-333333333333</AddInId>
+    <FullClassName>Disabled.App</FullClassName>
+    <VendorId>X</VendorId>
+    <VendorDescription>X</VendorDescription>
+  </AddIn>
+</RevitAddIns>

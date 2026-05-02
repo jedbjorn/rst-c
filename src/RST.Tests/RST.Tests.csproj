@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <None Update="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\**\*.addin" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\**\*.addin.RSTdisabled" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
