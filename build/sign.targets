@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    build/sign.targets — RST-013 hook point.
+
+    Reserved for `signtool` invocations on the produced DLLs and the
+    final MSI. No-op until the release pipeline (RST-013) wires in a
+    real cert source.
+
+    To activate, set in CI:
+       /p:SignAssemblies=true
+       /p:SignToolPath=C:\Path\to\signtool.exe
+       /p:SignCertThumbprint=...
+       /p:SignTimestampUrl=http://timestamp.digicert.com
+  -->
+
+  <Target Name="SignProducedAssemblies"
+          AfterTargets="AfterBuild"
+          Condition="'$(SignAssemblies)' == 'true'">
+    <Message Importance="high"
+             Text="[RST-013] Signing $(TargetFileName) — placeholder, not yet wired." />
+  </Target>
+
+</Project>

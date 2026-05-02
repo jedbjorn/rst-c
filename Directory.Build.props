@@ -1,0 +1,70 @@
+<Project>
+
+  <!--
+    RST-C — root build properties.
+
+    Picks a Revit major version per MSBuild Configuration following the
+    Nice3point convention: Configuration="Debug R25" → RevitVersion=2025.
+    Each project then conditionally selects TargetFramework + Revit API
+    package versions from $(RevitVersion).
+  -->
+
+  <PropertyGroup>
+    <Configurations>Debug R24;Debug R25;Debug R26;Debug R27;Release R24;Release R25;Release R26;Release R27</Configurations>
+    <Configuration Condition="'$(Configuration)' == ''">Debug R25</Configuration>
+  </PropertyGroup>
+
+  <!-- Revit version derived from Configuration name (R24/R25/R26/R27). -->
+  <PropertyGroup>
+    <RevitVersion Condition="$(Configuration.Contains('R24'))">2024</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R25'))">2025</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R26'))">2026</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R27'))">2027</RevitVersion>
+  </PropertyGroup>
+
+  <!-- Target framework: Revit 2024 → net48, 2025+ → net8.0-windows. -->
+  <PropertyGroup>
+    <RevitTargetFramework Condition="'$(RevitVersion)' == '2024'">net48</RevitTargetFramework>
+    <RevitTargetFramework Condition="'$(RevitVersion)' != '2024'">net8.0-windows</RevitTargetFramework>
+  </PropertyGroup>
+
+  <!-- Configuration name without the "R##" suffix (Debug/Release). -->
+  <PropertyGroup>
+    <PlainConfiguration Condition="$(Configuration.StartsWith('Debug'))">Debug</PlainConfiguration>
+    <PlainConfiguration Condition="$(Configuration.StartsWith('Release'))">Release</PlainConfiguration>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>RST-C</Product>
+    <Company>Designs/OS</Company>
+    <Authors>jedbjorn</Authors>
+    <Copyright>© 2026 Designs/OS</Copyright>
+    <Version>0.1.0-alpha</Version>
+    <RepositoryUrl>https://github.com/jedbjorn/RST-C</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1701</WarningsNotAsErrors>
+    <NoWarn>1591</NoWarn>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <!-- Code-signing hooks (no-ops in dev — wired up in RST-013). -->
+  <PropertyGroup>
+    <SignAssemblies Condition="'$(SignAssemblies)' == ''">false</SignAssemblies>
+    <SignTimestampUrl Condition="'$(SignTimestampUrl)' == ''">http://timestamp.digicert.com</SignTimestampUrl>
+  </PropertyGroup>
+
+  <!-- Disable common Revit-side analyzers/warnings that conflict with the
+       Revit API surface (e.g. CA1416 platform-compat, IDE0290 primary ctors). -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1416;IDE0290;IDE0028</NoWarn>
+  </PropertyGroup>
+
+</Project>
