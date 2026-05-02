@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Acme Tools</Name>
+    <Assembly>C:\Program Files\Acme\Revit 2024\AcmeTools.dll</Assembly>
+    <AddInId>11111111-1111-1111-1111-111111111111</AddInId>
+    <FullClassName>Acme.RevitAddin.App</FullClassName>
+    <VendorId>ACME</VendorId>
+    <VendorDescription>Acme Corp, https://acme.example.com</VendorDescription>
+  </AddIn>
+</RevitAddIns>

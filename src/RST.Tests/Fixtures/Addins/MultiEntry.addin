@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>MultiEntry App</Name>
+    <Assembly>C:\Vendor\MultiEntry\App.dll</Assembly>
+    <AddInId>22222222-2222-2222-2222-222222222222</AddInId>
+    <FullClassName>MultiEntry.App</FullClassName>
+    <VendorId>VND</VendorId>
+    <VendorDescription>Vendor Inc</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Name>MultiEntry Cmd</Name>
+    <Assembly>"C:\Vendor\MultiEntry\Cmd.dll"</Assembly>
+    <AddInId>22222222-2222-2222-2222-222222222223</AddInId>
+    <FullClassName>MultiEntry.Cmd</FullClassName>
+    <Text>Run MultiEntry</Text>
+    <VendorId>VND</VendorId>
+    <VendorDescription>Vendor Inc</VendorDescription>
+  </AddIn>
+</RevitAddIns>
