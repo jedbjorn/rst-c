@@ -144,7 +144,13 @@ internal static class PanelStyling
             bmp.UriSource = new Uri(Path.GetFullPath(logoAbsolutePath), UriKind.Absolute);
             bmp.CacheOption = BitmapCacheOption.OnLoad;
             bmp.EndInit();
-            try { bmp.Freeze(); } catch { /* freeze is best-effort */ }
+            // Freeze is best-effort — failure makes the bitmap mutable, which
+            // costs us cross-thread sharing and (more importantly) leaves
+            // PropertyChanged subscribers attached. Surface the cause if it
+            // ever fires so we can correlate against memory growth on rapid
+            // profile switches.
+            try { bmp.Freeze(); }
+            catch (Exception ex) { Log.Debug(ex, "PanelStyling: BitmapImage.Freeze failed for logo={Logo}", logoAbsolutePath); }
 
             var imgBrush = new ImageBrush(bmp) { Stretch = Stretch.Uniform };
             panel.CustomPanelBackground = imgBrush;
@@ -185,7 +191,8 @@ internal static class PanelStyling
         try
         {
             var fill = new SolidColorBrush(color.Value);
-            try { fill.Freeze(); } catch { /* freeze best-effort */ }
+            try { fill.Freeze(); }
+            catch (Exception ex) { Log.Debug(ex, "PanelStyling: SolidColorBrush.Freeze failed for hex={Hex}", hexColor); }
 
             var rect = new RectangleGeometry(new Rect(0, 0, 1, 1))
             {
@@ -200,7 +207,12 @@ internal static class PanelStyling
                 ViewportUnits = BrushMappingMode.RelativeToBoundingBox,
                 TileMode = TileMode.None,
             };
-            try { brush.Freeze(); } catch { /* sized brushes can't always freeze */ }
+            // DrawingBrush is the prime suspect for the live-switch leak —
+            // un-frozen Freezables retain PropertyChanged subscribers, which
+            // AdWindows' visual cache attaches to. If this Freeze silently
+            // failed we'd never know. Log at Debug so stress runs surface it.
+            try { brush.Freeze(); }
+            catch (Exception ex) { Log.Debug(ex, "PanelStyling: DrawingBrush.Freeze failed for hex={Hex}", hexColor); }
             return brush;
         }
         catch (Exception ex)
