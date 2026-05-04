@@ -491,6 +491,55 @@
     gap: 6px;
     justify-content: flex-end;
   }
+
+  /* ── HEADER BRANDING BUTTON + POPOVER ── */
+  .branding-anchor { position: relative; display: flex; align-items: center; }
+  .branding-anchor .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .branding-caret {
+    font-size: 8px;
+    color: var(--text3);
+  }
+  .branding-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent3);
+    flex-shrink: 0;
+  }
+  .branding-dot.empty {
+    background: transparent;
+    border: 1px solid var(--border2);
+  }
+  .branding-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    padding: 14px 16px;
+    width: 320px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .branding-popover[hidden] { display: none; }
+  .branding-popover .prop-section-label { margin-bottom: 0; }
+  .branding-popover .prop-row { margin-bottom: 0; }
+  .branding-popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
   .stack-card {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -737,6 +786,31 @@
     <label>Name</label>
     <input id="profileNameInput" type="text" placeholder="Profile name" oninput="profile.profile = this.value">
   </div>
+  <div class="branding-anchor">
+    <button id="brandingBtn" class="btn" onclick="toggleBrandingPopover(event)" title="Tab branding (logo + URL)">
+      <span id="brandingBtnDot" class="branding-dot empty"></span>
+      <span>Branding</span>
+      <span class="branding-caret">▾</span>
+    </button>
+    <div id="brandingPopover" class="branding-popover" hidden>
+      <div class="prop-section-label">Tab Branding</div>
+      <div class="prop-row">
+        <label>Logo</label>
+        <div class="logo-row">
+          <button class="btn" onclick="pickLogo()">Pick…</button>
+          <button class="btn ghost" onclick="clearLogo()" title="Clear logo">×</button>
+          <span id="propLogoName" class="logo-name empty">(none)</span>
+        </div>
+      </div>
+      <div class="prop-row">
+        <label>URL</label>
+        <input id="propBrandingUrl" type="text" placeholder="https://example.com" oninput="setBrandingUrl(this.value)">
+      </div>
+      <div class="branding-popover-actions">
+        <button class="btn primary" onclick="closeBrandingPopover()">Done</button>
+      </div>
+    </div>
+  </div>
   <div class="header-field">
     <label>Tab</label>
     <input id="profileTabInput" type="text" placeholder="Ribbon tab" oninput="profile.tab = this.value; document.getElementById('previewTabPill').textContent = this.value || '—'">
@@ -790,22 +864,6 @@
             <input id="propOpacity" type="range" min="10" max="100" step="5" value="100" oninput="setOpacity(this.value)">
             <span class="opacity-val" id="propOpacityVal">100</span>
           </div>
-        </div>
-      </div>
-
-      <div class="prop-section">
-        <div class="prop-section-label">Branding</div>
-        <div class="prop-row">
-          <label>Logo</label>
-          <div class="logo-row">
-            <button class="btn" onclick="pickLogo()">Pick…</button>
-            <button class="btn ghost" onclick="clearLogo()" title="Clear logo">×</button>
-            <span id="propLogoName" class="logo-name empty">(none)</span>
-          </div>
-        </div>
-        <div class="prop-row">
-          <label>URL</label>
-          <input id="propBrandingUrl" type="text" placeholder="https://example.com" oninput="setBrandingUrl(this.value)">
         </div>
       </div>
 
@@ -992,6 +1050,46 @@
       nameEl.textContent = '(none)';
       nameEl.classList.add('empty');
     }
+    // Header button dot — filled when any branding is set, hollow otherwise.
+    var dot = document.getElementById('brandingBtnDot');
+    if (dot) {
+      var isSet = !!(b.logoFile || b.url);
+      dot.classList.toggle('empty', !isSet);
+    }
+  }
+
+  function toggleBrandingPopover(e) {
+    if (e) e.stopPropagation();
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    if (pop.hasAttribute('hidden')) openBrandingPopover();
+    else closeBrandingPopover();
+  }
+
+  function openBrandingPopover() {
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    pop.removeAttribute('hidden');
+    syncBranding();
+    // Defer so the click that opened it doesn't immediately close it.
+    setTimeout(function() {
+      document.addEventListener('mousedown', brandingDismissHandler, true);
+    }, 0);
+  }
+
+  function closeBrandingPopover() {
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    pop.setAttribute('hidden', '');
+    document.removeEventListener('mousedown', brandingDismissHandler, true);
+  }
+
+  function brandingDismissHandler(e) {
+    var pop = document.getElementById('brandingPopover');
+    var btn = document.getElementById('brandingBtn');
+    if (!pop || pop.hasAttribute('hidden')) return;
+    if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+    closeBrandingPopover();
   }
 
   function ensureBranding() {
