@@ -425,6 +425,121 @@
     min-width: 32px;
     text-align: right;
   }
+  .prop-row .color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .prop-row input[type="color"] {
+    width: 40px;
+    height: 28px;
+    padding: 2px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .prop-row .color-hex {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: lowercase;
+  }
+  .prop-row .logo-row { display: flex; align-items: center; gap: 6px; }
+  .prop-row .logo-name {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .prop-row .logo-name.empty { color: var(--text3); font-style: italic; }
+  .prop-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 4px 0;
+  }
+  .url-editor {
+    margin-top: 6px;
+    padding: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .url-editor input[type="text"] {
+    width: 100%;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .url-editor input:focus { border-color: var(--accent); }
+  .url-editor .url-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  /* ── HEADER BRANDING BUTTON + POPOVER ── */
+  .branding-anchor { position: relative; display: flex; align-items: center; }
+  .branding-anchor .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .branding-caret {
+    font-size: 8px;
+    color: var(--text3);
+  }
+  .branding-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent3);
+    flex-shrink: 0;
+  }
+  .branding-dot.empty {
+    background: transparent;
+    border: 1px solid var(--border2);
+  }
+  .branding-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    padding: 14px 16px;
+    width: 320px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .branding-popover[hidden] { display: none; }
+  .branding-popover .prop-section-label { margin-bottom: 0; }
+  .branding-popover .prop-row { margin-bottom: 0; }
+  .branding-popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
   .stack-card {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -667,6 +782,31 @@
   <div class="header-sep"></div>
   <div class="window-title">Profile Builder</div>
   <div class="header-sep"></div>
+  <div class="branding-anchor">
+    <button id="brandingBtn" class="btn" onclick="toggleBrandingPopover(event)" title="Tab branding (logo + URL)">
+      <span id="brandingBtnDot" class="branding-dot empty"></span>
+      <span>Branding</span>
+      <span class="branding-caret">▾</span>
+    </button>
+    <div id="brandingPopover" class="branding-popover" hidden>
+      <div class="prop-section-label">Tab Branding</div>
+      <div class="prop-row">
+        <label>Logo</label>
+        <div class="logo-row">
+          <button class="btn" onclick="pickLogo()">Pick…</button>
+          <button class="btn ghost" onclick="clearLogo()" title="Clear logo">×</button>
+          <span id="propLogoName" class="logo-name empty">(none)</span>
+        </div>
+      </div>
+      <div class="prop-row">
+        <label>URL</label>
+        <input id="propBrandingUrl" type="text" placeholder="https://example.com" oninput="setBrandingUrl(this.value)">
+      </div>
+      <div class="branding-popover-actions">
+        <button class="btn primary" onclick="closeBrandingPopover()">Done</button>
+      </div>
+    </div>
+  </div>
   <div class="header-field">
     <label>Name</label>
     <input id="profileNameInput" type="text" placeholder="Profile name" oninput="profile.profile = this.value">
@@ -727,7 +867,14 @@
         </div>
       </div>
 
-      <div class="prop-section">
+      <div class="prop-section" id="selectedPanelSection">
+        <div class="prop-section-label">Selected Panel</div>
+        <div id="selectedPanelBody">
+          <div class="prop-empty">No panel selected.</div>
+        </div>
+      </div>
+
+      <div class="prop-section" id="stacksSection">
         <div class="prop-section-label" style="display:flex;justify-content:space-between;align-items:center">
           <span>Stacks</span>
           <button class="btn icon" onclick="addStack()">+ New</button>
@@ -752,6 +899,13 @@
 <div class="toast" id="toast"></div>
 
 <script>
+  // ── FEATURE FLAGS ────────────────────────────────────────────────────────────
+  // Stacks: model + serializer + RibbonBuilder all stay live, so existing
+  // profiles with stack slots still load/save/render. Only the *authoring*
+  // surfaces (right-pane Stacks section, drop-into-stack target) are hidden
+  // when this is false. Flip back to true when stacks come back.
+  var STACKS_ENABLED = false;
+
   // ── PROFILE STATE ────────────────────────────────────────────────────────────
   // Mirrors the on-disk JSON shape (RST.Core.Profiles.Profile) — bridge
   // round-trips this verbatim through save_profile / export_profile.
@@ -804,7 +958,11 @@
   }
 
   function bootAfterBridge() {
-    rstLog('info', 'builder boot', { mode: mode, editId: editProfileId, editName: editProfileName });
+    rstLog('info', 'builder boot', { mode: mode, editId: editProfileId, editName: editProfileName, stacksEnabled: STACKS_ENABLED });
+    if (!STACKS_ENABLED) {
+      var stacksSection = document.getElementById('stacksSection');
+      if (stacksSection) stacksSection.style.display = 'none';
+    }
 
     // Catalog first (left pane). Then if editing, fetch and load the
     // existing profile into state.
@@ -877,6 +1035,104 @@
     var op = profile.panelOpacity != null ? profile.panelOpacity : 100;
     document.getElementById('propOpacity').value = op;
     document.getElementById('propOpacityVal').textContent = op;
+    syncBranding();
+  }
+
+  // ── BRANDING ────────────────────────────────────────────────────────────────
+  function syncBranding() {
+    var b = profile.branding || {};
+    document.getElementById('propBrandingUrl').value = b.url || '';
+    var nameEl = document.getElementById('propLogoName');
+    if (b.logoFile) {
+      nameEl.textContent = b.logoFile;
+      nameEl.classList.remove('empty');
+    } else {
+      nameEl.textContent = '(none)';
+      nameEl.classList.add('empty');
+    }
+    // Header button dot — filled when any branding is set, hollow otherwise.
+    var dot = document.getElementById('brandingBtnDot');
+    if (dot) {
+      var isSet = !!(b.logoFile || b.url);
+      dot.classList.toggle('empty', !isSet);
+    }
+  }
+
+  function toggleBrandingPopover(e) {
+    if (e) e.stopPropagation();
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    if (pop.hasAttribute('hidden')) openBrandingPopover();
+    else closeBrandingPopover();
+  }
+
+  function openBrandingPopover() {
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    pop.removeAttribute('hidden');
+    syncBranding();
+    // Defer so the click that opened it doesn't immediately close it.
+    setTimeout(function() {
+      document.addEventListener('mousedown', brandingDismissHandler, true);
+    }, 0);
+  }
+
+  function closeBrandingPopover() {
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    pop.setAttribute('hidden', '');
+    document.removeEventListener('mousedown', brandingDismissHandler, true);
+  }
+
+  function brandingDismissHandler(e) {
+    var pop = document.getElementById('brandingPopover');
+    var btn = document.getElementById('brandingBtn');
+    if (!pop || pop.hasAttribute('hidden')) return;
+    if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+    closeBrandingPopover();
+  }
+
+  function ensureBranding() {
+    if (!profile.branding) profile.branding = { logoFile: null, url: null };
+    return profile.branding;
+  }
+
+  function pruneBranding() {
+    var b = profile.branding;
+    if (!b) return;
+    if (!b.logoFile && !b.url) profile.branding = null;
+  }
+
+  function setBrandingUrl(v) {
+    var trimmed = (v || '').trim();
+    if (trimmed) ensureBranding().url = trimmed;
+    else if (profile.branding) profile.branding.url = null;
+    pruneBranding();
+  }
+
+  function pickLogo() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    window.pywebview.api.pick_logo_file().then(function(result) {
+      if (!result || !result.ok) {
+        if (result && result.error && result.error !== 'cancelled') {
+          showToast('Logo pick failed: ' + result.error, 'err');
+        }
+        return;
+      }
+      ensureBranding().logoFile = result.fileName;
+      rstLog('info', 'builder: logo picked', { fileName: result.fileName });
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: pick_logo_file threw', { err: String(err) });
+      showToast('Logo pick failed: ' + err, 'err');
+    });
+  }
+
+  function clearLogo() {
+    if (!profile.branding) return;
+    profile.branding.logoFile = null;
+    pruneBranding();
+    syncBranding();
   }
 
   // ── CATALOG INDEX + RENDER ───────────────────────────────────────────────────
@@ -1185,6 +1441,153 @@
     renderStacks();
     renderPreview();
     syncHeader();
+    renderSelectedPanel();
+  }
+
+  // Per-panel branding pane — color, corner radius, and the URL-button
+  // editor. Re-rendered whenever the selection or the panel data changes.
+  function renderSelectedPanel() {
+    var body = document.getElementById('selectedPanelBody');
+    body.innerHTML = '';
+    if (selectedPanelIndex < 0 || selectedPanelIndex >= profile.panels.length) {
+      var stub = document.createElement('div');
+      stub.className = 'prop-empty';
+      stub.textContent = 'No panel selected.';
+      body.appendChild(stub);
+      return;
+    }
+    var panel = profile.panels[selectedPanelIndex];
+    var idx = selectedPanelIndex;
+
+    function row(labelText, control) {
+      var r = document.createElement('div');
+      r.className = 'prop-row';
+      var l = document.createElement('label');
+      l.textContent = labelText;
+      r.appendChild(l);
+      r.appendChild(control);
+      return r;
+    }
+
+    // Name (mirrors the inline panel-card name input).
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = panel.name || '';
+    nameInput.oninput = function() {
+      panel.name = this.value;
+      // Sync the inline input on the canvas card too.
+      var cards = document.querySelectorAll('.panel-card');
+      if (cards[idx]) {
+        var inline = cards[idx].querySelector('.panel-name-input');
+        if (inline) inline.value = panel.name;
+        var slotCount = cards[idx].querySelector('.panel-slot-count');
+        // count text doesn't depend on name; left intentionally
+      }
+      renderPreview();
+    };
+    body.appendChild(row('Name', nameInput));
+
+    // Color — type=color picker + hex echo.
+    var colorWrap = document.createElement('div');
+    colorWrap.className = 'color-row';
+    var colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    var initialColor = normalizeHex(panel.color) || '#4f8ef7';
+    colorInput.value = initialColor;
+    var hexLabel = document.createElement('span');
+    hexLabel.className = 'color-hex';
+    hexLabel.textContent = initialColor;
+    colorInput.oninput = function() {
+      panel.color = this.value;
+      hexLabel.textContent = this.value;
+      // Update card stripe + preview live.
+      var cards = document.querySelectorAll('.panel-card');
+      if (cards[idx]) {
+        var stripe = cards[idx].querySelector('.panel-stripe');
+        if (stripe) stripe.style.background = this.value;
+      }
+      renderPreview();
+    };
+    colorWrap.appendChild(colorInput);
+    colorWrap.appendChild(hexLabel);
+    body.appendChild(row('Color', colorWrap));
+
+    // Corner radius is no longer user-authored — pyRevit RST hardcoded
+    // PANEL_CORNER_RADIUS_PX = 5 and the C# runtime (RST-008) will do the
+    // same. Panel.CornerRadius stays in the model for round-trip fidelity
+    // with existing v1 profiles, but the builder doesn't surface it.
+
+    // URL button editor — collapsed by default; toggled open via button.
+    var urlSection = document.createElement('div');
+    urlSection.className = 'prop-row';
+    var urlLabel = document.createElement('label');
+    urlLabel.textContent = 'URL Buttons';
+    urlSection.appendChild(urlLabel);
+    var urlBtn = document.createElement('button');
+    urlBtn.className = 'btn';
+    urlBtn.textContent = '+ URL Button';
+    urlBtn.onclick = function() {
+      if (urlSection.querySelector('.url-editor')) return;
+      urlSection.appendChild(buildUrlEditor(idx, urlSection));
+    };
+    urlSection.appendChild(urlBtn);
+    body.appendChild(urlSection);
+  }
+
+  // Inline form to add a URL slot to the given panel. Slots persist as
+  // tool-type with commandId="URL:<href>" — same shape RibbonBuilder
+  // already understands.
+  function buildUrlEditor(panelIdx, parent) {
+    var box = document.createElement('div');
+    box.className = 'url-editor';
+    var nameIn = document.createElement('input');
+    nameIn.type = 'text';
+    nameIn.placeholder = 'Button label';
+    var urlIn = document.createElement('input');
+    urlIn.type = 'text';
+    urlIn.placeholder = 'https://example.com';
+    var actions = document.createElement('div');
+    actions.className = 'url-actions';
+    var cancel = document.createElement('button');
+    cancel.className = 'btn ghost';
+    cancel.textContent = 'Cancel';
+    cancel.onclick = function() { parent.removeChild(box); };
+    var add = document.createElement('button');
+    add.className = 'btn primary';
+    add.textContent = 'Add';
+    add.onclick = function() {
+      var name = (nameIn.value || '').trim();
+      var url = (urlIn.value || '').trim();
+      if (!name) { showToast('Button label required.', 'err'); return; }
+      if (!url) { showToast('URL required.', 'err'); return; }
+      profile.panels[panelIdx].slots.push({
+        type: 'tool',
+        name: name,
+        commandId: 'URL:' + url,
+      });
+      rstLog('info', 'builder: url button added', { panelIdx: panelIdx, name: name, url: url });
+      parent.removeChild(box);
+      renderCanvas();
+    };
+    actions.appendChild(cancel);
+    actions.appendChild(add);
+    box.appendChild(nameIn);
+    box.appendChild(urlIn);
+    box.appendChild(actions);
+    setTimeout(function() { nameIn.focus(); }, 0);
+    return box;
+  }
+
+  // <input type="color"> rejects shorthand (#abc) and uppercase variants;
+  // canonicalise so the picker initialises to the panel's current color
+  // even when the JSON used a shorthand or all-caps form.
+  function normalizeHex(v) {
+    if (!v) return null;
+    var s = String(v).trim().toLowerCase();
+    var m3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(s);
+    if (m3) return '#' + m3[1] + m3[1] + m3[2] + m3[2] + m3[3] + m3[3];
+    if (/^#[0-9a-f]{6}$/.test(s)) return s;
+    return null;
   }
 
   function renderPreview() {
@@ -1362,6 +1765,7 @@
       canvas.appendChild(card);
     });
     renderPreview();
+    renderSelectedPanel();
   }
 
   function makeSlotEl(panel, pIdx, slot, sIdx) {
@@ -1460,6 +1864,7 @@
   }
 
   function renderStacks() {
+    if (!STACKS_ENABLED) return;
     var list = document.getElementById('stackList');
     list.innerHTML = '';
     var names = Object.keys(profile.stacks).sort();

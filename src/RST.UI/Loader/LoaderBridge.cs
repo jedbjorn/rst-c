@@ -356,6 +356,27 @@ public class LoaderBridge
     }
 
     /// <summary>
+    /// Open a file-dialog for branding logo selection. Returns
+    /// { ok, path, fileName } on pick, { ok:false, error:"cancelled" } on cancel.
+    /// The path is the absolute filesystem path; fileName is the base name only,
+    /// suitable for storing in <c>Branding.LogoFile</c> (relative is fine — the
+    /// runtime resolver, RST-008, decides how to locate it).
+    /// </summary>
+    public string PickLogoFile()
+    {
+        LogEntry(nameof(PickLogoFile));
+        var path = FileDialogBridge.OpenImage();
+        if (string.IsNullOrEmpty(path))
+        {
+            Log.Information("Bridge.pick_logo_file: dialog cancelled");
+            return Serialize(new { ok = false, error = "cancelled" });
+        }
+        var fileName = Path.GetFileName(path);
+        Log.Information("Bridge.pick_logo_file OK: {Path} → {FileName}", path, fileName);
+        return Serialize(new { ok = true, path, fileName });
+    }
+
+    /// <summary>
     /// Browser → Serilog. Lets the WebView2-side JS write into the same
     /// rst_*.log file as everything else, so render outcomes / catches
     /// can be diagnosed without F12-ing dev tools on a live install.
