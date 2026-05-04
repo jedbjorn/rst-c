@@ -139,7 +139,7 @@ internal static class RibbonBuilder
                 var btnName = $"RST_Slot{slotIdx:D3}";
                 var pbd = new PushButtonData(
                     name: btnName,
-                    text: slot.Name,
+                    text: WrapButtonText(slot.Name),
                     assemblyName: assemblyPath,
                     className: slotClass)
                 {
@@ -174,4 +174,7 @@ internal static class RibbonBuilder
             return new SlotTarget(SlotKind.Url, commandId.Substring(4), displayName);
         return new SlotTarget(SlotKind.Command, commandId, displayName);
     }
+
+    private static string WrapButtonText(string? text) =>
+        RST.Core.Ribbon.ButtonLabel.Wrap(text);
 }
