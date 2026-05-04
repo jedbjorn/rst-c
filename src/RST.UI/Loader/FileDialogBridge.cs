@@ -30,6 +30,23 @@ internal static class FileDialogBridge
         }));
     }
 
+    public static string? OpenImage()
+    {
+        var app = Application.Current;
+        if (app is null) return null;
+
+        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "Choose Logo Image",
+                Filter = "Image Files (*.png;*.jpg;*.jpeg;*.svg;*.bmp)|*.png;*.jpg;*.jpeg;*.svg;*.bmp|All Files (*.*)|*.*",
+                Multiselect = false,
+            };
+            return dlg.ShowDialog() == true ? dlg.FileName : null;
+        }));
+    }
+
     public static string? SaveJson(string suggestedFileName)
     {
         var app = Application.Current;
