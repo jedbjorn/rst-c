@@ -40,6 +40,11 @@ internal static class RibbonBuilder
         try { app.CreateRibbonTab(RstTabName); }
         catch (Autodesk.Revit.Exceptions.ArgumentException) { /* tab exists — addin reload */ }
 
+        // Always register the RST tab itself so the catalog scanner
+        // doesn't surface our own Loader button (or any future RST-tab
+        // panels) as profile-buildable commands.
+        RstManagedTabs.Add(RstTabName);
+
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
         // Loader button — always present.
@@ -94,6 +99,10 @@ internal static class RibbonBuilder
                 Log.Debug("Profile tab '{TabName}' already exists", tabName);
             }
         }
+        // Register so RibbonScanner skips the profile tab — same reasoning
+        // as the RST tab: if RST built it, it shouldn't appear as catalog
+        // input on the next Loader open.
+        RstManagedTabs.Add(tabName);
 
         int slotIdx = 0;
         var skippedTooMany = new List<string>();
