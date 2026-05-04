@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RST — Profile Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #161b27;
+    --surface2: #1e2536;
+    --surface3: #242d42;
+    --border: #2a3347;
+    --border2: #3a4560;
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --heading: #f8fafc;
+    --header-h: 54px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  .window-header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .window-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    color: var(--heading);
+    text-transform: uppercase;
+  }
+  .header-sep { width: 1px; height: 22px; background: var(--border); }
+  .header-field { display: flex; align-items: center; gap: 8px; }
+  .header-field label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+  }
+  .header-field input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    min-width: 160px;
+    outline: none;
+  }
+  .header-field input:focus { border-color: var(--accent); }
+  .header-spacer { flex: 1; }
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 7px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+  }
+  .btn:hover:not(:disabled) { border-color: var(--text2); color: var(--heading); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover:not(:disabled) { background: #3b7cf5; }
+  .btn.danger {
+    background: transparent;
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  .btn.danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); border-color: var(--danger); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--text2);
+    border-color: var(--border);
+  }
+  .btn.icon {
+    padding: 4px 7px;
+    font-size: 10px;
+    min-width: 22px;
+  }
+
+  /* ── BODY 3-PANE ── */
+  .body { flex: 1; display: flex; min-height: 0; }
+  .pane {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    min-height: 0;
+    overflow: hidden;
+  }
+  .pane:last-child { border-right: none; }
+  .pane-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    flex-shrink: 0;
+    gap: 10px;
+  }
+  .pane-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+  }
+  .pane-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+  /* ── LEFT: CATALOG ── */
+  .pane.left { width: 340px; flex-shrink: 0; background: var(--surface); }
+  .catalog-search {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .catalog-search input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .catalog-search input:focus { border-color: var(--accent); }
+  .cat-tab {
+    margin-bottom: 4px;
+  }
+  .cat-tab-header, .cat-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text2);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .cat-tab-header:hover, .cat-panel-header:hover { color: var(--heading); background: var(--surface2); }
+  .cat-tab-header { font-weight: 600; color: var(--text); }
+  .cat-panel-header { padding-left: 26px; }
+  .cat-caret {
+    display: inline-block;
+    width: 9px;
+    text-align: center;
+    color: var(--text3);
+    transition: transform 0.1s;
+  }
+  .cat-tab.collapsed > .cat-tab-children,
+  .cat-panel.collapsed > .cat-panel-children { display: none; }
+  .cat-tab.collapsed > .cat-tab-header > .cat-caret,
+  .cat-panel.collapsed > .cat-panel-header > .cat-caret { transform: rotate(-90deg); }
+  .cat-cmd-count {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+  }
+  .cat-cmd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px 4px 42px;
+    cursor: grab;
+    color: var(--text);
+    font-size: 12px;
+    border-left: 2px solid transparent;
+  }
+  .cat-cmd:hover {
+    background: var(--surface2);
+    border-left-color: var(--accent);
+  }
+  .cat-cmd:active { cursor: grabbing; }
+  .cat-cmd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-cmd-id {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+  }
+  .cat-empty {
+    padding: 18px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+
+  /* ── CENTER: PANELS CANVAS ── */
+  .pane.center { flex: 1; background: var(--bg); min-width: 0; }
+  .canvas-wrap { padding: 16px 20px 24px; }
+  .canvas-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 32px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    margin: 16px 0;
+  }
+  .panel-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .panel-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .panel-card.drag-over {
+    border-color: var(--accent3);
+    box-shadow: 0 0 0 1px var(--accent3);
+  }
+  .panel-card.drop-before { border-top: 2px solid var(--accent3); }
+  .panel-card.drop-after  { border-bottom: 2px solid var(--accent3); }
+  .panel-stripe { height: 3px; }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: grab;
+  }
+  .panel-head:active { cursor: grabbing; }
+  .panel-name-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--heading);
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    padding: 4px 6px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .panel-name-input:focus, .panel-name-input:hover { border-color: var(--border2); background: var(--surface3); }
+  .panel-slot-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+  }
+  .panel-actions { display: flex; gap: 4px; }
+  .panel-body {
+    padding: 12px 14px;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .panel-body.empty {
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: grab;
+    transition: border-color 0.1s;
+  }
+  .slot:hover { border-color: var(--border2); }
+  .slot.drag-source { opacity: 0.4; }
+  .slot.drop-before { border-top: 2px solid var(--accent3); }
+  .slot.drop-after  { border-bottom: 2px solid var(--accent3); }
+  .slot-type {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .slot-type.tool  { color: var(--accent); border-color: rgba(79, 142, 247, 0.4); }
+  .slot-type.stack { color: var(--accent2); border-color: rgba(124, 58, 237, 0.4); }
+  .slot-type.url   { color: var(--accent3); border-color: rgba(16, 185, 129, 0.4); }
+  .slot-name-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 3px 5px;
+    border-radius: 3px;
+    outline: none;
+    min-width: 0;
+  }
+  .slot-name-input:focus { border-color: var(--border2); background: var(--surface2); }
+  .slot-cmd {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .slot-actions { display: flex; gap: 3px; flex-shrink: 0; }
+
+  /* ── RIGHT: PROPERTIES + STACKS ── */
+  .pane.right { width: 340px; flex-shrink: 0; background: var(--surface); }
+  .prop-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .prop-section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+  .prop-row { margin-bottom: 10px; }
+  .prop-row:last-child { margin-bottom: 0; }
+  .prop-row label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .prop-row input[type="text"], .prop-row input[type="number"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 9px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .prop-row input:focus { border-color: var(--accent); }
+  .prop-row .opacity-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .prop-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .prop-row .opacity-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    min-width: 32px;
+    text-align: right;
+  }
+  .stack-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+  .stack-card-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .stack-name-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--heading);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 5px;
+    border-radius: 3px;
+    outline: none;
+    min-width: 0;
+  }
+  .stack-name-input:focus, .stack-name-input:hover { border-color: var(--border2); background: var(--surface3); }
+  .stack-tool-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+  .stack-tool {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 7px;
+    background: var(--surface3);
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .stack-tool-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stack-tool-cmd {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+  }
+  .stack-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: center;
+    padding: 6px;
+  }
+  .toast {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 5px;
+    font-size: 12px;
+    z-index: 9999;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--danger); color: var(--danger); }
+  .toast.ok  { border-color: var(--accent3); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="window-header">
+  <button class="btn ghost" onclick="backToSelector()">← Back</button>
+  <div class="header-sep"></div>
+  <div class="window-title">Profile Builder</div>
+  <div class="header-sep"></div>
+  <div class="header-field">
+    <label>Name</label>
+    <input id="profileNameInput" type="text" placeholder="Profile name" oninput="profile.profile = this.value">
+  </div>
+  <div class="header-field">
+    <label>Tab</label>
+    <input id="profileTabInput" type="text" placeholder="Ribbon tab" oninput="profile.tab = this.value">
+  </div>
+  <div class="header-spacer"></div>
+  <button class="btn ghost" onclick="exportJson()">Export JSON</button>
+  <button class="btn primary" onclick="saveProfile()">Save</button>
+</div>
+
+<!-- Body: 3 panes -->
+<div class="body">
+
+  <!-- LEFT: catalog -->
+  <div class="pane left">
+    <div class="pane-header">
+      <span class="pane-label">Commands</span>
+      <span class="pane-label" id="catalogCount" style="color:var(--text3)">0</span>
+    </div>
+    <div class="catalog-search">
+      <input id="catalogSearch" type="text" placeholder="Filter…" oninput="renderCatalog()">
+    </div>
+    <div class="pane-scroll" id="catalogTree"></div>
+  </div>
+
+  <!-- CENTER: panels canvas -->
+  <div class="pane center">
+    <div class="pane-header">
+      <span class="pane-label">Panels</span>
+      <button class="btn" onclick="addPanel()">+ Add Panel</button>
+    </div>
+    <div class="pane-scroll">
+      <div class="canvas-wrap" id="canvas"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: properties + stacks -->
+  <div class="pane right">
+    <div class="pane-header">
+      <span class="pane-label">Properties</span>
+    </div>
+    <div class="pane-scroll">
+      <div class="prop-section">
+        <div class="prop-section-label">Profile</div>
+        <div class="prop-row">
+          <label>Min Revit Version</label>
+          <input id="propMinVersion" type="text" value="0.1.0" oninput="profile.min_version = this.value">
+        </div>
+        <div class="prop-row">
+          <label>Panel Opacity</label>
+          <div class="opacity-row">
+            <input id="propOpacity" type="range" min="10" max="100" step="5" value="100" oninput="setOpacity(this.value)">
+            <span class="opacity-val" id="propOpacityVal">100</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="prop-section">
+        <div class="prop-section-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Stacks</span>
+          <button class="btn icon" onclick="addStack()">+ New</button>
+        </div>
+        <div id="stackList"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── PROFILE STATE ────────────────────────────────────────────────────────────
+  // Mirrors the on-disk JSON shape (RST.Core.Profiles.Profile) — bridge
+  // round-trips this verbatim through save_profile / export_profile.
+  let profile = {
+    schemaVersion: 1,
+    id: null,
+    profile: '',
+    tab: '',
+    min_version: '0.1.0',
+    exportDate: '',
+    panelOpacity: 100,
+    requiredAddins: [],
+    hideRules: [],
+    stacks: {},
+    panels: [],
+    branding: null,
+  };
+
+  let catalog = [];                   // [{id, displayName, sourceTab, sourcePanel, ...}]
+  let catalogByTab = new Map();       // tab → Map(panel → [cmd])
+  let collapsed = new Set();          // tab/panel keys collapsed in the tree
+  let selectedPanelIndex = -1;
+  let mode = 'new';                   // 'new' | 'edit'
+  let editProfileId = null;
+  let editProfileName = null;
+
+  // Drag state — single-source-of-truth for what's being dragged. HTML5
+  // DataTransfer is too coarse for our typed payloads (catalog entry vs
+  // slot vs panel), so we keep the descriptor here and only stuff the
+  // kind tag into DataTransfer for cross-doc safety.
+  let drag = null;
+
+  // ── BOOT ─────────────────────────────────────────────────────────────────────
+  function boot() {
+    var params = new URLSearchParams(window.location.search);
+    mode = params.get('mode') === 'edit' ? 'edit' : 'new';
+    editProfileId = params.get('id') || null;
+    editProfileName = params.get('name') || null;
+
+    // Bridge is installed by the host; pywebview-shim.js wraps it in
+    // window.pywebview.api before firing pywebviewready. If the shim
+    // hasn't fired yet, wait for it.
+    if (window.pywebview && window.pywebview.api) {
+      bootAfterBridge();
+    } else {
+      window.addEventListener('pywebviewready', bootAfterBridge, { once: true });
+    }
+  }
+
+  function bootAfterBridge() {
+    // Catalog first (left pane). Then if editing, fetch and load the
+    // existing profile into state.
+    window.pywebview.api.get_catalog().then(function(cat) {
+      catalog = Array.isArray(cat) ? cat : [];
+      indexCatalog();
+      renderCatalog();
+      document.getElementById('catalogCount').textContent = catalog.length;
+    }).catch(function(err) {
+      console.error('get_catalog failed:', err);
+      catalog = [];
+      renderCatalog();
+    });
+
+    if (mode === 'edit' && (editProfileId || editProfileName)) {
+      window.pywebview.api.get_profiles().then(function(list) {
+        var found = (list || []).find(function(p) {
+          if (editProfileId && p.id === editProfileId) return true;
+          if (editProfileName && p.profile === editProfileName) return true;
+          return false;
+        });
+        if (found) loadIntoProfile(found);
+        else {
+          showToast('Profile not found — starting fresh.', 'err');
+          mode = 'new';
+        }
+        syncHeader();
+        renderAll();
+      }).catch(function(err) {
+        console.error('get_profiles failed:', err);
+        renderAll();
+      });
+    } else {
+      addPanel();   // start with one empty panel so the canvas isn't blank
+      renderAll();
+    }
+  }
+
+  function loadIntoProfile(src) {
+    // Copy in the DTO shape — `_filename` is bridge-only metadata, drop it.
+    profile.schemaVersion  = src.schemaVersion || 1;
+    profile.id             = src.id || null;
+    profile.profile        = src.profile || '';
+    profile.tab            = src.tab || '';
+    profile.min_version    = src.min_version || '0.1.0';
+    profile.exportDate     = src.exportDate || '';
+    profile.panelOpacity   = src.panelOpacity != null ? src.panelOpacity : 100;
+    profile.requiredAddins = src.requiredAddins || [];
+    profile.hideRules      = src.hideRules || [];
+    profile.stacks         = src.stacks || {};
+    profile.panels         = src.panels || [];
+    profile.branding       = src.branding || null;
+    if (profile.panels.length > 0) selectedPanelIndex = 0;
+  }
+
+  function syncHeader() {
+    document.getElementById('profileNameInput').value = profile.profile || '';
+    document.getElementById('profileTabInput').value = profile.tab || '';
+    document.getElementById('propMinVersion').value = profile.min_version || '0.1.0';
+    var op = profile.panelOpacity != null ? profile.panelOpacity : 100;
+    document.getElementById('propOpacity').value = op;
+    document.getElementById('propOpacityVal').textContent = op;
+  }
+
+  // ── CATALOG INDEX + RENDER ───────────────────────────────────────────────────
+  function indexCatalog() {
+    catalogByTab = new Map();
+    catalog.forEach(function(c) {
+      var tab = c.sourceTab || '(unknown)';
+      var panel = c.sourcePanel || '(unknown)';
+      if (!catalogByTab.has(tab)) catalogByTab.set(tab, new Map());
+      var pmap = catalogByTab.get(tab);
+      if (!pmap.has(panel)) pmap.set(panel, []);
+      pmap.get(panel).push(c);
+    });
+  }
+
+  function renderCatalog() {
+    var q = (document.getElementById('catalogSearch').value || '').toLowerCase().trim();
+    var tree = document.getElementById('catalogTree');
+    tree.innerHTML = '';
+
+    if (catalog.length === 0) {
+      tree.innerHTML = '<div class="cat-empty">No commands available.<br>Open the Loader from inside Revit to populate the catalog.</div>';
+      return;
+    }
+
+    var tabs = Array.from(catalogByTab.keys()).sort();
+    var anyMatch = false;
+
+    tabs.forEach(function(tab) {
+      var pmap = catalogByTab.get(tab);
+      var tabKey = 'tab:' + tab;
+      var tabEl = document.createElement('div');
+      tabEl.className = 'cat-tab' + (collapsed.has(tabKey) ? ' collapsed' : '');
+
+      var tabCmdCount = 0;
+      var panelEls = [];
+
+      Array.from(pmap.keys()).sort().forEach(function(panel) {
+        var cmds = pmap.get(panel);
+        var matched = q
+          ? cmds.filter(function(c) {
+              return (c.displayName && c.displayName.toLowerCase().indexOf(q) >= 0)
+                  || (c.id && c.id.toLowerCase().indexOf(q) >= 0);
+            })
+          : cmds;
+        if (matched.length === 0) return;
+
+        var pKey = 'panel:' + tab + '/' + panel;
+        var pEl = document.createElement('div');
+        pEl.className = 'cat-panel' + (collapsed.has(pKey) ? ' collapsed' : '');
+
+        var pHead = document.createElement('div');
+        pHead.className = 'cat-panel-header';
+        pHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(panel) + '</span><span class="cat-cmd-count">' + matched.length + '</span>';
+        pHead.onclick = function() { toggleCollapsed(pKey); };
+        pEl.appendChild(pHead);
+
+        var pBody = document.createElement('div');
+        pBody.className = 'cat-panel-children';
+        matched.forEach(function(c) {
+          var cmdEl = document.createElement('div');
+          cmdEl.className = 'cat-cmd';
+          cmdEl.title = c.id;
+          cmdEl.draggable = true;
+          cmdEl.innerHTML =
+            '<span class="cat-cmd-name">' + escHtml(c.displayName || c.id) + '</span>' +
+            '<span class="cat-cmd-id">' + escHtml(shortId(c.id)) + '</span>';
+          cmdEl.ondblclick = function() { addToolToSelectedPanel(c); };
+          cmdEl.ondragstart = function(e) {
+            drag = { kind: 'catalog', cmd: c };
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', 'catalog:' + c.id);
+          };
+          cmdEl.ondragend = function() { drag = null; };
+          pBody.appendChild(cmdEl);
+        });
+        pEl.appendChild(pBody);
+        panelEls.push(pEl);
+        tabCmdCount += matched.length;
+      });
+
+      if (panelEls.length === 0) return;
+      anyMatch = true;
+
+      var tHead = document.createElement('div');
+      tHead.className = 'cat-tab-header';
+      tHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(tab) + '</span><span class="cat-cmd-count">' + tabCmdCount + '</span>';
+      tHead.onclick = function() { toggleCollapsed(tabKey); };
+      tabEl.appendChild(tHead);
+
+      var tBody = document.createElement('div');
+      tBody.className = 'cat-tab-children';
+      panelEls.forEach(function(p) { tBody.appendChild(p); });
+      tabEl.appendChild(tBody);
+
+      tree.appendChild(tabEl);
+    });
+
+    if (!anyMatch && q) {
+      tree.innerHTML = '<div class="cat-empty">No matches for "' + escHtml(q) + '".</div>';
+    }
+  }
+
+  function toggleCollapsed(key) {
+    if (collapsed.has(key)) collapsed.delete(key);
+    else collapsed.add(key);
+    renderCatalog();
+  }
+
+  function shortId(id) {
+    if (!id) return '';
+    if (id.length <= 18) return id;
+    return id.substring(0, 8) + '…' + id.substring(id.length - 8);
+  }
+
+  // ── PANELS / SLOTS / STATE MUTATIONS ─────────────────────────────────────────
+  function addPanel() {
+    profile.panels.push({
+      name: 'Panel ' + (profile.panels.length + 1),
+      color: '#4f8ef7',
+      slots: [],
+    });
+    selectedPanelIndex = profile.panels.length - 1;
+    renderCanvas();
+  }
+
+  function deletePanel(idx) {
+    profile.panels.splice(idx, 1);
+    if (selectedPanelIndex >= profile.panels.length) selectedPanelIndex = profile.panels.length - 1;
+    renderCanvas();
+  }
+
+  function selectPanel(idx) {
+    selectedPanelIndex = idx;
+    renderCanvas();
+  }
+
+  function movePanel(idx, delta) {
+    var to = idx + delta;
+    if (to < 0 || to >= profile.panels.length) return;
+    var [p] = profile.panels.splice(idx, 1);
+    profile.panels.splice(to, 0, p);
+    if (selectedPanelIndex === idx) selectedPanelIndex = to;
+    else if (selectedPanelIndex === to) selectedPanelIndex = idx;
+    renderCanvas();
+  }
+
+  function addToolToSelectedPanel(cmd) {
+    if (selectedPanelIndex < 0 || selectedPanelIndex >= profile.panels.length) {
+      addPanel();
+    }
+    profile.panels[selectedPanelIndex].slots.push({
+      type: 'tool',
+      name: cmd.displayName || cmd.id,
+      commandId: cmd.id,
+      sourceTab: cmd.sourceTab || null,
+      sourcePanel: cmd.sourcePanel || null,
+    });
+    renderCanvas();
+  }
+
+  function addStackRefToSelectedPanel(stackName) {
+    if (selectedPanelIndex < 0 || selectedPanelIndex >= profile.panels.length) addPanel();
+    profile.panels[selectedPanelIndex].slots.push({
+      type: 'stack',
+      name: stackName,
+    });
+    renderCanvas();
+  }
+
+  function deleteSlot(panelIdx, slotIdx) {
+    profile.panels[panelIdx].slots.splice(slotIdx, 1);
+    renderCanvas();
+  }
+
+  function moveSlot(panelIdx, slotIdx, delta) {
+    var slots = profile.panels[panelIdx].slots;
+    var to = slotIdx + delta;
+    if (to < 0 || to >= slots.length) return;
+    var [s] = slots.splice(slotIdx, 1);
+    slots.splice(to, 0, s);
+    renderCanvas();
+  }
+
+  function setOpacity(v) {
+    profile.panelOpacity = parseInt(v, 10);
+    document.getElementById('propOpacityVal').textContent = profile.panelOpacity;
+  }
+
+  // ── STACKS ──────────────────────────────────────────────────────────────────
+  function addStack() {
+    var n = 1;
+    while (profile.stacks['Stack ' + n]) n++;
+    profile.stacks['Stack ' + n] = { tools: [] };
+    renderStacks();
+  }
+
+  function renameStack(oldName, newName) {
+    newName = (newName || '').trim();
+    if (!newName || newName === oldName) { renderStacks(); return; }
+    if (profile.stacks[newName]) {
+      showToast('Stack "' + newName + '" already exists.', 'err');
+      renderStacks();
+      return;
+    }
+    profile.stacks[newName] = profile.stacks[oldName];
+    delete profile.stacks[oldName];
+    // Rewrite any slots that reference the old name.
+    profile.panels.forEach(function(p) {
+      p.slots.forEach(function(s) {
+        if (s.type === 'stack' && s.name === oldName) s.name = newName;
+      });
+    });
+    renderStacks();
+    renderCanvas();
+  }
+
+  function deleteStack(name) {
+    if (!confirm('Delete stack "' + name + '"? Slots referencing it will also be removed.')) return;
+    delete profile.stacks[name];
+    profile.panels.forEach(function(p) {
+      p.slots = p.slots.filter(function(s) { return !(s.type === 'stack' && s.name === name); });
+    });
+    renderStacks();
+    renderCanvas();
+  }
+
+  function addToolToStack(stackName, cmd) {
+    profile.stacks[stackName].tools.push({
+      type: 'tool',
+      name: cmd.displayName || cmd.id,
+      commandId: cmd.id,
+    });
+    renderStacks();
+  }
+
+  function removeToolFromStack(stackName, toolIdx) {
+    profile.stacks[stackName].tools.splice(toolIdx, 1);
+    renderStacks();
+  }
+
+  // ── RENDER ──────────────────────────────────────────────────────────────────
+  function renderAll() {
+    renderCanvas();
+    renderStacks();
+    syncHeader();
+  }
+
+  function renderCanvas() {
+    var canvas = document.getElementById('canvas');
+    canvas.innerHTML = '';
+
+    if (profile.panels.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'canvas-empty';
+      empty.textContent = 'No panels yet. Click "+ Add Panel" to start.';
+      canvas.appendChild(empty);
+      return;
+    }
+
+    profile.panels.forEach(function(panel, pIdx) {
+      var card = document.createElement('div');
+      card.className = 'panel-card' + (pIdx === selectedPanelIndex ? ' selected' : '');
+      card.onclick = function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        selectPanel(pIdx);
+      };
+
+      // Panel-level drag = reorder among panels.
+      card.ondragover = function(e) {
+        if (!drag) return;
+        if (drag.kind === 'panel' && drag.panelIdx !== pIdx) {
+          e.preventDefault();
+          var rect = card.getBoundingClientRect();
+          var before = (e.clientY - rect.top) < rect.height / 2;
+          card.classList.toggle('drop-before', before);
+          card.classList.toggle('drop-after', !before);
+        } else if (drag.kind === 'catalog' || drag.kind === 'slot') {
+          e.preventDefault();
+          card.classList.add('drag-over');
+        }
+      };
+      card.ondragleave = function() {
+        card.classList.remove('drop-before', 'drop-after', 'drag-over');
+      };
+      card.ondrop = function(e) {
+        e.preventDefault();
+        card.classList.remove('drop-before', 'drop-after', 'drag-over');
+        if (!drag) return;
+        if (drag.kind === 'panel' && drag.panelIdx !== pIdx) {
+          var rect = card.getBoundingClientRect();
+          var before = (e.clientY - rect.top) < rect.height / 2;
+          var to = pIdx + (before ? 0 : 1);
+          var [moved] = profile.panels.splice(drag.panelIdx, 1);
+          if (drag.panelIdx < to) to--;
+          profile.panels.splice(to, 0, moved);
+          selectedPanelIndex = to;
+          renderCanvas();
+        } else if (drag.kind === 'catalog') {
+          // Drop catalog command into this panel as a tool slot.
+          profile.panels[pIdx].slots.push({
+            type: 'tool',
+            name: drag.cmd.displayName || drag.cmd.id,
+            commandId: drag.cmd.id,
+            sourceTab: drag.cmd.sourceTab || null,
+            sourcePanel: drag.cmd.sourcePanel || null,
+          });
+          selectedPanelIndex = pIdx;
+          renderCanvas();
+        } else if (drag.kind === 'slot' && drag.panelIdx !== pIdx) {
+          // Move slot to end of this panel.
+          var src = profile.panels[drag.panelIdx].slots.splice(drag.slotIdx, 1)[0];
+          profile.panels[pIdx].slots.push(src);
+          selectedPanelIndex = pIdx;
+          renderCanvas();
+        }
+      };
+
+      var stripe = document.createElement('div');
+      stripe.className = 'panel-stripe';
+      stripe.style.background = panel.color || '#4f8ef7';
+      card.appendChild(stripe);
+
+      var head = document.createElement('div');
+      head.className = 'panel-head';
+      head.draggable = true;
+      head.ondragstart = function(e) {
+        drag = { kind: 'panel', panelIdx: pIdx };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'panel:' + pIdx);
+      };
+      head.ondragend = function() {
+        drag = null;
+        document.querySelectorAll('.panel-card').forEach(function(c) {
+          c.classList.remove('drop-before', 'drop-after', 'drag-over');
+        });
+      };
+
+      var nameInput = document.createElement('input');
+      nameInput.className = 'panel-name-input';
+      nameInput.value = panel.name;
+      nameInput.onclick = function(e) { e.stopPropagation(); };
+      nameInput.oninput = function() { panel.name = this.value; };
+      head.appendChild(nameInput);
+
+      var slotCount = document.createElement('span');
+      slotCount.className = 'panel-slot-count';
+      slotCount.textContent = panel.slots.length + ' slot' + (panel.slots.length === 1 ? '' : 's');
+      head.appendChild(slotCount);
+
+      var actions = document.createElement('div');
+      actions.className = 'panel-actions';
+      actions.innerHTML = '';
+      actions.appendChild(makeBtn('▲', function() { movePanel(pIdx, -1); }, 'Move up'));
+      actions.appendChild(makeBtn('▼', function() { movePanel(pIdx, +1); }, 'Move down'));
+      actions.appendChild(makeBtn('×', function() {
+        if (confirm('Delete panel "' + panel.name + '"?')) deletePanel(pIdx);
+      }, 'Delete panel', 'danger'));
+      head.appendChild(actions);
+      card.appendChild(head);
+
+      var body = document.createElement('div');
+      body.className = 'panel-body' + (panel.slots.length === 0 ? ' empty' : '');
+      if (panel.slots.length === 0) {
+        body.textContent = 'Drop a command here, or click one in the Commands pane.';
+      } else {
+        panel.slots.forEach(function(slot, sIdx) {
+          body.appendChild(makeSlotEl(panel, pIdx, slot, sIdx));
+        });
+      }
+      card.appendChild(body);
+
+      canvas.appendChild(card);
+    });
+  }
+
+  function makeSlotEl(panel, pIdx, slot, sIdx) {
+    var el = document.createElement('div');
+    el.className = 'slot';
+    el.draggable = true;
+    el.ondragstart = function(e) {
+      drag = { kind: 'slot', panelIdx: pIdx, slotIdx: sIdx };
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'slot:' + pIdx + ':' + sIdx);
+      el.classList.add('drag-source');
+      e.stopPropagation();   // don't bubble to the panel-head drag
+    };
+    el.ondragend = function() {
+      drag = null;
+      el.classList.remove('drag-source');
+      document.querySelectorAll('.slot').forEach(function(s) {
+        s.classList.remove('drop-before', 'drop-after');
+      });
+    };
+    el.ondragover = function(e) {
+      if (!drag) return;
+      if (drag.kind === 'slot' || drag.kind === 'catalog') {
+        e.preventDefault();
+        e.stopPropagation();
+        var rect = el.getBoundingClientRect();
+        var before = (e.clientY - rect.top) < rect.height / 2;
+        el.classList.toggle('drop-before', before);
+        el.classList.toggle('drop-after', !before);
+      }
+    };
+    el.ondragleave = function() {
+      el.classList.remove('drop-before', 'drop-after');
+    };
+    el.ondrop = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drop-before', 'drop-after');
+      if (!drag) return;
+      var rect = el.getBoundingClientRect();
+      var before = (e.clientY - rect.top) < rect.height / 2;
+      var insertAt = sIdx + (before ? 0 : 1);
+
+      if (drag.kind === 'catalog') {
+        var newSlot = {
+          type: 'tool',
+          name: drag.cmd.displayName || drag.cmd.id,
+          commandId: drag.cmd.id,
+          sourceTab: drag.cmd.sourceTab || null,
+          sourcePanel: drag.cmd.sourcePanel || null,
+        };
+        profile.panels[pIdx].slots.splice(insertAt, 0, newSlot);
+        selectedPanelIndex = pIdx;
+        renderCanvas();
+        return;
+      }
+
+      if (drag.kind === 'slot') {
+        if (drag.panelIdx === pIdx && drag.slotIdx === sIdx) return;
+        var src = profile.panels[drag.panelIdx].slots.splice(drag.slotIdx, 1)[0];
+        // If we removed from the same panel above the insertion point, the
+        // index shifts left by one.
+        if (drag.panelIdx === pIdx && drag.slotIdx < insertAt) insertAt--;
+        profile.panels[pIdx].slots.splice(insertAt, 0, src);
+        selectedPanelIndex = pIdx;
+        renderCanvas();
+      }
+    };
+
+    var typeTag = document.createElement('span');
+    typeTag.className = 'slot-type ' + (slot.type || 'tool');
+    typeTag.textContent = slot.type || 'tool';
+    el.appendChild(typeTag);
+
+    var nameInput = document.createElement('input');
+    nameInput.className = 'slot-name-input';
+    nameInput.value = slot.name || '';
+    nameInput.oninput = function() { slot.name = this.value; };
+    el.appendChild(nameInput);
+
+    if (slot.type === 'tool' && slot.commandId) {
+      var cmdLabel = document.createElement('span');
+      cmdLabel.className = 'slot-cmd';
+      cmdLabel.title = slot.commandId;
+      cmdLabel.textContent = shortId(slot.commandId);
+      el.appendChild(cmdLabel);
+    }
+
+    var actions = document.createElement('div');
+    actions.className = 'slot-actions';
+    actions.appendChild(makeBtn('▲', function() { moveSlot(pIdx, sIdx, -1); }, 'Move up'));
+    actions.appendChild(makeBtn('▼', function() { moveSlot(pIdx, sIdx, +1); }, 'Move down'));
+    actions.appendChild(makeBtn('×', function() { deleteSlot(pIdx, sIdx); }, 'Remove', 'danger'));
+    el.appendChild(actions);
+    return el;
+  }
+
+  function renderStacks() {
+    var list = document.getElementById('stackList');
+    list.innerHTML = '';
+    var names = Object.keys(profile.stacks).sort();
+    if (names.length === 0) {
+      list.innerHTML = '<div class="stack-empty">No stacks. Add one and drop commands into it.</div>';
+      return;
+    }
+    names.forEach(function(name) {
+      var stack = profile.stacks[name];
+      var card = document.createElement('div');
+      card.className = 'stack-card';
+
+      // Drop target — catalog commands drop into the stack tools list.
+      card.ondragover = function(e) {
+        if (drag && drag.kind === 'catalog') {
+          e.preventDefault();
+          card.style.borderColor = 'var(--accent3)';
+        }
+      };
+      card.ondragleave = function() { card.style.borderColor = ''; };
+      card.ondrop = function(e) {
+        if (!drag || drag.kind !== 'catalog') return;
+        e.preventDefault();
+        card.style.borderColor = '';
+        addToolToStack(name, drag.cmd);
+      };
+
+      var head = document.createElement('div');
+      head.className = 'stack-card-head';
+
+      var nameInput = document.createElement('input');
+      nameInput.className = 'stack-name-input';
+      nameInput.value = name;
+      nameInput.onblur = function() { renameStack(name, this.value); };
+      nameInput.onkeydown = function(e) { if (e.key === 'Enter') this.blur(); };
+      head.appendChild(nameInput);
+
+      head.appendChild(makeBtn('+ Panel', function() { addStackRefToSelectedPanel(name); }, 'Drop a stack-ref into the selected panel'));
+      head.appendChild(makeBtn('×', function() { deleteStack(name); }, 'Delete stack', 'danger'));
+      card.appendChild(head);
+
+      var toolsEl = document.createElement('div');
+      toolsEl.className = 'stack-tool-list';
+      if (stack.tools.length === 0) {
+        toolsEl.innerHTML = '<div class="stack-empty" style="padding:4px">Drop commands here.</div>';
+      } else {
+        stack.tools.forEach(function(t, ti) {
+          var tEl = document.createElement('div');
+          tEl.className = 'stack-tool';
+          tEl.innerHTML =
+            '<span class="stack-tool-name">' + escHtml(t.name) + '</span>' +
+            (t.commandId ? '<span class="stack-tool-cmd">' + escHtml(shortId(t.commandId)) + '</span>' : '');
+          var rm = makeBtn('×', function() { removeToolFromStack(name, ti); }, 'Remove', 'danger');
+          tEl.appendChild(rm);
+          toolsEl.appendChild(tEl);
+        });
+      }
+      card.appendChild(toolsEl);
+      list.appendChild(card);
+    });
+  }
+
+  // ── BRIDGE I/O ──────────────────────────────────────────────────────────────
+  function saveProfile() {
+    if (!profile.profile || !profile.profile.trim()) {
+      showToast('Profile name required.', 'err'); return;
+    }
+    if (!profile.tab || !profile.tab.trim()) {
+      showToast('Tab name required.', 'err'); return;
+    }
+    window.pywebview.api.save_profile(profile).then(function(result) {
+      if (result && result.ok) {
+        showToast('Saved as ' + result.fileName, 'ok');
+        // Stash the assigned id so subsequent saves overwrite the same row.
+        if (result.profile) {
+          profile.id = result.profile.id;
+          profile.exportDate = result.profile.exportDate;
+        }
+        mode = 'edit';
+      } else {
+        showToast('Save failed: ' + ((result && result.error) || 'unknown'), 'err');
+      }
+    }).catch(function(err) {
+      showToast('Save failed: ' + err, 'err');
+    });
+  }
+
+  function exportJson() {
+    if (!profile.profile || !profile.profile.trim()) {
+      showToast('Profile name required.', 'err'); return;
+    }
+    window.pywebview.api.export_profile(profile).then(function(result) {
+      if (result && result.ok) showToast('Exported to ' + result.path, 'ok');
+      else if (result && result.error !== 'cancelled')
+        showToast('Export failed: ' + result.error, 'err');
+    }).catch(function(err) {
+      showToast('Export failed: ' + err, 'err');
+    });
+  }
+
+  function backToSelector() {
+    window.location.href = 'profile_loader.html';
+  }
+
+  // ── HELPERS ─────────────────────────────────────────────────────────────────
+  function makeBtn(label, onClick, title, variant) {
+    var b = document.createElement('button');
+    b.className = 'btn icon' + (variant ? ' ' + variant : '');
+    b.textContent = label;
+    if (title) b.title = title;
+    b.onclick = function(e) { e.stopPropagation(); onClick(); };
+    return b;
+  }
+
+  function escHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showToast(msg, kind) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + (kind || '');
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(function() { t.className = 'toast'; }, 2400);
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
