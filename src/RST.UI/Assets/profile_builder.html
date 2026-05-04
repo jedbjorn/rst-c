@@ -620,15 +620,23 @@
   }
 
   function bootAfterBridge() {
+    rstLog('info', 'builder boot', { mode: mode, editId: editProfileId, editName: editProfileName });
+
     // Catalog first (left pane). Then if editing, fetch and load the
     // existing profile into state.
     window.pywebview.api.get_catalog().then(function(cat) {
+      var t = typeof cat;
+      var len = Array.isArray(cat) ? cat.length : null;
       catalog = Array.isArray(cat) ? cat : [];
       indexCatalog();
       renderCatalog();
       document.getElementById('catalogCount').textContent = catalog.length;
+      rstLog(catalog.length === 0 ? 'warn' : 'info',
+             'builder: get_catalog returned',
+             { type: t, length: len, kept: catalog.length, sample: catalog[0] || null });
     }).catch(function(err) {
       console.error('get_catalog failed:', err);
+      rstLog('error', 'builder: get_catalog threw', { err: String(err) });
       catalog = [];
       renderCatalog();
     });
@@ -1281,6 +1289,25 @@
     clearTimeout(showToast._h);
     showToast._h = setTimeout(function() { t.className = 'toast'; }, 2400);
   }
+
+  // Best-effort JS → Serilog. Bridge may not be ready at the moment of
+  // call (e.g. window.onerror firing before pywebviewready); guard.
+  function rstLog(level, message, payload) {
+    try {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.log_event) {
+        window.pywebview.api.log_event(level, message, payload || {});
+      }
+    } catch (e) { /* best-effort only */ }
+  }
+
+  window.addEventListener('error', function(e) {
+    rstLog('error', 'window.onerror', {
+      msg: e.message, src: e.filename, line: e.lineno, col: e.colno,
+    });
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    rstLog('error', 'unhandledrejection', { reason: String(e.reason) });
+  });
 
   document.addEventListener('DOMContentLoaded', boot);
 </script>
