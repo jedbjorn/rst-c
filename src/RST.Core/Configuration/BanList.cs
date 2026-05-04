@@ -1,7 +1,10 @@
 // BanList.cs — admin-curated denylist of catalog command Ids.
 //
-// Persisted at %AppData%\RST\bans.json. Per-Windows-user by virtue of the
-// ApplicationData path. Format:
+// Persisted next to the addin DLLs (typically
+// %AppData%\Autodesk\Revit\Addins\<ver>\<DllSubfolder>\bans.json) so a
+// single staged folder can be pasted whole into the addins dir — bans
+// travel with the install. Per-Windows-user by virtue of %AppData%;
+// per-Revit-major by virtue of the addin folder split. Format:
 //
 //   {
 //     "version": 1,
@@ -44,9 +47,30 @@ public sealed class BanList
 
     public bool Remove(string id) => _ids.Remove(id);
 
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "RST", "bans.json");
+    /// <summary>
+    /// Default location for <c>bans.json</c> — next to the BanList assembly.
+    /// In a Revit install that resolves to the addin's DLL folder
+    /// (e.g. <c>%AppData%\Autodesk\Revit\Addins\2026\RST\bans.json</c>) so
+    /// the staged folder can be pasted whole into the addins dir.
+    /// Falls back to <c>%AppData%\RST\bans.json</c> for hosted scenarios
+    /// where <see cref="System.Reflection.Assembly.Location"/> is empty
+    /// (e.g. single-file deployment or test runners).
+    /// </summary>
+    public static string DefaultPath
+    {
+        get
+        {
+            var location = typeof(BanList).Assembly.Location;
+            if (string.IsNullOrEmpty(location))
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "RST", "bans.json");
+            }
+            var dir = Path.GetDirectoryName(location)!;
+            return Path.Combine(dir, "bans.json");
+        }
+    }
 
     public static BanList Load(string path)
     {
