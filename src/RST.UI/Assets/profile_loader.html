@@ -1215,10 +1215,12 @@
   // navigations, so a plain location change is enough. Selector state is
   // re-fetched from the bridge when we return.
   function newProfile() {
+    rstLog('info', 'selector: + New Profile clicked → builder');
     window.location.href = 'profile_builder.html?mode=new';
   }
   function editSelectedProfile() {
     if (!selectedProfile) return;
+    rstLog('info', 'selector: Edit clicked → builder', { name: selectedProfile.profile, id: selectedProfile.id });
     var pid = encodeURIComponent(selectedProfile.id || '');
     var pname = encodeURIComponent(selectedProfile.profile || '');
     window.location.href = 'profile_builder.html?mode=edit&id=' + pid + '&name=' + pname;
@@ -1259,9 +1261,15 @@
 
     window.pywebview.api.load_profile(selectedProfile.profile, disableUnused, currentRevitVersion, hiddenTabs, selectedProfile.id).then(function(result) {
       if (!result.ok) {
+        rstLog('error', 'selector: load_profile bridge returned ok=false', { warnings: result.warnings });
         RSTmsgInform('Load Failed', 'Failed to load profile.');
         return;
       }
+      rstLog('info', 'selector: load_profile OK', {
+        name: selectedProfile.profile, id: selectedProfile.id,
+        restart_needed: result.restart_needed,
+        failed_disables: (result.failed_disables || []).length,
+      });
       activeProfileId = selectedProfile.id;
       activeProfileName = selectedProfile.profile;
 
@@ -1299,7 +1307,11 @@
   }
 
   function loadProfile() {
-    if (!selectedProfile) return;
+    if (!selectedProfile) {
+      rstLog('warn', 'selector: Load clicked with no selection');
+      return;
+    }
+    rstLog('info', 'selector: Load attempt', { name: selectedProfile.profile, id: selectedProfile.id });
 
     // Check 1: not-found add-ins — warn but don't block
     pendingNotFoundWarnings = [];
@@ -1475,7 +1487,25 @@
 
   // ── INIT ──────────────────────────────────────────────────────────────────────
 
+  // Best-effort JS → Serilog (RST-006a). Bridge may not be ready at every
+  // call site (e.g. window.onerror firing before pywebviewready); guard.
+  function rstLog(level, message, payload) {
+    try {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.log_event) {
+        window.pywebview.api.log_event(level, message, payload || {});
+      }
+    } catch (e) { /* best-effort only */ }
+  }
+  window.addEventListener('error', function(e) {
+    rstLog('error', 'window.onerror', { msg: e.message, src: e.filename, line: e.lineno, col: e.colno });
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    rstLog('error', 'unhandledrejection', { reason: String(e.reason) });
+  });
+
   window.addEventListener('pywebviewready', function() {
+    rstLog('info', 'selector boot');
+
     // Fetch addin lookup
     window.pywebview.api.get_addin_lookup().then(function(lookup) {
       if (lookup && typeof lookup === 'object') {
@@ -1493,6 +1523,7 @@
     // Fetch profiles
     window.pywebview.api.get_profiles().then(function(data) {
       data.forEach(function(p) { profiles.push(p); });
+      rstLog('info', 'selector: profiles fetched', { count: profiles.length });
       renderCards();
 
       // Highlight the active profile and load previous hidden tabs

@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RST.Core.Configuration;
 using RST.Core.Scanning;
+using Serilog;
 
 namespace RST.Engine.Scanning;
 
@@ -45,24 +46,66 @@ public sealed class CommandCatalog
     /// explicit instance for testing or to bypass the disk read.</param>
     public static CommandCatalog Build(string revitVersion, BanList? bans = null)
     {
-        bans ??= BanList.Load(BanList.DefaultPath);
+        Log.Debug("CommandCatalog.Build start: revit={Version}, banListProvided={Provided}",
+                  revitVersion, bans is not null);
+
+        if (bans is null)
+        {
+            var banPath = BanList.DefaultPath;
+            var banExists = System.IO.File.Exists(banPath);
+            bans = BanList.Load(banPath);
+            Log.Information("BanList: path={Path}, exists={Exists}, banned={Count}",
+                            banPath, banExists, bans.Count);
+        }
+        else
+        {
+            Log.Debug("BanList: explicit instance, banned={Count}", bans.Count);
+        }
+
+        var searchRoots = AddinSearchPaths.ForVersion(revitVersion);
+        Log.Information("AddinSearchPaths: revit={Version}, roots={Roots}",
+                        revitVersion, searchRoots);
 
         var manifests = ScanManifests(revitVersion);
+        Log.Information("ManifestScan: {Count} manifests parsed across {RootCount} roots",
+                        manifests.Count, searchRoots.Count);
+
         var assemblyToManifest = BuildAssemblyIndex(manifests);
+        Log.Debug("AssemblyIndex: {Count} unique assembly paths", assemblyToManifest.Count);
 
         var byId = new Dictionary<string, ScannedCommand>();
 
+        var builtinCount = 0;
         foreach (var c in BuiltinCommandScanner.Enumerate())
+        {
             byId[c.Id] = c;
+            builtinCount++;
+        }
+        Log.Information("BuiltinCommandScanner: {Count} commands", builtinCount);
 
+        var ribbonAdded = 0;
+        var ribbonDuplicates = 0;
         foreach (var c in RibbonScanner.Enumerate())
-            if (!byId.ContainsKey(c.Id))
-                byId[c.Id] = EnrichFromManifests(c, assemblyToManifest);
+        {
+            if (byId.ContainsKey(c.Id)) { ribbonDuplicates++; continue; }
+            byId[c.Id] = EnrichFromManifests(c, assemblyToManifest);
+            ribbonAdded++;
+        }
+        Log.Information("RibbonScanner: added {Added} commands ({Dupes} duplicate of builtin/ignored)",
+                        ribbonAdded, ribbonDuplicates);
 
-        var filtered = byId.Values
-            .Where(c => !ModeRestrictedCommandIds.Contains(c.Id))
-            .Where(c => !bans.IsBanned(c.Id))
-            .ToList();
+        var preFilter = byId.Values.Count;
+        var modeDropped = 0;
+        var bansDropped = 0;
+        var filtered = new List<ScannedCommand>(preFilter);
+        foreach (var c in byId.Values)
+        {
+            if (ModeRestrictedCommandIds.Contains(c.Id)) { modeDropped++; continue; }
+            if (bans.IsBanned(c.Id))                      { bansDropped++; continue; }
+            filtered.Add(c);
+        }
+        Log.Information("Filter pipeline: {Pre} → {Post} (mode-restricted={Mode}, banned={Banned})",
+                        preFilter, filtered.Count, modeDropped, bansDropped);
 
         return new CommandCatalog(filtered, manifests);
     }
@@ -74,10 +117,14 @@ public sealed class CommandCatalog
         var result = new List<AddinManifest>();
         foreach (var root in roots)
         {
-            foreach (var m in AddinManifestParser.ParseDirectory(root))
+            var before = result.Count;
+            foreach (var m in AddinManifestParser.ParseDirectory(
+                root,
+                onSkip: (path, ex) => Log.Warning(ex, "AddinManifestParser: skipped {Path}", path)))
             {
                 if (seen.Add(m.FilePath)) result.Add(m);
             }
+            Log.Debug("ManifestScan: {Root} → {Added} new manifests", root, result.Count - before);
         }
         return result;
     }
