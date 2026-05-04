@@ -1,8 +1,18 @@
-// BuiltinTabs.cs — Revit's stock ribbon tabs.
+// BuiltinTabs.cs — Revit's stock ribbon tabs whose COMMANDS are also
+// authoritatively enumerated by BuiltinCommandScanner (PostableCommand).
 //
 // Used by OriginClassifier (commands on these tabs are CommandOrigin.Native)
-// and by RSTify in RST-009 (these tabs are protected from hide rules unless
-// explicitly opted in).
+// and by RibbonScanner (skipped because BuiltinCommandScanner already
+// covers them — walking them would only add duplicates).
+//
+// **NOT included**:
+//   - "Add-Ins" — Revit creates this tab, but it's a HOST for third-party
+//     buttons. Their commands are NOT in PostableCommand. Skipping it
+//     here drops every addin like Kinship that lives there. (Removed in
+//     scan-addins-tab fix after FnB hit this with Kinship on first verify.)
+//   - "FormIt", "FormIt Converter", "eTransmit" — Autodesk-shipped
+//     companions, not core Revit. Their commands aren't in
+//     PostableCommand either. Walking them is correct.
 
 using System;
 using System.Collections.Generic;
@@ -15,8 +25,7 @@ public static class BuiltinTabs
     {
         "Architecture", "Structure", "Systems", "Steel", "Precast",
         "Insert", "Annotate", "Analyze", "Massing & Site", "Collaborate",
-        "View", "Manage", "Modify", "Add-Ins", "Create", "RST",
-        "FormIt", "FormIt Converter", "eTransmit",
+        "View", "Manage", "Modify", "Create", "RST",
         "Modify | Walls", "Modify | Floors", "Modify | Roofs",
         "Modify | Structural Framing", "Modify | Generic Models",
     };
