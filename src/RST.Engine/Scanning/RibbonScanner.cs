@@ -1,15 +1,22 @@
 // RibbonScanner.cs — walk the live Revit ribbon to enumerate add-in commands.
 //
-// Revit assigns each add-in pushbutton a CommandId of the form
-//   CustomCtrl_%TabName%PanelName%ButtonName
-// which the Loader feeds back to RevitCommandId.LookupCommandId() to post.
+// The Id surfaced by Autodesk.Windows.RibbonButton.Id is treated as opaque:
+// RevitCommandId.LookupCommandId(id) is the universal resolver for both
+// built-in ("ID_BUTTON_*") and add-in IDs. Empirically (Revit 2026 probe,
+// 272/272 round-trip) custom add-in IDs come back with a double prefix
+// (CustomCtrl_%CustomCtrl_%Tab%Panel%Button); LookupCommandId handles
+// either shape, so do not parse the Id — round-trip only.
 //
 // The walk also surfaces (Tab, Panel) for each button, so profiles can
 // reference a command by source location when the same DLL ships multiple
 // buttons with similar names.
 //
-// Built-in tabs are skipped — built-in commands come from
-// BuiltinCommandScanner, which has authoritative IDs.
+// Excluded tabs:
+//   - BuiltinTabs        — Revit's stock modeless tabs; their commands come
+//                          authoritatively from BuiltinCommandScanner.
+//   - ModeRestrictedTabs — contextual editing modes (family editor, in-place
+//                          model/mass, MEP zone); commands aren't usable
+//                          from the main app context, so we drop them.
 
 using System.Collections.Generic;
 using Autodesk.Windows;
@@ -28,6 +35,7 @@ internal static class RibbonScanner
         {
             if (tab is null) continue;
             if (BuiltinTabs.Contains(tab.Title)) continue;
+            if (ModeRestrictedTabs.Contains(tab.Title)) continue;
 
             foreach (var panel in tab.Panels)
             {
