@@ -420,7 +420,7 @@ public class LoaderBridge
         try
         {
             var defaults = BrandingDefaults.Load();
-            defaults.Url = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+            defaults.Url = string.IsNullOrWhiteSpace(url) ? null : url!.Trim();
             defaults.Save();
             Log.Information("Bridge.save_default_branding_url OK: urlSet={UrlSet}", !string.IsNullOrEmpty(defaults.Url));
             return Serialize(new { ok = true });

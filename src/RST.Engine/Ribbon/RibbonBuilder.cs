@@ -15,9 +15,18 @@
 // tab. Otherwise a new tab is created with the profile's name —
 // matches how users describe profiles ("my Drafting tab", "my QA tab").
 //
-// Revit can't tear down ribbon panels mid-session, so this runs once
-// per Revit launch from RstApplication.OnStartup. Profile changes
-// require a Revit restart — the Loader UI tells users this on Apply.
+// Revit can't tear down ribbon panels mid-session via UIControlledApplication,
+// so this runs once per Revit launch from RstApplication.OnStartup. Profile
+// changes require a Revit restart today — RST-020 will lift that restriction
+// by switching the profile-tab path to AdWindows-direct construction.
+//
+// RST-008: after each profile panel is created via app.CreateRibbonPanel,
+// we look up the underlying Autodesk.Windows.RibbonPanel via PanelStyling
+// .FindAwPanel and apply color + opacity + rounded corners. A leftmost
+// branding panel (logo + URL) is built directly via AdWindows and inserted
+// at index 0 of the profile tab — same pattern pyRevit's startup.py uses,
+// because Revit's UIControlledApplication has no equivalent of "create a
+// panel with no IExternalCommand backing".
 
 using System;
 using System.Collections.Generic;
@@ -25,6 +34,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using Autodesk.Revit.UI;
+using RST.Core.Configuration;
 using RST.Core.Profiles;
 using Serilog;
 
@@ -106,6 +116,7 @@ internal static class RibbonBuilder
 
         int slotIdx = 0;
         var skippedTooMany = new List<string>();
+        var alpha = Math.Max(10, Math.Min(100, profile.PanelOpacity)) / 100.0;
 
         foreach (var panelDef in profile.Panels)
         {
@@ -116,6 +127,21 @@ internal static class RibbonBuilder
                 Log.Warning(ex, "Failed to create panel '{PanelName}' on tab '{TabName}' — skipping.",
                             panelDef.Name, tabName);
                 continue;
+            }
+
+            // Reach past the Revit wrapper to colour the underlying AdWindows
+            // panel. Match by Source.Title — Revit doesn't expose the wrapped
+            // instance directly, but order is preserved so the panel we just
+            // created is now in the tab's Panels collection.
+            var awPanel = PanelStyling.FindAwPanel(tabName, panelDef.Name);
+            if (awPanel is not null)
+            {
+                PanelStyling.ApplyColor(awPanel, panelDef.Color, alpha);
+            }
+            else
+            {
+                Log.Warning("Could not locate AdWindows panel for '{PanelName}' on tab '{TabName}' — color skipped.",
+                            panelDef.Name, tabName);
             }
 
             foreach (var slot in panelDef.Slots)
@@ -166,6 +192,39 @@ internal static class RibbonBuilder
                 }
                 slotIdx++;
             }
+        }
+
+        // Branding panel — leftmost on the profile tab. Uses the per-machine
+        // default branding (RST-017) resolved against the loaded profile.
+        // Built directly via AdWindows because UIControlledApplication has
+        // no API for a non-IExternalCommand-backed panel; pyRevit's
+        // startup.py uses the same approach.
+        var (logoPath, brandingUrl) = BrandingDefaults.Resolve(profile);
+        var brandingPanel = PanelStyling.BuildBrandingPanel(logoPath, brandingUrl);
+        if (brandingPanel is not null)
+        {
+            var awTab = PanelStyling.FindAwTab(tabName);
+            if (awTab is not null)
+            {
+                try
+                {
+                    awTab.Panels.Insert(0, brandingPanel);
+                    Log.Information("Branding panel inserted at index 0 of tab '{TabName}' (logo={Logo}, urlSet={UrlSet})",
+                                    tabName, logoPath, !string.IsNullOrEmpty(brandingUrl));
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to insert branding panel on tab '{TabName}'", tabName);
+                }
+            }
+            else
+            {
+                Log.Warning("Could not locate AdWindows tab '{TabName}' to insert branding panel", tabName);
+            }
+        }
+        else
+        {
+            Log.Debug("No branding logo available — skipping branding panel for tab '{TabName}'", tabName);
         }
 
         Log.Information("RST ribbon built: profile={Name}, tab={Tab}, panels={PanelCount}, slots={SlotCount}{TooMany}",
