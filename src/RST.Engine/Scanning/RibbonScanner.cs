@@ -1,4 +1,4 @@
-// RibbonScanner.cs — walk the live Revit ribbon to enumerate add-in commands.
+// RibbonScanner.cs — walk the live Revit ribbon to enumerate commands.
 //
 // The Id surfaced by Autodesk.Windows.RibbonButton.Id is treated as opaque:
 // RevitCommandId.LookupCommandId(id) is the universal resolver for both
@@ -9,14 +9,21 @@
 //
 // The walk also surfaces (Tab, Panel) for each button, so profiles can
 // reference a command by source location when the same DLL ships multiple
-// buttons with similar names.
+// buttons with similar names. CommandCatalog uses this to ENRICH
+// BuiltinCommandScanner entries (which only carry the Id, no tab/panel)
+// — so "Wall" gets bucketed under Architecture > Build instead of
+// landing in a "(unknown)" group in the catalog tree.
 //
 // Excluded tabs:
-//   - BuiltinTabs        — Revit's stock modeless tabs; their commands come
-//                          authoritatively from BuiltinCommandScanner.
 //   - ModeRestrictedTabs — contextual editing modes (family editor, in-place
 //                          model/mass, MEP zone); commands aren't usable
 //                          from the main app context, so we drop them.
+//
+// NOT excluded any more: BuiltinTabs (Architecture, Structure, …). Walking
+// them was previously skipped to avoid duplicates of BuiltinCommandScanner
+// output, but the catalog merge handles that now and gains tab/panel
+// enrichment in exchange. Same applies to host tabs (Add-Ins, FormIt) per
+// PR #10.
 
 using System.Collections.Generic;
 using Autodesk.Windows;
@@ -38,7 +45,6 @@ internal static class RibbonScanner
 
         var tabsTotal = 0;
         var tabsWalked = 0;
-        var tabsSkippedBuiltin = 0;
         var tabsSkippedRestricted = 0;
         var buttonsEmitted = 0;
 
@@ -46,7 +52,6 @@ internal static class RibbonScanner
         {
             if (tab is null) continue;
             tabsTotal++;
-            if (BuiltinTabs.Contains(tab.Title)) { tabsSkippedBuiltin++; continue; }
             if (ModeRestrictedTabs.Contains(tab.Title)) { tabsSkippedRestricted++; continue; }
             tabsWalked++;
 
@@ -70,8 +75,8 @@ internal static class RibbonScanner
         }
 
         Log.Debug("RibbonScanner: tabsTotal={Total}, walked={Walked}, " +
-                  "skippedBuiltin={Builtin}, skippedRestricted={Restricted}, buttons={Buttons}",
-                  tabsTotal, tabsWalked, tabsSkippedBuiltin, tabsSkippedRestricted, buttonsEmitted);
+                  "skippedRestricted={Restricted}, buttons={Buttons}",
+                  tabsTotal, tabsWalked, tabsSkippedRestricted, buttonsEmitted);
     }
 
     private static IEnumerable<ScannedCommand> EnumerateItem(
