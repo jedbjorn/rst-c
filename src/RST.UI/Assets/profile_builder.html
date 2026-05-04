@@ -1122,7 +1122,7 @@
 
   function setBrandingUrl(v) {
     if (!window.pywebview || !window.pywebview.api) return;
-    var trimmed = (v || '').trim();
+    var trimmed = normalizeUrl((v || '').trim());
     window.pywebview.api.save_default_branding_url(trimmed).then(function(result) {
       if (!result || !result.ok) {
         showToast('Save URL failed: ' + ((result && result.error) || 'unknown'), 'err');
@@ -1595,7 +1595,7 @@
     add.textContent = 'Add';
     add.onclick = function() {
       var name = (nameIn.value || '').trim();
-      var url = (urlIn.value || '').trim();
+      var url = normalizeUrl((urlIn.value || '').trim());
       if (!name) { showToast('Button label required.', 'err'); return; }
       if (!url) { showToast('URL required.', 'err'); return; }
       profile.panels[panelIdx].slots.push({
@@ -1614,6 +1614,22 @@
     box.appendChild(actions);
     setTimeout(function() { nameIn.focus(); }, 0);
     return box;
+  }
+
+  // Mirrors RST.Engine.Ribbon.UrlNormalizer — coerce user input into
+  // something ShellExecute will open. Bare hostnames get https://, bare
+  // emails get mailto:, anything with a recognized scheme passes through.
+  function normalizeUrl(v) {
+    if (!v) return '';
+    var s = String(v).trim();
+    if (!s) return '';
+    var schemes = ['http://', 'https://', 'mailto:', 'ftp://', 'file://', 'tel:'];
+    var lc = s.toLowerCase();
+    for (var i = 0; i < schemes.length; i++) {
+      if (lc.indexOf(schemes[i]) === 0) return s;
+    }
+    if (s.indexOf('@') >= 0 && s.indexOf('/') < 0) return 'mailto:' + s;
+    return 'https://' + s;
   }
 
   // <input type="color"> rejects shorthand (#abc) and uppercase variants;
