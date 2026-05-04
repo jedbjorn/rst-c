@@ -52,6 +52,8 @@ public class LoaderBridge
         _revitVersion = revitVersion ?? "";
         _catalog = catalog ?? Array.Empty<ScannedCommand>();
         _closeRequested = closeRequested ?? (() => { });
+        try { BrandingDefaults.EnsureSeeded(); }
+        catch (Exception ex) { Log.Warning(ex, "BrandingDefaults.EnsureSeeded failed (non-fatal)"); }
         Log.Information("LoaderBridge ready: revit={RevitVersion}, catalog={CatalogCount} commands",
                         _revitVersion, _catalog.Count);
     }
@@ -356,24 +358,102 @@ public class LoaderBridge
     }
 
     /// <summary>
-    /// Open a file-dialog for branding logo selection. Returns
-    /// { ok, path, fileName } on pick, { ok:false, error:"cancelled" } on cancel.
-    /// The path is the absolute filesystem path; fileName is the base name only,
-    /// suitable for storing in <c>Branding.LogoFile</c> (relative is fine — the
-    /// runtime resolver, RST-008, decides how to locate it).
+    /// Open a file-dialog for company branding logo selection. The picked
+    /// file is copied to %AppData%\RST\branding.png (writer wins) and the
+    /// machine-wide default logo is updated for every profile that does
+    /// not carry its own override.
+    /// Returns { ok:true, fileName:"branding.png", source:&lt;picked-path&gt; }
+    /// on success, { ok:false, error:"cancelled" } on cancel,
+    /// { ok:false, error:&lt;msg&gt; } on copy failure.
     /// </summary>
     public string PickLogoFile()
     {
         LogEntry(nameof(PickLogoFile));
-        var path = FileDialogBridge.OpenImage();
-        if (string.IsNullOrEmpty(path))
+        var source = FileDialogBridge.OpenImage();
+        if (string.IsNullOrEmpty(source))
         {
             Log.Information("Bridge.pick_logo_file: dialog cancelled");
             return Serialize(new { ok = false, error = "cancelled" });
         }
-        var fileName = Path.GetFileName(path);
-        Log.Information("Bridge.pick_logo_file OK: {Path} → {FileName}", path, fileName);
-        return Serialize(new { ok = true, path, fileName });
+        try
+        {
+            AppDataPaths.EnsureCreated();
+            File.Copy(source, BrandingDefaults.LogoPath, overwrite: true);
+            Log.Information("Bridge.pick_logo_file OK: {Source} → {Dest}", source, BrandingDefaults.LogoPath);
+            return Serialize(new { ok = true, fileName = BrandingDefaults.LogoFileName, source });
+        }
+        catch (IOException ex)
+        {
+            Log.Error(ex, "Bridge.pick_logo_file: copy failed {Source} → {Dest}", source, BrandingDefaults.LogoPath);
+            return Serialize(new { ok = false, error = "Copy failed: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Read the per-machine company branding (logo + URL). Returns
+    /// { hasLogo:bool, fileName:"branding.png"|null, url:string|null }.
+    /// fileName is non-null only when %AppData%\RST\branding.png exists.
+    /// </summary>
+    public string LoadDefaultBranding()
+    {
+        LogEntry(nameof(LoadDefaultBranding));
+        var defaults = BrandingDefaults.Load();
+        var hasLogo = BrandingDefaults.HasLogo;
+        Log.Debug("Bridge.load_default_branding → hasLogo={HasLogo}, urlSet={UrlSet}", hasLogo, !string.IsNullOrEmpty(defaults.Url));
+        return Serialize(new
+        {
+            hasLogo,
+            fileName = hasLogo ? BrandingDefaults.LogoFileName : null,
+            url = defaults.Url,
+        });
+    }
+
+    /// <summary>
+    /// Update the per-machine branding URL. Empty/whitespace clears it.
+    /// Returns { ok:true } on success, { ok:false, error:&lt;msg&gt; } on
+    /// write failure.
+    /// </summary>
+    public string SaveDefaultBrandingUrl(string urlJson)
+    {
+        LogEntry(nameof(SaveDefaultBrandingUrl));
+        var url = Deserialize<string>(urlJson);
+        try
+        {
+            var defaults = BrandingDefaults.Load();
+            defaults.Url = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+            defaults.Save();
+            Log.Information("Bridge.save_default_branding_url OK: urlSet={UrlSet}", !string.IsNullOrEmpty(defaults.Url));
+            return Serialize(new { ok = true });
+        }
+        catch (IOException ex)
+        {
+            Log.Error(ex, "Bridge.save_default_branding_url: write failed");
+            return Serialize(new { ok = false, error = "Write failed: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Clear the per-machine logo (delete %AppData%\RST\branding.png).
+    /// Returns { ok:true } on success or when file did not exist;
+    /// { ok:false, error:&lt;msg&gt; } on delete failure.
+    /// </summary>
+    public string ClearDefaultLogo()
+    {
+        LogEntry(nameof(ClearDefaultLogo));
+        try
+        {
+            if (File.Exists(BrandingDefaults.LogoPath))
+            {
+                File.Delete(BrandingDefaults.LogoPath);
+                Log.Information("Bridge.clear_default_logo OK: deleted {Path}", BrandingDefaults.LogoPath);
+            }
+            return Serialize(new { ok = true });
+        }
+        catch (IOException ex)
+        {
+            Log.Error(ex, "Bridge.clear_default_logo: delete failed");
+            return Serialize(new { ok = false, error = "Delete failed: " + ex.Message });
+        }
     }
 
     /// <summary>

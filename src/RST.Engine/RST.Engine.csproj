@@ -72,6 +72,17 @@
     <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
   </ItemGroup>
 
+  <!--
+    Bundled default branding — vendored from the pyRevit-era RST tab.
+    BrandingDefaults.EnsureSeeded copies this to %AppData%\RST\branding.png
+    on first launch when no per-machine logo exists yet.
+  -->
+  <ItemGroup>
+    <Content Include="Assets\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <Import Project="..\..\build\sign.targets" />
 
 </Project>
