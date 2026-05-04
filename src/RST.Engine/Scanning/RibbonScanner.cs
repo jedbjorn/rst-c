@@ -28,6 +28,7 @@
 using System.Collections.Generic;
 using Autodesk.Windows;
 using RST.Core.Scanning;
+using RST.Engine.Ribbon;
 using Serilog;
 
 namespace RST.Engine.Scanning;
@@ -46,6 +47,7 @@ internal static class RibbonScanner
         var tabsTotal = 0;
         var tabsWalked = 0;
         var tabsSkippedRestricted = 0;
+        var tabsSkippedRst = 0;
         var buttonsEmitted = 0;
 
         foreach (var tab in ribbon.Tabs)
@@ -53,6 +55,10 @@ internal static class RibbonScanner
             if (tab is null) continue;
             tabsTotal++;
             if (ModeRestrictedTabs.Contains(tab.Title)) { tabsSkippedRestricted++; continue; }
+            // RST-managed tabs (the RST tab itself + the active profile's tab,
+            // if any). RST built them this session, so reading them back
+            // would surface our own buttons as profile-buildable commands.
+            if (RstManagedTabs.Contains(tab.Title))     { tabsSkippedRst++; continue; }
             tabsWalked++;
 
             var perTab = 0;
@@ -75,8 +81,8 @@ internal static class RibbonScanner
         }
 
         Log.Debug("RibbonScanner: tabsTotal={Total}, walked={Walked}, " +
-                  "skippedRestricted={Restricted}, buttons={Buttons}",
-                  tabsTotal, tabsWalked, tabsSkippedRestricted, buttonsEmitted);
+                  "skippedRestricted={Restricted}, skippedRst={Rst}, buttons={Buttons}",
+                  tabsTotal, tabsWalked, tabsSkippedRestricted, tabsSkippedRst, buttonsEmitted);
     }
 
     private static IEnumerable<ScannedCommand> EnumerateItem(
