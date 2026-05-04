@@ -2,19 +2,24 @@
 //
 // Sources, in priority order (first wins on Id collision):
 //   1. BuiltinCommandScanner — PostableCommand-derived "ID_BUTTON_*" entries.
-//   2. RibbonScanner         — live ribbon walk for add-in pushbuttons
-//                              ("CustomCtrl_%Tab%Panel%Button"). Per-button
-//                              entries get enriched with AssemblyPath/AddinFile
-//                              by joining against the manifest scan via
-//                              tab title.
+//   2. RibbonScanner         — live ribbon walk for add-in pushbuttons.
+//                              Per-button entries get enriched with
+//                              AssemblyPath/AddinFile by joining against
+//                              the manifest scan via tab title.
 //   3. AddinManifestParser   — XML scan; supplies fallback entries for add-ins
 //                              that declare commands without a visible ribbon
 //                              presence (e.g. zero-doc commands).
+//
+// Filter pipeline (applied after merge):
+//   raw → drop ModeRestrictedCommandIds (hard, code-defined)
+//       → drop BanList entries (admin-curated, %AppData%\RST\bans.json)
+//       → catalog
 //
 // The catalog is the only surface RST-004 (Loader) talks to.
 
 using System.Collections.Generic;
 using System.Linq;
+using RST.Core.Configuration;
 using RST.Core.Scanning;
 
 namespace RST.Engine.Scanning;
@@ -34,8 +39,14 @@ public sealed class CommandCatalog
     /// Build the catalog from the live Revit session. Must be called from the
     /// Revit UI thread (typically during OnStartup or first ribbon use).
     /// </summary>
-    public static CommandCatalog Build(string revitVersion)
+    /// <param name="revitVersion">Revit major version (e.g. "2026").</param>
+    /// <param name="bans">Admin-curated denylist. When null, loads from the
+    /// default per-user path (<see cref="BanList.DefaultPath"/>); pass an
+    /// explicit instance for testing or to bypass the disk read.</param>
+    public static CommandCatalog Build(string revitVersion, BanList? bans = null)
     {
+        bans ??= BanList.Load(BanList.DefaultPath);
+
         var manifests = ScanManifests(revitVersion);
         var assemblyToManifest = BuildAssemblyIndex(manifests);
 
@@ -48,7 +59,12 @@ public sealed class CommandCatalog
             if (!byId.ContainsKey(c.Id))
                 byId[c.Id] = EnrichFromManifests(c, assemblyToManifest);
 
-        return new CommandCatalog(byId.Values.ToList(), manifests);
+        var filtered = byId.Values
+            .Where(c => !ModeRestrictedCommandIds.Contains(c.Id))
+            .Where(c => !bans.IsBanned(c.Id))
+            .ToList();
+
+        return new CommandCatalog(filtered, manifests);
     }
 
     private static List<AddinManifest> ScanManifests(string revitVersion)
