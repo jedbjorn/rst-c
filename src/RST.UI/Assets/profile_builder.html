@@ -181,6 +181,18 @@
   }
   .cat-tab-header:hover, .cat-panel-header:hover { color: var(--heading); background: var(--surface2); }
   .cat-tab-header { font-weight: 600; color: var(--text); }
+  .cat-supertab > .cat-tab-header {
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  /* When the Autodesk Native supertab is open, indent its inner tabs so
+     the nesting reads visually. */
+  .cat-supertab > .cat-tab-children > .cat-tab > .cat-tab-header { padding-left: 22px; }
+  .cat-supertab > .cat-tab-children > .cat-tab > .cat-tab-children > .cat-panel > .cat-panel-header { padding-left: 38px; }
+  .cat-supertab > .cat-tab-children > .cat-tab > .cat-tab-children > .cat-panel > .cat-panel-children > .cat-cmd { padding-left: 54px; }
   .cat-panel-header { padding-left: 26px; }
   .cat-caret {
     display: inline-block;
@@ -759,8 +771,10 @@
   };
 
   let catalog = [];                   // [{id, displayName, sourceTab, sourcePanel, ...}]
-  let catalogByTab = new Map();       // tab → Map(panel → [cmd])
+  let nativeByTab = new Map();        // origin=Native:    tab → Map(panel → [cmd])
+  let otherByTab  = new Map();        // origin=non-Native: tab → Map(panel → [cmd])
   let collapsed = new Set();          // tab/panel keys collapsed in the tree
+  let nativeBundleOpen = false;       // user toggled the Autodesk Native supertab open?
   let selectedPanelIndex = -1;
   let mode = 'new';                   // 'new' | 'edit'
   let editProfileId = null;
@@ -867,25 +881,103 @@
 
   // ── CATALOG INDEX + RENDER ───────────────────────────────────────────────────
   function indexCatalog() {
-    catalogByTab = new Map();
+    nativeByTab = new Map();
+    otherByTab  = new Map();
     catalog.forEach(function(c) {
-      // Most commands carry sourceTab from the ribbon walk (or host-tab
-      // promotion in PR #11). The minority that don't are PostableCommand
-      // entries with no ribbon presence — bucket those under
-      // "Revit Built-in" rather than a generic "(unknown)".
-      var tab = c.sourceTab
-        || (c.origin === 'Native' ? 'Revit Built-in' : '(unknown)');
+      // Bucket-1 (native): commands whose origin is Native — i.e., they
+      // came from BuiltinCommandScanner walking PostableCommand. After
+      // the headless filter (PR #16), every native here has both
+      // sourceTab and sourcePanel from the ribbon walk's enrichment.
+      // Grouped together under the "Autodesk Native" supertab so the
+      // tree isn't dominated by 20+ Revit tabs.
+      //
+      // Bucket-2 (other): everything else — third-party addins
+      // (Kinship, Enscape, …) and host-tab-promoted vendor panels.
+      // Surfaced at the top level as one entry per vendor.
+      var bucket = c.origin === 'Native' ? nativeByTab : otherByTab;
+      var tab = c.sourceTab || '(unknown)';
       var panel = c.sourcePanel || '(unknown)';
-      if (!catalogByTab.has(tab)) catalogByTab.set(tab, new Map());
-      var pmap = catalogByTab.get(tab);
+      if (!bucket.has(tab)) bucket.set(tab, new Map());
+      var pmap = bucket.get(tab);
       if (!pmap.has(panel)) pmap.set(panel, []);
       pmap.get(panel).push(c);
     });
-    var panelCount = 0;
-    catalogByTab.forEach(function(pmap) { panelCount += pmap.size; });
     rstLog('info', 'builder: catalog indexed', {
-      total: catalog.length, tabs: catalogByTab.size, panels: panelCount,
+      total: catalog.length,
+      nativeTabs: nativeByTab.size,
+      otherTabs:  otherByTab.size,
     });
+  }
+
+  // Build a single .cat-tab DOM element for one (tab, pmap, query) tuple.
+  // Returns { element, count } when the tab has at least one matched
+  // command, or null when fully filtered out by the search query.
+  function buildTabEl(tab, pmap, q) {
+    var tabKey = 'tab:' + tab;
+    var tabEl = document.createElement('div');
+    tabEl.className = 'cat-tab' + (collapsed.has(tabKey) ? ' collapsed' : '');
+
+    var tabCmdCount = 0;
+    var panelEls = [];
+
+    Array.from(pmap.keys()).sort().forEach(function(panel) {
+      var cmds = pmap.get(panel);
+      var matched = q
+        ? cmds.filter(function(c) {
+            return (c.displayName && c.displayName.toLowerCase().indexOf(q) >= 0)
+                || (c.id && c.id.toLowerCase().indexOf(q) >= 0);
+          })
+        : cmds;
+      if (matched.length === 0) return;
+
+      var pKey = 'panel:' + tab + '/' + panel;
+      var pEl = document.createElement('div');
+      pEl.className = 'cat-panel' + (collapsed.has(pKey) ? ' collapsed' : '');
+
+      var pHead = document.createElement('div');
+      pHead.className = 'cat-panel-header';
+      pHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(panel) + '</span><span class="cat-cmd-count">' + matched.length + '</span>';
+      pHead.onclick = function() { toggleCollapsed(pKey); };
+      pEl.appendChild(pHead);
+
+      var pBody = document.createElement('div');
+      pBody.className = 'cat-panel-children';
+      matched.forEach(function(c) {
+        var cmdEl = document.createElement('div');
+        cmdEl.className = 'cat-cmd';
+        cmdEl.title = c.id;
+        cmdEl.draggable = true;
+        cmdEl.innerHTML =
+          '<span class="cat-cmd-name">' + escHtml(c.displayName || c.id) + '</span>' +
+          '<span class="cat-cmd-id">' + escHtml(shortId(c.id)) + '</span>';
+        cmdEl.ondblclick = function() { addToolToSelectedPanel(c); };
+        cmdEl.ondragstart = function(e) {
+          drag = { kind: 'catalog', cmd: c };
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('text/plain', 'catalog:' + c.id);
+        };
+        cmdEl.ondragend = function() { drag = null; };
+        pBody.appendChild(cmdEl);
+      });
+      pEl.appendChild(pBody);
+      panelEls.push(pEl);
+      tabCmdCount += matched.length;
+    });
+
+    if (panelEls.length === 0) return null;
+
+    var tHead = document.createElement('div');
+    tHead.className = 'cat-tab-header';
+    tHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(tab) + '</span><span class="cat-cmd-count">' + tabCmdCount + '</span>';
+    tHead.onclick = function() { toggleCollapsed(tabKey); };
+    tabEl.appendChild(tHead);
+
+    var tBody = document.createElement('div');
+    tBody.className = 'cat-tab-children';
+    panelEls.forEach(function(p) { tBody.appendChild(p); });
+    tabEl.appendChild(tBody);
+
+    return { element: tabEl, count: tabCmdCount };
   }
 
   function renderCatalog() {
@@ -898,77 +990,50 @@
       return;
     }
 
-    var tabs = Array.from(catalogByTab.keys()).sort();
     var anyMatch = false;
 
-    tabs.forEach(function(tab) {
-      var pmap = catalogByTab.get(tab);
-      var tabKey = 'tab:' + tab;
-      var tabEl = document.createElement('div');
-      tabEl.className = 'cat-tab' + (collapsed.has(tabKey) ? ' collapsed' : '');
-
-      var tabCmdCount = 0;
-      var panelEls = [];
-
-      Array.from(pmap.keys()).sort().forEach(function(panel) {
-        var cmds = pmap.get(panel);
-        var matched = q
-          ? cmds.filter(function(c) {
-              return (c.displayName && c.displayName.toLowerCase().indexOf(q) >= 0)
-                  || (c.id && c.id.toLowerCase().indexOf(q) >= 0);
-            })
-          : cmds;
-        if (matched.length === 0) return;
-
-        var pKey = 'panel:' + tab + '/' + panel;
-        var pEl = document.createElement('div');
-        pEl.className = 'cat-panel' + (collapsed.has(pKey) ? ' collapsed' : '');
-
-        var pHead = document.createElement('div');
-        pHead.className = 'cat-panel-header';
-        pHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(panel) + '</span><span class="cat-cmd-count">' + matched.length + '</span>';
-        pHead.onclick = function() { toggleCollapsed(pKey); };
-        pEl.appendChild(pHead);
-
-        var pBody = document.createElement('div');
-        pBody.className = 'cat-panel-children';
-        matched.forEach(function(c) {
-          var cmdEl = document.createElement('div');
-          cmdEl.className = 'cat-cmd';
-          cmdEl.title = c.id;
-          cmdEl.draggable = true;
-          cmdEl.innerHTML =
-            '<span class="cat-cmd-name">' + escHtml(c.displayName || c.id) + '</span>' +
-            '<span class="cat-cmd-id">' + escHtml(shortId(c.id)) + '</span>';
-          cmdEl.ondblclick = function() { addToolToSelectedPanel(c); };
-          cmdEl.ondragstart = function(e) {
-            drag = { kind: 'catalog', cmd: c };
-            e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('text/plain', 'catalog:' + c.id);
-          };
-          cmdEl.ondragend = function() { drag = null; };
-          pBody.appendChild(cmdEl);
-        });
-        pEl.appendChild(pBody);
-        panelEls.push(pEl);
-        tabCmdCount += matched.length;
+    // Autodesk Native supertab — bundles every Revit-shipped tab so the
+    // tree isn't 25 expanders deep. Collapsed by default; auto-expanded
+    // when the user is searching (so matches inside aren't hidden).
+    if (nativeByTab.size > 0) {
+      var nativeTabEls = [];
+      var nativeTotal = 0;
+      Array.from(nativeByTab.keys()).sort().forEach(function(tab) {
+        var built = buildTabEl(tab, nativeByTab.get(tab), q);
+        if (built) {
+          nativeTabEls.push(built.element);
+          nativeTotal += built.count;
+        }
       });
+      if (nativeTabEls.length > 0) {
+        var supertabEl = document.createElement('div');
+        var collapseSuper = !q && !nativeBundleOpen;
+        supertabEl.className = 'cat-tab cat-supertab' + (collapseSuper ? ' collapsed' : '');
 
-      if (panelEls.length === 0) return;
-      anyMatch = true;
+        var sHead = document.createElement('div');
+        sHead.className = 'cat-tab-header';
+        sHead.innerHTML = '<span class="cat-caret">▾</span><span>Autodesk Native</span><span class="cat-cmd-count">' + nativeTotal + '</span>';
+        sHead.onclick = function() { nativeBundleOpen = !nativeBundleOpen; renderCatalog(); };
+        supertabEl.appendChild(sHead);
 
-      var tHead = document.createElement('div');
-      tHead.className = 'cat-tab-header';
-      tHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(tab) + '</span><span class="cat-cmd-count">' + tabCmdCount + '</span>';
-      tHead.onclick = function() { toggleCollapsed(tabKey); };
-      tabEl.appendChild(tHead);
+        var sBody = document.createElement('div');
+        sBody.className = 'cat-tab-children';
+        nativeTabEls.forEach(function(t) { sBody.appendChild(t); });
+        supertabEl.appendChild(sBody);
 
-      var tBody = document.createElement('div');
-      tBody.className = 'cat-tab-children';
-      panelEls.forEach(function(p) { tBody.appendChild(p); });
-      tabEl.appendChild(tBody);
+        tree.appendChild(supertabEl);
+        anyMatch = true;
+      }
+    }
 
-      tree.appendChild(tabEl);
+    // Third-party at top level — one expandable entry per vendor (or
+    // host-tab-promoted panel name from PR #11: Kinship, Enscape, …).
+    Array.from(otherByTab.keys()).sort().forEach(function(tab) {
+      var built = buildTabEl(tab, otherByTab.get(tab), q);
+      if (built) {
+        tree.appendChild(built.element);
+        anyMatch = true;
+      }
     });
 
     if (!anyMatch && q) {
