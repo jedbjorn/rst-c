@@ -1,12 +1,16 @@
 // LoaderBridge.cs — host object exposed to the WebView2-hosted loader UI.
 //
-// Method shape: every public method takes JSON-string args and returns a
-// JSON-string result (or empty string for void). The JS-side shim
-// (Assets/pywebview-shim.js) snake_case→PascalCase translates names,
-// JSON.stringifies inbound args and JSON.parses returns. This keeps the
-// COM surface trivial — only string IO crosses the boundary — while
-// preserving the legacy `pywebview.api.foo(args).then(r => ...)` calls
-// in the vendored HTML unchanged.
+// Method shape: every public method returns a JSON-string result (or
+// empty string for void). Methods that JS calls with arguments take one
+// `string` parameter per JS arg — the JS-side shim
+// (Assets/pywebview-shim.js) JSON.stringifies each arg before invoking
+// the host object. snake_case→PascalCase happens in the same shim.
+//
+// **Arity matters across COM**: WebView2's IDispatch bridge will not
+// coerce a zero-arg JS call into a 1-arg C# method — it returns
+// 0x80070057 E_INVALIDARG. So zero-arg-from-JS methods (get_catalog,
+// get_profiles, etc.) MUST be declared zero-arg in C# too, not
+// `(string _)` as a placeholder. Don't add unused parameters here.
 //
 // Coverage:
 //   live    — get_profiles, get_active_profile, load_profile, add_profile,
@@ -54,7 +58,7 @@ public class LoaderBridge
 
     // ---- live methods --------------------------------------------------
 
-    public string GetProfiles(string _)
+    public string GetProfiles()
     {
         LogEntry(nameof(GetProfiles));
         var entries = ProfileStore.List();
@@ -64,7 +68,7 @@ public class LoaderBridge
         return Serialize(dtos);
     }
 
-    public string GetActiveProfile(string _)
+    public string GetActiveProfile()
     {
         LogEntry(nameof(GetActiveProfile));
         var ap = ActiveProfile.Read();
@@ -131,7 +135,7 @@ public class LoaderBridge
         });
     }
 
-    public string AddProfile(string _)
+    public string AddProfile()
     {
         LogEntry(nameof(AddProfile));
         // File-dialog import. Marshalled to UI thread by the host window.
@@ -189,7 +193,7 @@ public class LoaderBridge
         return Serialize(new { ok = true });
     }
 
-    public string UnloadProfile(string _)
+    public string UnloadProfile()
     {
         LogEntry(nameof(UnloadProfile));
         ActiveProfile.WriteBlank();
@@ -197,13 +201,13 @@ public class LoaderBridge
         return Serialize(new { ok = true });
     }
 
-    public string GetRevitVersion(string _)
+    public string GetRevitVersion()
     {
         LogEntry(nameof(GetRevitVersion));
         return Serialize(_revitVersion);
     }
 
-    public string CloseWindow(string _)
+    public string CloseWindow()
     {
         LogEntry(nameof(CloseWindow));
         Log.Information("Bridge.close_window: window close requested");
@@ -213,7 +217,7 @@ public class LoaderBridge
 
     // ---- builder (RST-006) ---------------------------------------------
 
-    public string GetCatalog(string _)
+    public string GetCatalog()
     {
         LogEntry(nameof(GetCatalog));
         try
@@ -361,28 +365,28 @@ public class LoaderBridge
 
     // ---- stubs (features land in later flags) --------------------------
 
-    public string GetAddinLookup(string _)
+    public string GetAddinLookup()
     {
         LogEntry(nameof(GetAddinLookup));
         return Serialize(new Dictionary<string, object>());
     }
-    public string GetLoadedAddins(string _)
+    public string GetLoadedAddins()
     {
         LogEntry(nameof(GetLoadedAddins));
         return Serialize(Array.Empty<object>());
     }
-    public string GetAllTabs(string _)
+    public string GetAllTabs()
     {
         LogEntry(nameof(GetAllTabs));
         return Serialize(Array.Empty<string>());
     }
-    public string GetUserConfig(string _)
+    public string GetUserConfig()
     {
         LogEntry(nameof(GetUserConfig));
         return Serialize(new { addins = new Dictionary<string, object>() });
     }
 
-    public string GetDisablePreview(string _)
+    public string GetDisablePreview()
     {
         LogEntry(nameof(GetDisablePreview));
         return Serialize(new
@@ -394,7 +398,7 @@ public class LoaderBridge
         });
     }
 
-    public string RestoreAddins(string _)
+    public string RestoreAddins()
     {
         LogEntry(nameof(RestoreAddins));
         return Serialize(new
