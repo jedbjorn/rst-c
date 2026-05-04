@@ -19,7 +19,10 @@
     <AssemblyName>RST.Engine</AssemblyName>
     <IsPackable>false</IsPackable>
     <PlatformTarget>x64</PlatformTarget>
-    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- RST-004: Engine ships Serilog + WebView2 + UI assemblies into the
+         addin folder. Revit doesn't resolve transitive packages from a
+         shared cache, so they must travel with the install. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <OutputType>Library</OutputType>
     <!-- Allow Linux + macOS to build the Windows-targeted TFM (net8.0-windows). -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -66,6 +69,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
+    <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
   </ItemGroup>
 
   <Import Project="..\..\build\sign.targets" />
