@@ -40,12 +40,24 @@ public class RoundTripTests
         {
             second.Panels[i].Name.Should().Be(first.Panels[i].Name);
             second.Panels[i].Color.Should().Be(first.Panels[i].Color);
+            second.Panels[i].CornerRadius.Should().Be(first.Panels[i].CornerRadius);
             second.Panels[i].Slots.Count.Should().Be(first.Panels[i].Slots.Count);
         }
 
         second.Stacks.Keys.Should().BeEquivalentTo(first.Stacks.Keys);
         second.RequiredAddins.Count.Should().Be(first.RequiredAddins.Count);
         second.HideRules.Count.Should().Be(first.HideRules.Count);
+
+        if (first.Branding is null)
+        {
+            second.Branding.Should().BeNull();
+        }
+        else
+        {
+            second.Branding.Should().NotBeNull();
+            second.Branding!.LogoFile.Should().Be(first.Branding.LogoFile);
+            second.Branding.Url.Should().Be(first.Branding.Url);
+        }
     }
 
     [Fact]
