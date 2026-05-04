@@ -10,11 +10,13 @@
 //   5. Navigate to https://rst.ui/profile_loader.html.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
+using RST.Core.Scanning;
 
 namespace RST.UI.Loader;
 
@@ -23,10 +25,11 @@ public partial class LoaderWindow : Window
     private const string VirtualHost = "rst.ui";
     private readonly LoaderBridge _bridge;
 
-    public LoaderWindow(string revitVersion)
+    public LoaderWindow(string revitVersion, IReadOnlyList<ScannedCommand> catalog)
     {
         InitializeComponent();
-        _bridge = new LoaderBridge(revitVersion, () => Dispatcher.BeginInvoke(new Action(Close)));
+        _bridge = new LoaderBridge(revitVersion, catalog,
+                                   () => Dispatcher.BeginInvoke(new Action(Close)));
         Loaded += async (_, _) => await InitializeWebViewAsync();
     }
 

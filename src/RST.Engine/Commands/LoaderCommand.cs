@@ -22,7 +22,8 @@ public sealed class LoaderCommand : IExternalCommand
         Log.Information("Loader opened (Revit {Version})", revitVersion);
         try
         {
-            LoaderHost.ShowModal(revitVersion);
+            var catalog = RstApplication.GetOrBuildCatalog(revitVersion);
+            LoaderHost.ShowModal(revitVersion, catalog);
             return Result.Succeeded;
         }
         catch (System.Exception ex)

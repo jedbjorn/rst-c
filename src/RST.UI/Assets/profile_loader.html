@@ -732,7 +732,8 @@
     <label>Revit</label>
     <span id="revitVersionDisplay" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);letter-spacing:0.04em">—</span>
   </div>
-  <button class="add-profile-btn" onclick="addProfile()" style="margin-left:0">+ Add Profile from Path</button>
+  <button class="add-profile-btn" onclick="newProfile()" style="margin-left:0">+ New Profile</button>
+  <button class="add-profile-btn" onclick="addProfile()" style="margin-left:0">+ Import from File</button>
 </div>
 
 <div class="body">
@@ -754,6 +755,7 @@
       <div class="detail-profile-name" id="detailName">
         —
         <span class="card-badge loaded" id="detailLoadedBadge" style="display:none;font-size:9px">● Loaded</span>
+        <button class="add-profile-btn" id="editProfileBtn" onclick="editSelectedProfile()" style="display:none;margin-left:auto;font-size:10px">Edit</button>
       </div>
       <div class="detail-meta-row" id="detailMeta"></div>
     </div>
@@ -1082,6 +1084,7 @@
     document.getElementById('detailMeta').innerHTML = '';
     document.getElementById('tabCanvas').innerHTML = '';
     document.getElementById('addinTogglesRow').style.display = 'none';
+    document.getElementById('editProfileBtn').style.display = 'none';
   }
 
   function selectCard(el, idx) {
@@ -1095,6 +1098,7 @@
     document.getElementById('detailName').childNodes[0].textContent = profile.profile + ' ';
     const loadedBadge = document.getElementById('detailLoadedBadge');
     loadedBadge.style.display = profile.profile === activeProfileName ? 'inline-flex' : 'none';
+    document.getElementById('editProfileBtn').style.display = 'inline-block';
 
     // Meta row — tab name now included
     document.getElementById('detailMeta').innerHTML = `
@@ -1204,6 +1208,20 @@
     }).catch(function(err) {
       if (err) console.error('addProfile error:', err);
     });
+  }
+
+  // ── NAVIGATE TO BUILDER (RST-006) ────────────────────────────────────────────
+  // Builder runs in the same WebView2; the host bridge persists across
+  // navigations, so a plain location change is enough. Selector state is
+  // re-fetched from the bridge when we return.
+  function newProfile() {
+    window.location.href = 'profile_builder.html?mode=new';
+  }
+  function editSelectedProfile() {
+    if (!selectedProfile) return;
+    var pid = encodeURIComponent(selectedProfile.id || '');
+    var pname = encodeURIComponent(selectedProfile.profile || '');
+    window.location.href = 'profile_builder.html?mode=edit&id=' + pid + '&name=' + pname;
   }
 
   // ── LOAD PROFILE ──────────────────────────────────────────────────────────────
