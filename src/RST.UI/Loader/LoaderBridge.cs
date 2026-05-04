@@ -8,9 +8,10 @@
 // preserving the legacy `pywebview.api.foo(args).then(r => ...)` calls
 // in the vendored HTML unchanged.
 //
-// Coverage in RST-004:
+// Coverage:
 //   live    — get_profiles, get_active_profile, load_profile, add_profile,
-//             remove_profile, unload_profile, close_window, get_revit_version
+//             remove_profile, unload_profile, close_window, get_revit_version,
+//             get_catalog, save_profile, export_profile (RST-006: builder)
 //   stubbed — get_addin_lookup, get_loaded_addins, get_all_tabs,
 //             get_user_config, get_disable_preview, restore_addins
 //             (return empty/safe defaults; their features land in later flags)
@@ -23,6 +24,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 
 namespace RST.UI.Loader;
 
@@ -31,6 +33,7 @@ namespace RST.UI.Loader;
 public class LoaderBridge
 {
     private readonly string _revitVersion;
+    private readonly IReadOnlyList<ScannedCommand> _catalog;
     private readonly Action _closeRequested;
 
     private static readonly JsonSerializerOptions WriteOptions = new()
@@ -39,9 +42,10 @@ public class LoaderBridge
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public LoaderBridge(string revitVersion, Action closeRequested)
+    public LoaderBridge(string revitVersion, IReadOnlyList<ScannedCommand> catalog, Action closeRequested)
     {
         _revitVersion = revitVersion ?? "";
+        _catalog = catalog ?? Array.Empty<ScannedCommand>();
         _closeRequested = closeRequested ?? (() => { });
     }
 
@@ -167,6 +171,91 @@ public class LoaderBridge
     {
         _closeRequested();
         return "";
+    }
+
+    // ---- builder (RST-006) ---------------------------------------------
+
+    public string GetCatalog(string _)
+    {
+        var dtos = _catalog.Select(c => new
+        {
+            id           = c.Id,
+            displayName  = c.DisplayName,
+            origin       = c.Origin.ToString(),
+            sourceTab    = c.SourceTab,
+            sourcePanel  = c.SourcePanel,
+            addinFile    = c.AddinFile,
+            assemblyPath = c.AssemblyPath,
+        }).ToArray();
+        return Serialize(dtos);
+    }
+
+    /// <summary>
+    /// Persist a profile to disk (assigns Id + ExportDate when missing).
+    /// Returns { ok, fileName, profile } on success.
+    /// </summary>
+    public string SaveProfile(string profileJson)
+    {
+        Profile? profile;
+        try { profile = JsonSerializer.Deserialize<Profile>(profileJson); }
+        catch (JsonException ex)
+        {
+            return Serialize(new { ok = false, error = "Invalid profile JSON: " + ex.Message });
+        }
+        if (profile is null)
+            return Serialize(new { ok = false, error = "Empty profile" });
+        if (string.IsNullOrWhiteSpace(profile.ProfileName))
+            return Serialize(new { ok = false, error = "Profile name required" });
+        if (string.IsNullOrWhiteSpace(profile.Tab))
+            return Serialize(new { ok = false, error = "Tab name required" });
+
+        if (string.IsNullOrEmpty(profile.Id)) profile.Id = Guid.NewGuid().ToString();
+        if (string.IsNullOrEmpty(profile.ExportDate))
+            profile.ExportDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+        try
+        {
+            var fileName = ProfileStore.Save(profile);
+            return Serialize(new { ok = true, fileName, profile = ToProfileDto(fileName, profile) });
+        }
+        catch (IOException ex)
+        {
+            return Serialize(new { ok = false, error = "Write failed: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Export the in-memory profile to a user-chosen JSON path (Save
+    /// dialog). Does NOT touch the local profiles store.
+    /// </summary>
+    public string ExportProfile(string profileJson)
+    {
+        Profile? profile;
+        try { profile = JsonSerializer.Deserialize<Profile>(profileJson); }
+        catch (JsonException ex)
+        {
+            return Serialize(new { ok = false, error = "Invalid profile JSON: " + ex.Message });
+        }
+        if (profile is null)
+            return Serialize(new { ok = false, error = "Empty profile" });
+
+        var suggested = string.IsNullOrWhiteSpace(profile.ProfileName)
+            ? "rst_profile.json"
+            : ProfileStore.CanonicalFileName(profile);
+        var path = FileDialogBridge.SaveJson(suggested);
+        if (string.IsNullOrEmpty(path))
+            return Serialize(new { ok = false, error = "cancelled" });
+
+        try
+        {
+            using var fs = File.Create(path!);
+            ProfileSerializer.Write(profile, fs);
+            return Serialize(new { ok = true, path });
+        }
+        catch (IOException ex)
+        {
+            return Serialize(new { ok = false, error = "Write failed: " + ex.Message });
+        }
     }
 
     // ---- stubs (features land in later flags) --------------------------

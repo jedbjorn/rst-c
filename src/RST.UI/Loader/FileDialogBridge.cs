@@ -29,4 +29,24 @@ internal static class FileDialogBridge
             return dlg.ShowDialog() == true ? dlg.FileName : null;
         }));
     }
+
+    public static string? SaveJson(string suggestedFileName)
+    {
+        var app = Application.Current;
+        if (app is null) return null;
+
+        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = "Export RST Profile",
+                Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
+                FileName = suggestedFileName,
+                DefaultExt = ".json",
+                AddExtension = true,
+                OverwritePrompt = true,
+            };
+            return dlg.ShowDialog() == true ? dlg.FileName : null;
+        }));
+    }
 }
