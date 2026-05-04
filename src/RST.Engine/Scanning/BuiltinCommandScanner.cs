@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using Autodesk.Revit.UI;
 using RST.Core.Scanning;
+using Serilog;
 
 namespace RST.Engine.Scanning;
 
@@ -19,19 +20,26 @@ internal static class BuiltinCommandScanner
 {
     public static IEnumerable<ScannedCommand> Enumerate()
     {
-        foreach (PostableCommand cmd in Enum.GetValues(typeof(PostableCommand)))
+        var skippedThrew = 0;
+        var skippedEmpty = 0;
+        var emitted = 0;
+        var values = Enum.GetValues(typeof(PostableCommand));
+        foreach (PostableCommand cmd in values)
         {
             string? id;
             try
             {
                 id = RevitCommandId.LookupPostableCommandId(cmd)?.Name;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Log.Debug(ex, "BuiltinCommandScanner: lookup threw for {Cmd}", cmd);
+                skippedThrew++;
                 continue;
             }
-            if (string.IsNullOrEmpty(id)) continue;
+            if (string.IsNullOrEmpty(id)) { skippedEmpty++; continue; }
 
+            emitted++;
             yield return new ScannedCommand(
                 Id: id!,
                 DisplayName: cmd.ToString(),
@@ -41,5 +49,8 @@ internal static class BuiltinCommandScanner
                 SourceTab: null,
                 SourcePanel: null);
         }
+        Log.Debug("BuiltinCommandScanner: enum={EnumCount}, emitted={Emitted}, " +
+                  "skippedEmpty={Empty}, skippedThrew={Threw}",
+                  values.Length, emitted, skippedEmpty, skippedThrew);
     }
 }

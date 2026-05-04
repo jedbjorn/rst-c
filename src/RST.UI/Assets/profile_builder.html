@@ -680,6 +680,10 @@
     profile.panels         = src.panels || [];
     profile.branding       = src.branding || null;
     if (profile.panels.length > 0) selectedPanelIndex = 0;
+    rstLog('info', 'builder: loaded existing profile into editor', {
+      name: profile.profile, id: profile.id, panels: profile.panels.length,
+      stacks: Object.keys(profile.stacks).length,
+    });
   }
 
   function syncHeader() {
@@ -701,6 +705,11 @@
       var pmap = catalogByTab.get(tab);
       if (!pmap.has(panel)) pmap.set(panel, []);
       pmap.get(panel).push(c);
+    });
+    var panelCount = 0;
+    catalogByTab.forEach(function(pmap) { panelCount += pmap.size; });
+    rstLog('info', 'builder: catalog indexed', {
+      total: catalog.length, tabs: catalogByTab.size, panels: panelCount,
     });
   }
 
@@ -1226,13 +1235,20 @@
   // ── BRIDGE I/O ──────────────────────────────────────────────────────────────
   function saveProfile() {
     if (!profile.profile || !profile.profile.trim()) {
+      rstLog('warn', 'builder: save aborted (no name)');
       showToast('Profile name required.', 'err'); return;
     }
     if (!profile.tab || !profile.tab.trim()) {
+      rstLog('warn', 'builder: save aborted (no tab)', { name: profile.profile });
       showToast('Tab name required.', 'err'); return;
     }
+    rstLog('info', 'builder: save attempt', {
+      name: profile.profile, tab: profile.tab, panels: profile.panels.length,
+      stacks: Object.keys(profile.stacks).length, mode: mode, id: profile.id,
+    });
     window.pywebview.api.save_profile(profile).then(function(result) {
       if (result && result.ok) {
+        rstLog('info', 'builder: save OK', { fileName: result.fileName, id: result.profile && result.profile.id });
         showToast('Saved as ' + result.fileName, 'ok');
         // Stash the assigned id so subsequent saves overwrite the same row.
         if (result.profile) {
@@ -1241,22 +1257,33 @@
         }
         mode = 'edit';
       } else {
+        rstLog('error', 'builder: save failed', { error: result && result.error });
         showToast('Save failed: ' + ((result && result.error) || 'unknown'), 'err');
       }
     }).catch(function(err) {
+      rstLog('error', 'builder: save threw', { err: String(err) });
       showToast('Save failed: ' + err, 'err');
     });
   }
 
   function exportJson() {
     if (!profile.profile || !profile.profile.trim()) {
+      rstLog('warn', 'builder: export aborted (no name)');
       showToast('Profile name required.', 'err'); return;
     }
+    rstLog('info', 'builder: export attempt', { name: profile.profile });
     window.pywebview.api.export_profile(profile).then(function(result) {
-      if (result && result.ok) showToast('Exported to ' + result.path, 'ok');
-      else if (result && result.error !== 'cancelled')
+      if (result && result.ok) {
+        rstLog('info', 'builder: export OK', { path: result.path });
+        showToast('Exported to ' + result.path, 'ok');
+      } else if (result && result.error !== 'cancelled') {
+        rstLog('error', 'builder: export failed', { error: result.error });
         showToast('Export failed: ' + result.error, 'err');
+      } else {
+        rstLog('info', 'builder: export cancelled');
+      }
     }).catch(function(err) {
+      rstLog('error', 'builder: export threw', { err: String(err) });
       showToast('Export failed: ' + err, 'err');
     });
   }

@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Autodesk.Revit.UI;
+using RST.Core.Configuration;
 using RST.Core.Scanning;
 using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
@@ -29,10 +30,18 @@ public sealed class RstApplication : IExternalApplication
         try
         {
             ConfigureLogging();
-            Log.Information("RST {Version} starting on Revit {RevitVersion}",
-                            ThisVersion, application.ControlledApplication.VersionNumber);
+            var rev = application.ControlledApplication.VersionNumber;
+            Log.Information("=== RST {Version} starting on Revit {RevitVersion} ===",
+                            ThisVersion, rev);
+            Log.Information("Paths: appData={AppData}, profilesDir={ProfilesDir}, " +
+                            "activeProfileFile={ActiveProfile}, banList={BanList}, " +
+                            "engineAssembly={EngineDll}",
+                            AppDataPaths.Root, AppDataPaths.ProfilesDir,
+                            AppDataPaths.ActiveProfileFile, BanList.DefaultPath,
+                            typeof(RstApplication).Assembly.Location);
 
             RibbonBuilder.Build(application);
+            Log.Information("=== RST.OnStartup OK ===");
             return Result.Succeeded;
         }
         catch (Exception ex)
@@ -52,18 +61,25 @@ public sealed class RstApplication : IExternalApplication
         lock (CatalogLock)
         {
             if (_catalogCache is not null && _catalogVersion == revitVersion)
+            {
+                Log.Debug("GetOrBuildCatalog: cache hit ({Count} commands, revit={Version})",
+                          _catalogCache.Count, revitVersion);
                 return _catalogCache;
+            }
 
+            Log.Information("GetOrBuildCatalog: cold cache for revit={Version}, building…", revitVersion);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 var catalog = CommandCatalog.Build(revitVersion);
                 _catalogCache = catalog.Commands;
                 _catalogVersion = revitVersion;
-                Log.Information("Catalog built: {Count} commands.", _catalogCache.Count);
+                Log.Information("GetOrBuildCatalog OK: {Count} commands in {Ms}ms",
+                                _catalogCache.Count, sw.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Catalog build failed; serving empty list.");
+                Log.Error(ex, "GetOrBuildCatalog FAILED after {Ms}ms; serving empty list", sw.ElapsedMilliseconds);
                 _catalogCache = Array.Empty<ScannedCommand>();
                 _catalogVersion = revitVersion;
             }
@@ -89,10 +105,14 @@ public sealed class RstApplication : IExternalApplication
             logsDir,
             $"rst_{DateTime.Now:yyyy-MM-dd_HHmmss}.log");
 
+        // DEBUG minimum during dev so per-step traces (catalog stages, bridge
+        // entry args, navigation source) land in the file. Promote to
+        // Information once the loader/builder are stable.
         Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.Debug()
             .Enrich.WithProperty("Component", "RST.Engine")
             .WriteTo.File(sessionLog,
+                          outputTemplate: "{Timestamp:HH:mm:ss.fff} {Level:u3} {Message:lj}{NewLine}{Exception}",
                           rollingInterval: RollingInterval.Infinite,
                           retainedFileCountLimit: 20)
             .CreateLogger();

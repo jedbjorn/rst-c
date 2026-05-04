@@ -56,17 +56,21 @@ public class LoaderBridge
 
     public string GetProfiles(string _)
     {
+        LogEntry(nameof(GetProfiles));
         var entries = ProfileStore.List();
         var dtos = entries.Select(e => ToProfileDto(e.FileName, e.Profile)).ToArray();
-        Log.Information("Bridge.get_profiles → {Count} profiles", dtos.Length);
+        Log.Information("Bridge.get_profiles → {Count} profiles from {Dir}",
+                        dtos.Length, AppDataPaths.ProfilesDir);
         return Serialize(dtos);
     }
 
     public string GetActiveProfile(string _)
     {
+        LogEntry(nameof(GetActiveProfile));
         var ap = ActiveProfile.Read();
         if (ap.IsBlank)
         {
+            Log.Debug("Bridge.get_active_profile → blank");
             return Serialize(new
             {
                 id = (string?)null,
@@ -75,6 +79,8 @@ public class LoaderBridge
                 disable_non_required = false,
             });
         }
+        Log.Information("Bridge.get_active_profile → name={Name} id={Id} hiddenTabs={Hidden} disableNonRequired={Disable}",
+                        ap.ProfileName, ap.ProfileId, ap.HiddenTabs?.Length ?? 0, ap.DisableNonRequired);
         return Serialize(new
         {
             id = ap.ProfileId,
@@ -87,6 +93,10 @@ public class LoaderBridge
     public string LoadProfile(string profileNameJson, string disableNonRequiredJson,
                               string revitVersionJson, string hiddenTabsJson, string profileIdJson)
     {
+        LogEntry(nameof(LoadProfile),
+                 ("name", profileNameJson), ("disable", disableNonRequiredJson),
+                 ("revit", revitVersionJson), ("hiddenTabs", hiddenTabsJson),
+                 ("id", profileIdJson));
         var profileName = Deserialize<string>(profileNameJson) ?? "";
         var disableNonRequired = Deserialize<bool>(disableNonRequiredJson);
         var hiddenTabs = Deserialize<string[]>(hiddenTabsJson) ?? Array.Empty<string>();
@@ -123,6 +133,7 @@ public class LoaderBridge
 
     public string AddProfile(string _)
     {
+        LogEntry(nameof(AddProfile));
         // File-dialog import. Marshalled to UI thread by the host window.
         var path = FileDialogBridge.OpenJson();
         if (string.IsNullOrEmpty(path))
@@ -155,6 +166,7 @@ public class LoaderBridge
 
     public string RemoveProfile(string profileNameJson, string profileIdJson)
     {
+        LogEntry(nameof(RemoveProfile), ("name", profileNameJson), ("id", profileIdJson));
         var profileName = Deserialize<string>(profileNameJson) ?? "";
         var profileId = Deserialize<string?>(profileIdJson);
 
@@ -179,15 +191,22 @@ public class LoaderBridge
 
     public string UnloadProfile(string _)
     {
+        LogEntry(nameof(UnloadProfile));
         ActiveProfile.WriteBlank();
         Log.Information("Bridge.unload_profile OK");
         return Serialize(new { ok = true });
     }
 
-    public string GetRevitVersion(string _) => Serialize(_revitVersion);
+    public string GetRevitVersion(string _)
+    {
+        LogEntry(nameof(GetRevitVersion));
+        return Serialize(_revitVersion);
+    }
 
     public string CloseWindow(string _)
     {
+        LogEntry(nameof(CloseWindow));
+        Log.Information("Bridge.close_window: window close requested");
         _closeRequested();
         return "";
     }
@@ -196,6 +215,7 @@ public class LoaderBridge
 
     public string GetCatalog(string _)
     {
+        LogEntry(nameof(GetCatalog));
         try
         {
             var dtos = _catalog.Select(c => new
@@ -228,6 +248,7 @@ public class LoaderBridge
     /// </summary>
     public string SaveProfile(string profileJson)
     {
+        LogEntry(nameof(SaveProfile), ("profile", profileJson));
         Profile? profile;
         try { profile = JsonSerializer.Deserialize<Profile>(profileJson); }
         catch (JsonException ex)
@@ -275,6 +296,7 @@ public class LoaderBridge
     /// </summary>
     public string ExportProfile(string profileJson)
     {
+        LogEntry(nameof(ExportProfile), ("profile", profileJson));
         Profile? profile;
         try { profile = JsonSerializer.Deserialize<Profile>(profileJson); }
         catch (JsonException ex)
@@ -320,6 +342,8 @@ public class LoaderBridge
     /// </summary>
     public string LogEvent(string levelJson, string messageJson, string payloadJson)
     {
+        // Intentionally no LogEntry — this method IS the entry, and would
+        // recurse-confuse the log if it logged itself.
         var level = (Deserialize<string>(levelJson) ?? "info").ToLowerInvariant();
         var message = Deserialize<string>(messageJson) ?? "";
         var payload = payloadJson;   // raw JSON — keep as-is so the structured field stays parseable
@@ -337,25 +361,49 @@ public class LoaderBridge
 
     // ---- stubs (features land in later flags) --------------------------
 
-    public string GetAddinLookup(string _)    => Serialize(new Dictionary<string, object>());
-    public string GetLoadedAddins(string _)   => Serialize(Array.Empty<object>());
-    public string GetAllTabs(string _)        => Serialize(Array.Empty<string>());
-    public string GetUserConfig(string _)     => Serialize(new { addins = new Dictionary<string, object>() });
-
-    public string GetDisablePreview(string _) => Serialize(new
+    public string GetAddinLookup(string _)
     {
-        staying = Array.Empty<object>(),
-        disabling = Array.Empty<object>(),
-        tryDisable = Array.Empty<object>(),
-        skipped = Array.Empty<object>(),
-    });
-
-    public string RestoreAddins(string _) => Serialize(new
+        LogEntry(nameof(GetAddinLookup));
+        return Serialize(new Dictionary<string, object>());
+    }
+    public string GetLoadedAddins(string _)
     {
-        ok = true,
-        restart_needed = false,
-        restored = Array.Empty<string>(),
-    });
+        LogEntry(nameof(GetLoadedAddins));
+        return Serialize(Array.Empty<object>());
+    }
+    public string GetAllTabs(string _)
+    {
+        LogEntry(nameof(GetAllTabs));
+        return Serialize(Array.Empty<string>());
+    }
+    public string GetUserConfig(string _)
+    {
+        LogEntry(nameof(GetUserConfig));
+        return Serialize(new { addins = new Dictionary<string, object>() });
+    }
+
+    public string GetDisablePreview(string _)
+    {
+        LogEntry(nameof(GetDisablePreview));
+        return Serialize(new
+        {
+            staying = Array.Empty<object>(),
+            disabling = Array.Empty<object>(),
+            tryDisable = Array.Empty<object>(),
+            skipped = Array.Empty<object>(),
+        });
+    }
+
+    public string RestoreAddins(string _)
+    {
+        LogEntry(nameof(RestoreAddins));
+        return Serialize(new
+        {
+            ok = true,
+            restart_needed = false,
+            restored = Array.Empty<string>(),
+        });
+    }
 
     // ---- helpers -------------------------------------------------------
 
@@ -385,5 +433,27 @@ public class LoaderBridge
             return default;
         try { return JsonSerializer.Deserialize<T>(json); }
         catch (JsonException) { return default; }
+    }
+
+    /// <summary>
+    /// Entry-time DEBUG line for a bridge method. Inputs are truncated to
+    /// keep the log readable when callers send large profile blobs.
+    /// </summary>
+    private static void LogEntry(string method, params (string name, string? value)[] args)
+    {
+        if (!Log.IsEnabled(Serilog.Events.LogEventLevel.Debug)) return;
+        if (args.Length == 0)
+        {
+            Log.Debug("Bridge.{Method} called", method);
+            return;
+        }
+        var summarised = new string[args.Length];
+        for (int i = 0; i < args.Length; i++)
+        {
+            var raw = args[i].value ?? "";
+            var trimmed = raw.Length > 200 ? raw.Substring(0, 200) + "…(" + raw.Length + "B)" : raw;
+            summarised[i] = args[i].name + "=" + trimmed;
+        }
+        Log.Debug("Bridge.{Method} called: {Args}", method, string.Join(", ", summarised));
     }
 }
