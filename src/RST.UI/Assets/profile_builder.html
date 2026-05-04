@@ -869,7 +869,12 @@
   function indexCatalog() {
     catalogByTab = new Map();
     catalog.forEach(function(c) {
-      var tab = c.sourceTab || '(unknown)';
+      // Most commands carry sourceTab from the ribbon walk (or host-tab
+      // promotion in PR #11). The minority that don't are PostableCommand
+      // entries with no ribbon presence — bucket those under
+      // "Revit Built-in" rather than a generic "(unknown)".
+      var tab = c.sourceTab
+        || (c.origin === 'Native' ? 'Revit Built-in' : '(unknown)');
       var panel = c.sourcePanel || '(unknown)';
       if (!catalogByTab.has(tab)) catalogByTab.set(tab, new Map());
       var pmap = catalogByTab.get(tab);
