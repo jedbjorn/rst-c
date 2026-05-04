@@ -782,10 +782,6 @@
   <div class="header-sep"></div>
   <div class="window-title">Profile Builder</div>
   <div class="header-sep"></div>
-  <div class="header-field">
-    <label>Name</label>
-    <input id="profileNameInput" type="text" placeholder="Profile name" oninput="profile.profile = this.value">
-  </div>
   <div class="branding-anchor">
     <button id="brandingBtn" class="btn" onclick="toggleBrandingPopover(event)" title="Tab branding (logo + URL)">
       <span id="brandingBtnDot" class="branding-dot empty"></span>
@@ -810,6 +806,10 @@
         <button class="btn primary" onclick="closeBrandingPopover()">Done</button>
       </div>
     </div>
+  </div>
+  <div class="header-field">
+    <label>Name</label>
+    <input id="profileNameInput" type="text" placeholder="Profile name" oninput="profile.profile = this.value">
   </div>
   <div class="header-field">
     <label>Tab</label>
