@@ -8,6 +8,7 @@
 using System;
 using System.IO;
 using Autodesk.Revit.UI;
+using RST.Engine.Ribbon;
 using Serilog;
 
 namespace RST.Engine;
@@ -16,8 +17,6 @@ namespace RST.Engine;
 [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
 public sealed class RstApplication : IExternalApplication
 {
-    private const string TabName = "RST";
-
     public Result OnStartup(UIControlledApplication application)
     {
         try
@@ -26,7 +25,7 @@ public sealed class RstApplication : IExternalApplication
             Log.Information("RST {Version} starting on Revit {RevitVersion}",
                             ThisVersion, application.ControlledApplication.VersionNumber);
 
-            BuildRstTab(application);
+            RibbonBuilder.Build(application);
             return Result.Succeeded;
         }
         catch (Exception ex)
@@ -41,19 +40,6 @@ public sealed class RstApplication : IExternalApplication
         Log.Information("RST shutting down");
         Log.CloseAndFlush();
         return Result.Succeeded;
-    }
-
-    private static void BuildRstTab(UIControlledApplication app)
-    {
-        try { app.CreateRibbonTab(TabName); }
-        catch (Autodesk.Revit.Exceptions.ArgumentException)
-        {
-            // Tab already exists (e.g. on add-in reload).
-        }
-
-        // Real ribbon assembly lands in RST-004 (Loader) and RST-005 (switcher).
-        // For RST-002 we only prove the IExternalApplication wiring compiles
-        // and gets called.
     }
 
     private static void ConfigureLogging()
