@@ -1414,20 +1414,10 @@
     colorWrap.appendChild(hexLabel);
     body.appendChild(row('Color', colorWrap));
 
-    // Corner radius — number input, blank = inherit (null).
-    var radiusInput = document.createElement('input');
-    radiusInput.type = 'number';
-    radiusInput.min = '0';
-    radiusInput.max = '20';
-    radiusInput.placeholder = 'inherit';
-    radiusInput.value = panel.cornerRadius != null ? panel.cornerRadius : '';
-    radiusInput.oninput = function() {
-      var raw = this.value.trim();
-      if (raw === '') { panel.cornerRadius = null; return; }
-      var n = parseInt(raw, 10);
-      if (!isNaN(n)) panel.cornerRadius = n;
-    };
-    body.appendChild(row('Corner Radius', radiusInput));
+    // Corner radius is no longer user-authored — pyRevit RST hardcoded
+    // PANEL_CORNER_RADIUS_PX = 5 and the C# runtime (RST-008) will do the
+    // same. Panel.CornerRadius stays in the model for round-trip fidelity
+    // with existing v1 profiles, but the builder doesn't surface it.
 
     // URL button editor — collapsed by default; toggled open via button.
     var urlSection = document.createElement('div');
