@@ -222,18 +222,35 @@ public class LoaderBridge
         LogEntry(nameof(GetCatalog));
         try
         {
-            var dtos = _catalog.Select(c => new
+            // Host-tab promotion (port of pyRevit RST addin_panels rule):
+            // tabs like "Add-Ins" host panels from many unrelated vendors.
+            // For catalog grouping the host tab is uninformative — promote
+            // sourcePanel to sourceTab so each vendor's panel becomes its own
+            // group ("Kinship", "Enscape", …) instead of one giant "Add-Ins".
+            // Original location is preserved as hostTab/literalPanel for the
+            // builder UI to surface if it ever wants to.
+            var promoted = 0;
+            var dtos = _catalog.Select(c =>
             {
-                id           = c.Id,
-                displayName  = c.DisplayName,
-                origin       = c.Origin.ToString(),
-                sourceTab    = c.SourceTab,
-                sourcePanel  = c.SourcePanel,
-                addinFile    = c.AddinFile,
-                assemblyPath = c.AssemblyPath,
+                var isHost = HostTabs.Contains(c.SourceTab);
+                string? group = isHost ? (c.SourcePanel ?? c.SourceTab) : c.SourceTab;
+                if (isHost && !string.IsNullOrEmpty(c.SourcePanel)) promoted++;
+                return new
+                {
+                    id            = c.Id,
+                    displayName   = c.DisplayName,
+                    origin        = c.Origin.ToString(),
+                    sourceTab     = group,            // catalog grouping key
+                    sourcePanel   = isHost ? null : c.SourcePanel,
+                    hostTab       = isHost ? c.SourceTab : null,    // literal Revit tab when promoted
+                    literalPanel  = isHost ? c.SourcePanel : null,
+                    addinFile     = c.AddinFile,
+                    assemblyPath  = c.AssemblyPath,
+                };
             }).ToArray();
             var json = Serialize(dtos);
-            Log.Information("Bridge.get_catalog OK: {Count} commands, {Bytes} bytes JSON", dtos.Length, json.Length);
+            Log.Information("Bridge.get_catalog OK: {Count} commands ({Promoted} host-tab promoted), {Bytes} bytes JSON",
+                            dtos.Length, promoted, json.Length);
             return json;
         }
         catch (Exception ex)
