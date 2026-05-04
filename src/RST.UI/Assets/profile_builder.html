@@ -816,7 +816,7 @@
         </div>
       </div>
 
-      <div class="prop-section">
+      <div class="prop-section" id="stacksSection">
         <div class="prop-section-label" style="display:flex;justify-content:space-between;align-items:center">
           <span>Stacks</span>
           <button class="btn icon" onclick="addStack()">+ New</button>
@@ -841,6 +841,13 @@
 <div class="toast" id="toast"></div>
 
 <script>
+  // ── FEATURE FLAGS ────────────────────────────────────────────────────────────
+  // Stacks: model + serializer + RibbonBuilder all stay live, so existing
+  // profiles with stack slots still load/save/render. Only the *authoring*
+  // surfaces (right-pane Stacks section, drop-into-stack target) are hidden
+  // when this is false. Flip back to true when stacks come back.
+  var STACKS_ENABLED = false;
+
   // ── PROFILE STATE ────────────────────────────────────────────────────────────
   // Mirrors the on-disk JSON shape (RST.Core.Profiles.Profile) — bridge
   // round-trips this verbatim through save_profile / export_profile.
@@ -893,7 +900,11 @@
   }
 
   function bootAfterBridge() {
-    rstLog('info', 'builder boot', { mode: mode, editId: editProfileId, editName: editProfileName });
+    rstLog('info', 'builder boot', { mode: mode, editId: editProfileId, editName: editProfileName, stacksEnabled: STACKS_ENABLED });
+    if (!STACKS_ENABLED) {
+      var stacksSection = document.getElementById('stacksSection');
+      if (stacksSection) stacksSection.style.display = 'none';
+    }
 
     // Catalog first (left pane). Then if editing, fetch and load the
     // existing profile into state.
@@ -1765,6 +1776,7 @@
   }
 
   function renderStacks() {
+    if (!STACKS_ENABLED) return;
     var list = document.getElementById('stackList');
     list.innerHTML = '';
     var names = Object.keys(profile.stacks).sort();
