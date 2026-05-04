@@ -17,6 +17,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using RST.Core.Scanning;
+using Serilog;
 
 namespace RST.UI.Loader;
 
@@ -58,17 +59,30 @@ public partial class LoaderWindow : Window
                 folderPath: assetsDir,
                 accessKind: CoreWebView2HostResourceAccessKind.Allow);
 
+            var shimPath = Path.Combine(assetsDir, "pywebview-shim.js");
             // File.ReadAllTextAsync is missing on net48; sync read is fine — the
             // shim file is ~2 KB and load happens once at window construction.
-            var shim = File.ReadAllText(Path.Combine(assetsDir, "pywebview-shim.js"));
+            var shim = File.ReadAllText(shimPath);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(shim);
 
             core.AddHostObjectToScript("api", _bridge);
+            core.NavigationCompleted += (_, e) =>
+            {
+                if (e.IsSuccess)
+                    Log.Information("WebView2 navigation OK");
+                else
+                    Log.Warning("WebView2 navigation failed: status={Status}, error={Error}",
+                                e.HttpStatusCode, e.WebErrorStatus);
+            };
 
-            core.Navigate($"https://{VirtualHost}/profile_loader.html");
+            var landing = $"https://{VirtualHost}/profile_loader.html";
+            Log.Information("WebView2 initialised: assetsDir={AssetsDir}, userData={UserData}, landing={Landing}",
+                            assetsDir, userDataDir, landing);
+            core.Navigate(landing);
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "WebView2 initialisation failed");
             MessageBox.Show(
                 "Failed to initialise WebView2:\n\n" + ex.Message +
                 "\n\nWebView2 Runtime must be installed (preinstalled on Win10 1903+/Win11).",

@@ -21,6 +21,7 @@
 using System.Collections.Generic;
 using Autodesk.Windows;
 using RST.Core.Scanning;
+using Serilog;
 
 namespace RST.Engine.Scanning;
 
@@ -29,14 +30,27 @@ internal static class RibbonScanner
     public static IEnumerable<ScannedCommand> Enumerate()
     {
         var ribbon = ComponentManager.Ribbon;
-        if (ribbon is null) yield break;
+        if (ribbon is null)
+        {
+            Log.Warning("RibbonScanner: ComponentManager.Ribbon is null — no add-in commands will be enumerated");
+            yield break;
+        }
+
+        var tabsTotal = 0;
+        var tabsWalked = 0;
+        var tabsSkippedBuiltin = 0;
+        var tabsSkippedRestricted = 0;
+        var buttonsEmitted = 0;
 
         foreach (var tab in ribbon.Tabs)
         {
             if (tab is null) continue;
-            if (BuiltinTabs.Contains(tab.Title)) continue;
-            if (ModeRestrictedTabs.Contains(tab.Title)) continue;
+            tabsTotal++;
+            if (BuiltinTabs.Contains(tab.Title)) { tabsSkippedBuiltin++; continue; }
+            if (ModeRestrictedTabs.Contains(tab.Title)) { tabsSkippedRestricted++; continue; }
+            tabsWalked++;
 
+            var perTab = 0;
             foreach (var panel in tab.Panels)
             {
                 var source = panel?.Source;
@@ -45,10 +59,19 @@ internal static class RibbonScanner
                 foreach (var item in source.Items)
                 {
                     foreach (var cmd in EnumerateItem(item, tab.Title, source.Title))
+                    {
+                        perTab++;
+                        buttonsEmitted++;
                         yield return cmd;
+                    }
                 }
             }
+            Log.Debug("RibbonScanner: tab={Tab} → {Count} buttons", tab.Title, perTab);
         }
+
+        Log.Debug("RibbonScanner: tabsTotal={Total}, walked={Walked}, " +
+                  "skippedBuiltin={Builtin}, skippedRestricted={Restricted}, buttons={Buttons}",
+                  tabsTotal, tabsWalked, tabsSkippedBuiltin, tabsSkippedRestricted, buttonsEmitted);
     }
 
     private static IEnumerable<ScannedCommand> EnumerateItem(
