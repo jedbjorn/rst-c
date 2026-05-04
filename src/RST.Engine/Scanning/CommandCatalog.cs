@@ -1,14 +1,20 @@
-// CommandCatalog.cs — single in-memory catalog joining the three scan sources.
+// CommandCatalog.cs — single in-memory catalog joining the scan sources.
 //
-// Sources, in priority order (first wins on Id collision):
-//   1. BuiltinCommandScanner — PostableCommand-derived "ID_BUTTON_*" entries.
-//   2. RibbonScanner         — live ribbon walk for add-in pushbuttons.
-//                              Per-button entries get enriched with
-//                              AssemblyPath/AddinFile by joining against
-//                              the manifest scan via tab title.
-//   3. AddinManifestParser   — XML scan; supplies fallback entries for add-ins
-//                              that declare commands without a visible ribbon
-//                              presence (e.g. zero-doc commands).
+// Sources and merge rules:
+//   1. BuiltinCommandScanner — seed: PostableCommand → "ID_BUTTON_*"
+//      entries. Authoritative for displayName + Native origin tag, but
+//      carries no SourceTab/SourcePanel (PostableCommand is just an enum;
+//      tab/panel placement is what the ribbon decides).
+//   2. RibbonScanner         — live ribbon walk. For every button:
+//        - if Id is new        → add as a fresh entry (3rd-party content).
+//        - if Id is in seed    → ENRICH: copy SourceTab/SourcePanel onto
+//                                the existing entry. This is how Revit's
+//                                built-ins get "Architecture > Build > Wall"
+//                                instead of landing in a "(unknown)" group.
+//        - if seed already has tab/panel → skip (redundant confirmation).
+//   3. AddinManifestParser   — XML scan; supplies fallback entries for
+//                              add-ins that declare commands without a
+//                              visible ribbon presence (zero-doc commands).
 //
 // Filter pipeline (applied after merge):
 //   raw → drop ModeRestrictedCommandIds (hard, code-defined)
@@ -84,15 +90,36 @@ public sealed class CommandCatalog
         Log.Information("BuiltinCommandScanner: {Count} commands", builtinCount);
 
         var ribbonAdded = 0;
-        var ribbonDuplicates = 0;
+        var ribbonEnriched = 0;
+        var ribbonRedundant = 0;
         foreach (var c in RibbonScanner.Enumerate())
         {
-            if (byId.ContainsKey(c.Id)) { ribbonDuplicates++; continue; }
+            if (byId.TryGetValue(c.Id, out var existing))
+            {
+                // Same Id already in the catalog (BuiltinCommandScanner entry).
+                // If existing has no tab/panel and the ribbon walk gives us
+                // one, upgrade — that's the whole reason we walk built-in
+                // tabs. Otherwise the ribbon walk is just confirming.
+                if (string.IsNullOrEmpty(existing.SourceTab) && !string.IsNullOrEmpty(c.SourceTab))
+                {
+                    byId[c.Id] = existing with
+                    {
+                        SourceTab = c.SourceTab,
+                        SourcePanel = c.SourcePanel,
+                    };
+                    ribbonEnriched++;
+                }
+                else
+                {
+                    ribbonRedundant++;
+                }
+                continue;
+            }
             byId[c.Id] = EnrichFromManifests(c, assemblyToManifest);
             ribbonAdded++;
         }
-        Log.Information("RibbonScanner: added {Added} commands ({Dupes} duplicate of builtin/ignored)",
-                        ribbonAdded, ribbonDuplicates);
+        Log.Information("RibbonScanner: added {Added} new, enriched {Enriched} builtins with tab/panel, {Redundant} redundant",
+                        ribbonAdded, ribbonEnriched, ribbonRedundant);
 
         var preFilter = byId.Values.Count;
         var modeDropped = 0;
