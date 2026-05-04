@@ -44,6 +44,7 @@ using AwRibbonPanel = Autodesk.Windows.RibbonPanel;
 using AwRibbonPanelSource = Autodesk.Windows.RibbonPanelSource;
 using AwRibbonButton = Autodesk.Windows.RibbonButton;
 using AwRibbonItemSize = Autodesk.Windows.RibbonItemSize;
+using RST.Core.Ribbon;
 using Serilog;
 
 namespace RST.Engine.Ribbon;
@@ -237,7 +238,7 @@ internal static class PanelStyling
     private sealed class UrlClickCommand : ICommand
     {
         private readonly string _url;
-        public UrlClickCommand(string url) { _url = url; }
+        public UrlClickCommand(string url) { _url = UrlNormalizer.Normalize(url); }
         public event EventHandler? CanExecuteChanged { add { } remove { } }
         public bool CanExecute(object? parameter) => true;
         public void Execute(object? parameter)
