@@ -783,13 +783,13 @@
   <div class="window-title">Profile Builder</div>
   <div class="header-sep"></div>
   <div class="branding-anchor">
-    <button id="brandingBtn" class="btn" onclick="toggleBrandingPopover(event)" title="Tab branding (logo + URL)">
+    <button id="brandingBtn" class="btn" onclick="toggleBrandingPopover(event)" title="Company Tab Branding">
       <span id="brandingBtnDot" class="branding-dot empty"></span>
       <span>Branding</span>
       <span class="branding-caret">▾</span>
     </button>
     <div id="brandingPopover" class="branding-popover" hidden>
-      <div class="prop-section-label">Tab Branding</div>
+      <div class="prop-section-label">Company Tab Branding</div>
       <div class="prop-row">
         <label>Logo</label>
         <div class="logo-row">
@@ -800,7 +800,7 @@
       </div>
       <div class="prop-row">
         <label>URL</label>
-        <input id="propBrandingUrl" type="text" placeholder="https://example.com" oninput="setBrandingUrl(this.value)">
+        <input id="propBrandingUrl" type="text" placeholder="https://example.com" onchange="setBrandingUrl(this.value)">
       </div>
       <div class="branding-popover-actions">
         <button class="btn primary" onclick="closeBrandingPopover()">Done</button>
@@ -964,6 +964,10 @@
       if (stacksSection) stacksSection.style.display = 'none';
     }
 
+    // Default branding is machine-wide; fetch first so the popover and
+    // header dot reflect current state even before any profile loads.
+    loadDefaultBrandingFromBridge();
+
     // Catalog first (left pane). Then if editing, fetch and load the
     // existing profile into state.
     window.pywebview.api.get_catalog().then(function(cat) {
@@ -1020,7 +1024,10 @@
     profile.hideRules      = src.hideRules || [];
     profile.stacks         = src.stacks || {};
     profile.panels         = src.panels || [];
-    profile.branding       = src.branding || null;
+    // Per-profile Branding is no longer authored — global default applies.
+    // Legacy non-null values are dropped silently; runtime resolver falls
+    // back to %AppData%\RST\branding.png + branding.json.
+    profile.branding       = null;
     if (profile.panels.length > 0) selectedPanelIndex = 0;
     rstLog('info', 'builder: loaded existing profile into editor', {
       name: profile.profile, id: profile.id, panels: profile.panels.length,
@@ -1038,13 +1045,34 @@
     syncBranding();
   }
 
-  // ── BRANDING ────────────────────────────────────────────────────────────────
+  // ── BRANDING (machine-wide) ─────────────────────────────────────────────────
+  // Branding lives at %AppData%\RST\branding.png + branding.json — one company
+  // brand per machine, applied to every profile that does not carry its own
+  // override. Profile.branding stays null in saved JSON; the runtime resolver
+  // (BrandingDefaults.Resolve) falls back to the machine default.
+  var defaultBranding = { hasLogo: false, fileName: null, url: null };
+
+  function loadDefaultBrandingFromBridge() {
+    if (!window.pywebview || !window.pywebview.api) return Promise.resolve();
+    return window.pywebview.api.load_default_branding().then(function(b) {
+      if (b && typeof b === 'object') {
+        defaultBranding = {
+          hasLogo: !!b.hasLogo,
+          fileName: b.fileName || null,
+          url: b.url || null,
+        };
+      }
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: load_default_branding threw', { err: String(err) });
+    });
+  }
+
   function syncBranding() {
-    var b = profile.branding || {};
-    document.getElementById('propBrandingUrl').value = b.url || '';
+    document.getElementById('propBrandingUrl').value = defaultBranding.url || '';
     var nameEl = document.getElementById('propLogoName');
-    if (b.logoFile) {
-      nameEl.textContent = b.logoFile;
+    if (defaultBranding.hasLogo) {
+      nameEl.textContent = defaultBranding.fileName || 'branding.png';
       nameEl.classList.remove('empty');
     } else {
       nameEl.textContent = '(none)';
@@ -1053,7 +1081,7 @@
     // Header button dot — filled when any branding is set, hollow otherwise.
     var dot = document.getElementById('brandingBtnDot');
     if (dot) {
-      var isSet = !!(b.logoFile || b.url);
+      var isSet = !!(defaultBranding.hasLogo || defaultBranding.url);
       dot.classList.toggle('empty', !isSet);
     }
   }
@@ -1092,22 +1120,21 @@
     closeBrandingPopover();
   }
 
-  function ensureBranding() {
-    if (!profile.branding) profile.branding = { logoFile: null, url: null };
-    return profile.branding;
-  }
-
-  function pruneBranding() {
-    var b = profile.branding;
-    if (!b) return;
-    if (!b.logoFile && !b.url) profile.branding = null;
-  }
-
   function setBrandingUrl(v) {
+    if (!window.pywebview || !window.pywebview.api) return;
     var trimmed = (v || '').trim();
-    if (trimmed) ensureBranding().url = trimmed;
-    else if (profile.branding) profile.branding.url = null;
-    pruneBranding();
+    window.pywebview.api.save_default_branding_url(trimmed).then(function(result) {
+      if (!result || !result.ok) {
+        showToast('Save URL failed: ' + ((result && result.error) || 'unknown'), 'err');
+        return;
+      }
+      defaultBranding.url = trimmed || null;
+      rstLog('info', 'builder: default branding url saved', { urlSet: !!defaultBranding.url });
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: save_default_branding_url threw', { err: String(err) });
+      showToast('Save URL failed: ' + err, 'err');
+    });
   }
 
   function pickLogo() {
@@ -1119,8 +1146,9 @@
         }
         return;
       }
-      ensureBranding().logoFile = result.fileName;
-      rstLog('info', 'builder: logo picked', { fileName: result.fileName });
+      defaultBranding.hasLogo = true;
+      defaultBranding.fileName = result.fileName || 'branding.png';
+      rstLog('info', 'builder: default logo updated', { fileName: defaultBranding.fileName });
       syncBranding();
     }).catch(function(err) {
       rstLog('error', 'builder: pick_logo_file threw', { err: String(err) });
@@ -1129,10 +1157,20 @@
   }
 
   function clearLogo() {
-    if (!profile.branding) return;
-    profile.branding.logoFile = null;
-    pruneBranding();
-    syncBranding();
+    if (!window.pywebview || !window.pywebview.api) return;
+    window.pywebview.api.clear_default_logo().then(function(result) {
+      if (!result || !result.ok) {
+        showToast('Clear logo failed: ' + ((result && result.error) || 'unknown'), 'err');
+        return;
+      }
+      defaultBranding.hasLogo = false;
+      defaultBranding.fileName = null;
+      rstLog('info', 'builder: default logo cleared');
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: clear_default_logo threw', { err: String(err) });
+      showToast('Clear logo failed: ' + err, 'err');
+    });
   }
 
   // ── CATALOG INDEX + RENDER ───────────────────────────────────────────────────

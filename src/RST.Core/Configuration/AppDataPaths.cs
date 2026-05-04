@@ -20,11 +20,24 @@ namespace RST.Core.Configuration;
 
 public static class AppDataPaths
 {
+    private static string? _rootOverride;
+
     /// <summary>%AppData%\RST\.</summary>
     public static string Root =>
-        Path.Combine(
+        _rootOverride ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "RST");
+
+    /// <summary>
+    /// Test hook — redirect Root to an arbitrary directory. Pass null to
+    /// restore the real %AppData%\RST\ resolution. Production code never
+    /// calls this; tests use it to point AppData reads/writes at a temp
+    /// directory so they don't pollute the user's real config.
+    /// </summary>
+    public static void OverrideRootForTests(string? root)
+    {
+        _rootOverride = root;
+    }
 
     /// <summary>%AppData%\RST\profiles\.</summary>
     public static string ProfilesDir => Path.Combine(Root, "profiles");
