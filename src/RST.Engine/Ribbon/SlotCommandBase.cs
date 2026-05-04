@@ -8,6 +8,7 @@ using System;
 using System.Diagnostics;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using RST.Core.Ribbon;
 using Serilog;
 
 namespace RST.Engine.Ribbon;
@@ -33,7 +34,7 @@ public abstract class SlotCommandBase : IExternalCommand
             switch (target.Kind)
             {
                 case SlotKind.Url:
-                    Process.Start(new ProcessStartInfo(target.Payload) { UseShellExecute = true });
+                    Process.Start(new ProcessStartInfo(UrlNormalizer.Normalize(target.Payload)) { UseShellExecute = true });
                     return Result.Succeeded;
 
                 case SlotKind.Command:
