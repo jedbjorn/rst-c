@@ -19,6 +19,8 @@
 // Filter pipeline (applied after merge):
 //   raw → drop ModeRestrictedCommandIds (hard, code-defined)
 //       → drop BanList entries (admin-curated, %AppData%\RST\bans.json)
+//       → drop headless (no SourceTab or no SourcePanel) — if the user
+//         can't see it on the ribbon, it doesn't belong in the catalog
 //       → catalog
 //
 // The catalog is the only surface RST-004 (Loader) talks to.
@@ -124,15 +126,26 @@ public sealed class CommandCatalog
         var preFilter = byId.Values.Count;
         var modeDropped = 0;
         var bansDropped = 0;
+        var headlessDropped = 0;
         var filtered = new List<ScannedCommand>(preFilter);
         foreach (var c in byId.Values)
         {
             if (ModeRestrictedCommandIds.Contains(c.Id)) { modeDropped++; continue; }
             if (bans.IsBanned(c.Id))                      { bansDropped++; continue; }
+            // Headless commands — PostableCommand entries (or manifest-only
+            // hits) that don't surface anywhere on the live ribbon. If the
+            // user can't see it in Revit they can't expect to find it in the
+            // builder catalog either, and they wouldn't recognise it by Id
+            // alone if they did. Drop them to keep the catalog tidy.
+            if (string.IsNullOrEmpty(c.SourceTab) || string.IsNullOrEmpty(c.SourcePanel))
+            {
+                headlessDropped++;
+                continue;
+            }
             filtered.Add(c);
         }
-        Log.Information("Filter pipeline: {Pre} → {Post} (mode-restricted={Mode}, banned={Banned})",
-                        preFilter, filtered.Count, modeDropped, bansDropped);
+        Log.Information("Filter pipeline: {Pre} → {Post} (mode-restricted={Mode}, banned={Banned}, headless={Headless})",
+                        preFilter, filtered.Count, modeDropped, bansDropped, headlessDropped);
 
         return new CommandCatalog(filtered, manifests);
     }
