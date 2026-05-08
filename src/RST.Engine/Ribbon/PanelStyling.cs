@@ -177,7 +177,8 @@ internal static class PanelStyling
                 Id = "REST_Branding_Btn",
                 ShowText = false,
                 Size = AwRibbonItemSize.Large,
-                LargeImage = IconAssets.Default,
+                Image = IconAssets.Default32,
+                LargeImage = IconAssets.Default32,
                 CommandHandler = new UrlClickCommand(string.IsNullOrWhiteSpace(url)
                     ? "https://github.com/jedbjorn/RST"
                     : url!.Trim()),

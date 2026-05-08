@@ -227,7 +227,9 @@ internal static class ProfileTabBuilder
                 Id = $"RST_ProfileBtn_{panelIndex:D3}_{slotInPanel:D3}",
                 ShowText = true,
                 Size = AwRibbonItemSize.Large,
-                LargeImage = IconAssets.Default,
+                Image = IconAssets.Default32,
+                LargeImage = IconAssets.Default32,
+                Orientation = System.Windows.Controls.Orientation.Vertical,
                 ToolTip = target.Kind == SlotKind.Url
                     ? "Open: " + target.Payload
                     : "Posts: " + target.Payload,

@@ -1,12 +1,17 @@
 // IconAssets.cs — bundled image resources for ribbon button icons.
 //
-// blank.png is a 1x1 transparent PNG used as a non-null LargeImage on
-// every ribbon button we create. AdWindows/Revit render Size=Large
-// buttons with no LargeImage as a dropdown-chevron placeholder, even
-// when no dropdown is wired. Setting LargeImage to anything (including
-// a fully transparent pixel) suppresses the chevron without committing
-// to icon design — real per-slot icons land in a follow-up flag (the
-// `pack:foo` resolver + shipped icon pack referenced by Slot.IconFile).
+// AdWindows/Revit render Size=Large buttons without visible Image and
+// LargeImage as a dropdown-chevron placeholder (split-button look),
+// even when no dropdown is wired. A 1x1 transparent PNG is NOT enough
+// to suppress this — the renderer treats sub-pixel images as "no image"
+// in Revit 2025. We ship a real 32x32 default (default_32.png, copied
+// from upstream pyRevit RST) and set BOTH Image AND LargeImage on every
+// button — same pattern startup.py uses for unmapped slots.
+//
+// Real per-slot icons (the `pack:foo` resolver against Assets/icons/pack/)
+// land in a follow-up flag — Slot.IconFile is in the model but unwired.
+// Until then every button shows the same default icon, like pyRevit RST
+// did before its iconpack matured.
 
 using System;
 using System.IO;
@@ -18,48 +23,55 @@ namespace RST.Engine.Ribbon;
 
 internal static class IconAssets
 {
-    private static ImageSource? _default;
-    private static bool _loadAttempted;
+    private static ImageSource? _default32;
+    private static bool _default32Attempted;
 
-    public static ImageSource? Default
+    /// <summary>
+    /// 32x32 visible default icon (Assets/icons/default_32.png). Used as
+    /// both Image and LargeImage on any button without a per-slot icon.
+    /// </summary>
+    public static ImageSource? Default32
     {
         get
         {
-            if (_loadAttempted) return _default;
-            _loadAttempted = true;
-
-            var path = BundledPath("blank.png");
-            if (path is null || !File.Exists(path))
-            {
-                Log.Warning("IconAssets: blank.png not found at expected path={Path}", path);
-                return null;
-            }
-
-            try
-            {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.UriSource = new Uri(path, UriKind.Absolute);
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.EndInit();
-                if (bmp.CanFreeze) bmp.Freeze();
-                _default = bmp;
-                Log.Debug("IconAssets: loaded blank.png ({Width}x{Height}) from {Path}", bmp.PixelWidth, bmp.PixelHeight, path);
-                return _default;
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "IconAssets: failed to load blank.png from {Path}", path);
-                return null;
-            }
+            if (_default32Attempted) return _default32;
+            _default32Attempted = true;
+            _default32 = LoadBundled("icons/default_32.png");
+            return _default32;
         }
     }
 
-    private static string? BundledPath(string filename)
+    private static ImageSource? LoadBundled(string relativePath)
     {
         var loc = typeof(IconAssets).Assembly.Location;
-        if (string.IsNullOrEmpty(loc)) return null;
+        if (string.IsNullOrEmpty(loc))
+        {
+            Log.Warning("IconAssets: assembly location unavailable, can't load {Rel}", relativePath);
+            return null;
+        }
         var dir = Path.GetDirectoryName(loc);
-        return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir!, "Assets", filename);
+        if (string.IsNullOrEmpty(dir)) return null;
+        var path = Path.Combine(dir!, "Assets", relativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(path))
+        {
+            Log.Warning("IconAssets: bundled icon not found at {Path}", path);
+            return null;
+        }
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.UriSource = new Uri(path, UriKind.Absolute);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            if (bmp.CanFreeze) bmp.Freeze();
+            Log.Debug("IconAssets: loaded {Rel} ({W}x{H})", relativePath, bmp.PixelWidth, bmp.PixelHeight);
+            return bmp;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "IconAssets: failed to load {Path}", path);
+            return null;
+        }
     }
 }
