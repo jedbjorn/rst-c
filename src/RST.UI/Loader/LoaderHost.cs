@@ -30,4 +30,19 @@ public static class LoaderHost
         var window = new LoaderWindow(revitVersion, catalog, switchScheduler);
         window.ShowDialog();
     }
+
+    /// <summary>
+    /// Open the WebView2 host modally and land directly on the profile
+    /// builder page. Same window class as <see cref="ShowModal"/> —
+    /// only the initial URL differs. Wired to the dedicated Builder
+    /// ribbon button so the user can edit/create profiles without going
+    /// through the loader picker first.
+    /// </summary>
+    public static void ShowModalToBuilder(string revitVersion,
+                                          IReadOnlyList<ScannedCommand> catalog,
+                                          IProfileSwitchScheduler? switchScheduler = null)
+    {
+        var window = new LoaderWindow(revitVersion, catalog, switchScheduler, LoaderInitialPage.Builder);
+        window.ShowDialog();
+    }
 }

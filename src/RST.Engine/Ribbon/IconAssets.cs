@@ -25,6 +25,10 @@ internal static class IconAssets
 {
     private static ImageSource? _default32;
     private static bool _default32Attempted;
+    private static ImageSource? _loader;
+    private static bool _loaderAttempted;
+    private static ImageSource? _builder;
+    private static bool _builderAttempted;
 
     /// <summary>
     /// 32x32 visible default icon (Assets/icons/default_32.png). Used as
@@ -38,6 +42,30 @@ internal static class IconAssets
             _default32Attempted = true;
             _default32 = LoadBundled("icons/default_32.png");
             return _default32;
+        }
+    }
+
+    /// <summary>32x32 icon for the Loader ribbon button (Assets/icons/icon_loader.png).</summary>
+    public static ImageSource? LoaderIcon
+    {
+        get
+        {
+            if (_loaderAttempted) return _loader;
+            _loaderAttempted = true;
+            _loader = LoadBundled("icons/icon_loader.png");
+            return _loader;
+        }
+    }
+
+    /// <summary>32x32 icon for the Builder ribbon button (Assets/icons/icon_creator.png).</summary>
+    public static ImageSource? BuilderIcon
+    {
+        get
+        {
+            if (_builderAttempted) return _builder;
+            _builderAttempted = true;
+            _builder = LoadBundled("icons/icon_creator.png");
+            return _builder;
         }
     }
 
