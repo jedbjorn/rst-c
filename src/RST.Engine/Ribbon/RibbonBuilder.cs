@@ -18,26 +18,28 @@ namespace RST.Engine.Ribbon;
 
 internal static class RibbonBuilder
 {
-    private const string RstTabName = "RST";
+    private const string RstPanelTitle = "RST";
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
     private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
 
     public static void Build(UIControlledApplication app)
     {
-        try { app.CreateRibbonTab(RstTabName); }
-        catch (Autodesk.Revit.Exceptions.ArgumentException) { /* tab exists — addin reload */ }
-
-        // Always register the RST tab so the catalog scanner doesn't
-        // surface our own buttons (or any future RST-tab panels) as
-        // profile-buildable commands.
-        RstManagedTabs.Add(RstTabName);
+        // Register the panel title so the catalog scanner skips it —
+        // otherwise our own three buttons would surface as catalog
+        // entries on every Loader open. RstManagedTabs is too coarse on
+        // a shared tab (Add-Ins hosts every addin's buttons), so we
+        // filter at the panel-title level instead.
+        RstManagedPanels.Add(RstPanelTitle);
 
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
         // Single panel, three side-by-side Large buttons:
-        // Builder | Loader | RSTify. Order matches upstream pyRevit RST.
-        var rstPanel = app.CreateRibbonPanel(RstTabName, "RST");
+        // Builder | Loader | RSTify. Lives on Revit's built-in Add-Ins
+        // tab (single-arg CreateRibbonPanel overload). No custom RST tab
+        // — RST tools share the External Tools area with every other
+        // add-in.
+        var rstPanel = app.CreateRibbonPanel(RstPanelTitle);
 
         var builderBtn = new PushButtonData(
             name: "RST_Builder",
