@@ -29,6 +29,10 @@ internal static class IconAssets
     private static bool _loaderAttempted;
     private static ImageSource? _builder;
     private static bool _builderAttempted;
+    private static ImageSource? _rstifyOff;
+    private static bool _rstifyOffAttempted;
+    private static ImageSource? _rstifyOn;
+    private static bool _rstifyOnAttempted;
 
     /// <summary>
     /// 32x32 visible default icon (Assets/icons/default_32.png). Used as
@@ -66,6 +70,30 @@ internal static class IconAssets
             _builderAttempted = true;
             _builder = LoadBundled("icons/icon_creator.png");
             return _builder;
+        }
+    }
+
+    /// <summary>RSTify "inactive" icon — hidden tabs are currently visible.</summary>
+    public static ImageSource? RstifyIconOff
+    {
+        get
+        {
+            if (_rstifyOffAttempted) return _rstifyOff;
+            _rstifyOffAttempted = true;
+            _rstifyOff = LoadBundled("icons/icon_minify.png");
+            return _rstifyOff;
+        }
+    }
+
+    /// <summary>RSTify "active" icon — hidden tabs are currently suppressed.</summary>
+    public static ImageSource? RstifyIconOn
+    {
+        get
+        {
+            if (_rstifyOnAttempted) return _rstifyOn;
+            _rstifyOnAttempted = true;
+            _rstifyOn = LoadBundled("icons/icon_minify_on.png");
+            return _rstifyOn;
         }
     }
 

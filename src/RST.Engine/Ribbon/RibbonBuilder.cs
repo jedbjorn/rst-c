@@ -21,6 +21,7 @@ internal static class RibbonBuilder
     private const string RstTabName = "RST";
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
+    private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
 
     public static void Build(UIControlledApplication app)
     {
@@ -34,20 +35,9 @@ internal static class RibbonBuilder
 
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
-        // Single panel, two side-by-side Large buttons: Loader + Builder.
-        // Order matches upstream pyRevit RST.
+        // Single panel, three side-by-side Large buttons:
+        // Builder | Loader | RSTify. Order matches upstream pyRevit RST.
         var rstPanel = app.CreateRibbonPanel(RstTabName, "RST");
-
-        var loaderBtn = new PushButtonData(
-            name: "RST_Loader",
-            text: "Loader",
-            assemblyName: assemblyPath,
-            className: LoaderClassName)
-        {
-            ToolTip = "Open the RST profile selector.",
-            Image = IconAssets.LoaderIcon ?? IconAssets.Default32,
-            LargeImage = IconAssets.LoaderIcon ?? IconAssets.Default32,
-        };
 
         var builderBtn = new PushButtonData(
             name: "RST_Builder",
@@ -60,7 +50,32 @@ internal static class RibbonBuilder
             LargeImage = IconAssets.BuilderIcon ?? IconAssets.Default32,
         };
 
-        rstPanel.AddItem(loaderBtn);
+        var loaderBtn = new PushButtonData(
+            name: "RST_Loader",
+            text: "Loader",
+            assemblyName: assemblyPath,
+            className: LoaderClassName)
+        {
+            ToolTip = "Open the RST profile selector.",
+            Image = IconAssets.LoaderIcon ?? IconAssets.Default32,
+            LargeImage = IconAssets.LoaderIcon ?? IconAssets.Default32,
+        };
+
+        // Name doubles as the cookie/id marker RstifyToggle.RefreshIcon
+        // looks up at runtime to swap the on/off icon.
+        var rstifyBtn = new PushButtonData(
+            name: RstifyToggle.RstifyButtonCookie,
+            text: "RSTify",
+            assemblyName: assemblyPath,
+            className: RstifyClassName)
+        {
+            ToolTip = "Toggle hide-rules from the active profile (hide configured tabs / show all).",
+            Image = IconAssets.RstifyIconOff ?? IconAssets.Default32,
+            LargeImage = IconAssets.RstifyIconOff ?? IconAssets.Default32,
+        };
+
         rstPanel.AddItem(builderBtn);
+        rstPanel.AddItem(loaderBtn);
+        rstPanel.AddItem(rstifyBtn);
     }
 }
