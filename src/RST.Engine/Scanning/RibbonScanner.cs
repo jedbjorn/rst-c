@@ -66,6 +66,11 @@ internal static class RibbonScanner
             {
                 var source = panel?.Source;
                 if (source is null) continue;
+                // RST-managed panels on shared/built-in tabs (Add-Ins).
+                // RstManagedTabs would skip the entire host tab, eating
+                // every other add-in's buttons too — so we cut at the
+                // panel level instead.
+                if (RstManagedPanels.Contains(source.Title)) continue;
 
                 foreach (var item in source.Items)
                 {
