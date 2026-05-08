@@ -159,6 +159,13 @@ internal static class PanelStyling
             bmp.BeginInit();
             bmp.UriSource = new Uri(Path.GetFullPath(logoAbsolutePath), UriKind.Absolute);
             bmp.CacheOption = BitmapCacheOption.OnLoad;
+            // The branding logo is user-mutable — Bridge.PickLogoFile rewrites
+            // the same %AppData%\RST\branding.png on every pick. WPF caches
+            // BitmapImage by URI process-wide; without IgnoreImageCache the
+            // cached old bitmap survives every profile rebuild for the rest
+            // of the Revit session, even though a fresh BitmapImage instance
+            // is constructed each time. Bypass the cache so re-picks land.
+            bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             bmp.EndInit();
             // Freeze is best-effort — failure makes the bitmap mutable, which
             // costs us cross-thread sharing and (more importantly) leaves
