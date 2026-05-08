@@ -291,31 +291,41 @@
     padding: 2px 7px;
   }
 
+  /* Preview canvas mimics Revit's ribbon background. Defaults to Revit 2024+
+     dark theme; flips to the light-theme color when the OS reports a light
+     preference. WebView2 honors `prefers-color-scheme` from Windows settings.
+     A true preview matches what the user sees in Revit — independent of the
+     loader UI's own (always-dark) chrome. */
   .tab-canvas-ro {
     display: flex;
     gap: 4px;
     padding: 10px 12px 12px;
     overflow-x: auto;
-    background: var(--bg);
+    background: #2D2D30; /* Revit dark ribbon */
     min-height: 96px;
     align-items: flex-start;
+  }
+  @media (prefers-color-scheme: light) {
+    .tab-canvas-ro { background: #E1E1E1; } /* Revit light ribbon */
   }
   .tab-canvas-ro::-webkit-scrollbar { height: 3px; }
   .tab-canvas-ro::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  /* Preview panel cards */
+  /* Preview panel cards — background applied per-panel via inline style
+     (panel.color blended with profile.panelOpacity → rgba). Subtle 1px
+     ring keeps panels distinct against either canvas theme. */
   .p-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
     border-radius: 5px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     min-width: 100px;
     flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
   }
 
-  .p-panel-stripe { height: 3px; flex-shrink: 0; }
+  /* Stripe is no longer rendered — the whole panel carries the color. */
+  .p-panel-stripe { display: none; }
 
   .p-panel-inner {
     flex: 1;
@@ -1037,6 +1047,22 @@
   }
 
   // ── TAB PREVIEW (read-only) ───────────────────────────────────────────────────
+  // Convert "#RRGGBB" + opacity (0-100) to "rgba(r,g,b,a)" for live preview.
+  // Mirrors what PanelStyling.cs does in the running ribbon — see-through
+  // panels at low opacity, fully opaque at 100, falling back to a sane
+  // default when the hex is malformed.
+  function hexToRgba(hex, opacityPct) {
+    var h = (hex || '').trim().replace(/^#/, '');
+    if (h.length !== 6) return 'rgba(79,142,247,1)';
+    var r = parseInt(h.slice(0, 2), 16);
+    var g = parseInt(h.slice(2, 4), 16);
+    var b = parseInt(h.slice(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return 'rgba(79,142,247,1)';
+    var pct = (opacityPct == null || isNaN(opacityPct)) ? 100 : opacityPct;
+    var a = Math.max(0, Math.min(100, pct)) / 100;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+  }
+
   function renderTabPreview(profile) {
     document.getElementById('previewTabPill').textContent = profile.tab || '—';
     const canvas = document.getElementById('tabCanvas');
@@ -1045,6 +1071,8 @@
       canvas.innerHTML = `<div style="color:var(--text3);font-family:'DM Mono',monospace;font-size:10px;padding:18px;letter-spacing:0.06em">No panels configured</div>`;
       return;
     }
+
+    const panelOpacity = profile.panelOpacity != null ? profile.panelOpacity : 100;
 
     canvas.innerHTML = profile.panels.map(panel => {
       const innerHtml = (panel.slots || []).map(slot => {
@@ -1068,8 +1096,8 @@
         return '';
       }).join('');
 
-      return `<div class="p-panel">
-        <div class="p-panel-stripe" style="background:${panel.color}"></div>
+      const panelBg = hexToRgba(panel.color, panelOpacity);
+      return `<div class="p-panel" style="background:${panelBg}">
         <div class="p-panel-inner">${innerHtml || '<span class="p-panel-empty">Empty</span>'}</div>
         <div class="p-panel-name">${escHtml(panel.name)}</div>
       </div>`;
