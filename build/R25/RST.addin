@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST.addin — Revit application manifest.
+
+  Installed under %ProgramData%\Autodesk\Revit\Addins\<ver>\ by the WiX
+  installer (RST-012). The Assembly path is per-version; the installer
+  drops the matching DLL alongside this manifest.
+
+  AddInId is the canonical RST application ID — do NOT change once
+  shipped, this becomes how Revit identifies the add-in across upgrades.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>RST</Name>
+    <Assembly>RST\RST.Engine.dll</Assembly>
+    <FullClassName>RST.Engine.RstApplication</FullClassName>
+    <ClientId>4f8ef7a0-0001-4000-8000-525354000001</ClientId>
+    <VendorId>RSTC</VendorId>
+    <VendorDescription>Designs/OS — https://github.com/jedbjorn/RST-C</VendorDescription>
+  </AddIn>
+</RevitAddIns>

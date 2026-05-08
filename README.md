@@ -78,14 +78,15 @@ dotnet build -c "Debug R24"     # Revit 2024 (requires .NET Framework 4.8 refere
 
 ## Testing on Revit (Windows)
 
-Pre-built bundles live on the orphan **`dist`** branch — one folder per Revit major (`dist/R24/`, `dist/R25/`, `dist/R26/`, `dist/R27/`). Currently only **R25** is built; the rest are pending until first build for that target.
+Pre-built bundles ship on `main` under `build/R<NN>/` — one folder per Revit major (`build/R24/`, `build/R25/`, `build/R26/`, `build/R27/`). Currently only **R25** is built; the rest are pending until first build for that target.
 
-### Pull the bundle on the test machine
+### Pull on the test machine
 
 ```bash
-git clone -b dist git@github.com:jedbjorn/rst-c-.git rst-c-dist
-# or, on an existing clone of the dist branch:
-git pull origin dist
+# fresh clone:
+git clone git@github.com:jedbjorn/rst-c-.git
+# or on an existing clone:
+git pull
 ```
 
 ### Install into Revit's per-user add-in directory
@@ -93,8 +94,8 @@ git pull origin dist
 Close Revit first (it locks the DLLs), then copy the matching bundle into `%AppData%\Autodesk\Revit\Addins\<version>\`. For Revit 2025:
 
 ```powershell
-# from the rst-c-dist working tree
-Copy-Item -Recurse -Force "dist\R25\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
+# from the rst-c- working tree
+Copy-Item -Recurse -Force "build\R25\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
 ```
 
 After install, the directory should look like:

@@ -29,6 +29,10 @@ artifacts/
 publish/
 *.binlog
 
+## Re-include shipped bundles under build/R<NN>/
+!build/R*/**/*.pdb
+!build/R*/**/*.dll.config
+
 ## RST-specific
 src/**/Resources/Profiles/*.json
 !src/**/Resources/Profiles/.gitkeep
