@@ -12,16 +12,17 @@
 //   ApplyColor(panel, hex, alpha) — sets the panel's
 //     CustomPanelBackground + CustomPanelTitleBarBackground.
 //
-// Note on corner radius: pyRevit's startup.py wraps SizeChanged-aware
-// brush recalc in a try/except that silently swallows the
-// AttributeError — Autodesk.Windows.RibbonPanel inherits from
-// System.Object, not from a WPF FrameworkElement, so it has no
-// SizeChanged event, no ActualWidth/Height. Verified via metadata-
-// reader probe of AdWindows 2026.4.0 (events are PropertyChanged /
-// HostEvent / IsVisibleChanged only). We use default RadiusX/Y ratios
-// (0.03 / 0.08) for the rounded rectangle — visually equivalent to
-// pyRevit's actual runtime output. RST-020 may revisit if a route to
-// the underlying visual surfaces.
+// Note on corner radius: AdWindows.RibbonPanel inherits from
+// System.Object (verified via metadata-reader probe of 2025.4.41 +
+// 2026.4.0), so it has no SizeChanged event and no ActualWidth/Height.
+// pyRevit's startup.py wraps a SizeChanged subscription in try/except
+// — IronPython's late binding swallows the AttributeError silently,
+// which means pyRevit's runtime radii are also just the initial relative
+// ratios. We do better here: estimate panel dimensions from item count
+// (each Large item ≈ 96px wide) and emit two brushes (body + title bar)
+// with absolute-pixel-targeted relative radii. Result: ~5px corners on
+// every panel regardless of item count, matching pyRevit's intended
+// PANEL_CORNER_RADIUS_PX = 5 — which pyRevit silently fails to apply.
 //
 // Branding panel construction lives in BuildBrandingPanel(); the
 // caller (RibbonBuilder) is responsible for inserting it at index 0
@@ -51,10 +52,14 @@ namespace RST.Engine.Ribbon;
 
 internal static class PanelStyling
 {
+    /// <summary>Target absolute corner radius in pixels (matches pyRevit's PANEL_CORNER_RADIUS_PX).</summary>
+    private const double TargetRadiusPx = 5.0;
+
     /// <summary>
     /// Apply a colored, rounded background to <paramref name="panel"/>.
-    /// Sets both the panel body and title-bar brushes to the same
-    /// DrawingBrush.
+    /// Body and title-bar each get their own DrawingBrush so both render
+    /// with ~5px corners regardless of item count or title-bar height
+    /// (a single shared brush would give the title bar squashed Y-radii).
     /// </summary>
     public static void ApplyColor(AwRibbonPanel panel, string hexColor, double alpha)
     {
@@ -62,10 +67,21 @@ internal static class PanelStyling
         var clamped = Math.Max(0.0, Math.Min(1.0, alpha));
         try
         {
-            var brush = ColorBrush(hexColor, clamped);
-            if (brush is null) return;
-            panel.CustomPanelBackground = brush;
-            panel.CustomPanelTitleBarBackground = brush;
+            // Estimate rendered panel width from item count — each Large
+            // item is ~96px wide. AdWindows doesn't expose ActualWidth,
+            // so this is the closest we can get without a visual-tree walk.
+            int itemCount = panel.Source?.Items.Count ?? 1;
+            double estW = Math.Max(96.0, itemCount * 96.0 + 8.0);
+            const double bodyH = 96.0;
+            const double titleH = 18.0;
+
+            var bodyBrush = ColorBrush(hexColor, clamped, estW, bodyH);
+            var titleBrush = ColorBrush(hexColor, clamped, estW, titleH);
+            if (bodyBrush is not null) panel.CustomPanelBackground = bodyBrush;
+            if (titleBrush is not null) panel.CustomPanelTitleBarBackground = titleBrush;
+
+            Log.Debug("PanelStyling.ApplyColor: hex={Hex} alpha={Alpha} items={Items} estW={EstW}",
+                      hexColor, clamped, itemCount, estW);
         }
         catch (Exception ex)
         {
@@ -179,12 +195,16 @@ internal static class PanelStyling
 
     /// <summary>
     /// Create a DrawingBrush that paints a rounded rectangle in the
-    /// requested color. RadiusX/Y are relative-to-bounding-box ratios
-    /// (0.03 / 0.08) — see header comment on why we don't size-track
-    /// for fixed-pixel corners. Falls back to a SolidColorBrush if the
-    /// rounded path throws.
+    /// requested color. When <paramref name="targetWidth"/> and
+    /// <paramref name="targetHeight"/> are both &gt; 0, RadiusX/Y are
+    /// computed as <see cref="TargetRadiusPx"/> divided by the target
+    /// dimension — so the brush, when stretched (Fill / RelativeToBoundingBox)
+    /// to a container of that size, renders ~5px corners. Without targets,
+    /// falls back to legacy ratios (0.03 / 0.08) which scale with panel
+    /// width and produce inconsistent pixel-radii across panels.
+    /// Falls back to a SolidColorBrush if the rounded path throws.
     /// </summary>
-    public static Brush? ColorBrush(string hexColor, double alpha)
+    public static Brush? ColorBrush(string hexColor, double alpha, double targetWidth = 0, double targetHeight = 0)
     {
         var color = ParseHex(hexColor, alpha);
         if (color is null) return null;
@@ -195,10 +215,21 @@ internal static class PanelStyling
             try { fill.Freeze(); }
             catch (Exception ex) { Log.Debug(ex, "PanelStyling: SolidColorBrush.Freeze failed for hex={Hex}", hexColor); }
 
+            double rx, ry;
+            if (targetWidth > 0 && targetHeight > 0)
+            {
+                rx = TargetRadiusPx / targetWidth;
+                ry = TargetRadiusPx / targetHeight;
+            }
+            else
+            {
+                rx = 0.03;
+                ry = 0.08;
+            }
             var rect = new RectangleGeometry(new Rect(0, 0, 1, 1))
             {
-                RadiusX = 0.03,
-                RadiusY = 0.08,
+                RadiusX = rx,
+                RadiusY = ry,
             };
             var drawing = new GeometryDrawing(fill, pen: null, geometry: rect);
 
