@@ -116,6 +116,23 @@
     min-width: 22px;
   }
 
+  /* Profile selector dropdown — sits where the back button used to;
+     replaces back-navigation with same-window profile switching. */
+  .profile-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 9px;
+    border-radius: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+    min-width: 170px;
+    height: 26px;
+  }
+  .profile-selector:hover { border-color: var(--border2); }
+  .profile-selector:focus { outline: none; border-color: var(--accent); }
+
   /* ── BODY 3-PANE ── */
   .body { flex: 1; display: flex; min-height: 0; }
   .pane {
@@ -789,7 +806,10 @@
 
 <!-- Header -->
 <div class="window-header">
-  <button class="btn ghost" onclick="backToSelector()">← Back</button>
+  <select id="profileSelector" class="profile-selector" onchange="onProfileSelectChange(this.value)" title="Switch profile or start a new one">
+    <option value="__new__">+ New Profile</option>
+    <!-- existing profiles populated by populateProfileSelector() at boot -->
+  </select>
   <div class="header-sep"></div>
   <div class="window-title">Profile Builder</div>
   <div class="header-sep"></div>
@@ -942,8 +962,15 @@
   let nativeBundleOpen = false;       // user toggled the Autodesk Native supertab open?
   let selectedPanelIndex = -1;
   let mode = 'new';                   // 'new' | 'edit'
-  let editProfileId = null;
-  let editProfileName = null;
+
+  // Profile-switch state. The dropdown in the header is the only path to
+  // change which profile is being edited (no back-to-loader, no URL params
+  // — Builder and Loader are separate entry points).
+  let profilesList = [];              // refreshed after every save
+  let activeProfileId = null;         // id of the currently-loaded profile
+  let activeHiddenTabs = [];          // user's last RSTify settings
+  let activeDisableNonRequired = false;
+  let currentRevitVersion = '';
 
   // Drag state — single-source-of-truth for what's being dragged. HTML5
   // DataTransfer is too coarse for our typed payloads (catalog entry vs
@@ -953,11 +980,6 @@
 
   // ── BOOT ─────────────────────────────────────────────────────────────────────
   function boot() {
-    var params = new URLSearchParams(window.location.search);
-    mode = params.get('mode') === 'edit' ? 'edit' : 'new';
-    editProfileId = params.get('id') || null;
-    editProfileName = params.get('name') || null;
-
     // Bridge is installed by the host; pywebview-shim.js wraps it in
     // window.pywebview.api before firing pywebviewready. If the shim
     // hasn't fired yet, wait for it.
@@ -969,7 +991,7 @@
   }
 
   function bootAfterBridge() {
-    rstLog('info', 'builder boot', { mode: mode, editId: editProfileId, editName: editProfileName, stacksEnabled: STACKS_ENABLED });
+    rstLog('info', 'builder boot', { stacksEnabled: STACKS_ENABLED });
     if (!STACKS_ENABLED) {
       var stacksSection = document.getElementById('stacksSection');
       if (stacksSection) stacksSection.style.display = 'none';
@@ -979,47 +1001,115 @@
     // header dot reflect current state even before any profile loads.
     loadDefaultBrandingFromBridge();
 
-    // Catalog first (left pane). Then if editing, fetch and load the
-    // existing profile into state.
-    window.pywebview.api.get_catalog().then(function(cat) {
-      var t = typeof cat;
-      var len = Array.isArray(cat) ? cat.length : null;
-      catalog = Array.isArray(cat) ? cat : [];
+    // Fetch all bootstrap data in parallel — catalog, profiles list,
+    // active-profile snapshot (for the auto-reload-on-save check), and
+    // the running Revit version (passed back through load_profile).
+    Promise.all([
+      window.pywebview.api.get_catalog(),
+      window.pywebview.api.get_profiles(),
+      window.pywebview.api.get_active_profile(),
+      window.pywebview.api.get_revit_version()
+    ]).then(function(results) {
+      catalog = Array.isArray(results[0]) ? results[0] : [];
       indexCatalog();
       renderCatalog();
       document.getElementById('catalogCount').textContent = catalog.length;
       rstLog(catalog.length === 0 ? 'warn' : 'info',
              'builder: get_catalog returned',
-             { type: t, length: len, kept: catalog.length, sample: catalog[0] || null });
-    }).catch(function(err) {
-      console.error('get_catalog failed:', err);
-      rstLog('error', 'builder: get_catalog threw', { err: String(err) });
-      catalog = [];
-      renderCatalog();
-    });
+             { length: catalog.length, sample: catalog[0] || null });
 
-    if (mode === 'edit' && (editProfileId || editProfileName)) {
-      window.pywebview.api.get_profiles().then(function(list) {
-        var found = (list || []).find(function(p) {
-          if (editProfileId && p.id === editProfileId) return true;
-          if (editProfileName && p.profile === editProfileName) return true;
-          return false;
-        });
-        if (found) loadIntoProfile(found);
-        else {
-          showToast('Profile not found — starting fresh.', 'err');
-          mode = 'new';
-        }
-        syncHeader();
-        renderAll();
-      }).catch(function(err) {
-        console.error('get_profiles failed:', err);
-        renderAll();
+      profilesList = results[1] || [];
+      populateProfileSelector();
+
+      var ap = results[2];
+      activeProfileId = ap && ap.id ? ap.id : null;
+      activeHiddenTabs = ap && Array.isArray(ap.hidden_tabs) ? ap.hidden_tabs : [];
+      activeDisableNonRequired = !!(ap && ap.disable_non_required);
+      rstLog('info', 'builder: active profile snapshot', {
+        id: activeProfileId,
+        hiddenTabs: activeHiddenTabs.length,
+        disableNonRequired: activeDisableNonRequired
       });
-    } else {
-      addPanel();   // start with one empty panel so the canvas isn't blank
+
+      currentRevitVersion = results[3] || '';
+
+      // Default the dropdown to "+ New Profile" — the user picks an
+      // existing profile from the dropdown if they want to edit one.
+      startFresh();
       renderAll();
+    }).catch(function(err) {
+      rstLog('error', 'builder: boot fetches threw', { err: String(err) });
+      catalog = [];
+      profilesList = [];
+      startFresh();
+      renderAll();
+    });
+  }
+
+  // Reset the editor to a blank "new profile" state, with one empty
+  // panel so the canvas isn't completely empty.
+  function startFresh() {
+    profile.schemaVersion  = 1;
+    profile.id             = null;
+    profile.profile        = '';
+    profile.tab            = '';
+    profile.min_version    = '0.1.0';
+    profile.exportDate     = '';
+    profile.panelOpacity   = 100;
+    profile.requiredAddins = [];
+    profile.hideRules      = [];
+    profile.stacks         = {};
+    profile.panels         = [];
+    profile.branding       = null;
+    selectedPanelIndex     = -1;
+    mode = 'new';
+    addPanel();   // canvas isn't empty on first paint
+  }
+
+  // Populate the header <select> with the current profilesList. Keeps
+  // the user's selection across refreshes when possible.
+  function populateProfileSelector() {
+    var sel = document.getElementById('profileSelector');
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '';
+    var newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ New Profile';
+    sel.appendChild(newOpt);
+    profilesList.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.id || p.profile;
+      opt.textContent = p.profile + (p.id && p.id === activeProfileId ? '  (loaded)' : '');
+      sel.appendChild(opt);
+    });
+    var found = Array.from(sel.options).some(function(o) { return o.value === prev; });
+    sel.value = found ? prev : '__new__';
+  }
+
+  // Dropdown handler. "__new__" → reset to fresh. Any other value is a
+  // profile id (or name fallback) → load it into the editor.
+  function onProfileSelectChange(value) {
+    if (value === '__new__') {
+      rstLog('info', 'builder: dropdown → new profile');
+      startFresh();
+      renderAll();
+      return;
     }
+    var match = profilesList.find(function(p) {
+      return (p.id && p.id === value) || p.profile === value;
+    });
+    if (!match) {
+      rstLog('warn', 'builder: dropdown change: profile not found', { value: value });
+      startFresh();
+      renderAll();
+      return;
+    }
+    rstLog('info', 'builder: dropdown → load existing', { name: match.profile, id: match.id });
+    loadIntoProfile(match);
+    mode = 'edit';
+    syncHeader();
+    renderAll();
   }
 
   function loadIntoProfile(src) {
@@ -2028,13 +2118,50 @@
     window.pywebview.api.save_profile(profile).then(function(result) {
       if (result && result.ok) {
         rstLog('info', 'builder: save OK', { fileName: result.fileName, id: result.profile && result.profile.id });
-        showToast('Saved as ' + result.fileName, 'ok');
         // Stash the assigned id so subsequent saves overwrite the same row.
         if (result.profile) {
           profile.id = result.profile.id;
           profile.exportDate = result.profile.exportDate;
         }
         mode = 'edit';
+
+        var savedIsActive = profile.id && profile.id === activeProfileId;
+
+        // Refresh the dropdown so just-saved (or just-renamed) profiles
+        // appear; preserve the current selection across the refresh.
+        window.pywebview.api.get_profiles().then(function(list) {
+          profilesList = list || [];
+          populateProfileSelector();
+          var sel = document.getElementById('profileSelector');
+          if (sel && profile.id) sel.value = profile.id;
+        }).catch(function() { /* non-fatal */ });
+
+        if (savedIsActive) {
+          // Trigger a live reload — same code path the Loader uses on
+          // Apply. Keeps the user's last hidden_tabs / disable_non_required
+          // settings, just rebuilds the ribbon with the new profile bytes.
+          rstLog('info', 'builder: saved profile is active — auto-reloading');
+          window.pywebview.api.load_profile(
+            profile.profile,
+            activeDisableNonRequired,
+            currentRevitVersion,
+            activeHiddenTabs,
+            profile.id
+          ).then(function(loadResult) {
+            if (loadResult && loadResult.ok) {
+              rstLog('info', 'builder: auto-reload OK', { restart_needed: loadResult.restart_needed });
+              showToast('Saved & ribbon reloaded.', 'ok');
+            } else {
+              rstLog('warn', 'builder: auto-reload returned ok=false', { result: loadResult });
+              showToast('Saved (auto-reload failed).', 'err');
+            }
+          }).catch(function(err) {
+            rstLog('error', 'builder: auto-reload threw', { err: String(err) });
+            showToast('Saved (auto-reload failed: ' + err + ').', 'err');
+          });
+        } else {
+          showToast('Saved as ' + result.fileName, 'ok');
+        }
       } else {
         rstLog('error', 'builder: save failed', { error: result && result.error });
         showToast('Save failed: ' + ((result && result.error) || 'unknown'), 'err');
@@ -2065,10 +2192,6 @@
       rstLog('error', 'builder: export threw', { err: String(err) });
       showToast('Export failed: ' + err, 'err');
     });
-  }
-
-  function backToSelector() {
-    window.location.href = 'profile_loader.html';
   }
 
   // ── HELPERS ─────────────────────────────────────────────────────────────────
