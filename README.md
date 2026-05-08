@@ -76,6 +76,55 @@ dotnet build -c "Debug R24"     # Revit 2024 (requires .NET Framework 4.8 refere
 
 (Configurations encode the Revit version per the Nice3point convention.)
 
+## Testing on Revit (Windows)
+
+Pre-built bundles live on the orphan **`dist`** branch — one folder per Revit major (`dist/R24/`, `dist/R25/`, `dist/R26/`, `dist/R27/`). Currently only **R25** is built; the rest are pending until first build for that target.
+
+### Pull the bundle on the test machine
+
+```bash
+git clone -b dist git@github.com:jedbjorn/rst-c-.git rst-c-dist
+# or, on an existing clone of the dist branch:
+git pull origin dist
+```
+
+### Install into Revit's per-user add-in directory
+
+Close Revit first (it locks the DLLs), then copy the matching bundle into `%AppData%\Autodesk\Revit\Addins\<version>\`. For Revit 2025:
+
+```powershell
+# from the rst-c-dist working tree
+Copy-Item -Recurse -Force "dist\R25\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
+```
+
+After install, the directory should look like:
+
+```
+%AppData%\Autodesk\Revit\Addins\2025\
+├── RST.addin              # manifest — points at RST\RST.Engine.dll
+└── RST\                   # all DLLs/PDBs/runtimes/Assets
+    ├── RST.Engine.dll
+    ├── RST.Core.dll
+    ├── RST.UI.dll
+    ├── Microsoft.Web.WebView2.*.dll
+    ├── Serilog*.dll
+    ├── Assets/
+    └── runtimes/
+```
+
+Start Revit. The **RST** tab should appear with the Loader button.
+
+### Smoke tests
+
+1. **Loader opens** — click the Loader button on the RST tab; the WebView2 window loads and lists profiles.
+2. **Live profile switch (RST-020)** — pick a profile, hit Apply. The profile tab should rebuild **without** prompting for a Revit restart.
+3. **URL slot resolution (#21)** — a slot URL of `gmail.com` (no scheme) or `support@example.com` (bare email) should open in the default browser/mail client. Pre-fix, both threw `Win32Exception(2)`.
+4. **No-leak check** — Apply 10–20 different profiles back-to-back in one session; check the Serilog file (see below) for `Freeze` failures or other warnings.
+
+### Logs
+
+Serilog rolling files at `%AppData%\RST\`. Always check there first when something looks wrong — both C# and WebView2-side errors land in the same file via the `log_event` bridge.
+
 ## License
 
 TBD — to mirror the parent RST repo at release.
