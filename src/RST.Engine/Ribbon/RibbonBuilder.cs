@@ -20,6 +20,7 @@ internal static class RibbonBuilder
 {
     private const string RstTabName = "RST";
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
+    private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
 
     public static void Build(UIControlledApplication app)
     {
@@ -27,13 +28,16 @@ internal static class RibbonBuilder
         catch (Autodesk.Revit.Exceptions.ArgumentException) { /* tab exists — addin reload */ }
 
         // Always register the RST tab so the catalog scanner doesn't
-        // surface our own Loader button (or any future RST-tab panels)
-        // as profile-buildable commands.
+        // surface our own buttons (or any future RST-tab panels) as
+        // profile-buildable commands.
         RstManagedTabs.Add(RstTabName);
 
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
-        var loaderPanel = app.CreateRibbonPanel(RstTabName, "RST");
+        // Single panel, two side-by-side Large buttons: Loader + Builder.
+        // Order matches upstream pyRevit RST.
+        var rstPanel = app.CreateRibbonPanel(RstTabName, "RST");
+
         var loaderBtn = new PushButtonData(
             name: "RST_Loader",
             text: "Loader",
@@ -41,9 +45,22 @@ internal static class RibbonBuilder
             className: LoaderClassName)
         {
             ToolTip = "Open the RST profile selector.",
-            Image = IconAssets.Default32,
-            LargeImage = IconAssets.Default32,
+            Image = IconAssets.LoaderIcon ?? IconAssets.Default32,
+            LargeImage = IconAssets.LoaderIcon ?? IconAssets.Default32,
         };
-        loaderPanel.AddItem(loaderBtn);
+
+        var builderBtn = new PushButtonData(
+            name: "RST_Builder",
+            text: "Builder",
+            assemblyName: assemblyPath,
+            className: BuilderClassName)
+        {
+            ToolTip = "Edit profiles or create a new one.",
+            Image = IconAssets.BuilderIcon ?? IconAssets.Default32,
+            LargeImage = IconAssets.BuilderIcon ?? IconAssets.Default32,
+        };
+
+        rstPanel.AddItem(loaderBtn);
+        rstPanel.AddItem(builderBtn);
     }
 }

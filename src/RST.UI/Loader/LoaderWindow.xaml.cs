@@ -22,19 +22,24 @@ using Serilog;
 
 namespace RST.UI.Loader;
 
+public enum LoaderInitialPage { Loader, Builder }
+
 public partial class LoaderWindow : Window
 {
     private const string VirtualHost = "rst.ui";
     private readonly LoaderBridge _bridge;
+    private readonly LoaderInitialPage _initialPage;
 
     public LoaderWindow(string revitVersion,
                         IReadOnlyList<ScannedCommand> catalog,
-                        IProfileSwitchScheduler? switchScheduler = null)
+                        IProfileSwitchScheduler? switchScheduler = null,
+                        LoaderInitialPage initialPage = LoaderInitialPage.Loader)
     {
         InitializeComponent();
         _bridge = new LoaderBridge(revitVersion, catalog,
                                    () => Dispatcher.BeginInvoke(new Action(Close)),
                                    switchScheduler);
+        _initialPage = initialPage;
         Loaded += async (_, _) => await InitializeWebViewAsync();
     }
 
@@ -79,7 +84,10 @@ public partial class LoaderWindow : Window
                                 e.HttpStatusCode, e.WebErrorStatus);
             };
 
-            var landing = $"https://{VirtualHost}/profile_loader.html";
+            var landingFile = _initialPage == LoaderInitialPage.Builder
+                ? "profile_builder.html"
+                : "profile_loader.html";
+            var landing = $"https://{VirtualHost}/{landingFile}";
             Log.Information("WebView2 initialised: assetsDir={AssetsDir}, userData={UserData}, landing={Landing}",
                             assetsDir, userDataDir, landing);
             core.Navigate(landing);
