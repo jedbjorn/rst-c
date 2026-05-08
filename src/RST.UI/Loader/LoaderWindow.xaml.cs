@@ -33,12 +33,14 @@ public partial class LoaderWindow : Window
     public LoaderWindow(string revitVersion,
                         IReadOnlyList<ScannedCommand> catalog,
                         IProfileSwitchScheduler? switchScheduler = null,
-                        LoaderInitialPage initialPage = LoaderInitialPage.Loader)
+                        LoaderInitialPage initialPage = LoaderInitialPage.Loader,
+                        IReadOnlyList<string>? allTabs = null)
     {
         InitializeComponent();
         _bridge = new LoaderBridge(revitVersion, catalog,
                                    () => Dispatcher.BeginInvoke(new Action(Close)),
-                                   switchScheduler);
+                                   switchScheduler,
+                                   allTabs);
         _initialPage = initialPage;
         Loaded += async (_, _) => await InitializeWebViewAsync();
     }

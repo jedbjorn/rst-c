@@ -23,11 +23,18 @@ public static class LoaderHost
     /// ribbon rebuilds in place once the modal closes — no Revit
     /// restart. Pass null to fall back to legacy restart-required
     /// behavior (e.g. when running outside Revit).</param>
+    /// <param name="allTabs">Snapshot of distinct non-contextual ribbon
+    /// tab titles for the RSTify "Hide These Tabs" picker. Caller
+    /// computes via RST.Engine.Scanning.RibbonTabEnumerator so this
+    /// project stays independent of AdWindows. Empty list disables the
+    /// picker (renders blank — same as the pre-RST-009 stub).</param>
     public static void ShowModal(string revitVersion,
                                  IReadOnlyList<ScannedCommand> catalog,
-                                 IProfileSwitchScheduler? switchScheduler = null)
+                                 IProfileSwitchScheduler? switchScheduler = null,
+                                 IReadOnlyList<string>? allTabs = null)
     {
-        var window = new LoaderWindow(revitVersion, catalog, switchScheduler);
+        var window = new LoaderWindow(revitVersion, catalog, switchScheduler,
+                                      LoaderInitialPage.Loader, allTabs);
         window.ShowDialog();
     }
 
@@ -40,9 +47,11 @@ public static class LoaderHost
     /// </summary>
     public static void ShowModalToBuilder(string revitVersion,
                                           IReadOnlyList<ScannedCommand> catalog,
-                                          IProfileSwitchScheduler? switchScheduler = null)
+                                          IProfileSwitchScheduler? switchScheduler = null,
+                                          IReadOnlyList<string>? allTabs = null)
     {
-        var window = new LoaderWindow(revitVersion, catalog, switchScheduler, LoaderInitialPage.Builder);
+        var window = new LoaderWindow(revitVersion, catalog, switchScheduler,
+                                      LoaderInitialPage.Builder, allTabs);
         window.ShowDialog();
     }
 }
