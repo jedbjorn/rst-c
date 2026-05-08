@@ -26,6 +26,8 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
 using RST.Core.Scanning;
@@ -412,8 +414,28 @@ public class LoaderBridge
         try
         {
             AppDataPaths.EnsureCreated();
-            File.Copy(source, BrandingDefaults.LogoPath, overwrite: true);
-            Log.Information("Bridge.pick_logo_file OK: {Source} → {Dest}", source, BrandingDefaults.LogoPath);
+            // Try: load → resize 48x48 → PNG-encode → save. Matches upstream
+            // tab_creator.py PickLogo (PIL.Image.resize((48,48), LANCZOS) +
+            // save as PNG). Branding panel renders at ~96px so 48x48 is the
+            // smallest size that holds up at HiDPI without bloating memory
+            // — and forces a known format so any downstream code (panel
+            // background brush, etc.) doesn't have to sniff JPEG vs PNG.
+            try
+            {
+                EncodeAsBranding(source!, BrandingDefaults.LogoPath!, targetSize: 48);
+                Log.Information("Bridge.pick_logo_file OK (resized 48x48 PNG): {Source} → {Dest}",
+                                source, BrandingDefaults.LogoPath);
+            }
+            catch (Exception ex)
+            {
+                // Fallback: raw copy. Mirrors upstream behaviour when PIL
+                // is missing — better to ship something the user picked
+                // than reject the upload outright.
+                Log.Warning(ex, "Bridge.pick_logo_file: encode/resize failed; falling back to raw copy");
+                File.Copy(source, BrandingDefaults.LogoPath, overwrite: true);
+                Log.Information("Bridge.pick_logo_file OK (raw copy): {Source} → {Dest}",
+                                source, BrandingDefaults.LogoPath);
+            }
             return Serialize(new { ok = true, fileName = BrandingDefaults.LogoFileName, source });
         }
         catch (IOException ex)
@@ -421,6 +443,37 @@ public class LoaderBridge
             Log.Error(ex, "Bridge.pick_logo_file: copy failed {Source} → {Dest}", source, BrandingDefaults.LogoPath);
             return Serialize(new { ok = false, error = "Copy failed: " + ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Decode <paramref name="sourcePath"/> (PNG or JPEG), force-resize to
+    /// <paramref name="targetSize"/>×<paramref name="targetSize"/>, and
+    /// PNG-encode the result to <paramref name="destPath"/>. Throws on
+    /// any failure — caller decides whether to fall back.
+    /// </summary>
+    private static void EncodeAsBranding(string sourcePath, string destPath, int targetSize)
+    {
+        var src = new BitmapImage();
+        src.BeginInit();
+        src.UriSource = new Uri(sourcePath, UriKind.Absolute);
+        // OnLoad detaches the BitmapImage from the source file so we can
+        // safely overwrite destPath even when src and dest are the same
+        // path (re-pick the existing logo).
+        src.CacheOption = BitmapCacheOption.OnLoad;
+        src.EndInit();
+        if (src.CanFreeze) src.Freeze();
+
+        // Non-uniform scale to force exact targetSize × targetSize, mirroring
+        // PIL.Image.resize((48,48)) which distorts non-square inputs.
+        var scaleX = (double)targetSize / Math.Max(1, src.PixelWidth);
+        var scaleY = (double)targetSize / Math.Max(1, src.PixelHeight);
+        var resized = new TransformedBitmap(src, new ScaleTransform(scaleX, scaleY));
+        if (resized.CanFreeze) resized.Freeze();
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(resized));
+        using var fs = File.Create(destPath);
+        encoder.Save(fs);
     }
 
     /// <summary>
