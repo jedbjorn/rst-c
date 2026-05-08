@@ -116,6 +116,46 @@
     min-width: 22px;
   }
 
+  /* Exit confirm modal — shown only when the Builder has unsaved
+     changes and the user clicks Exit. Three actions: save+exit,
+     discard+exit, cancel. Backdrop pattern mirrors profile_loader.html's
+     confirm-overlay. */
+  .exit-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  .exit-modal-backdrop[hidden] { display: none; }
+  .exit-modal-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 22px 26px;
+    max-width: 460px;
+    width: 90%;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  }
+  .exit-modal-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--heading);
+    margin-bottom: 6px;
+  }
+  .exit-modal-body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.5;
+    margin-bottom: 18px;
+  }
+  .exit-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
   /* Profile selector dropdown — sits where the back button used to;
      replaces back-navigation with same-window profile switching. */
   .profile-selector {
@@ -849,6 +889,7 @@
   <div class="header-spacer"></div>
   <button class="btn ghost" onclick="exportJson()">Export JSON</button>
   <button class="btn primary" onclick="saveProfile()">Save</button>
+  <button class="btn ghost" onclick="exitBuilder()" title="Close the Builder">Exit</button>
 </div>
 
 <!-- Body: 3 panes -->
@@ -929,6 +970,21 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Exit confirm modal — see exitBuilder() / showExitConfirmModal(). -->
+<div id="exitModal" class="exit-modal-backdrop" hidden>
+  <div class="exit-modal-card">
+    <div class="exit-modal-title">Unsaved changes</div>
+    <div class="exit-modal-body">
+      You have unsaved changes to this profile. What would you like to do?
+    </div>
+    <div class="exit-modal-actions">
+      <button class="btn ghost" onclick="cancelExit()">Cancel</button>
+      <button class="btn ghost" onclick="confirmExitDiscard()">Discard &amp; Exit</button>
+      <button class="btn primary" onclick="confirmExitSaveAndClose()">Save &amp; Exit</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // ── FEATURE FLAGS ────────────────────────────────────────────────────────────
   // Stacks: model + serializer + RibbonBuilder all stay live, so existing
@@ -971,6 +1027,12 @@
   let activeHiddenTabs = [];          // user's last RSTify settings
   let activeDisableNonRequired = false;
   let currentRevitVersion = '';
+
+  // Dirty-tracking — JSON snapshot of `profile` taken whenever the
+  // editor lands on a "clean" state (boot, dropdown switch, post-save).
+  // exitBuilder() compares the current profile JSON against this; a
+  // mismatch surfaces the unsaved-changes confirm modal.
+  let pristineProfile = '';
 
   // Drag state — single-source-of-truth for what's being dragged. HTML5
   // DataTransfer is too coarse for our typed payloads (catalog entry vs
@@ -1064,6 +1126,20 @@
     selectedPanelIndex     = -1;
     mode = 'new';
     addPanel();   // canvas isn't empty on first paint
+    snapshotPristine();
+  }
+
+  // Capture the current `profile` state as the "clean" baseline. Called
+  // from startFresh, dropdown-driven loadIntoProfile, and after a
+  // successful save so subsequent edits are correctly flagged dirty.
+  function snapshotPristine() {
+    try { pristineProfile = JSON.stringify(profile); }
+    catch (e) { pristineProfile = ''; }
+  }
+
+  function isProfileDirty() {
+    try { return JSON.stringify(profile) !== pristineProfile; }
+    catch (e) { return true; }   // assume dirty if we can't compare
   }
 
   // Populate the header <select> with the current profilesList. Keeps
@@ -1110,6 +1186,7 @@
     mode = 'edit';
     syncHeader();
     renderAll();
+    snapshotPristine();
   }
 
   function loadIntoProfile(src) {
@@ -2102,74 +2179,144 @@
   }
 
   // ── BRIDGE I/O ──────────────────────────────────────────────────────────────
+  // Save handler bound to the header Save button — fire-and-forget,
+  // delegates to saveAndMaybeReload (which carries the auto-reload-if-
+  // active flow). Errors land in the toast via the inner Promise chain;
+  // we still .catch here so an uncaught rejection isn't logged twice.
   function saveProfile() {
+    saveAndMaybeReload().catch(function(err) {
+      rstLog('error', 'builder: saveProfile chain rejected', { err: String(err) });
+    });
+  }
+
+  // Validate, save, and (if the saved profile matches the active one)
+  // trigger a live ribbon reload via load_profile. Returns a Promise:
+  // resolves on full success (including the reload sub-call); rejects
+  // on validation or save failure. Used by both saveProfile and the
+  // Save & Exit modal action.
+  function saveAndMaybeReload() {
     if (!profile.profile || !profile.profile.trim()) {
       rstLog('warn', 'builder: save aborted (no name)');
-      showToast('Profile name required.', 'err'); return;
+      showToast('Profile name required.', 'err');
+      return Promise.reject(new Error('no name'));
     }
     if (!profile.tab || !profile.tab.trim()) {
       rstLog('warn', 'builder: save aborted (no tab)', { name: profile.profile });
-      showToast('Tab name required.', 'err'); return;
+      showToast('Tab name required.', 'err');
+      return Promise.reject(new Error('no tab'));
     }
     rstLog('info', 'builder: save attempt', {
       name: profile.profile, tab: profile.tab, panels: profile.panels.length,
       stacks: Object.keys(profile.stacks).length, mode: mode, id: profile.id,
     });
-    window.pywebview.api.save_profile(profile).then(function(result) {
-      if (result && result.ok) {
-        rstLog('info', 'builder: save OK', { fileName: result.fileName, id: result.profile && result.profile.id });
-        // Stash the assigned id so subsequent saves overwrite the same row.
-        if (result.profile) {
-          profile.id = result.profile.id;
-          profile.exportDate = result.profile.exportDate;
-        }
-        mode = 'edit';
-
-        var savedIsActive = profile.id && profile.id === activeProfileId;
-
-        // Refresh the dropdown so just-saved (or just-renamed) profiles
-        // appear; preserve the current selection across the refresh.
-        window.pywebview.api.get_profiles().then(function(list) {
-          profilesList = list || [];
-          populateProfileSelector();
-          var sel = document.getElementById('profileSelector');
-          if (sel && profile.id) sel.value = profile.id;
-        }).catch(function() { /* non-fatal */ });
-
-        if (savedIsActive) {
-          // Trigger a live reload — same code path the Loader uses on
-          // Apply. Keeps the user's last hidden_tabs / disable_non_required
-          // settings, just rebuilds the ribbon with the new profile bytes.
-          rstLog('info', 'builder: saved profile is active — auto-reloading');
-          window.pywebview.api.load_profile(
-            profile.profile,
-            activeDisableNonRequired,
-            currentRevitVersion,
-            activeHiddenTabs,
-            profile.id
-          ).then(function(loadResult) {
-            if (loadResult && loadResult.ok) {
-              rstLog('info', 'builder: auto-reload OK', { restart_needed: loadResult.restart_needed });
-              showToast('Saved & ribbon reloaded.', 'ok');
-            } else {
-              rstLog('warn', 'builder: auto-reload returned ok=false', { result: loadResult });
-              showToast('Saved (auto-reload failed).', 'err');
-            }
-          }).catch(function(err) {
-            rstLog('error', 'builder: auto-reload threw', { err: String(err) });
-            showToast('Saved (auto-reload failed: ' + err + ').', 'err');
-          });
-        } else {
-          showToast('Saved as ' + result.fileName, 'ok');
-        }
-      } else {
-        rstLog('error', 'builder: save failed', { error: result && result.error });
-        showToast('Save failed: ' + ((result && result.error) || 'unknown'), 'err');
+    return window.pywebview.api.save_profile(profile).then(function(result) {
+      if (!(result && result.ok)) {
+        var msg = (result && result.error) || 'unknown';
+        rstLog('error', 'builder: save failed', { error: msg });
+        showToast('Save failed: ' + msg, 'err');
+        throw new Error('save failed: ' + msg);
       }
-    }).catch(function(err) {
-      rstLog('error', 'builder: save threw', { err: String(err) });
-      showToast('Save failed: ' + err, 'err');
+      rstLog('info', 'builder: save OK', { fileName: result.fileName, id: result.profile && result.profile.id });
+      // Stash the assigned id so subsequent saves overwrite the same row.
+      if (result.profile) {
+        profile.id = result.profile.id;
+        profile.exportDate = result.profile.exportDate;
+      }
+      mode = 'edit';
+
+      var savedIsActive = profile.id && profile.id === activeProfileId;
+
+      // Refresh the dropdown so just-saved (or just-renamed) profiles
+      // appear; preserve the current selection across the refresh.
+      window.pywebview.api.get_profiles().then(function(list) {
+        profilesList = list || [];
+        populateProfileSelector();
+        var sel = document.getElementById('profileSelector');
+        if (sel && profile.id) sel.value = profile.id;
+      }).catch(function() { /* non-fatal */ });
+
+      // Saved state IS the disk now — reset dirty baseline.
+      snapshotPristine();
+
+      if (!savedIsActive) {
+        showToast('Saved as ' + result.fileName, 'ok');
+        return result;
+      }
+      // Trigger a live reload — same code path the Loader uses on
+      // Apply. Keeps the user's last hidden_tabs / disable_non_required
+      // settings, just rebuilds the ribbon with the new profile bytes.
+      rstLog('info', 'builder: saved profile is active — auto-reloading');
+      return window.pywebview.api.load_profile(
+        profile.profile,
+        activeDisableNonRequired,
+        currentRevitVersion,
+        activeHiddenTabs,
+        profile.id
+      ).then(function(loadResult) {
+        if (loadResult && loadResult.ok) {
+          rstLog('info', 'builder: auto-reload OK', { restart_needed: loadResult.restart_needed });
+          showToast('Saved & ribbon reloaded.', 'ok');
+        } else {
+          rstLog('warn', 'builder: auto-reload returned ok=false', { result: loadResult });
+          showToast('Saved (auto-reload failed).', 'err');
+        }
+        return result;
+      });
     });
+  }
+
+  // ── EXIT FLOW ───────────────────────────────────────────────────────────────
+  // Exit button: clean → close. Dirty → confirm modal (Save & Exit /
+  // Discard & Exit / Cancel). Save & Exit chains through saveAndMaybeReload,
+  // so closing happens only after the save (and the auto-reload if the
+  // edited profile was the active one) completes.
+  function exitBuilder() {
+    if (!isProfileDirty()) {
+      rstLog('info', 'builder: exit clicked, no unsaved changes — closing');
+      closeBuilderWindow();
+      return;
+    }
+    rstLog('info', 'builder: exit clicked with unsaved changes — prompting');
+    showExitConfirmModal();
+  }
+
+  function confirmExitSaveAndClose() {
+    rstLog('info', 'builder: exit modal → Save & Exit');
+    hideExitConfirmModal();
+    saveAndMaybeReload().then(function() {
+      closeBuilderWindow();
+    }).catch(function(err) {
+      // Save failed — keep the window open so the user can fix the
+      // validation error or whatever the save bridge complained about.
+      rstLog('warn', 'builder: Save & Exit aborted (save failed)', { err: String(err) });
+    });
+  }
+
+  function confirmExitDiscard() {
+    rstLog('info', 'builder: exit modal → Discard & Exit');
+    hideExitConfirmModal();
+    closeBuilderWindow();
+  }
+
+  function cancelExit() {
+    rstLog('info', 'builder: exit modal → Cancel');
+    hideExitConfirmModal();
+  }
+
+  function showExitConfirmModal() {
+    var m = document.getElementById('exitModal');
+    if (m) m.hidden = false;
+  }
+
+  function hideExitConfirmModal() {
+    var m = document.getElementById('exitModal');
+    if (m) m.hidden = true;
+  }
+
+  function closeBuilderWindow() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.close_window) {
+      window.pywebview.api.close_window();
+    }
   }
 
   function exportJson() {
