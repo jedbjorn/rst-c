@@ -28,6 +28,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using RST.Core.AddIns;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
 using RST.Core.Scanning;
@@ -133,6 +134,34 @@ public class LoaderBridge
         Log.Information("Bridge.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs}",
                         profileName, profileId, disableNonRequired, hiddenTabs.Length);
 
+        // Disable non-required addins by renaming .addin → .addin.RSTdisabled.
+        // Effective on the next Revit launch — already-loaded DLLs stay
+        // resident this session, so any disable forces restart_needed=true
+        // regardless of live-switch availability.
+        var failedDisables = new List<object>();
+        bool disableForcedRestart = false;
+        if (disableNonRequired)
+        {
+            try
+            {
+                var result = AddinDisabler.DisableNonRequired(
+                    _revitVersion,
+                    entry.Profile.RequiredAddins,
+                    onError: (path, ex) => Log.Warning(ex, "AddinDisabler: rename failed for {Path}", path));
+                Log.Information("Bridge.load_profile: disabled {Count} addins, skippedReadOnly={ReadOnly}, alreadyDisabled={Already}, failed={Failed}",
+                                result.DisabledCount, result.SkippedReadOnly, result.SkippedAlreadyDisabled, result.Failed);
+                foreach (var fname in result.FailedFiles)
+                    failedDisables.Add(new { fileName = fname });
+                if (result.DisabledCount > 0) disableForcedRestart = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Bridge.load_profile: AddinDisabler threw for {Name}", profileName);
+                failedDisables.Add(new { fileName = "(disable subsystem failure)", error = ex.Message });
+                disableForcedRestart = true;   // be conservative — assume DLLs need a restart
+            }
+        }
+
         // RST-020: schedule a live ribbon rebuild on the Revit UI thread.
         // The ExternalEvent fires after the modal Loader window closes
         // (Revit's main loop resumes pumping then). When no scheduler is
@@ -152,16 +181,14 @@ public class LoaderBridge
                 restartNeeded = true;
             }
         }
+        if (disableForcedRestart) restartNeeded = true;
 
-        // disable_non_required is wired into ActiveProfile but not yet executed —
-        // the addin-disable subsystem lands in a later flag. UI shows the toggle;
-        // we just record the user's intent for now.
         return Serialize(new
         {
             ok = true,
             warnings = Array.Empty<string>(),
             restart_needed = restartNeeded,
-            failed_disables = Array.Empty<object>(),
+            failed_disables = failedDisables,
         });
     }
 
@@ -570,49 +597,154 @@ public class LoaderBridge
 
     // ---- stubs (features land in later flags) --------------------------
 
+    /// <summary>
+    /// Return the local-machine addin lookup config. Phase-2 follow-up;
+    /// the upstream version reads a JSON file with tab-name → addinFile
+    /// hints. Empty dict matches the upstream behaviour when the file
+    /// is missing.
+    /// </summary>
     public string GetAddinLookup()
     {
         LogEntry(nameof(GetAddinLookup));
         return Serialize(new Dictionary<string, object>());
     }
+
+    /// <summary>
+    /// Surface every .addin (and .addin.RSTdisabled) we can find under
+    /// the running Revit version's addin search paths. The UI uses this
+    /// for the "available add-ins" picker in the Builder and for the
+    /// required-addins matching display. Each entry exposes the canonical
+    /// file name, the first AddInId/Assembly we parsed out, and a flag
+    /// indicating whether it's currently disabled on disk.
+    /// </summary>
     public string GetLoadedAddins()
     {
         LogEntry(nameof(GetLoadedAddins));
-        return Serialize(Array.Empty<object>());
+        var manifests = AddinDirectoryScanner.Scan(_revitVersion,
+            onSkip: (p, ex) => Log.Debug(ex, "AddinDirectoryScanner: skipped {Path}", p));
+        var dtos = manifests.Select(m =>
+        {
+            var first = m.Entries.Count > 0 ? m.Entries[0] : null;
+            return new
+            {
+                fileName = m.FileName,
+                filePath = m.FilePath,
+                isDisabled = m.IsDisabled,
+                displayName = !string.IsNullOrWhiteSpace(first?.Name)
+                    ? first!.Name
+                    : Path.GetFileNameWithoutExtension(m.FileName),
+                addinId = first?.AddinId,
+                assembly = first?.AssemblyPath,
+            };
+        }).ToArray();
+        Log.Information("Bridge.get_loaded_addins → {Count} manifests scanned for Revit {Ver}", dtos.Length, _revitVersion);
+        return Serialize(dtos);
     }
+
+    /// <summary>
+    /// Phase-2 follow-up — currently returns an empty list. Upstream
+    /// walks the live ribbon and surfaces tab names so the Builder's
+    /// required-addins picker can offer "by tab" matches without the
+    /// user knowing the .addin file name.
+    /// </summary>
     public string GetAllTabs()
     {
         LogEntry(nameof(GetAllTabs));
         return Serialize(Array.Empty<string>());
     }
+
+    /// <summary>
+    /// User-config knobs (per-addin overrides etc). Phase-2 follow-up.
+    /// Returns the upstream-expected shape so the loader UI doesn't
+    /// throw when destructuring `addins`.
+    /// </summary>
     public string GetUserConfig()
     {
         LogEntry(nameof(GetUserConfig));
         return Serialize(new { addins = new Dictionary<string, object>() });
     }
 
-    public string GetDisablePreview()
+    /// <summary>
+    /// Compute the disable-preview classification for the named profile:
+    /// staying (required), disabling (writeable + non-required),
+    /// tryDisable (read-only + non-required — Revit install dir),
+    /// skipped (already .addin.RSTdisabled). Pure — no rename happens
+    /// here.
+    /// </summary>
+    public string GetDisablePreview(string profileNameJson)
     {
-        LogEntry(nameof(GetDisablePreview));
+        LogEntry(nameof(GetDisablePreview), ("name", profileNameJson));
+        var profileName = Deserialize<string>(profileNameJson) ?? "";
+        var entry = ProfileStore.Resolve(profileName, id: null);
+        if (entry is null)
+        {
+            Log.Warning("Bridge.get_disable_preview: profile not found {Name}", profileName);
+            return Serialize(new
+            {
+                error = "Profile not found: " + profileName,
+                staying = Array.Empty<object>(),
+                disabling = Array.Empty<object>(),
+                tryDisable = Array.Empty<object>(),
+                skipped = Array.Empty<object>(),
+            });
+        }
+
+        var preview = DisablePreviewBuilder.Build(_revitVersion, entry.Profile.RequiredAddins);
+        Log.Information("Bridge.get_disable_preview: name={Name} staying={S} disabling={D} tryDisable={T} skipped={Sk}",
+                        profileName, preview.Staying.Count, preview.Disabling.Count, preview.TryDisable.Count, preview.Skipped.Count);
+
         return Serialize(new
         {
-            staying = Array.Empty<object>(),
-            disabling = Array.Empty<object>(),
-            tryDisable = Array.Empty<object>(),
-            skipped = Array.Empty<object>(),
+            staying = preview.Staying.Select(ToPreviewDto).ToArray(),
+            disabling = preview.Disabling.Select(ToPreviewDto).ToArray(),
+            tryDisable = preview.TryDisable.Select(ToPreviewDto).ToArray(),
+            skipped = preview.Skipped.Select(ToPreviewDto).ToArray(),
         });
     }
 
+    /// <summary>
+    /// Walk every search path for the running Revit version and rename
+    /// any .addin.RSTdisabled back to .addin. Effective on the next
+    /// Revit launch (DLLs already loaded stay resident this session,
+    /// so restart_needed=true whenever anything was actually restored).
+    /// </summary>
     public string RestoreAddins()
     {
         LogEntry(nameof(RestoreAddins));
-        return Serialize(new
+        try
         {
-            ok = true,
-            restart_needed = false,
-            restored = Array.Empty<string>(),
-        });
+            var result = AddinDisabler.RestoreAll(_revitVersion,
+                onError: (path, ex) => Log.Warning(ex, "AddinDisabler.Restore: rename failed for {Path}", path));
+            Log.Information("Bridge.restore_addins → restored={Restored}, failed={Failed}",
+                            result.RestoredCount, result.Failed);
+            return Serialize(new
+            {
+                ok = true,
+                restart_needed = result.RestoredCount > 0,
+                restored = result.RestoredFiles,
+                failed = result.FailedFiles,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Bridge.restore_addins: AddinDisabler.RestoreAll threw");
+            return Serialize(new { ok = false, error = ex.Message, restart_needed = false });
+        }
     }
+
+    private static object ToPreviewDto(AddinPreviewEntry e) => new
+    {
+        // The loader's confirm-overlay reads `displayName` (with `tabName`
+        // as a fallback). We synthesise displayName from filename so the
+        // user sees something meaningful when no <Name> is set on the
+        // first AddIn entry.
+        displayName = Path.GetFileNameWithoutExtension(e.FileName),
+        fileName = e.FileName,
+        filePath = e.FilePath,
+        addinId = e.FirstAddinId,
+        assembly = e.FirstAssemblyPath,
+        sourceKind = e.SourceKind.ToString(),
+    };
 
     // ---- helpers -------------------------------------------------------
 
