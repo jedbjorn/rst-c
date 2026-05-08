@@ -3,6 +3,7 @@
 // classes at the call site.
 
 using System.Collections.Generic;
+using RST.Core.Profiles;
 using RST.Core.Scanning;
 
 namespace RST.UI.Loader;
@@ -17,9 +18,16 @@ public static class LoaderHost
     /// <param name="catalog">Pre-built command catalog for the builder's
     /// tool picker. Pass an empty list when running outside a Revit
     /// session — the builder degrades to URL-only / hand-typed slots.</param>
-    public static void ShowModal(string revitVersion, IReadOnlyList<ScannedCommand> catalog)
+    /// <param name="switchScheduler">Live profile-switch scheduler. The
+    /// bridge calls Schedule() after writing active_profile.json so the
+    /// ribbon rebuilds in place once the modal closes — no Revit
+    /// restart. Pass null to fall back to legacy restart-required
+    /// behavior (e.g. when running outside Revit).</param>
+    public static void ShowModal(string revitVersion,
+                                 IReadOnlyList<ScannedCommand> catalog,
+                                 IProfileSwitchScheduler? switchScheduler = null)
     {
-        var window = new LoaderWindow(revitVersion, catalog);
+        var window = new LoaderWindow(revitVersion, catalog, switchScheduler);
         window.ShowDialog();
     }
 }

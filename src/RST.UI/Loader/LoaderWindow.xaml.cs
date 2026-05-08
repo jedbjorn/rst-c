@@ -16,6 +16,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
+using RST.Core.Profiles;
 using RST.Core.Scanning;
 using Serilog;
 
@@ -26,11 +27,14 @@ public partial class LoaderWindow : Window
     private const string VirtualHost = "rst.ui";
     private readonly LoaderBridge _bridge;
 
-    public LoaderWindow(string revitVersion, IReadOnlyList<ScannedCommand> catalog)
+    public LoaderWindow(string revitVersion,
+                        IReadOnlyList<ScannedCommand> catalog,
+                        IProfileSwitchScheduler? switchScheduler = null)
     {
         InitializeComponent();
         _bridge = new LoaderBridge(revitVersion, catalog,
-                                   () => Dispatcher.BeginInvoke(new Action(Close)));
+                                   () => Dispatcher.BeginInvoke(new Action(Close)),
+                                   switchScheduler);
         Loaded += async (_, _) => await InitializeWebViewAsync();
     }
 

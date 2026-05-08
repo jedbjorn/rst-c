@@ -40,6 +40,7 @@ public class LoaderBridge
     private readonly string _revitVersion;
     private readonly IReadOnlyList<ScannedCommand> _catalog;
     private readonly Action _closeRequested;
+    private readonly IProfileSwitchScheduler? _switchScheduler;
 
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -47,15 +48,19 @@ public class LoaderBridge
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public LoaderBridge(string revitVersion, IReadOnlyList<ScannedCommand> catalog, Action closeRequested)
+    public LoaderBridge(string revitVersion,
+                        IReadOnlyList<ScannedCommand> catalog,
+                        Action closeRequested,
+                        IProfileSwitchScheduler? switchScheduler = null)
     {
         _revitVersion = revitVersion ?? "";
         _catalog = catalog ?? Array.Empty<ScannedCommand>();
         _closeRequested = closeRequested ?? (() => { });
+        _switchScheduler = switchScheduler;
         try { BrandingDefaults.EnsureSeeded(); }
         catch (Exception ex) { Log.Warning(ex, "BrandingDefaults.EnsureSeeded failed (non-fatal)"); }
-        Log.Information("LoaderBridge ready: revit={RevitVersion}, catalog={CatalogCount} commands",
-                        _revitVersion, _catalog.Count);
+        Log.Information("LoaderBridge ready: revit={RevitVersion}, catalog={CatalogCount} commands, liveSwitch={LiveSwitch}",
+                        _revitVersion, _catalog.Count, _switchScheduler is not null);
     }
 
     // ---- live methods --------------------------------------------------
@@ -125,6 +130,27 @@ public class LoaderBridge
 
         Log.Information("Bridge.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs}",
                         profileName, profileId, disableNonRequired, hiddenTabs.Length);
+
+        // RST-020: schedule a live ribbon rebuild on the Revit UI thread.
+        // The ExternalEvent fires after the modal Loader window closes
+        // (Revit's main loop resumes pumping then). When no scheduler is
+        // wired (e.g. running outside Revit), we fall back to the legacy
+        // restart-required behavior so the UI can still surface that.
+        bool restartNeeded = true;
+        if (_switchScheduler is not null)
+        {
+            try
+            {
+                _switchScheduler.Schedule(entry.Profile);
+                restartNeeded = false;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Bridge.load_profile: switch scheduler failed; falling back to restart-required for {Name}", profileName);
+                restartNeeded = true;
+            }
+        }
+
         // disable_non_required is wired into ActiveProfile but not yet executed —
         // the addin-disable subsystem lands in a later flag. UI shows the toggle;
         // we just record the user's intent for now.
@@ -132,7 +158,7 @@ public class LoaderBridge
         {
             ok = true,
             warnings = Array.Empty<string>(),
-            restart_needed = true,
+            restart_needed = restartNeeded,
             failed_disables = Array.Empty<object>(),
         });
     }
@@ -199,6 +225,14 @@ public class LoaderBridge
     {
         LogEntry(nameof(UnloadProfile));
         ActiveProfile.WriteBlank();
+        // RST-020: tear down the live profile tab too. Schedule(null) is
+        // the agreed-upon "unload" signal — ProfileTabBuilder removes its
+        // panels and our created tab without rebuilding.
+        if (_switchScheduler is not null)
+        {
+            try { _switchScheduler.Schedule(null); }
+            catch (Exception ex) { Log.Error(ex, "Bridge.unload_profile: switch scheduler failed"); }
+        }
         Log.Information("Bridge.unload_profile OK");
         return Serialize(new { ok = true });
     }
