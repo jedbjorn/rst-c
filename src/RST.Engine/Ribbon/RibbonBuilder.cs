@@ -41,7 +41,8 @@ internal static class RibbonBuilder
             className: LoaderClassName)
         {
             ToolTip = "Open the RST profile selector.",
-            LargeImage = IconAssets.Default,
+            Image = IconAssets.Default32,
+            LargeImage = IconAssets.Default32,
         };
         loaderPanel.AddItem(loaderBtn);
     }
