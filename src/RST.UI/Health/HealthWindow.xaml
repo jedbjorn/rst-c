@@ -1,0 +1,14 @@
+<Window x:Class="RST.UI.Health.HealthWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="RST — Health"
+        Width="900"
+        Height="800"
+        WindowStartupLocation="CenterScreen"
+        Background="#0f1117"
+        ResizeMode="CanResize">
+    <Grid>
+        <wv:WebView2 x:Name="WebView" />
+    </Grid>
+</Window>

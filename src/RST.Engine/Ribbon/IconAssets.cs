@@ -33,6 +33,8 @@ internal static class IconAssets
     private static bool _rstifyOffAttempted;
     private static ImageSource? _rstifyOn;
     private static bool _rstifyOnAttempted;
+    private static ImageSource? _health;
+    private static bool _healthAttempted;
 
     /// <summary>
     /// 32x32 visible default icon (Assets/icons/default_32.png). Used as
@@ -94,6 +96,18 @@ internal static class IconAssets
             _rstifyOnAttempted = true;
             _rstifyOn = LoadBundled("icons/icon_minify_on.png");
             return _rstifyOn;
+        }
+    }
+
+    /// <summary>Heart icon for the Health ribbon button (Assets/icons/icon_health.png).</summary>
+    public static ImageSource? HealthIcon
+    {
+        get
+        {
+            if (_healthAttempted) return _health;
+            _healthAttempted = true;
+            _health = LoadBundled("icons/icon_health.png");
+            return _health;
         }
     }
 
