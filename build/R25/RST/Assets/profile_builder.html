@@ -465,6 +465,106 @@
   }
   .slot-actions { display: flex; gap: 3px; flex-shrink: 0; }
 
+  /* Pick-icon button on tool cards (replaces the legacy 'tool' badge). */
+  .slot-icon-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid rgba(79, 142, 247, 0.4);
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    height: 22px;
+    color: var(--accent);
+  }
+  .slot-icon-btn:hover { border-color: var(--accent); background: rgba(79, 142, 247, 0.08); }
+  .slot-icon-btn-thumb {
+    width: 14px; height: 14px;
+    image-rendering: pixelated;
+    flex-shrink: 0;
+  }
+  .slot-icon-btn-placeholder {
+    width: 14px; height: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--text3);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .slot-icon-btn-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Icon picker modal (vendored 48-PNG iconpack + None option). */
+  .icon-picker-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .icon-picker-overlay.visible { display: flex; }
+  .icon-picker-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 680px;
+    max-width: 92vw;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .icon-picker-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .icon-picker-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text2);
+  }
+  .icon-picker-grid {
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    gap: 6px;
+    overflow-y: auto;
+  }
+  .icon-tile {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    min-height: 70px;
+    color: var(--text3);
+  }
+  .icon-tile:hover { border-color: var(--accent); color: var(--text); }
+  .icon-tile.selected { border-color: var(--accent3); background: var(--surface3); color: var(--text); }
+  .icon-tile img { width: 32px; height: 32px; image-rendering: pixelated; }
+  .icon-tile-none {
+    width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 22px; color: var(--text3);
+  }
+  .icon-tile-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    word-break: break-all;
+    text-align: center;
+    line-height: 1.2;
+  }
+
   /* ── RIGHT: PROPERTIES + STACKS ── */
   .pane.right { width: 340px; flex-shrink: 0; background: var(--surface); }
   .prop-section {
@@ -804,6 +904,11 @@
     justify-content: center;
     font-size: 10px;
   }
+  .p-rib-icon-img {
+    width: 18px;
+    height: 18px;
+    image-rendering: pixelated;
+  }
   .p-rib-label {
     font-family: 'DM Sans', sans-serif;
     font-size: 8px;
@@ -1046,6 +1151,20 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Tool icon picker — opened by the Pick Icon button on tool slot cards.
+     Iconpack list comes from LoaderBridge.ListIconpack (cached after first
+     fetch). Selecting a tile sets slot.iconFile = "pack:<name>" or null
+     for the None tile, and re-renders the canvas + preview. -->
+<div id="iconPickerOverlay" class="icon-picker-overlay">
+  <div class="icon-picker-card">
+    <div class="icon-picker-head">
+      <div class="icon-picker-title">Pick an icon</div>
+      <button class="btn ghost" onclick="closeIconPicker()">Cancel</button>
+    </div>
+    <div class="icon-picker-grid" id="iconPickerGrid"></div>
+  </div>
+</div>
 
 <!-- Exit confirm modal — see exitBuilder() / showExitConfirmModal(). -->
 <div id="exitModal" class="exit-modal-backdrop" hidden>
@@ -1962,8 +2081,12 @@
       var innerHtml = (panel.slots || []).map(function(slot) {
         if (!slot) return '';
         if (slot.type === 'tool') {
+          var packName = parsePackIcon(slot.iconFile);
+          var iconHtml = packName
+            ? '<img class="p-rib-icon-img" alt="" src="icons/pack/32_' + escHtml(packName) + '.png">'
+            : '⬜';
           return '<div class="p-rib-btn">' +
-                   '<div class="p-rib-icon">⬜</div>' +
+                   '<div class="p-rib-icon">' + iconHtml + '</div>' +
                    '<div class="p-rib-label">' + escHtml(slot.name || '') + '</div>' +
                  '</div>';
         }
@@ -2194,10 +2317,29 @@
       }
     };
 
-    var typeTag = document.createElement('span');
-    typeTag.className = 'slot-type ' + (slot.type || 'tool');
-    typeTag.textContent = slot.type || 'tool';
-    el.appendChild(typeTag);
+    if (slot.type === 'tool') {
+      // Pick-icon button — replaces the legacy "tool" badge. Shows the
+      // currently picked icon's thumbnail (or "+" placeholder when none),
+      // opens the iconpack modal on click.
+      var iconBtn = document.createElement('button');
+      iconBtn.type = 'button';
+      iconBtn.className = 'slot-icon-btn';
+      iconBtn.title = 'Pick icon';
+      refreshSlotIconBtn(iconBtn, slot);
+      iconBtn.onclick = function(e) {
+        e.stopPropagation();
+        openIconPicker(slot, function() {
+          refreshSlotIconBtn(iconBtn, slot);
+          renderPreview();
+        });
+      };
+      el.appendChild(iconBtn);
+    } else {
+      var typeTag = document.createElement('span');
+      typeTag.className = 'slot-type ' + (slot.type || 'tool');
+      typeTag.textContent = slot.type || 'tool';
+      el.appendChild(typeTag);
+    }
 
     var nameInput = document.createElement('input');
     nameInput.className = 'slot-name-input';
@@ -2706,6 +2848,102 @@
     t.className = 'toast show ' + (kind || '');
     clearTimeout(showToast._h);
     showToast._h = setTimeout(function() { t.className = 'toast'; }, 2400);
+  }
+
+  // ── ICON PICKER ────────────────────────────────────────────────────────────
+  // Vendored 48-icon pack lives under Assets/icons/pack/32_<name>.png and
+  // is enumerated once via LoaderBridge.list_iconpack(). Selection writes
+  // slot.iconFile = "pack:<name>" (or null for None); ProfileTabBuilder
+  // resolves the same string back at ribbon-build time.
+  var iconPackCache = null;
+
+  function parsePackIcon(s) {
+    if (!s || typeof s !== 'string') return null;
+    if (s.toLowerCase().indexOf('pack:') !== 0) return null;
+    return s.substring(5).trim();
+  }
+
+  function refreshSlotIconBtn(btn, slot) {
+    btn.innerHTML = '';
+    var name = parsePackIcon(slot.iconFile);
+    if (name) {
+      var img = document.createElement('img');
+      img.className = 'slot-icon-btn-thumb';
+      img.alt = name;
+      img.src = 'icons/pack/32_' + name + '.png';
+      btn.appendChild(img);
+    } else {
+      var ph = document.createElement('span');
+      ph.className = 'slot-icon-btn-placeholder';
+      ph.textContent = '+';
+      btn.appendChild(ph);
+    }
+    var label = document.createElement('span');
+    label.className = 'slot-icon-btn-label';
+    label.textContent = name || 'Icon';
+    btn.appendChild(label);
+  }
+
+  function ensureIconPack(cb) {
+    if (iconPackCache !== null) { cb(iconPackCache); return; }
+    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.list_iconpack) {
+      iconPackCache = [];
+      cb(iconPackCache);
+      return;
+    }
+    window.pywebview.api.list_iconpack().then(function(list) {
+      iconPackCache = (list || []).map(function(e) { return e.name; });
+      rstLog('info', 'iconpack loaded', { count: iconPackCache.length });
+      cb(iconPackCache);
+    }).catch(function(err) {
+      rstLog('error', 'iconpack list failed', { err: String(err) });
+      iconPackCache = [];
+      cb(iconPackCache);
+    });
+  }
+
+  function closeIconPicker() {
+    var overlay = document.getElementById('iconPickerOverlay');
+    overlay.classList.remove('visible');
+  }
+
+  function openIconPicker(slot, onApply) {
+    var overlay = document.getElementById('iconPickerOverlay');
+    var grid = document.getElementById('iconPickerGrid');
+    ensureIconPack(function(names) {
+      grid.innerHTML = '';
+      var current = parsePackIcon(slot.iconFile);
+
+      function addTile(name, isNone) {
+        var t = document.createElement('button');
+        t.type = 'button';
+        var sel = isNone ? (current === null) : (current === name);
+        t.className = 'icon-tile' + (sel ? ' selected' : '');
+        t.title = isNone ? 'No icon (default)' : name;
+        if (isNone) {
+          t.innerHTML = '<span class="icon-tile-none">∅</span><span class="icon-tile-label">none</span>';
+        } else {
+          var img = document.createElement('img');
+          img.alt = '';
+          img.src = 'icons/pack/32_' + name + '.png';
+          t.appendChild(img);
+          var lbl = document.createElement('span');
+          lbl.className = 'icon-tile-label';
+          lbl.textContent = name;
+          t.appendChild(lbl);
+        }
+        t.onclick = function() {
+          slot.iconFile = isNone ? null : ('pack:' + name);
+          closeIconPicker();
+          onApply();
+        };
+        grid.appendChild(t);
+      }
+
+      addTile(null, true);
+      names.forEach(function(n) { addTile(n, false); });
+      overlay.classList.add('visible');
+    });
   }
 
   // Best-effort JS → Serilog. Bridge may not be ready at the moment of
