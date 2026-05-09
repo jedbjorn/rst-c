@@ -6,6 +6,7 @@
 <title>RST — Profile Selector</title>
 <!-- NOTE: Window size is 1450x900. Set in profile_selector.py. -->
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="rst_components.css">
 <style>
   :root {
     --bg: #0f1117;
@@ -146,8 +147,6 @@
   }
 
   .profile-scroll { flex: 1; overflow-y: auto; padding: 8px; }
-  .profile-scroll::-webkit-scrollbar { width: 3px; }
-  .profile-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
   .profile-card {
     border-radius: 7px;
@@ -234,8 +233,6 @@
     flex-direction: column;
     gap: 22px;
   }
-  .detail-body::-webkit-scrollbar { width: 3px; }
-  .detail-body::-webkit-scrollbar-thumb { background: var(--border); }
 
   .detail-section-label {
     font-family: 'DM Mono', monospace;
@@ -308,8 +305,6 @@
   @media (prefers-color-scheme: light) {
     .tab-canvas-ro { background: #E1E1E1; } /* Revit light ribbon */
   }
-  .tab-canvas-ro::-webkit-scrollbar { height: 3px; }
-  .tab-canvas-ro::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
   /* Preview panel cards — background applied per-panel via inline style
      (panel.color blended with profile.panelOpacity → rgba). Subtle 1px
@@ -586,8 +581,6 @@
     line-height: 1.8;
     text-align: center;
   }
-  .confirm-list::-webkit-scrollbar { width: 3px; }
-  .confirm-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   .confirm-list-item {
     padding: 2px 0;
     max-width: 20ch;
