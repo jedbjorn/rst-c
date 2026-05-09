@@ -61,6 +61,53 @@ public class RoundTripTests
     }
 
     [Fact]
+    public void Presets_round_trip_through_serializer()
+    {
+        var first = new Profile
+        {
+            Id = "abc",
+            ProfileName = "Presets RT",
+            Tab = "T",
+            Panels = new System.Collections.Generic.List<Panel>
+            {
+                new Panel { Name = "P", Color = "#4f8ef7", Slots = new System.Collections.Generic.List<Slot>() },
+            },
+            Presets = new ProfilePresets
+            {
+                HiddenTabs = new System.Collections.Generic.List<string> { "Architecture", "Annotate" },
+                DisableUnusedAddins = true,
+            },
+        };
+
+        var json = ProfileSerializer.WriteString(first);
+        var second = ProfileSerializer.ReadString(json);
+
+        second.Presets.Should().NotBeNull();
+        second.Presets!.HiddenTabs.Should().BeEquivalentTo(new[] { "Architecture", "Annotate" });
+        second.Presets.DisableUnusedAddins.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Profile_without_presets_round_trips_with_null()
+    {
+        var first = new Profile
+        {
+            Id = "abc",
+            ProfileName = "No Presets",
+            Tab = "T",
+            Panels = new System.Collections.Generic.List<Panel>
+            {
+                new Panel { Name = "P", Color = "#4f8ef7", Slots = new System.Collections.Generic.List<Slot>() },
+            },
+        };
+
+        var json = ProfileSerializer.WriteString(first);
+        var second = ProfileSerializer.ReadString(json);
+
+        second.Presets.Should().BeNull();
+    }
+
+    [Fact]
     public void Legacy_v0_profile_migrates_to_current_schema_on_load()
     {
         using var stream = File.OpenRead(FixturePath("legacy_v0.json"));

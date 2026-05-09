@@ -886,6 +886,7 @@ public class LoaderBridge
         stacks = p.Stacks,
         panels = p.Panels,
         branding = p.Branding,
+        presets = p.Presets,
         _filename = fileName,
     };
 
