@@ -953,9 +953,52 @@
         </div>
         <div id="stackList"></div>
       </div>
+
+      <div class="prop-section" id="presetsSection">
+        <div class="prop-section-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>RST Presets</span>
+          <button class="btn" onclick="openPresetsModal()">Configure</button>
+        </div>
+        <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+            Pre-configure RSTify hidden tabs + Disable Unused Add-ins so the
+            profile ships with a sensible Loader state out of the box.
+          </div>
+          <div id="presetsSummary"
+               style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+        </div>
+      </div>
     </div>
   </div>
 
+</div>
+
+<!-- Presets Configure Modal — reuses exit-modal-backdrop styling. -->
+<div class="exit-modal-backdrop" id="presetsOverlay" hidden>
+  <div class="exit-modal-card" style="max-width:520px">
+    <div class="exit-modal-title">RST Presets</div>
+    <div class="exit-modal-body" style="margin-bottom:12px">
+      Defaults applied when a user selects this profile in the Loader. They can still tweak per load.
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="prop-section-label" style="margin-bottom:6px">RSTify — Hide These Tabs</div>
+      <div id="presetsTabsList"
+           style="max-height:240px;overflow-y:auto;padding-right:6px;border:1px solid var(--border);border-radius:4px;padding:8px"></div>
+    </div>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--border);cursor:pointer">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text1)">Disable Unused Add-ins</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">
+          Default state for the Loader's footer toggle on first load.
+        </div>
+      </div>
+      <input type="checkbox" id="presetsDisableUnused" style="width:16px;height:16px">
+    </label>
+    <div class="exit-modal-actions" style="margin-top:16px">
+      <button class="btn ghost" onclick="closePresetsModal()">Cancel</button>
+      <button class="btn primary" onclick="savePresetsModal()">Apply</button>
+    </div>
+  </div>
 </div>
 
 <!-- Live tab preview (mirrors selector's read-only preview) -->
@@ -1009,10 +1052,12 @@
     stacks: {},
     panels: [],
     branding: null,
+    presets: { hiddenTabs: [], disableUnusedAddins: false },
   };
 
   let catalog = [];                   // [{id, displayName, sourceTab, sourcePanel, ...}]
   let ADDIN_LOOKUP = {};              // curated name → {displayName, file, url}; loaded at boot
+  let ALL_TABS = [];                  // ribbon tab titles, loaded once at boot for the presets picker
   let nativeByTab = new Map();        // origin=Native:    tab → Map(panel → [cmd])
   let otherByTab  = new Map();        // origin=non-Native: tab → Map(panel → [cmd])
   let collapsed = new Set();          // tab/panel keys collapsed in the tree
@@ -1081,7 +1126,8 @@
       window.pywebview.api.get_profiles(),
       window.pywebview.api.get_active_profile(),
       window.pywebview.api.get_revit_version(),
-      window.pywebview.api.get_addin_lookup()
+      window.pywebview.api.get_addin_lookup(),
+      window.pywebview.api.get_all_tabs()
     ]).then(function(results) {
       catalog = Array.isArray(results[0]) ? results[0] : [];
       indexCatalog();
@@ -1108,6 +1154,9 @@
 
       ADDIN_LOOKUP = (results[4] && typeof results[4] === 'object') ? results[4] : {};
       rstLog('info', 'builder: addin lookup loaded', { keys: Object.keys(ADDIN_LOOKUP).length });
+
+      ALL_TABS = Array.isArray(results[5]) ? results[5] : [];
+      rstLog('info', 'builder: all tabs loaded', { count: ALL_TABS.length });
 
       // Default the dropdown to "+ New Profile" — the user picks an
       // existing profile from the dropdown if they want to edit one.
@@ -1137,10 +1186,12 @@
     profile.stacks         = {};
     profile.panels         = [];
     profile.branding       = null;
+    profile.presets        = { hiddenTabs: [], disableUnusedAddins: false };
     selectedPanelIndex     = -1;
     mode = 'new';
     originalNameOnLoad = '';
     addPanel();   // canvas isn't empty on first paint
+    renderPresetsSummary();
     snapshotPristine();
   }
 
@@ -1222,10 +1273,18 @@
     // Legacy non-null values are dropped silently; runtime resolver falls
     // back to %AppData%\RST\branding.png + branding.json.
     profile.branding       = null;
+    var srcPresets = src.presets || {};
+    profile.presets = {
+      hiddenTabs: Array.isArray(srcPresets.hiddenTabs) ? srcPresets.hiddenTabs.slice() : [],
+      disableUnusedAddins: !!srcPresets.disableUnusedAddins,
+    };
     if (profile.panels.length > 0) selectedPanelIndex = 0;
+    renderPresetsSummary();
     rstLog('info', 'builder: loaded existing profile into editor', {
       name: profile.profile, id: profile.id, panels: profile.panels.length,
       stacks: Object.keys(profile.stacks).length,
+      presetHiddenTabs: profile.presets.hiddenTabs.length,
+      presetDisableUnused: profile.presets.disableUnusedAddins,
     });
   }
 
@@ -2193,6 +2252,86 @@
     });
     renderPreview();
   }
+
+  // ── RST PRESETS ─────────────────────────────────────────────────────────────
+  // Admin-authored Loader defaults: hidden tabs (RSTify) + disable-unused
+  // toggle. Persisted on profile.presets and surfaced by the Loader when a
+  // user selects a non-active profile (so the picker + footer toggle land
+  // pre-configured). The Loader still lets the user tweak per load.
+
+  // Tabs that should never appear in the hide picker — same set as the
+  // Loader's renderTabToggles. Built-in core tabs are always visible by
+  // contract; the profile's own tab obviously can't be hidden.
+  var PRESET_CORE_TABS = new Set(['Modify', 'Manage', 'View', 'Annotate', 'Add-Ins', 'Create']);
+
+  function renderPresetsSummary() {
+    var el = document.getElementById('presetsSummary');
+    if (!el) return;
+    var p = profile.presets || { hiddenTabs: [], disableUnusedAddins: false };
+    var n = (p.hiddenTabs || []).length;
+    var parts = [];
+    parts.push(n === 0 ? 'No tabs hidden' : (n + ' tab' + (n === 1 ? '' : 's') + ' hidden'));
+    parts.push('Disable Unused: ' + (p.disableUnusedAddins ? 'on' : 'off'));
+    el.textContent = parts.join('  •  ');
+  }
+
+  function openPresetsModal() {
+    var p = profile.presets || { hiddenTabs: [], disableUnusedAddins: false };
+    var preset = new Set(p.hiddenTabs || []);
+    var lockedTab = (profile.tab || '').trim();
+
+    // Picker source — every ribbon tab the admin's machine knows about
+    // minus core tabs and the profile's own tab. Tabs that were in the
+    // preset list but aren't on the current ribbon (e.g. an addin the
+    // admin is editing on a stripped-down machine) are still rendered
+    // so they're visible/removable rather than silently dropped.
+    var fromRibbon = (ALL_TABS || []).filter(function(t) {
+      return t && !PRESET_CORE_TABS.has(t) && t !== lockedTab;
+    });
+    var fromPreset = (p.hiddenTabs || []).filter(function(t) {
+      return t && fromRibbon.indexOf(t) === -1 && t !== lockedTab && !PRESET_CORE_TABS.has(t);
+    });
+    var tabs = fromRibbon.concat(fromPreset);
+
+    var list = document.getElementById('presetsTabsList');
+    if (tabs.length === 0) {
+      list.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 4px">' +
+                       'No tabs available to hide on this machine.</div>';
+    } else {
+      list.innerHTML = tabs.map(function(t) {
+        var checked = preset.has(t) ? ' checked' : '';
+        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text1)">' +
+               '<input type="checkbox" data-tab="' + escAttr(t) + '"' + checked + ' style="width:14px;height:14px">' +
+               '<span>' + escHtml(t) + '</span>' +
+               '</label>';
+      }).join('');
+    }
+
+    document.getElementById('presetsDisableUnused').checked = !!p.disableUnusedAddins;
+    document.getElementById('presetsOverlay').hidden = false;
+  }
+
+  function closePresetsModal() {
+    document.getElementById('presetsOverlay').hidden = true;
+  }
+
+  function savePresetsModal() {
+    var checkboxes = document.querySelectorAll('#presetsTabsList input[type="checkbox"]');
+    var hidden = [];
+    checkboxes.forEach(function(cb) {
+      if (cb.checked && cb.dataset.tab) hidden.push(cb.dataset.tab);
+    });
+    var disableUnused = document.getElementById('presetsDisableUnused').checked;
+    profile.presets = { hiddenTabs: hidden, disableUnusedAddins: disableUnused };
+    rstLog('info', 'builder: presets updated', {
+      hiddenTabs: hidden.length, disableUnusedAddins: disableUnused,
+    });
+    renderPresetsSummary();
+    closePresetsModal();
+  }
+
+  // escHtml is defined later in the file; reuse it.
+  function escAttr(s) { return escHtml(s); }
 
   // ── REQUIRED-ADDIN DETECTION ────────────────────────────────────────────────
   // Mirror upstream pyRevit RST/ui/profile_manager.html getDetectedAddins
