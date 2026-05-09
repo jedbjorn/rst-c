@@ -57,10 +57,18 @@ and a panel assignment. The Builder also handles per-profile metadata —
 branding, colors, cleanup targets, required add-ins — and exports the
 finished profile as a self-contained zip that any other rst-c install
 can load.
+Support for: 
+- Giving tools a unique name on the built ribbon
+- Naming Panels individually
+- coloring panels, including opacity settings
+- Tab and Profile naming
+
+Profiles are saved to the users %AppData% folder at creation and transmitted profiles are copied to that location.
+No need to save the zips anywhere, just import via the Loader. 
 
 ### Live Profile Switching
 
-Switching profiles does not require a Revit restart. When the Loader
+Switching profiles is done via the Loader tool and does not require a Revit restart. When the Loader
 applies a profile, rst-c rebuilds the profile tab in place using
 Revit's own ribbon and AdWindows APIs, on the next idle event. The
 intent is to make profile switching cheap enough to do mid-session — an
@@ -82,7 +90,7 @@ remember a separate set of bookmarks.
 ### Branding Panel
 
 Every profile tab can display an 85×85 square branding image with
-rounded corners — typically a company or office logo. The branding
+rounded corners — typically a company or office logo. This is set in the Builder tool and the same branding will be applied to all future profiles created or edited after the branding image is set. The branding
 panel is non-interactive and lives at the leading edge of the tab, so
 the curated ribbon visibly belongs to the org that curated it. Logos
 ship inside the profile zip, so a profile shared to another office
