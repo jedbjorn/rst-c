@@ -102,8 +102,8 @@ internal static class ProfileTabBuilder
         // OnStartup: pyRevit and RST-008 both insert at index 0 directly.
         // When profile.Tab == "RST" this pushes the Loader panel one slot
         // right; that matches the previous behaviour exactly.
-        var (logoPath, brandingUrl) = BrandingDefaults.Resolve(profile);
-        var brandingPanel = PanelStyling.BuildBrandingPanel(logoPath, brandingUrl);
+        var (logoPath, _) = BrandingDefaults.Resolve(profile);
+        var brandingPanel = PanelStyling.BuildBrandingPanel(logoPath, profile.ProfileName);
         if (brandingPanel is not null)
         {
             // Tag the source id so teardown can identify it as ours even
@@ -115,8 +115,8 @@ internal static class ProfileTabBuilder
             {
                 tab.Panels.Insert(0, brandingPanel);
                 _managedPanels.Add(brandingPanel);
-                Log.Information("ProfileTabBuilder: branding panel inserted at index 0 of tab '{Tab}' (logo={Logo}, urlSet={UrlSet})",
-                                tabName, logoPath, !string.IsNullOrEmpty(brandingUrl));
+                Log.Information("ProfileTabBuilder: branding panel inserted at index 0 of tab '{Tab}' (logo={Logo}, profile={Profile})",
+                                tabName, logoPath, profile.ProfileName);
             }
             catch (Exception ex)
             {

@@ -24,28 +24,27 @@
 // every panel regardless of item count, matching pyRevit's intended
 // PANEL_CORNER_RADIUS_PX = 5 — which pyRevit silently fails to apply.
 //
-// Branding panel construction lives in BuildBrandingPanel(); the
-// caller (RibbonBuilder) is responsible for inserting it at index 0
-// of the profile tab's Panels collection.
+// Branding panel construction lives in BuildBrandingPanel() — square
+// 85×85 logo with rounded corners, no button (a zero-content RibbonLabel
+// holds the layout slot AdWindows requires). Title strip is hidden;
+// Source.Name carries the active profile name for diagnostics. Caller
+// (ProfileTabBuilder) inserts at index 0 of the profile tab.
 //
 // Thread model: every method must be called on the UI thread (Revit's
 // ribbon and WPF have the usual STA constraint). Initial color
 // application happens in OnStartup, which is UI-thread.
 
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using AwComponentManager = Autodesk.Windows.ComponentManager;
 using AwRibbonTab = Autodesk.Windows.RibbonTab;
 using AwRibbonPanel = Autodesk.Windows.RibbonPanel;
 using AwRibbonPanelSource = Autodesk.Windows.RibbonPanelSource;
-using AwRibbonButton = Autodesk.Windows.RibbonButton;
-using AwRibbonItemSize = Autodesk.Windows.RibbonItemSize;
-using RST.Core.Ribbon;
+using AwRibbonLabel = Autodesk.Windows.RibbonLabel;
+using RST.Core.Configuration;
 using Serilog;
 
 namespace RST.Engine.Ribbon;
@@ -126,16 +125,15 @@ internal static class PanelStyling
     }
 
     /// <summary>
-    /// Build the leftmost branding panel — title is whitespace (panels
-    /// without a title get auto-laid-out with a bare label, which is
-    /// what we want for a logo-only panel), background is the company
-    /// logo via ImageBrush, and the panel hosts a single transparent
-    /// large button so the panel takes up the standard Large width;
-    /// clicking the button opens the configured branding URL (or the
-    /// RST GitHub repo if no URL is set).
+    /// Build the leftmost branding panel — square logo with rounded
+    /// corners and no button. Title strip is suppressed visually (transparent
+    /// brush + empty Title) but the source's Name carries the active profile
+    /// name for diagnostics. Sizing is forced via a single zero-content
+    /// RibbonLabel of Width/Height = 85 (AdWindows panels collapse without
+    /// at least one item).
     /// Returns null if no logo is available — caller skips the insert.
     /// </summary>
-    public static AwRibbonPanel? BuildBrandingPanel(string? logoAbsolutePath, string? url)
+    public static AwRibbonPanel? BuildBrandingPanel(string? logoAbsolutePath, string? profileName)
     {
         if (string.IsNullOrEmpty(logoAbsolutePath) || !File.Exists(logoAbsolutePath))
         {
@@ -147,10 +145,8 @@ internal static class PanelStyling
             var panel = new AwRibbonPanel();
             var source = new AwRibbonPanelSource
             {
-                // Whitespace title leaves a bare strip; matches pyRevit's
-                // 12-space placeholder so the layout reserves height for the
-                // logo without showing any text.
-                Title = "            ",
+                Title = "",
+                Name = profileName ?? "",
                 Id = "REST_Branding",
             };
             panel.Source = source;
@@ -167,31 +163,52 @@ internal static class PanelStyling
             // is constructed each time. Bypass the cache so re-picks land.
             bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             bmp.EndInit();
-            // Freeze is best-effort — failure makes the bitmap mutable, which
-            // costs us cross-thread sharing and (more importantly) leaves
-            // PropertyChanged subscribers attached. Surface the cause if it
-            // ever fires so we can correlate against memory growth on rapid
-            // profile switches.
             try { bmp.Freeze(); }
             catch (Exception ex) { Log.Debug(ex, "PanelStyling: BitmapImage.Freeze failed for logo={Logo}", logoAbsolutePath); }
 
-            var imgBrush = new ImageBrush(bmp) { Stretch = Stretch.Uniform };
-            panel.CustomPanelBackground = imgBrush;
-
-            var btn = new AwRibbonButton
+            // Rounded-corner image brush: GeometryDrawing fills a rounded
+            // rectangle with the bitmap. Radii are computed against the
+            // square panel size so corner radius lands at TargetRadiusPx.
+            double rx = TargetRadiusPx / (double)BrandingDefaults.PanelSizePx;
+            double ry = rx;
+            var rect = new RectangleGeometry(new Rect(0, 0, 1, 1)) { RadiusX = rx, RadiusY = ry };
+            var imgBrush = new ImageBrush(bmp) { Stretch = Stretch.Fill };
+            try { imgBrush.Freeze(); } catch { /* best-effort */ }
+            var drawing = new GeometryDrawing(imgBrush, pen: null, geometry: rect);
+            var bgBrush = new DrawingBrush(drawing)
             {
-                Text = " ",
-                Id = "REST_Branding_Btn",
-                ShowText = false,
-                Size = AwRibbonItemSize.Large,
-                Image = IconAssets.Default32,
-                LargeImage = IconAssets.Default32,
-                CommandHandler = new UrlClickCommand(string.IsNullOrWhiteSpace(url)
-                    ? "https://github.com/jedbjorn/RST"
-                    : url!.Trim()),
+                Stretch = Stretch.Fill,
+                ViewportUnits = BrushMappingMode.RelativeToBoundingBox,
+                TileMode = TileMode.None,
             };
-            source.Items.Add(btn);
+            try { bgBrush.Freeze(); }
+            catch (Exception ex) { Log.Debug(ex, "PanelStyling: branding DrawingBrush.Freeze failed"); }
+            panel.CustomPanelBackground = bgBrush;
 
+            // Suppress the title strip: transparent brush so the bar blends
+            // into the ribbon canvas. Title text is empty so no label renders.
+            var transparent = new SolidColorBrush(Colors.Transparent);
+            try { transparent.Freeze(); } catch { /* best-effort */ }
+            panel.CustomPanelTitleBarBackground = transparent;
+
+            // Sizing spacer — AdWindows panels collapse with zero items.
+            // RibbonLabel with empty Text + explicit Width/Height enforces
+            // the 85×85 footprint without rendering button chrome.
+            var spacer = new AwRibbonLabel
+            {
+                Id = "REST_Branding_Spacer",
+                Text = "",
+                ShowText = false,
+                ShowImage = false,
+                Width = BrandingDefaults.PanelSizePx,
+                Height = BrandingDefaults.PanelSizePx,
+                MinWidth = BrandingDefaults.PanelSizePx,
+                MinHeight = BrandingDefaults.PanelSizePx,
+                IsToolTipEnabled = false,
+            };
+            source.Items.Add(spacer);
+
+            Log.Debug("PanelStyling.BuildBrandingPanel: profile={Profile} logo={Logo}", profileName, logoAbsolutePath);
             return panel;
         }
         catch (Exception ex)
@@ -281,28 +298,4 @@ internal static class PanelStyling
         }
     }
 
-    /// <summary>
-    /// ICommand wrapper that opens a URL via the system shell when the
-    /// branding-panel button is clicked. AdWindows.RibbonButton wires
-    /// click to ICommand (not IExternalCommand), so the URL handler
-    /// runs entirely WPF-side without a Revit transaction.
-    /// </summary>
-    private sealed class UrlClickCommand : ICommand
-    {
-        private readonly string _url;
-        public UrlClickCommand(string url) { _url = UrlNormalizer.Normalize(url); }
-        public event EventHandler? CanExecuteChanged { add { } remove { } }
-        public bool CanExecute(object? parameter) => true;
-        public void Execute(object? parameter)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo(_url) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Branding URL open failed for {Url}", _url);
-            }
-        }
-    }
 }

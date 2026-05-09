@@ -555,17 +555,16 @@ public class LoaderBridge
         try
         {
             AppDataPaths.EnsureCreated();
-            // Try: load → resize 48x48 → PNG-encode → save. Matches upstream
-            // tab_creator.py PickLogo (PIL.Image.resize((48,48), LANCZOS) +
-            // save as PNG). Branding panel renders at ~96px so 48x48 is the
-            // smallest size that holds up at HiDPI without bloating memory
-            // — and forces a known format so any downstream code (panel
-            // background brush, etc.) doesn't have to sniff JPEG vs PNG.
+            // Resize to RST.Engine PanelStyling.BrandingPanelSizePx (85)
+            // and PNG-encode. Square non-uniform scale matches the panel
+            // shape — RST-021 fixed the panel at 85×85 with the image
+            // filling the body, so encoding to that exact size avoids
+            // runtime up/down-sampling at every ribbon paint.
             try
             {
-                EncodeAsBranding(source!, BrandingDefaults.LogoPath!, targetSize: 48);
-                Log.Information("Bridge.pick_logo_file OK (resized 48x48 PNG): {Source} → {Dest}",
-                                source, BrandingDefaults.LogoPath);
+                EncodeAsBranding(source!, BrandingDefaults.LogoPath!, targetSize: BrandingDefaults.PanelSizePx);
+                Log.Information("Bridge.pick_logo_file OK (resized {Size}x{Size} PNG): {Source} → {Dest}",
+                                BrandingDefaults.PanelSizePx, BrandingDefaults.PanelSizePx, source, BrandingDefaults.LogoPath);
             }
             catch (Exception ex)
             {
