@@ -144,8 +144,11 @@ internal static class RstifyToggle
     /// </summary>
     public static void RefreshIcon(bool active)
     {
-        var icon = active ? IconAssets.RstifyIconOn : IconAssets.RstifyIconOff;
-        if (icon is null) return;
+        var large = active ? IconAssets.RstifyIconOn : IconAssets.RstifyIconOff;
+        if (large is null) return;
+        // Small (16x16) variant for QAT — falls back to the 32 if missing
+        // so the on/off swap still happens even when the small isn't bundled.
+        var small = (active ? IconAssets.RstifyIconOn16 : IconAssets.RstifyIconOff16) ?? large;
 
         var ribbon = AwComponentManager.Ribbon;
         if (ribbon is null) return;
@@ -158,13 +161,13 @@ internal static class RstifyToggle
                 if (panel?.Source is null) continue;
                 foreach (var item in panel.Source.Items)
                 {
-                    if (TrySetIfRstify(item, icon)) return;
+                    if (TrySetIfRstify(item, large, small)) return;
                 }
             }
         }
     }
 
-    private static bool TrySetIfRstify(AwRibbonItem? item, ImageSource icon)
+    private static bool TrySetIfRstify(AwRibbonItem? item, ImageSource large, ImageSource small)
     {
         if (item is null) return false;
         // Cookie or Id can carry our marker; check both.
@@ -175,8 +178,8 @@ internal static class RstifyToggle
             return false;
         try
         {
-            item.LargeImage = icon;
-            item.Image = icon;
+            item.LargeImage = large;
+            item.Image = small;
             Log.Debug("RstifyToggle.RefreshIcon: updated RSTify button icon (cookie={Cookie}, id={Id})", cookie, id);
             return true;
         }
