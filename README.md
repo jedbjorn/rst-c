@@ -63,6 +63,10 @@ Support for:
 - coloring panels, including opacity settings
 - Tab and Profile naming
 
+Profiles can be edited in the Builder using the drop down at the top left. Editing a profile and then renaming it creates a copy of that profile, 
+allowing for different flavors of the same profile to be created and curated. Profile deletion is done at the system level within the Loader by selecting
+the profile and clicking "delete profile". 
+
 Profiles are saved to the users %AppData% folder at creation and transmitted profiles are copied to that location.
 No need to save the zips anywhere, just import via the Loader. 
 
@@ -157,13 +161,11 @@ behaves unexpectedly.
 
 ## Targets
 
-| Revit version | TFM               |
-|---------------|-------------------|
-| 2025          | `net8.0-windows`  |
-| 2026          | `net8.0-windows`  |
-| 2027          | `net10.0-windows` |
-
-(2027 is provisional pending Autodesk's release.)
+| Revit version | TFM              |
+|---------------|------------------|
+| 2025          | `net8.0-windows` |
+| 2026          | `net8.0-windows` |
+| 2027          | `net8.0-windows` |
 
 ## Install
 
@@ -191,4 +193,4 @@ dotnet build -c "Debug R27"     # Revit 2027 (needs .NET 10 SDK)
 
 ## License
 
-TBD — to mirror the parent RST repo at release.
+TBD 
