@@ -2178,6 +2178,84 @@
     renderPreview();
   }
 
+  // ── REQUIRED-ADDIN DETECTION ────────────────────────────────────────────────
+  // Mirror upstream pyRevit RST/ui/profile_manager.html getDetectedAddins
+  // (lines 1861-1929). Walks every placed slot + stack tool, classifies by
+  // sourceTab/sourcePanel, and returns one entry per distinct third-party
+  // tab or panel. The Loader's normalizeRequiredAddins (profile_loader.html:892)
+  // already handles this {tabName, addinFile, url} shape.
+  //
+  // Phase-2 enrichment (publisher / version / origin from ADDIN_LOOKUP +
+  // RESOLVED_ADDINS) is deferred — those bridge methods are still stubs in
+  // the C# port, so we emit minimal entries. The Loader falls back to status
+  // badges ("Not Found" / "Loaded" / "Installed" / "Disabled") which already
+  // depend on the addin scan, not these enrichments.
+
+  var BUILTIN_TABS = new Set([
+    'Architecture', 'Structure', 'Systems', 'Steel', 'Precast',
+    'Insert', 'Annotate', 'Analyze', 'Massing & Site', 'Collaborate',
+    'View', 'Manage', 'Modify', 'Add-Ins', 'Create', 'RST',
+    'FormIt', 'FormIt Converter', 'eTransmit',
+  ]);
+  // Panels Revit ships on built-in tabs that aren't third-party add-ins.
+  // Keeps Macros / External Tools / etc. out of the requiredAddins list.
+  // Mirrors /home/jedi/RST/RST.tab/Loader.panel/ProfileLoader.pushbutton/
+  // script.py:_BUILTIN_PANELS.
+  var BUILTIN_PANELS = new Set([
+    'Align', 'Macros', 'External', 'External Tools',
+    'Analysis', 'Selection', 'Visual Programming',
+  ]);
+
+  function computeRequiredAddins() {
+    // commandId → {sourceTab, sourcePanel} index. Stack tools store only
+    // {type,name,commandId} (addToolToStack), so we resolve their tab/panel
+    // through the catalog rather than duplicating the data on each tool.
+    var byId = {};
+    catalog.forEach(function(c) {
+      if (c && c.id) byId[c.id] = { sourceTab: c.sourceTab || null, sourcePanel: c.sourcePanel || null };
+    });
+
+    var thirdPartyTabs  = new Set();   // tools on non-built-in tabs → tab name is the addin
+    var thirdPartyPanels = new Set();  // tools on built-in tabs → addin lives in the panel name
+
+    function classify(srcTab, srcPanel) {
+      if (!srcTab) return;
+      if (srcTab === 'Custom' || srcTab.indexOf('CustomCtrl_') === 0) return;
+      if (BUILTIN_TABS.has(srcTab)) {
+        if (!srcPanel) return;
+        if (BUILTIN_TABS.has(srcPanel) || BUILTIN_PANELS.has(srcPanel)) return;
+        thirdPartyPanels.add(srcPanel);
+      } else {
+        thirdPartyTabs.add(srcTab);
+      }
+    }
+
+    (profile.panels || []).forEach(function(panel) {
+      (panel.slots || []).forEach(function(slot) {
+        if (!slot) return;
+        if (slot.type === 'tool') {
+          classify(slot.sourceTab, slot.sourcePanel);
+        } else if (slot.type === 'stack') {
+          var stack = profile.stacks ? profile.stacks[slot.name] : null;
+          if (!stack) return;
+          (stack.tools || []).forEach(function(t) {
+            var info = (t && t.commandId) ? byId[t.commandId] : null;
+            if (info) classify(info.sourceTab, info.sourcePanel);
+          });
+        }
+      });
+    });
+
+    var entries = [];
+    thirdPartyTabs.forEach(function(name) {
+      entries.push({ tabName: name, addinFile: null, url: '' });
+    });
+    thirdPartyPanels.forEach(function(name) {
+      entries.push({ tabName: name, addinFile: null, url: '' });
+    });
+    return entries;
+  }
+
   // ── BRIDGE I/O ──────────────────────────────────────────────────────────────
   // Save handler bound to the header Save button — fire-and-forget,
   // delegates to saveAndMaybeReload (which carries the auto-reload-if-
@@ -2205,9 +2283,15 @@
       showToast('Tab name required.', 'err');
       return Promise.reject(new Error('no tab'));
     }
+    // Auto-derive requiredAddins from placed tools' sourceTab/sourcePanel
+    // before sending to the bridge. Done at save time (rather than on every
+    // slot drop) to keep the editing path cheap; the Loader only consumes
+    // requiredAddins on profile load, so save-time refresh is enough.
+    profile.requiredAddins = computeRequiredAddins();
     rstLog('info', 'builder: save attempt', {
       name: profile.profile, tab: profile.tab, panels: profile.panels.length,
       stacks: Object.keys(profile.stacks).length, mode: mode, id: profile.id,
+      requiredAddins: profile.requiredAddins.length,
     });
     return window.pywebview.api.save_profile(profile).then(function(result) {
       if (!(result && result.ok)) {
