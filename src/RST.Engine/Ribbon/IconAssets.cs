@@ -8,12 +8,14 @@
 // from upstream pyRevit RST) and set BOTH Image AND LargeImage on every
 // button — same pattern startup.py uses for unmapped slots.
 //
-// Real per-slot icons (the `pack:foo` resolver against Assets/icons/pack/)
-// land in a follow-up flag — Slot.IconFile is in the model but unwired.
-// Until then every button shows the same default icon, like pyRevit RST
-// did before its iconpack matured.
+// Per-slot icons resolve via ResolveSlotIcon(slot.IconFile):
+//   "pack:foo" → Assets/icons/pack/32_foo.png (vendored 48-PNG iconpack)
+//   anything else → null (caller falls back to Default32)
+// Resolved icons are cached so a profile rebuild doesn't re-decode the
+// same PNG on every button.
 
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -109,6 +111,36 @@ internal static class IconAssets
             _health = LoadBundled("icons/icon_health.png");
             return _health;
         }
+    }
+
+    private static readonly ConcurrentDictionary<string, ImageSource?> _packCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolve a slot's <c>iconFile</c> field into a Revit-ready
+    /// <see cref="ImageSource"/>. Today only the <c>pack:&lt;name&gt;</c>
+    /// shorthand is supported — looks up
+    /// <c>Assets/icons/pack/32_&lt;name&gt;.png</c>. Returns null when
+    /// the field is empty/unrecognised or the file is missing; caller
+    /// falls back to <see cref="Default32"/>.
+    /// Resolved bitmaps are process-cached so a live profile rebuild
+    /// (RST-020) doesn't re-decode the same PNG for every button.
+    /// </summary>
+    public static ImageSource? ResolveSlotIcon(string? iconFile)
+    {
+        if (string.IsNullOrWhiteSpace(iconFile)) return null;
+        var trimmed = iconFile!.Trim();
+        if (!trimmed.StartsWith("pack:", StringComparison.OrdinalIgnoreCase))
+        {
+            // Per-profile asset paths (e.g. "<profile-id>/foo.png") will
+            // resolve here in a follow-up flag once the upload + zip-bundle
+            // path lands. Until then, anything that isn't pack:* falls
+            // back to the default icon.
+            return null;
+        }
+        var name = trimmed.Substring(5).Trim();
+        if (name.Length == 0) return null;
+        return _packCache.GetOrAdd(name, key => LoadBundled($"icons/pack/32_{key}.png"));
     }
 
     private static ImageSource? LoadBundled(string relativePath)

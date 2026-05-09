@@ -221,14 +221,15 @@ internal static class ProfileTabBuilder
             if (string.IsNullOrEmpty(slot.CommandId)) continue;
 
             var target = ParseTarget(slot.CommandId!, slot.Name);
+            var icon = IconAssets.ResolveSlotIcon(slot.IconFile) ?? IconAssets.Default32;
             var btn = new AwRibbonButton
             {
                 Text = RST.Core.Ribbon.ButtonLabel.Wrap(slot.Name),
                 Id = $"RST_ProfileBtn_{panelIndex:D3}_{slotInPanel:D3}",
                 ShowText = true,
                 Size = AwRibbonItemSize.Large,
-                Image = IconAssets.Default32,
-                LargeImage = IconAssets.Default32,
+                Image = icon,
+                LargeImage = icon,
                 Orientation = System.Windows.Controls.Orientation.Vertical,
                 ToolTip = target.Kind == SlotKind.Url
                     ? "Open: " + target.Payload
