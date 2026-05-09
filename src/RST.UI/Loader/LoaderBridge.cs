@@ -133,6 +133,25 @@ public class LoaderBridge
             return Serialize(new { ok = false, warnings = new[] { "Failed to write active profile: " + ex.Message }, restart_needed = false, failed_disables = Array.Empty<object>() });
         }
 
+        // Persist this profile's RSTify + disable-unused state to the
+        // per-profile user prefs file so switching profiles in the
+        // picker swaps in *this* profile's saved selections rather
+        // than carrying over from active_profile.json. Don't reset
+        // the presetsAdopted flag here — the picker manages that on
+        // first card selection.
+        if (!string.IsNullOrEmpty(entry.Profile.Id))
+        {
+            try
+            {
+                var prefs = UserProfilePrefs.Read();
+                prefs.Set(entry.Profile.Id!, hiddenTabs, disableNonRequired);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Bridge.load_profile: failed writing user_profile_prefs for {Name}", profileName);
+            }
+        }
+
         Log.Information("Bridge.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs}",
                         profileName, profileId, disableNonRequired, hiddenTabs.Length);
 
@@ -786,6 +805,84 @@ public class LoaderBridge
     {
         LogEntry(nameof(GetUserConfig));
         return Serialize(new { addins = new Dictionary<string, object>() });
+    }
+
+    /// <summary>
+    /// Per-profile RSTify + disable-unused user prefs, keyed by profile
+    /// id. Loader's selectCard reads this to seed the picker / footer
+    /// toggle when the user picks a profile. See UserProfilePrefs.cs
+    /// for the design rationale (separate from active_profile.json).
+    /// </summary>
+    public string GetUserProfilePrefs()
+    {
+        LogEntry(nameof(GetUserProfilePrefs));
+        try
+        {
+            var prefs = UserProfilePrefs.Read();
+            // One-time migration: if the currently-active profile has
+            // hidden_tabs / disable_non_required in active_profile.json
+            // but no entry in user_profile_prefs (pre-RST-026 install),
+            // seed an entry so the user doesn't lose their existing
+            // state on first selection. presetsAdopted=true so the
+            // adopt prompt doesn't fire over data the user already
+            // explicitly configured.
+            try
+            {
+                var ap = ActiveProfile.Read();
+                if (!ap.IsBlank && !string.IsNullOrEmpty(ap.ProfileId)
+                    && prefs.Get(ap.ProfileId!) is null
+                    && ((ap.HiddenTabs?.Length ?? 0) > 0 || ap.DisableNonRequired))
+                {
+                    prefs.Set(ap.ProfileId!, ap.HiddenTabs ?? Array.Empty<string>(),
+                              ap.DisableNonRequired, presetsAdopted: true);
+                    Log.Information("Bridge.get_user_profile_prefs: migrated active profile {Id} into user prefs",
+                                    ap.ProfileId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Bridge.get_user_profile_prefs: active-profile migration skipped (non-fatal)");
+            }
+            return Serialize(prefs);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Bridge.get_user_profile_prefs: read failed");
+            return Serialize(new UserProfilePrefs());
+        }
+    }
+
+    /// <summary>
+    /// Upsert the prefs entry for one profile id. Used by the Loader's
+    /// adopt-presets prompt — so the user's "yes" or "no" answer is
+    /// persisted before they ever click Load Profile, ensuring the
+    /// prompt doesn't fire again on the next selection.
+    /// </summary>
+    public string RecordUserProfilePrefs(string profileIdJson, string hiddenTabsJson, string disableUnusedJson, string presetsAdoptedJson)
+    {
+        LogEntry(nameof(RecordUserProfilePrefs),
+                 ("id", profileIdJson), ("hiddenTabs", hiddenTabsJson),
+                 ("disableUnused", disableUnusedJson), ("presetsAdopted", presetsAdoptedJson));
+        var profileId = Deserialize<string>(profileIdJson) ?? "";
+        if (string.IsNullOrEmpty(profileId))
+            return Serialize(new { ok = false, error = "profileId required" });
+
+        var hiddenTabs = Deserialize<string[]>(hiddenTabsJson) ?? Array.Empty<string>();
+        var disableUnused = Deserialize<bool>(disableUnusedJson);
+        var presetsAdopted = Deserialize<bool>(presetsAdoptedJson);
+        try
+        {
+            var prefs = UserProfilePrefs.Read();
+            prefs.Set(profileId, hiddenTabs, disableUnused, presetsAdopted);
+            Log.Information("Bridge.record_user_profile_prefs OK: id={Id} hidden={Hidden} disableUnused={D} adopted={A}",
+                            profileId, hiddenTabs.Length, disableUnused, presetsAdopted);
+            return Serialize(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Bridge.record_user_profile_prefs: write failed for {Id}", profileId);
+            return Serialize(new { ok = false, error = ex.Message });
+        }
     }
 
     /// <summary>
