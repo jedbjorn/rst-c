@@ -4,9 +4,7 @@
     RST.Engine — Revit-bound logic.
 
     TargetFramework selected from $(RevitVersion) (set by Configuration in
-    Directory.Build.props):
-      RevitVersion=2024 → net48
-      RevitVersion>=2025 → net8.0-windows
+    Directory.Build.props): 2025/2026 → net8.0-windows, 2027 → net10.0-windows.
 
     Revit API package versions are pinned per Revit major below, OUTSIDE
     central package management — CPM (NU1011) refuses floating versions.
@@ -27,19 +25,6 @@
     <!-- Allow Linux + macOS to build the Windows-targeted TFM (net8.0-windows). -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
-
-  <!-- net48 cross-platform reference assemblies (so Linux can build). -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies"
-                      PrivateAssets="all" />
-  </ItemGroup>
-
-  <!-- Revit 2024 (latest verified stable on NuGet 2026-05) -->
-  <ItemGroup Condition="'$(RevitVersion)' == '2024'">
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2024.3.40" PrivateAssets="all" VersionOverride="2024.3.40" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.3.40" PrivateAssets="all" VersionOverride="2024.3.40" />
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2024.3.40" PrivateAssets="all" VersionOverride="2024.3.40" />
-  </ItemGroup>
 
   <!-- Revit 2025 -->
   <ItemGroup Condition="'$(RevitVersion)' == '2025'">

@@ -71,8 +71,6 @@ public partial class LoaderWindow : Window
                 accessKind: CoreWebView2HostResourceAccessKind.Allow);
 
             var shimPath = Path.Combine(assetsDir, "pywebview-shim.js");
-            // File.ReadAllTextAsync is missing on net48; sync read is fine — the
-            // shim file is ~2 KB and load happens once at window construction.
             var shim = File.ReadAllText(shimPath);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(shim);
 

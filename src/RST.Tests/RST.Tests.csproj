@@ -7,7 +7,7 @@
     <IsTestProject>true</IsTestProject>
     <!-- Tests are configuration-agnostic — the multi-Revit conditionals
          in the rest of the build don't apply here. -->
-    <Configurations>Debug;Release;Debug R24;Debug R25;Debug R26;Debug R27;Release R24;Release R25;Release R26;Release R27</Configurations>
+    <Configurations>Debug;Release;Debug R25;Debug R26;Debug R27;Release R25;Release R26;Release R27</Configurations>
   </PropertyGroup>
 
   <ItemGroup>
