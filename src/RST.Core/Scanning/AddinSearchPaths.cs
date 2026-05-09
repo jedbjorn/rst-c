@@ -14,7 +14,7 @@ public static class AddinSearchPaths
 {
     /// <summary>
     /// Return the directory roots where .addin manifests may live for
-    /// <paramref name="revitVersion"/> (e.g. "2024"). Filters out paths
+    /// <paramref name="revitVersion"/> (e.g. "2025"). Filters out paths
     /// that don't exist. Order is significant for resolution priority.
     /// </summary>
     public static IReadOnlyList<string> ForVersion(string revitVersion)
