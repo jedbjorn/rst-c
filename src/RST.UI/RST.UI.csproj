@@ -36,6 +36,20 @@
     <PackageReference Include="Serilog" />
   </ItemGroup>
 
+  <!--
+    System.Management hosts WMI/CIM classes used by HealthScanner
+    (Win32_VideoController, Win32_NetworkAdapter, MSFT_PhysicalDisk,
+    Win32_DesktopMonitor). On .NET 8 the package ships a managed
+    implementation; on .NET Framework the same types come from the
+    in-box GAC assembly, so we reference it differently per TFM.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.Management" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <PackageReference Include="System.Management" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
   </ItemGroup>
