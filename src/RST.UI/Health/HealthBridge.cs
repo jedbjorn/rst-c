@@ -74,6 +74,13 @@ public class HealthBridge
         LogEntry(nameof(RunScan));
         try
         {
+            // Hand the cleanup targets the user would actually clean into
+            // the scanner so the resulting snapshot carries per-target
+            // size + count for the Hardware section's Junk Files list.
+            // Disabled targets are filtered out — measuring them would
+            // surface bytes the user can't reclaim from this profile.
+            var targets = ResolveActiveTargets().Where(t => t.Enabled).ToArray();
+
             var snap = HealthScanner.Capture(
                 revitVersion: NullIfEmpty(_context.RevitVersion),
                 revitBuild:   NullIfEmpty(_context.RevitBuild),
@@ -81,7 +88,8 @@ public class HealthBridge
                 modelName:    NullIfEmpty(_context.ModelName),
                 modelPath:    NullIfEmpty(_context.ModelPath),
                 modelSizeMb:  _context.ModelSizeMb,
-                warningsCount: _context.WarningsCount);
+                warningsCount: _context.WarningsCount,
+                cleanupTargets: targets);
             HealthScanner.Save(snap, SnapshotPath);
             return Serialize(new { ok = true, error = (string?)null, data = snap });
         }

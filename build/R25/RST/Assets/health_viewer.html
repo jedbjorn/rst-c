@@ -438,6 +438,17 @@
   const fmt = {
     mb(n) { return (n == null) ? '—' : n.toLocaleString() + ' MB'; },
     gb(n) { return (n == null) ? '—' : n.toLocaleString() + ' GB'; },
+    // Auto-scale binary bytes (KB/MB/GB/TB). Used by the Hardware
+    // section's Junk Files rows so a 4 KB and a 5.2 GB target both
+    // read cleanly without picking a unit per-row.
+    bytes(n) {
+      if (n == null) return '—';
+      if (n === 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let i = 0; let v = n;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
+    },
     pct(n) { return (n == null) ? '—' : n + '%'; },
     num(n) { return (n == null) ? '—' : n.toLocaleString(); },
     str(s) { return (s == null || s === '') ? '—' : s; },
@@ -491,16 +502,17 @@
     document.querySelector('[data-field="device"]').textContent = id.deviceName || '—';
     document.querySelector('[data-field="captured"]').textContent = fmt.time(snap.captureTimestamp);
 
-    const cpu  = snap.cpu     || {};
-    const ram  = snap.ram     || {};
-    const gpu  = snap.gpu     || {};
-    const disk = snap.disk    || {};
-    const dsp  = snap.display || {};
-    const net  = snap.network || {};
-    const os   = snap.os      || {};
-    const rv   = snap.revit   || {};
-    const mdl  = rv.model     || {};
-    const wbs  = rv.warningsBySeverity || {};
+    const cpu     = snap.cpu     || {};
+    const ram     = snap.ram     || {};
+    const gpu     = snap.gpu     || {};
+    const disk    = snap.disk    || {};
+    const dsp     = snap.display || {};
+    const net     = snap.network || {};
+    const os      = snap.os      || {};
+    const rv      = snap.revit   || {};
+    const mdl     = rv.model     || {};
+    const wbs     = rv.warningsBySeverity || {};
+    const cleanup = snap.cleanup || null;
 
     // Severity ranking: ok < warn-soft < warn < danger
     const sevRank = { 'ok': 0, 'warn-soft': 1, 'warn': 2, 'danger': 3 };
@@ -551,6 +563,32 @@
       ? Object.entries(wbs).map(([k, v]) => `${k}: ${v}`).join(' · ')
       : '';
 
+    // Junk Files rows — one per cleanup target, plus a Total row.
+    // Surfaced inline in Hardware (RST-032) so users can read reclaimable
+    // space alongside the rest of the device stats. Only renders when a
+    // scan has populated snap.cleanup; first-load / pre-scan snapshots
+    // omit it cleanly (no rows = no clutter).
+    const junkRows = [];
+    if (cleanup && Array.isArray(cleanup.targets) && cleanup.targets.length > 0) {
+      cleanup.targets.forEach(function(t) {
+        const isIni = t.kind === 'iniRecentFiles';
+        const sizeText = isIni ? '' : fmt.bytes(t.sizeBytes);
+        const countText = isIni
+          ? `${fmt.num(t.fileCount)} entries`
+          : `${fmt.num(t.fileCount)} files`;
+        const firstResolved = (t.resolvedPaths && t.resolvedPaths[0]) || t.path || '';
+        const more = (t.resolvedPaths && t.resolvedPaths.length > 1)
+          ? ` · ${t.resolvedPaths.length} paths`
+          : '';
+        const value = isIni
+          ? `${countText}<span class="sub">${firstResolved}${more}</span>`
+          : `${sizeText}<span class="sub">${countText} · ${firstResolved}${more}</span>`;
+        junkRows.push(row('  ' + (t.name || '(unnamed)'), value));
+      });
+      junkRows.push(row('Junk total',
+        `<strong>${fmt.bytes(cleanup.totalSizeBytes)}</strong><span class="sub">${fmt.num(cleanup.totalFileCount)} files · reclaimable on Clean Junk Files</span>`));
+    }
+
     const html = [
       section({
         title: 'Hardware',
@@ -573,6 +611,7 @@
           row('Disk (C:)', (disk.totalGB != null)
             ? `${fmt.str(disk.friendlyName)}<span class="sub${subCls(diskSev)}">${fmt.str(disk.type)} · ${fmt.gb(disk.availableGB)} free of ${fmt.gb(disk.totalGB)} · ${fmt.pct(disk.usedPercent)} used</span>`
             : null),
+          ...junkRows,
         ],
       }),
 
