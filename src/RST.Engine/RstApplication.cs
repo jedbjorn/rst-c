@@ -186,15 +186,19 @@ public sealed class RstApplication : IExternalApplication
     }
 
     /// <summary>
-    /// Hard cap on session logs we keep on disk. Each Revit launch creates
-    /// a new <c>rst_&lt;timestamp&gt;.log</c> with a unique filename, so
-    /// Serilog's own <c>retainedFileCountLimit</c> never trips
-    /// (it only prunes size-rolled files derived from the same base path).
-    /// We prune at boot instead. RST-032: also surfaced as an OOB cleanup
-    /// target in <see cref="CleanupDefaults"/> so users have a hard exit
-    /// via the Health tool if the boot-time prune ever fails.
+    /// Hard cap on session logs we keep on disk. Each Revit launch produces
+    /// two files under <c>%AppData%\RST\logs\</c> with a shared timestamp
+    /// prefix: <c>rst_&lt;ts&gt;_boot.log</c> (written by RST.Bootstrap, see
+    /// RST-033) and <c>rst_&lt;ts&gt;.log</c> (Serilog session log). The
+    /// prune glob <c>rst_*.log</c> matches both, so the cap is sized at
+    /// 10 = 5 sessions × {boot, engine}. Serilog's own
+    /// <c>retainedFileCountLimit</c> doesn't help — it only prunes
+    /// size-rolled files derived from the same base path. RST-032: also
+    /// surfaced as an OOB cleanup target in <see cref="CleanupDefaults"/>
+    /// so users have a hard exit via the Health tool if the boot-time
+    /// prune ever fails.
     /// </summary>
-    private const int MaxSessionLogs = 5;
+    private const int MaxSessionLogs = 10;
 
     private static void ConfigureLogging()
     {
