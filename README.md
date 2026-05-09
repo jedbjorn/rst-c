@@ -163,12 +163,9 @@ behaves unexpectedly.
 
 | Revit version | TFM              |
 |---------------|------------------|
-| 2024          | `net48`          |
 | 2025          | `net8.0-windows` |
 | 2026          | `net8.0-windows` |
 | 2027          | `net8.0-windows` |
-
-(2027 is provisional pending Autodesk's release.)
 
 ## Install
 
