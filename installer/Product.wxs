@@ -73,12 +73,15 @@
     </Property>
 
     <!-- Directory layout under %AppData% (Roaming). All paths are
-         per-user; no admin elevation required for install. -->
+         per-user; no admin elevation required for install. R27
+         directories will land in RST-013 once .NET 10 SDK is wired into
+         CI to stage the R27 engine. -->
     <StandardDirectory Id="AppDataFolder">
       <Directory Id="AutodeskFolder" Name="Autodesk">
         <Directory Id="RevitFolder" Name="Revit">
           <Directory Id="RevitAddinsFolder" Name="Addins">
             <Directory Id="Addins2025Dir" Name="2025" />
+            <Directory Id="Addins2026Dir" Name="2026" />
           </Directory>
         </Directory>
       </Directory>
@@ -86,11 +89,17 @@
         <Directory Id="R25Dir" Name="R25">
           <Directory Id="R25AppDir" Name="app" />
         </Directory>
+        <Directory Id="R26Dir" Name="R26">
+          <Directory Id="R26AppDir" Name="app" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
     <!-- Single feature for v0: install everything. Per-Revit conditional
-         install (using REVIT<NN>_REG above) is a future refinement.
+         install (using REVIT<NN>_REG above) is a future refinement —
+         absent Revit installs receive the .addin in a directory Revit
+         creates lazily; the engine subdir under %AppData%\RST\R<NN>\app\
+         simply sits idle until that Revit major is installed.
 
          <Files Include> auto-harvests the source tree into per-file
          components and binds them to this feature. Path is relative to
@@ -98,6 +107,8 @@
     <Feature Id="Main" Title="RST" Level="1">
       <Files Include="..\build\R25\addins\**" Directory="Addins2025Dir" />
       <Files Include="..\build\R25\app\**"    Directory="R25AppDir" />
+      <Files Include="..\build\R26\addins\**" Directory="Addins2026Dir" />
+      <Files Include="..\build\R26\app\**"    Directory="R26AppDir" />
     </Feature>
 
   </Package>
