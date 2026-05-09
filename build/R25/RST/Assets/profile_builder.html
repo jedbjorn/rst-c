@@ -565,6 +565,100 @@
     line-height: 1.2;
   }
 
+  /* Junk Cleanup Configure modal (RST-031) — same surface aesthetic
+     as the icon picker, wider for the path inputs. */
+  .cleanup-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .cleanup-overlay.visible { display: flex; }
+  .cleanup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 760px;
+    max-width: 94vw;
+    max-height: 86vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .cleanup-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .cleanup-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text2);
+  }
+  .cleanup-body {
+    padding: 12px 16px;
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+    gap: 8px;
+  }
+  .cleanup-help {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    line-height: 1.5;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cleanup-help code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    color: var(--accent);
+  }
+  .cleanup-row {
+    display: grid;
+    grid-template-columns: 36px 160px 1fr 130px 28px;
+    gap: 6px;
+    align-items: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  .cleanup-row:hover { border-color: var(--border2); }
+  .cleanup-row .tab-toggle-switch { margin: 0; }
+  .cleanup-row input[type="text"], .cleanup-row select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid transparent;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .cleanup-row input[type="text"]:focus,
+  .cleanup-row select:focus { border-color: var(--border2); background: var(--surface3); }
+  .cleanup-row select { cursor: pointer; }
+  .cleanup-actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    gap: 8px;
+  }
+  .cleanup-empty {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+    text-align: center;
+    padding: 24px 8px;
+  }
+
   /* ── RIGHT: PROPERTIES + STACKS ── */
   .pane.right { width: 340px; flex-shrink: 0; background: var(--surface); }
   .prop-section {
@@ -1104,6 +1198,19 @@
           <button class="btn" onclick="openPresetsModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
         </div>
       </div>
+
+      <div class="prop-section" id="cleanupSection">
+        <div class="prop-section-label">Junk Cleanup</div>
+        <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+            Targets the Health tool's "Clean Junk Files" sweeps. Ship with
+            sensible OOB defaults; remove or extend per profile.
+          </div>
+          <div id="cleanupSummary"
+               style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+          <button class="btn" onclick="openCleanupModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1136,6 +1243,34 @@
     <div class="exit-modal-actions" style="margin-top:16px">
       <button class="btn ghost" onclick="closePresetsModal()">Cancel</button>
       <button class="btn primary" onclick="savePresetsModal()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Junk Cleanup Configure Modal — list of CleanupTarget rows the user
+     can edit/remove + "Add Target" + "Restore Defaults". Styling mirrors
+     the icon picker (RST-030) and tool slot cards. -->
+<div class="cleanup-overlay" id="cleanupOverlay">
+  <div class="cleanup-card">
+    <div class="cleanup-head">
+      <div class="cleanup-title">Junk Cleanup Targets</div>
+      <button class="btn ghost" onclick="closeCleanupModal()">Cancel</button>
+    </div>
+    <div class="cleanup-body">
+      <div class="cleanup-help">
+        Path tokens: <code>%LocalAppData%</code>, <code>%AppData%</code>, <code>%UserProfile%</code>,
+        <code>{revit-version}</code> (expands to every installed Revit major).
+        Kind: <strong>directory</strong> purges file contents recursively;
+        <strong>iniRecentFiles</strong> strips the [Recent File List] section
+        from a Revit.ini.
+      </div>
+      <div id="cleanupRows"></div>
+    </div>
+    <div class="cleanup-actions">
+      <button class="btn ghost" onclick="restoreCleanupDefaults()" title="Replace the list with the OOB defaults">Restore Defaults</button>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="addCleanupRow()">+ Add Target</button>
+      <button class="btn primary" onclick="saveCleanupModal()">Apply</button>
     </div>
   </div>
 </div>
@@ -1206,6 +1341,7 @@
     panels: [],
     branding: null,
     presets: { hiddenTabs: [], disableUnusedAddins: false },
+    cleanupTargets: cleanupDefaultsSeed(),
   };
 
   let catalog = [];                   // [{id, displayName, sourceTab, sourcePanel, ...}]
@@ -1340,11 +1476,13 @@
     profile.panels         = [];
     profile.branding       = null;
     profile.presets        = { hiddenTabs: [], disableUnusedAddins: false };
+    profile.cleanupTargets = cleanupDefaultsSeed();
     selectedPanelIndex     = -1;
     mode = 'new';
     originalNameOnLoad = '';
     addPanel();   // canvas isn't empty on first paint
     renderPresetsSummary();
+    renderCleanupSummary();
     snapshotPristine();
   }
 
@@ -1431,8 +1569,14 @@
       hiddenTabs: Array.isArray(srcPresets.hiddenTabs) ? srcPresets.hiddenTabs.slice() : [],
       disableUnusedAddins: !!srcPresets.disableUnusedAddins,
     };
+    // Pre-RST-031 profiles arrive without cleanupTargets — seed defaults so
+    // the right-pane summary + Configure modal aren't blank for legacy data.
+    profile.cleanupTargets = Array.isArray(src.cleanupTargets)
+      ? src.cleanupTargets.map(function(t) { return Object.assign({}, t); })
+      : cleanupDefaultsSeed();
     if (profile.panels.length > 0) selectedPanelIndex = 0;
     renderPresetsSummary();
+    renderCleanupSummary();
     rstLog('info', 'builder: loaded existing profile into editor', {
       name: profile.profile, id: profile.id, panels: profile.panels.length,
       stacks: Object.keys(profile.stacks).length,
@@ -2507,6 +2651,148 @@
     });
     renderPresetsSummary();
     closePresetsModal();
+  }
+
+  // ── JUNK CLEANUP TARGETS (RST-031) ─────────────────────────────────────────
+  // Per-profile list consumed by the Health tool's "Clean Junk Files" sweep.
+  // Schema mirrors RST.Core.Profiles.CleanupTarget — id, name, path, kind,
+  // enabled. Path tokens %LocalAppData% / %AppData% / %UserProfile% / and
+  // {revit-version} are expanded by RST.UI.Health.CleanupPathResolver at
+  // run time.
+  var CLEANUP_KIND_DIRECTORY        = 'directory';
+  var CLEANUP_KIND_INI_RECENT_FILES = 'iniRecentFiles';
+
+  // OOB seed list — kept in sync with RST.Core.Profiles.CleanupDefaults.cs
+  // (verified by RST.Tests/Profiles/CleanupDefaultsParityTests if added).
+  function cleanupDefaultsSeed() {
+    return [
+      { id: 'rst.cleanup.temp',        name: 'Temp',                path: '%LocalAppData%\\Temp',                                          kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.pacCache',    name: 'PacCache',            path: '%LocalAppData%\\Autodesk\\Revit\\PacCache',                     kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.journals',    name: 'Journals',            path: '%LocalAppData%\\Autodesk\\Revit\\{revit-version}\\Journals',     kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.collabCache', name: 'Collaboration Cache', path: '%LocalAppData%\\Autodesk\\Revit\\{revit-version}\\CollaborationCache', kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.recentFiles', name: 'Recent File List',    path: '%AppData%\\Autodesk\\Revit\\{revit-version}\\Revit.ini',         kind: CLEANUP_KIND_INI_RECENT_FILES, enabled: true },
+    ];
+  }
+
+  function ensureCleanupTargets() {
+    if (!Array.isArray(profile.cleanupTargets) || profile.cleanupTargets.length === 0) {
+      profile.cleanupTargets = cleanupDefaultsSeed();
+    }
+    return profile.cleanupTargets;
+  }
+
+  function renderCleanupSummary() {
+    var el = document.getElementById('cleanupSummary');
+    if (!el) return;
+    var t = profile.cleanupTargets;
+    if (!Array.isArray(t)) { el.textContent = 'Defaults will be used.'; return; }
+    var enabled = t.filter(function(x) { return x && x.enabled; }).length;
+    el.textContent = enabled + ' of ' + t.length + ' target' + (t.length === 1 ? '' : 's') + ' enabled.';
+  }
+
+  function openCleanupModal() {
+    ensureCleanupTargets();
+    renderCleanupRows();
+    document.getElementById('cleanupOverlay').classList.add('visible');
+  }
+
+  function closeCleanupModal() {
+    document.getElementById('cleanupOverlay').classList.remove('visible');
+  }
+
+  function renderCleanupRows() {
+    var host = document.getElementById('cleanupRows');
+    host.innerHTML = '';
+    var targets = profile.cleanupTargets || [];
+    if (targets.length === 0) {
+      host.innerHTML = '<div class="cleanup-empty">No targets. Use "+ Add Target" or "Restore Defaults".</div>';
+      return;
+    }
+    targets.forEach(function(t, idx) { host.appendChild(buildCleanupRow(t, idx)); });
+  }
+
+  function buildCleanupRow(target, idx) {
+    var row = document.createElement('div');
+    row.className = 'cleanup-row';
+
+    var enableLabel = document.createElement('label');
+    enableLabel.className = 'tab-toggle-switch';
+    enableLabel.title = 'Enable / disable this target';
+    var enableCb = document.createElement('input');
+    enableCb.type = 'checkbox';
+    enableCb.checked = target.enabled !== false;
+    enableCb.onchange = function() { target.enabled = this.checked; };
+    var enableTrack = document.createElement('div');
+    enableTrack.className = 'tab-toggle-track';
+    enableTrack.innerHTML = '<div class="tab-toggle-thumb"></div>';
+    enableLabel.appendChild(enableCb);
+    enableLabel.appendChild(enableTrack);
+
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Name';
+    nameInput.value = target.name || '';
+    nameInput.oninput = function() { target.name = this.value; };
+
+    var pathInput = document.createElement('input');
+    pathInput.type = 'text';
+    pathInput.placeholder = '%LocalAppData%\\…';
+    pathInput.value = target.path || '';
+    pathInput.oninput = function() { target.path = this.value; };
+
+    var kindSelect = document.createElement('select');
+    [CLEANUP_KIND_DIRECTORY, CLEANUP_KIND_INI_RECENT_FILES].forEach(function(k) {
+      var opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = k;
+      if ((target.kind || CLEANUP_KIND_DIRECTORY) === k) opt.selected = true;
+      kindSelect.appendChild(opt);
+    });
+    kindSelect.onchange = function() { target.kind = this.value; };
+
+    var rmBtn = makeBtn('×', function() {
+      profile.cleanupTargets.splice(idx, 1);
+      renderCleanupRows();
+    }, 'Remove target', 'danger');
+
+    row.appendChild(enableLabel);
+    row.appendChild(nameInput);
+    row.appendChild(pathInput);
+    row.appendChild(kindSelect);
+    row.appendChild(rmBtn);
+    return row;
+  }
+
+  function addCleanupRow() {
+    if (!Array.isArray(profile.cleanupTargets)) profile.cleanupTargets = [];
+    profile.cleanupTargets.push({
+      id: 'rst.cleanup.user.' + Date.now() + '.' + Math.floor(Math.random() * 1000),
+      name: '',
+      path: '',
+      kind: CLEANUP_KIND_DIRECTORY,
+      enabled: true,
+    });
+    renderCleanupRows();
+  }
+
+  function restoreCleanupDefaults() {
+    profile.cleanupTargets = cleanupDefaultsSeed();
+    renderCleanupRows();
+  }
+
+  function saveCleanupModal() {
+    // Strip blank entries (no name AND no path) so the saved profile
+    // doesn't carry empty rows. In-place edits are already live on
+    // profile.cleanupTargets via the row's oninput handlers.
+    profile.cleanupTargets = (profile.cleanupTargets || []).filter(function(t) {
+      return t && ((t.name && t.name.trim()) || (t.path && t.path.trim()));
+    });
+    renderCleanupSummary();
+    closeCleanupModal();
+    rstLog('info', 'builder: cleanup targets saved', {
+      count: profile.cleanupTargets.length,
+      enabled: profile.cleanupTargets.filter(function(x) { return x.enabled; }).length,
+    });
   }
 
   // escHtml is defined later in the file; reuse it.

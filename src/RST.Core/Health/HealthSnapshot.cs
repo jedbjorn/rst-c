@@ -22,6 +22,40 @@ public sealed class HealthSnapshot
     [JsonPropertyName("network")]  public Network Network { get; set; } = new();
     [JsonPropertyName("os")]       public OsInfo Os       { get; set; } = new();
     [JsonPropertyName("revit")]    public RevitInfo Revit { get; set; } = new();
+
+    /// <summary>
+    /// Per-cleanup-target measurements (file count + on-disk size) for
+    /// the Health viewer's "Junk Files" sub-section. Populated by Scan
+    /// System; null on snapshots captured before RST-032 or when the
+    /// active profile has zero enabled cleanup targets.
+    /// </summary>
+    [JsonPropertyName("cleanup")] public CleanupSummary? Cleanup { get; set; }
+}
+
+public sealed class CleanupSummary
+{
+    [JsonPropertyName("targets")] public List<CleanupTargetSummary> Targets { get; set; } = new();
+    [JsonPropertyName("totalFileCount")] public long TotalFileCount { get; set; }
+    [JsonPropertyName("totalSizeBytes")] public long TotalSizeBytes { get; set; }
+    /// <summary>Number of locked / inaccessible files skipped while measuring (informational).</summary>
+    [JsonPropertyName("totalSkipped")]   public long TotalSkipped { get; set; }
+}
+
+public sealed class CleanupTargetSummary
+{
+    [JsonPropertyName("id")]            public string Id   { get; set; } = "";
+    [JsonPropertyName("name")]          public string Name { get; set; } = "";
+    [JsonPropertyName("path")]          public string Path { get; set; } = "";
+    /// <summary>"directory" or "iniRecentFiles" — same as CleanupTarget.Kind.</summary>
+    [JsonPropertyName("kind")]          public string Kind { get; set; } = "";
+    /// <summary>0..N concrete paths the path expanded to on this device.</summary>
+    [JsonPropertyName("resolvedPaths")] public List<string> ResolvedPaths { get; set; } = new();
+    /// <summary>For "directory": files counted. For "iniRecentFiles": FileN= entries that would be removed.</summary>
+    [JsonPropertyName("fileCount")]     public long FileCount { get; set; }
+    /// <summary>On-disk byte total. Always 0 for iniRecentFiles (the operation doesn't reclaim file bytes).</summary>
+    [JsonPropertyName("sizeBytes")]     public long SizeBytes { get; set; }
+    /// <summary>Files we couldn't stat (locked / access-denied).</summary>
+    [JsonPropertyName("skipped")]       public long Skipped   { get; set; }
 }
 
 public sealed class Identity
