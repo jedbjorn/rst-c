@@ -1012,6 +1012,7 @@
   };
 
   let catalog = [];                   // [{id, displayName, sourceTab, sourcePanel, ...}]
+  let ADDIN_LOOKUP = {};              // curated name → {displayName, file, url}; loaded at boot
   let nativeByTab = new Map();        // origin=Native:    tab → Map(panel → [cmd])
   let otherByTab  = new Map();        // origin=non-Native: tab → Map(panel → [cmd])
   let collapsed = new Set();          // tab/panel keys collapsed in the tree
@@ -1070,7 +1071,8 @@
       window.pywebview.api.get_catalog(),
       window.pywebview.api.get_profiles(),
       window.pywebview.api.get_active_profile(),
-      window.pywebview.api.get_revit_version()
+      window.pywebview.api.get_revit_version(),
+      window.pywebview.api.get_addin_lookup()
     ]).then(function(results) {
       catalog = Array.isArray(results[0]) ? results[0] : [];
       indexCatalog();
@@ -1094,6 +1096,9 @@
       });
 
       currentRevitVersion = results[3] || '';
+
+      ADDIN_LOOKUP = (results[4] && typeof results[4] === 'object') ? results[4] : {};
+      rstLog('info', 'builder: addin lookup loaded', { keys: Object.keys(ADDIN_LOOKUP).length });
 
       // Default the dropdown to "+ New Profile" — the user picks an
       // existing profile from the dropdown if they want to edit one.
@@ -2185,11 +2190,12 @@
   // tab or panel. The Loader's normalizeRequiredAddins (profile_loader.html:892)
   // already handles this {tabName, addinFile, url} shape.
   //
-  // Phase-2 enrichment (publisher / version / origin from ADDIN_LOOKUP +
-  // RESOLVED_ADDINS) is deferred — those bridge methods are still stubs in
-  // the C# port, so we emit minimal entries. The Loader falls back to status
-  // badges ("Not Found" / "Loaded" / "Installed" / "Disabled") which already
-  // depend on the addin scan, not these enrichments.
+  // Enrichment from ADDIN_LOOKUP (curated registry vendored under
+  // Assets/lookup/addin_lookup.json): for every detected tab/panel, we look
+  // up addinFile + url and bake them into the entry. Once the profile is
+  // saved, it travels to user machines self-contained — the Loader uses
+  // the baked-in URL to render the "info ↗" download link without needing
+  // the lookup file on the user side.
 
   var BUILTIN_TABS = new Set([
     'Architecture', 'Structure', 'Systems', 'Steel', 'Precast',
@@ -2246,12 +2252,38 @@
       });
     });
 
+    // Direct key lookup, then fuzzy fallback against displayName so a
+    // panel or tab that doesn't exactly match a registry key (e.g.
+    // "Lumion" panel vs "Lumion" key — direct hit; or "DiRoots Suite"
+    // panel vs "DiRoots" key — fuzzy hit) still picks up URL/file data.
+    function enrich(name) {
+      var direct = ADDIN_LOOKUP[name];
+      if (direct) return { addinFile: direct.file || null, url: direct.url || '' };
+      var nameLower = name.toLowerCase();
+      var keys = Object.keys(ADDIN_LOOKUP);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var entry = ADDIN_LOOKUP[k] || {};
+        var dn = (entry.displayName || '').toLowerCase();
+        var kl = k.toLowerCase();
+        if (kl && (kl.indexOf(nameLower) !== -1 || nameLower.indexOf(kl) !== -1)) {
+          return { addinFile: entry.file || null, url: entry.url || '' };
+        }
+        if (dn && (dn.indexOf(nameLower) !== -1 || nameLower.indexOf(dn) !== -1)) {
+          return { addinFile: entry.file || null, url: entry.url || '' };
+        }
+      }
+      return { addinFile: null, url: '' };
+    }
+
     var entries = [];
     thirdPartyTabs.forEach(function(name) {
-      entries.push({ tabName: name, addinFile: null, url: '' });
+      var e = enrich(name);
+      entries.push({ tabName: name, addinFile: e.addinFile, url: e.url });
     });
     thirdPartyPanels.forEach(function(name) {
-      entries.push({ tabName: name, addinFile: null, url: '' });
+      var e = enrich(name);
+      entries.push({ tabName: name, addinFile: e.addinFile, url: e.url });
     });
     return entries;
   }

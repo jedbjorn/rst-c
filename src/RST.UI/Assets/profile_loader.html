@@ -922,16 +922,47 @@
     return BUILTIN_TABS.has(tabName);
   }
 
+  // Pull every plausible name field off a LOADED_ADDINS entry. The
+  // upstream pyRevit shape was {name: <ribbon tab title>}; the C# port's
+  // get_loaded_addins returns scanned manifests with displayName +
+  // fileName instead. Accept either so the same matcher works on both
+  // shapes (and survives future bridge changes).
+  function _addinNameFields(a) {
+    var out = [];
+    if (!a) return out;
+    if (a.name)        out.push(a.name);
+    if (a.displayName) out.push(a.displayName);
+    if (a.fileName)    out.push(a.fileName.replace(/\.addin(\.RSTdisabled)?$/i, ''));
+    return out;
+  }
+
   function isAddinLoaded(tabName) {
     if (isNativeTab(tabName)) return true;
-    if (!LOADED_ADDINS.length) return false;
     var tabLower = tabName.toLowerCase();
+
+    // Live ribbon match — if the addin's tab is currently on the ribbon,
+    // it's loaded in this Revit session. Strongest signal; cheap walk.
+    for (var i = 0; i < ALL_TABS.length; i++) {
+      var t = (ALL_TABS[i] || '').toLowerCase();
+      if (!t) continue;
+      if (t === tabLower || t.indexOf(tabLower) !== -1 || tabLower.indexOf(t) !== -1) return true;
+    }
+
+    // Manifest-scan fallback — for panels-on-built-in-tabs the addin
+    // doesn't surface as a top-level ribbon tab (e.g. Kinship sits on
+    // Add-Ins). Match against displayName / fileName from the .addin
+    // scan, plus the ADDIN_LOOKUP file-stem hint when present.
+    if (!LOADED_ADDINS.length) return false;
     var entry = ADDIN_LOOKUP[tabName];
-    var stem = entry ? entry.file.replace('.addin', '').toLowerCase() : '';
+    var stem = entry && entry.file ? entry.file.replace(/\.addin$/i, '').toLowerCase() : '';
     for (var i = 0; i < LOADED_ADDINS.length; i++) {
-      var name = (LOADED_ADDINS[i].name || '').toLowerCase();
-      if (name && (name.indexOf(tabLower) !== -1 || tabLower.indexOf(name) !== -1)) return true;
-      if (stem && name.indexOf(stem) !== -1) return true;
+      var fields = _addinNameFields(LOADED_ADDINS[i]);
+      for (var j = 0; j < fields.length; j++) {
+        var f = fields[j].toLowerCase();
+        if (!f) continue;
+        if (f.indexOf(tabLower) !== -1 || tabLower.indexOf(f) !== -1) return true;
+        if (stem && f.indexOf(stem) !== -1) return true;
+      }
     }
     return false;
   }
@@ -940,11 +971,17 @@
     if (!LOADED_ADDINS.length) return '';
     var tabLower = tabName.toLowerCase();
     var entry = ADDIN_LOOKUP[tabName];
-    var stem = entry ? entry.file.replace('.addin', '').toLowerCase() : '';
+    var stem = entry && entry.file ? entry.file.replace(/\.addin$/i, '').toLowerCase() : '';
     for (var i = 0; i < LOADED_ADDINS.length; i++) {
-      var name = (LOADED_ADDINS[i].name || '').toLowerCase();
-      if (name && (name.indexOf(tabLower) !== -1 || tabLower.indexOf(name) !== -1)) return LOADED_ADDINS[i].name;
-      if (stem && name.indexOf(stem) !== -1) return LOADED_ADDINS[i].name;
+      var a = LOADED_ADDINS[i];
+      var fields = _addinNameFields(a);
+      var label = a.displayName || a.name || a.fileName || '';
+      for (var j = 0; j < fields.length; j++) {
+        var f = fields[j].toLowerCase();
+        if (!f) continue;
+        if (f.indexOf(tabLower) !== -1 || tabLower.indexOf(f) !== -1) return label;
+        if (stem && f.indexOf(stem) !== -1) return label;
+      }
     }
     return '';
   }

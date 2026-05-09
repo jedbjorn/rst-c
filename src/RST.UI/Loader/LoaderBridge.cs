@@ -16,8 +16,8 @@
 //   live    — get_profiles, get_active_profile, load_profile, add_profile,
 //             remove_profile, unload_profile, close_window, get_revit_version,
 //             get_catalog, save_profile, export_profile (RST-006: builder)
-//   stubbed — get_addin_lookup, get_user_config (return empty/safe
-//             defaults; their features land in later flags)
+//   stubbed — get_user_config (returns empty/safe default; lands in a
+//             later flag)
 
 using System;
 using System.Collections.Generic;
@@ -600,15 +600,43 @@ public class LoaderBridge
     // ---- stubs (features land in later flags) --------------------------
 
     /// <summary>
-    /// Return the local-machine addin lookup config. Phase-2 follow-up;
-    /// the upstream version reads a JSON file with tab-name → addinFile
-    /// hints. Empty dict matches the upstream behaviour when the file
-    /// is missing.
+    /// Curated addin registry: name → {displayName, file, url}. Vendored
+    /// from upstream pyRevit RST/lookup/addin_lookup.json under
+    /// Assets/lookup/ so it ships with the bundle. Read once; the JSON is
+    /// small (~5KB, ~30 entries) so we don't cache.
+    ///
+    /// Used by the Builder at profile-create time to bake addinFile + url
+    /// into profile.requiredAddins (admin's machine consults this; the
+    /// resulting profile is self-contained and travels to user machines
+    /// without the lookup). Returns an empty dict if the bundled file is
+    /// missing — no enrichment, profiles still save with tab names alone.
     /// </summary>
     public string GetAddinLookup()
     {
         LogEntry(nameof(GetAddinLookup));
-        return Serialize(new Dictionary<string, object>());
+        try
+        {
+            var assetsDir = Path.Combine(
+                Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
+                "Assets", "lookup");
+            var path = Path.Combine(assetsDir, "addin_lookup.json");
+            if (!File.Exists(path))
+            {
+                Log.Warning("Bridge.get_addin_lookup: {Path} missing — returning empty dict", path);
+                return Serialize(new Dictionary<string, object>());
+            }
+            // Pass through verbatim — the JSON is already in the shape the
+            // JS expects ({key: {displayName, file, url}, ...}). Parsing
+            // and re-serializing would lose nothing but cost a round-trip.
+            var raw = File.ReadAllText(path);
+            Log.Information("Bridge.get_addin_lookup: {Bytes} bytes from {Path}", raw.Length, path);
+            return raw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Bridge.get_addin_lookup: read failed; returning empty dict");
+            return Serialize(new Dictionary<string, object>());
+        }
     }
 
     /// <summary>
