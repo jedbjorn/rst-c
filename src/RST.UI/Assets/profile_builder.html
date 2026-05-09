@@ -1035,6 +1035,15 @@
   // mismatch surfaces the unsaved-changes confirm modal.
   let pristineProfile = '';
 
+  // Rename-as-copy tracking. The profile name when an existing profile
+  // was loaded into the editor (or '' for a brand-new profile). On
+  // save, if profile.profile has changed away from this, we save as a
+  // new profile (clear id → bridge mints a fresh GUID, ProfileStore
+  // writes a new file) instead of renaming in place. Tab name change
+  // is independent and does NOT trigger a copy. Updated after every
+  // successful save so the saved name becomes the new baseline.
+  let originalNameOnLoad = '';
+
   // Drag state — single-source-of-truth for what's being dragged. HTML5
   // DataTransfer is too coarse for our typed payloads (catalog entry vs
   // slot vs panel), so we keep the descriptor here and only stuff the
@@ -1130,6 +1139,7 @@
     profile.branding       = null;
     selectedPanelIndex     = -1;
     mode = 'new';
+    originalNameOnLoad = '';
     addPanel();   // canvas isn't empty on first paint
     snapshotPristine();
   }
@@ -1189,6 +1199,7 @@
     rstLog('info', 'builder: dropdown → load existing', { name: match.profile, id: match.id });
     loadIntoProfile(match);
     mode = 'edit';
+    originalNameOnLoad = profile.profile || '';
     syncHeader();
     renderAll();
     snapshotPristine();
@@ -2315,6 +2326,38 @@
       showToast('Tab name required.', 'err');
       return Promise.reject(new Error('no tab'));
     }
+    // Rename-as-copy: if the user loaded an existing profile and then
+    // changed its name, save as a NEW profile (fresh id + fresh
+    // exportDate) rather than renaming in place. The original profile
+    // stays on disk untouched. Tab name change does not trigger this —
+    // a profile can legitimately be renamed-and-retabbed in place.
+    var renamedAway = mode === 'edit'
+                   && originalNameOnLoad
+                   && profile.profile.trim() !== originalNameOnLoad.trim();
+    var savedAsCopy = false;
+    if (renamedAway) {
+      // Collision guard — if the new name matches another existing
+      // profile (different id), bail rather than silently overwriting it.
+      var newNameLower = profile.profile.trim().toLowerCase();
+      var collision = (profilesList || []).some(function(p) {
+        return p && p.id && p.id !== profile.id
+               && (p.profile || '').trim().toLowerCase() === newNameLower;
+      });
+      if (collision) {
+        rstLog('warn', 'builder: rename-as-copy aborted (name collision)', {
+          newName: profile.profile, originalName: originalNameOnLoad,
+        });
+        showToast('A profile named "' + profile.profile + '" already exists. Choose a different name.', 'err');
+        return Promise.reject(new Error('name collision'));
+      }
+      rstLog('info', 'builder: rename detected → saving as copy', {
+        originalName: originalNameOnLoad, newName: profile.profile, sourceId: profile.id,
+      });
+      profile.id = null;
+      profile.exportDate = '';
+      savedAsCopy = true;
+    }
+
     // Auto-derive requiredAddins from placed tools' sourceTab/sourcePanel
     // before sending to the bridge. Done at save time (rather than on every
     // slot drop) to keep the editing path cheap; the Loader only consumes
@@ -2323,7 +2366,7 @@
     rstLog('info', 'builder: save attempt', {
       name: profile.profile, tab: profile.tab, panels: profile.panels.length,
       stacks: Object.keys(profile.stacks).length, mode: mode, id: profile.id,
-      requiredAddins: profile.requiredAddins.length,
+      requiredAddins: profile.requiredAddins.length, savedAsCopy: savedAsCopy,
     });
     return window.pywebview.api.save_profile(profile).then(function(result) {
       if (!(result && result.ok)) {
@@ -2339,6 +2382,10 @@
         profile.exportDate = result.profile.exportDate;
       }
       mode = 'edit';
+      // The just-saved name is the new baseline — further edits to this
+      // record without a name change are in-place updates. Renaming
+      // again will spawn another copy.
+      originalNameOnLoad = profile.profile || '';
 
       var savedIsActive = profile.id && profile.id === activeProfileId;
 
@@ -2355,7 +2402,10 @@
       snapshotPristine();
 
       if (!savedIsActive) {
-        showToast('Saved as ' + result.fileName, 'ok');
+        var msg = savedAsCopy
+          ? 'Saved as new profile "' + profile.profile + '" — original kept.'
+          : 'Saved as ' + result.fileName;
+        showToast(msg, 'ok');
         return result;
       }
       // Trigger a live reload — same code path the Loader uses on
