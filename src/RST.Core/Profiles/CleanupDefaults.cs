@@ -19,6 +19,7 @@ public static class CleanupDefaults
     public const string IdJournals    = "rst.cleanup.journals";
     public const string IdCollabCache = "rst.cleanup.collabCache";
     public const string IdRecentFiles = "rst.cleanup.recentFiles";
+    public const string IdRstLogs     = "rst.cleanup.rstLogs";
 
     /// <summary>
     /// Build a fresh list of the OOB targets. Called by the Builder when
@@ -65,6 +66,20 @@ public static class CleanupDefaults
             Name = "Recent File List",
             Path = @"%AppData%\Autodesk\Revit\{revit-version}\Revit.ini",
             Kind = CleanupTarget.KindIniRecentFiles,
+            Enabled = true,
+        },
+        // RST's own session logs. The boot-time prune in
+        // RstApplication.PruneOldSessionLogs already caps these at 5
+        // files; this entry is the user-visible hard exit when that
+        // automation fails (locked files, IO errors, etc.) — they can
+        // see "RST Logs · 8 files · 14 MB" in the Health snapshot and
+        // sweep manually instead of grepping AppData by hand.
+        new CleanupTarget
+        {
+            Id = IdRstLogs,
+            Name = "RST Logs",
+            Path = @"%AppData%\RST\logs",
+            Kind = CleanupTarget.KindDirectory,
             Enabled = true,
         },
     };
