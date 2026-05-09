@@ -49,7 +49,10 @@ internal static class RibbonBuilder
             className: BuilderClassName)
         {
             ToolTip = "Edit profiles or create a new one.",
-            Image = IconAssets.BuilderIcon ?? IconAssets.Default32,
+            // Image (small, 16x16) is what Quick Access Toolbar reads.
+            // LargeImage (32x32) is what the panel renders. Shipping
+            // hand-sized 16s avoids Revit's naive downscale of the 32.
+            Image = IconAssets.BuilderIcon16 ?? IconAssets.Default16,
             LargeImage = IconAssets.BuilderIcon ?? IconAssets.Default32,
         };
 
@@ -60,7 +63,7 @@ internal static class RibbonBuilder
             className: LoaderClassName)
         {
             ToolTip = "Open the RST profile selector.",
-            Image = IconAssets.LoaderIcon ?? IconAssets.Default32,
+            Image = IconAssets.LoaderIcon16 ?? IconAssets.Default16,
             LargeImage = IconAssets.LoaderIcon ?? IconAssets.Default32,
         };
 
@@ -73,7 +76,7 @@ internal static class RibbonBuilder
             className: RstifyClassName)
         {
             ToolTip = "Toggle hide-rules from the active profile (hide configured tabs / show all).",
-            Image = IconAssets.RstifyIconOff ?? IconAssets.Default32,
+            Image = IconAssets.RstifyIconOff16 ?? IconAssets.Default16,
             LargeImage = IconAssets.RstifyIconOff ?? IconAssets.Default32,
         };
 
@@ -84,7 +87,7 @@ internal static class RibbonBuilder
             className: HealthClassName)
         {
             ToolTip = "System health snapshot, Revit context, and cache cleanup.",
-            Image = IconAssets.HealthIcon ?? IconAssets.Default32,
+            Image = IconAssets.HealthIcon16 ?? IconAssets.Default16,
             LargeImage = IconAssets.HealthIcon ?? IconAssets.Default32,
         };
 
