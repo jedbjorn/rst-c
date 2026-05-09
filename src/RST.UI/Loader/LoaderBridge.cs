@@ -167,7 +167,7 @@ public class LoaderBridge
         bool qaForcedRestart = false;
         try
         {
-            var qa = RequiredAddinQa.Classify(_revitVersion, entry.Profile.RequiredAddins);
+            var qa = RequiredAddinQa.Classify(_revitVersion, entry.Profile.RequiredAddins, _allTabs);
             int activeCount = 0, disabledCount = 0, missingCount = 0;
             var disabledMatches = new List<RequiredAddin>();
             foreach (var r in qa)
