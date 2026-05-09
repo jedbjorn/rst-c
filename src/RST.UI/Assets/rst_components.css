@@ -90,10 +90,18 @@
 
 
 /* ── SCROLLBAR ────────────────────────────────────────────────────────────────
-   Apply .rst-scroll to any scrollable container.
-   Provides a minimal 3px scrollbar matching RST's dark UI.
+   Global custom scrollbar — applied to every scrollable container so the
+   OS default never appears in any RST WebView2 surface (RST-034).
+   Pre-existing .rst-scroll class kept as an alias for back-compat; it
+   resolves to the same style now.
 */
 
-.rst-scroll::-webkit-scrollbar { width: 3px; height: 3px; }
-.rst-scroll::-webkit-scrollbar-thumb { background: var(--border, #2a3347); border-radius: 2px; }
-.rst-scroll::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar         { width: 3px; height: 3px; }
+::-webkit-scrollbar-thumb   { background: var(--border, #2a3347); border-radius: 2px; }
+::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar-corner  { background: transparent; }
+
+/* Firefox / future-Chromium-host fallback. WebView2 (Chromium) honors the
+   ::-webkit-* rules above; this keeps the scrollbar thin if the same
+   markup ever renders elsewhere. */
+* { scrollbar-width: thin; scrollbar-color: var(--border, #2a3347) transparent; }
