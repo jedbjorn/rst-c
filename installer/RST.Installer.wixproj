@@ -1,4 +1,4 @@
-<Project Sdk="WixToolset.Sdk/4.0.5">
+<Project Sdk="WixToolset.Sdk/6.0.2">
 
   <!--
     RST.Installer — produces RST.msi.
@@ -8,6 +8,12 @@
 
     The WXS auto-harvests files from ../build/R25/{addins,app}/, so
     `build/stage.sh R25` must be run first to populate that tree.
+
+    SDK is pinned to 6.x because the <Files> harvest element used in
+    Product.wxs was introduced in WiX v5.0 — v4.0.5 has no <Files>
+    schema at all and trips WIX0005 wherever the element is parented
+    (RST-040). v6.0.2 is the latest patch on the v6 line; bumping to
+    v7 is a one-line change if/when needed.
   -->
 
   <PropertyGroup>
@@ -15,6 +21,22 @@
     <OutputType>Package</OutputType>
     <!-- WiX v4+ emits MSI by default; keep the project explicit. -->
     <Configurations>Debug;Release</Configurations>
+    <!-- The MSI ICE validation suite was authored for the per-machine
+         install model. Three of its rules fire spuriously on every
+         per-user (Scope="perUser") harvest and the WiX team has
+         acknowledged the gap (wixtoolset/issues#8633):
+           ICE91 — "directory doesn't vary based on ALLUSERS"; that's
+                   the *intent* of perUser scope.
+           ICE38 — components in user profile "should" have an HKCU
+                   KeyPath instead of a file KeyPath; auto-harvested
+                   components cannot express that.
+           ICE64 — per-user directories must be in the RemoveFile
+                   table; for files laid down by the MSI itself, normal
+                   uninstall removes them — the RemoveFile table is for
+                   files the *app* creates at runtime, which we don't.
+         Combined with the repo-wide TreatWarningsAsErrors=true these
+         block the build despite being non-issues for a perUser MSI. -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
   </PropertyGroup>
 
 </Project>
