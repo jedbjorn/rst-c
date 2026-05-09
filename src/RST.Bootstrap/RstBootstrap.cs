@@ -14,27 +14,37 @@ namespace RST.Bootstrap;
 [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
 public sealed class RstBootstrap : IExternalApplication
 {
-    private static readonly string AppDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "RST", "app");
-
     private IExternalApplication? _engine;
 
     public Result OnStartup(UIControlledApplication application)
     {
         try
         {
+            // Derive the per-major app dir from Revit's reported version
+            // (RST-037). Each Revit major pins different Nice3point.Revit.Api
+            // versions and 2027 targets a different TFM, so engine binaries
+            // are not interchangeable between majors. Layout:
+            //   %AppData%\RST\R25\app\RST.Engine.dll
+            //   %AppData%\RST\R26\app\RST.Engine.dll
+            //   %AppData%\RST\R27\app\RST.Engine.dll
+            var revitVersion = application.ControlledApplication.VersionNumber;
+            var major = "R" + (revitVersion.Length >= 2 ? revitVersion.Substring(revitVersion.Length - 2) : revitVersion);
+            var appDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "RST", major, "app");
+
             BootLog.Info("RST.Bootstrap loading");
             BootLog.Info($"  bootstrapDll={typeof(RstBootstrap).Assembly.Location}");
-            BootLog.Info($"  appDir={AppDir} (exists={Directory.Exists(AppDir)})");
+            BootLog.Info($"  revitVersion={revitVersion} major={major}");
+            BootLog.Info($"  appDir={appDir} (exists={Directory.Exists(appDir)})");
 
-            if (!Directory.Exists(AppDir))
+            if (!Directory.Exists(appDir))
             {
-                BootLog.Error($"App dir missing: {AppDir}. Engine cannot load.");
+                BootLog.Error($"App dir missing: {appDir}. Engine cannot load.");
                 return Result.Failed;
             }
 
-            var enginePath = Path.Combine(AppDir, "RST.Engine.dll");
+            var enginePath = Path.Combine(appDir, "RST.Engine.dll");
             var fi = new FileInfo(enginePath);
             BootLog.Info($"  enginePath={enginePath} (exists={fi.Exists}, size={(fi.Exists ? fi.Length : 0)} bytes)");
             if (!fi.Exists)
