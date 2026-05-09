@@ -1,0 +1,20 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+
+  <!--
+    RST.Installer — produces RST.msi.
+
+    Build: from this directory, `dotnet build` (or `wix build Product.wxs`
+    directly). Output: bin/<Configuration>/RST.msi.
+
+    The WXS auto-harvests files from ../build/R25/{addins,app}/, so
+    `build/stage.sh R25` must be run first to populate that tree.
+  -->
+
+  <PropertyGroup>
+    <OutputName>RST</OutputName>
+    <OutputType>Package</OutputType>
+    <!-- WiX v4+ emits MSI by default; keep the project explicit. -->
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+</Project>

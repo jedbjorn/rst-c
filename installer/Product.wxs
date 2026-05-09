@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST.msi — per-user installer for RST.
+
+  Lays the bootstrap thunk (RST.addin + RST.Bootstrap.dll) into the
+  per-user Revit Add-Ins directory and the engine + transitives
+  (Serilog, WebView2, System.Management runtime variant, Assets,
+  runtimes/native) into %AppData%\RST\R<major>\app\. The bootstrap
+  derives R<major> from application.ControlledApplication.VersionNumber
+  at OnStartup (RST-037) and loads the matching engine.
+
+  Layout (RST-033 split):
+    %AppData%\Autodesk\Revit\Addins\<ver>\
+      RST.addin
+      RST.Bootstrap.dll
+      RST.Bootstrap.pdb
+    %AppData%\RST\R<NN>\app\
+      RST.Engine.dll
+      RST.UI.dll
+      RST.Core.dll
+      Serilog*.dll
+      Microsoft.Web.WebView2.*.dll
+      RST.Engine.deps.json
+      Assets\**\*
+      runtimes\<rid>\native\WebView2Loader.dll
+      runtimes\win\lib\net8.0\System.Management.dll  (RST-038: stub at
+                                                      bin root removed at
+                                                      stage time)
+      *.pdb
+
+  v0 ships R25 only. R26/R27 expand once those majors enter the test
+  matrix; the WXS pattern is identical (one ComponentGroup per Revit
+  per tree).
+
+  UpgradeCode is the stable identity of the RST product family. NEVER
+  change it once shipped — it's how the MSI engine knows to upgrade
+  prior installs in place rather than installing side-by-side.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="RST"
+           Manufacturer="Designs/OS"
+           Version="0.1.0"
+           UpgradeCode="AF0331FC-5280-492A-94BD-95EDF108BE74"
+           Scope="perUser"
+           Compressed="yes">
+
+    <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles" />
+
+    <!-- Replace any prior install of the same product family in place. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Per-Revit-major detection. v0 doesn't gate install on these
+         (always-install-all is simpler and the spurious files in unused
+         majors are <10MB). The properties are populated for diagnostics
+         and for the future feature-conditional install path. -->
+    <Property Id="REVIT2025_REG">
+      <RegistrySearch Id="Revit2025Search" Root="HKLM"
+                      Key="SOFTWARE\Autodesk\Revit\2025"
+                      Name="InstallationLocation" Type="raw" />
+    </Property>
+    <Property Id="REVIT2026_REG">
+      <RegistrySearch Id="Revit2026Search" Root="HKLM"
+                      Key="SOFTWARE\Autodesk\Revit\2026"
+                      Name="InstallationLocation" Type="raw" />
+    </Property>
+    <Property Id="REVIT2027_REG">
+      <RegistrySearch Id="Revit2027Search" Root="HKLM"
+                      Key="SOFTWARE\Autodesk\Revit\2027"
+                      Name="InstallationLocation" Type="raw" />
+    </Property>
+
+    <!-- Directory layout under %AppData% (Roaming). All paths are
+         per-user; no admin elevation required for install. -->
+    <StandardDirectory Id="AppDataFolder">
+      <Directory Id="AutodeskFolder" Name="Autodesk">
+        <Directory Id="RevitFolder" Name="Revit">
+          <Directory Id="RevitAddinsFolder" Name="Addins">
+            <Directory Id="Addins2025Dir" Name="2025" />
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="RstFolder" Name="RST">
+        <Directory Id="R25Dir" Name="R25">
+          <Directory Id="R25AppDir" Name="app" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Single feature for v0: install everything. Per-Revit conditional
+         install (using REVIT<NN>_REG above) is a future refinement. -->
+    <Feature Id="Main" Title="RST" Level="1">
+      <ComponentGroupRef Id="Addins2025Components" />
+      <ComponentGroupRef Id="App2025Components" />
+    </Feature>
+
+    <!-- File harvesting via <Files> auto-generates components per file.
+         Path is relative to this .wxs file's directory (installer/). -->
+    <ComponentGroup Id="Addins2025Components" Directory="Addins2025Dir">
+      <Files Include="..\build\R25\addins\**" />
+    </ComponentGroup>
+
+    <ComponentGroup Id="App2025Components" Directory="R25AppDir">
+      <Files Include="..\build\R25\app\**" />
+    </ComponentGroup>
+
+  </Package>
+
+</Wix>
