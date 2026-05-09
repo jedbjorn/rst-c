@@ -434,6 +434,46 @@ public class LoaderBridge
     }
 
     /// <summary>
+    /// Enumerate the vendored iconpack — every PNG under Assets/icons/pack/
+    /// next to RST.UI.dll. The Builder's icon picker grid renders these
+    /// for selection; the chosen pack name persists as
+    /// <c>slot.iconFile = "pack:&lt;name&gt;"</c> and ProfileTabBuilder
+    /// resolves it back to <c>Assets/icons/pack/32_&lt;name&gt;.png</c> at
+    /// ribbon-build time. Files are named <c>32_&lt;name&gt;.png</c> by
+    /// convention (matches the upstream pyRevit pack); the prefix and
+    /// extension are stripped here so the picker shows clean names.
+    /// </summary>
+    public string ListIconpack()
+    {
+        LogEntry(nameof(ListIconpack));
+        try
+        {
+            var assetsDir = Path.Combine(
+                Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
+                "Assets", "icons", "pack");
+            if (!Directory.Exists(assetsDir))
+            {
+                Log.Warning("Bridge.list_iconpack: missing pack dir {Dir}", assetsDir);
+                return "[]";
+            }
+            var names = Directory.GetFiles(assetsDir, "32_*.png")
+                .Select(p => Path.GetFileNameWithoutExtension(p))
+                .Where(n => n.StartsWith("32_", StringComparison.Ordinal))
+                .Select(n => n.Substring(3))
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .Select(name => new { name })
+                .ToArray();
+            Log.Information("Bridge.list_iconpack OK: {Count} icons from {Dir}", names.Length, assetsDir);
+            return Serialize(names);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Bridge.list_iconpack threw");
+            return "[]";
+        }
+    }
+
+    /// <summary>
     /// Persist a profile to disk (assigns Id + ExportDate when missing).
     /// Returns { ok, fileName, profile } on success.
     /// </summary>
