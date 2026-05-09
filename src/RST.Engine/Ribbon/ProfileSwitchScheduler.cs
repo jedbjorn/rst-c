@@ -80,6 +80,25 @@ internal sealed class ProfileSwitchScheduler : IProfileSwitchScheduler, IExterna
             Log.Error(ex, "ProfileSwitchScheduler.Execute: live rebuild failed for profile={Name}",
                       toApply?.ProfileName ?? "(unload)");
         }
+
+        // Apply the active profile's RSTify state on the rebuilt ribbon.
+        // Loader has already written active_profile.json before raising
+        // the event, so reading from disk gives us the canonical
+        // hidden_tabs the user just selected. ApplyForActiveProfile
+        // lifts whatever this session previously hid (so a switch from
+        // {Architecture, Annotate} → {View} doesn't strand the first
+        // two), applies the new set, and flips the icon. Mirrors the
+        // OnApplicationInitialized path so live-switch and startup
+        // can't drift.
+        try
+        {
+            var active = ActiveProfile.Read();
+            RstifyToggle.ApplyForActiveProfile(active.HiddenTabs);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "ProfileSwitchScheduler.Execute: failed to apply RSTify state after live switch");
+        }
     }
 
     public string GetName() => "RST.ProfileSwitchScheduler";

@@ -41,25 +41,81 @@ internal static class RstifyToggle
     public const string RstifyButtonCookie = "RST_Rstify";
 
     /// <summary>
+    /// Tabs the most-recent Hide call hid. Used by
+    /// <see cref="ApplyForActiveProfile"/> to lift the prior set before
+    /// applying the new one — without this, switching from a profile
+    /// that hid {Architecture, Annotate} to one that hides {View} would
+    /// leave Architecture and Annotate stranded-hidden.
+    /// </summary>
+    private static IReadOnlyCollection<string> _lastAppliedHidden = Array.Empty<string>();
+
+    /// <summary>
     /// Apply the hide rule (set IsVisible=false on every tab in
     /// <paramref name="hiddenTabTitles"/>). No-op when the list is empty.
-    /// Returns the count of tabs actually hidden.
+    /// Returns the count of tabs actually hidden. Updates the
+    /// last-applied tracking so a subsequent
+    /// <see cref="ApplyForActiveProfile"/> can lift exactly this set.
     /// </summary>
     public static int Hide(IReadOnlyCollection<string> hiddenTabTitles)
     {
         if (hiddenTabTitles is null || hiddenTabTitles.Count == 0) return 0;
-        return SetVisibility(hiddenTabTitles, visible: false);
+        var count = SetVisibility(hiddenTabTitles, visible: false);
+        _lastAppliedHidden = SnapshotCopy(hiddenTabTitles);
+        return count;
     }
 
     /// <summary>
     /// Lift the hide rule (set IsVisible=true on every tab in
     /// <paramref name="hiddenTabTitles"/>). No-op when the list is empty.
-    /// Returns the count of tabs actually shown.
+    /// Returns the count of tabs actually shown. Clears the
+    /// last-applied tracking — nothing is hidden after this returns.
     /// </summary>
     public static int Show(IReadOnlyCollection<string> hiddenTabTitles)
     {
         if (hiddenTabTitles is null || hiddenTabTitles.Count == 0) return 0;
-        return SetVisibility(hiddenTabTitles, visible: true);
+        var count = SetVisibility(hiddenTabTitles, visible: true);
+        _lastAppliedHidden = Array.Empty<string>();
+        return count;
+    }
+
+    /// <summary>
+    /// Apply the hide rule for the active profile end-to-end:
+    /// lift any previous hides this session set, hide the new set, and
+    /// flip the RSTify button icon to match. Idempotent and safe to
+    /// call with an empty/null list (clears all RST hides + icon→off).
+    ///
+    /// This is the right entry point for "apply the active profile's
+    /// RSTify state on the live ribbon" — used by both startup
+    /// (ApplicationInitialized) and live profile switching
+    /// (ProfileSwitchScheduler.Execute) so the two paths can't drift.
+    /// </summary>
+    public static void ApplyForActiveProfile(IReadOnlyCollection<string>? newHiddenTabs)
+    {
+        // Lift the previous set first, so a profile switch from
+        // {Architecture, Annotate} → {View} doesn't leave the first
+        // two stranded-hidden.
+        if (_lastAppliedHidden.Count > 0)
+        {
+            SetVisibility(_lastAppliedHidden, visible: true);
+            _lastAppliedHidden = Array.Empty<string>();
+        }
+
+        var hasNew = newHiddenTabs is { Count: > 0 };
+        if (hasNew)
+        {
+            SetVisibility(newHiddenTabs!, visible: false);
+            _lastAppliedHidden = SnapshotCopy(newHiddenTabs!);
+        }
+
+        RefreshIcon(active: hasNew);
+    }
+
+    private static IReadOnlyCollection<string> SnapshotCopy(IReadOnlyCollection<string> source)
+    {
+        var copy = new string[source.Count];
+        var i = 0;
+        foreach (var s in source) copy[i++] = s;
+        return copy;
     }
 
     /// <summary>
