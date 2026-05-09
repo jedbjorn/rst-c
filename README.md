@@ -192,4 +192,4 @@ dotnet build -c "Debug R24"     # Revit 2024 (needs .NET Framework 4.8 reference
 
 ## License
 
-TBD — to mirror the parent RST repo at release.
+TBD 
