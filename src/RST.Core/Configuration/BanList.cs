@@ -1,10 +1,9 @@
 // BanList.cs — admin-curated denylist of catalog command Ids.
 //
-// Persisted next to the addin DLLs (typically
-// %AppData%\Autodesk\Revit\Addins\<ver>\<DllSubfolder>\bans.json) so a
-// single staged folder can be pasted whole into the addins dir — bans
-// travel with the install. Per-Windows-user by virtue of %AppData%;
-// per-Revit-major by virtue of the addin folder split. Format:
+// Persisted at %AppData%\RST\bans.json — user-data, per Windows user,
+// shared across all Revit majors on the machine (the bootstrap split
+// in RST-033 pushed the install bundle to %AppData%\RST\app\ but bans
+// are user-curated config and stay at the user-data root). Format:
 //
 //   {
 //     "version": 1,
@@ -48,29 +47,13 @@ public sealed class BanList
     public bool Remove(string id) => _ids.Remove(id);
 
     /// <summary>
-    /// Default location for <c>bans.json</c> — next to the BanList assembly.
-    /// In a Revit install that resolves to the addin's DLL folder
-    /// (e.g. <c>%AppData%\Autodesk\Revit\Addins\2026\RST\bans.json</c>) so
-    /// the staged folder can be pasted whole into the addins dir.
-    /// Falls back to <c>%AppData%\RST\bans.json</c> for hosted scenarios
-    /// where <see cref="System.Reflection.Assembly.Location"/> is empty
-    /// (e.g. single-file deployment or test runners).
+    /// Default location for <c>bans.json</c>: <c>%AppData%\RST\bans.json</c>.
+    /// User-data — shared across Revit majors, separate from the install
+    /// bundle at <c>%AppData%\RST\app\</c> (see RST-033).
     /// </summary>
-    public static string DefaultPath
-    {
-        get
-        {
-            var location = typeof(BanList).Assembly.Location;
-            if (string.IsNullOrEmpty(location))
-            {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "RST", "bans.json");
-            }
-            var dir = Path.GetDirectoryName(location)!;
-            return Path.Combine(dir, "bans.json");
-        }
-    }
+    public static string DefaultPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "RST", "bans.json");
 
     public static BanList Load(string path)
     {
