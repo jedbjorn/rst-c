@@ -156,6 +156,39 @@
     justify-content: flex-end;
   }
 
+  /* RST Presets modal — toggle switches matching the Loader's RSTify
+     picker (profile_loader.html lines 692-708). Same colors so the
+     two surfaces feel like one continuous affordance. */
+  .preset-tab-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 4px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text1);
+  }
+  .preset-tab-row:hover { background: rgba(255,255,255,0.03); border-radius: 4px; }
+  .tab-toggle-switch { position: relative; width: 30px; height: 17px; flex-shrink: 0; }
+  .tab-toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .tab-toggle-track {
+    position: absolute; inset: 0; border-radius: 9px;
+    background: var(--surface3); border: 1px solid var(--border2);
+    transition: background 0.2s, border-color 0.2s; cursor: pointer;
+  }
+  .tab-toggle-thumb {
+    position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+    border-radius: 50%; background: var(--text3); transition: transform 0.2s, background 0.2s;
+  }
+  .tab-toggle-switch input:checked + .tab-toggle-track {
+    background: rgba(245,158,11,0.18); border-color: rgba(245,158,11,0.45);
+  }
+  .tab-toggle-switch input:checked + .tab-toggle-track .tab-toggle-thumb {
+    transform: translateX(13px); background: var(--warn);
+  }
+
   /* Profile selector dropdown — sits where the back button used to;
      replaces back-navigation with same-window profile switching. */
   .profile-selector {
@@ -955,10 +988,7 @@
       </div>
 
       <div class="prop-section" id="presetsSection">
-        <div class="prop-section-label" style="display:flex;justify-content:space-between;align-items:center">
-          <span>RST Presets</span>
-          <button class="btn" onclick="openPresetsModal()">Configure</button>
-        </div>
+        <div class="prop-section-label">RST Presets</div>
         <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
           <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
             Pre-configure RSTify hidden tabs + Disable Unused Add-ins so the
@@ -966,6 +996,7 @@
           </div>
           <div id="presetsSummary"
                style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+          <button class="btn" onclick="openPresetsModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
         </div>
       </div>
     </div>
@@ -992,7 +1023,10 @@
           Default state for the Loader's footer toggle on first load.
         </div>
       </div>
-      <input type="checkbox" id="presetsDisableUnused" style="width:16px;height:16px">
+      <span class="tab-toggle-switch">
+        <input type="checkbox" id="presetsDisableUnused">
+        <div class="tab-toggle-track"><div class="tab-toggle-thumb"></div></div>
+      </span>
     </label>
     <div class="exit-modal-actions" style="margin-top:16px">
       <button class="btn ghost" onclick="closePresetsModal()">Cancel</button>
@@ -2300,9 +2334,12 @@
     } else {
       list.innerHTML = tabs.map(function(t) {
         var checked = preset.has(t) ? ' checked' : '';
-        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text1)">' +
-               '<input type="checkbox" data-tab="' + escAttr(t) + '"' + checked + ' style="width:14px;height:14px">' +
+        return '<label class="preset-tab-row">' +
                '<span>' + escHtml(t) + '</span>' +
+               '<span class="tab-toggle-switch">' +
+               '<input type="checkbox" data-tab="' + escAttr(t) + '"' + checked + '>' +
+               '<div class="tab-toggle-track"><div class="tab-toggle-thumb"></div></div>' +
+               '</span>' +
                '</label>';
       }).join('');
     }
