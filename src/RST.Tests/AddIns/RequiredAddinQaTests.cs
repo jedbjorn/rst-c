@@ -97,6 +97,79 @@ public sealed class RequiredAddinQaTests
         results[0].MatchedManifest!.FileName.Should().Be("RandomFile.addin");
     }
 
+    private static AddinManifest ManifestWithEntry(string fileName, bool disabled, string entryName) =>
+        new(
+            FilePath: $"/fake/path/{fileName}{(disabled ? ".RSTdisabled" : "")}",
+            FileName: fileName,
+            IsDisabled: disabled,
+            Entries: new List<AddinEntry> { new("Application", null, null, entryName, null, null) });
+
+    [Fact]
+    public void Fuzzy_displayName_match_classifies_as_InstalledActive_when_filename_misses()
+    {
+        // Registry says "Lumion.addin" but the actual install ships as
+        // "RandomCorpLive.addin" with entry Name "Lumion LiveSync".
+        // Tier-1 + tier-2 miss, tier-3 hits via entry Name substring.
+        var scan = new[]
+        {
+            (ManifestWithEntry("RandomCorpLive.addin", false, "Lumion LiveSync"), SearchPath()),
+        };
+        var required = new List<RequiredAddin>
+        {
+            new() { TabName = "Lumion", AddinFile = "Lumion.addin" },
+        };
+        var results = RequiredAddinQa.Classify(scan, required);
+        results[0].Status.Should().Be(RequiredAddinStatus.InstalledActive);
+        results[0].MatchedManifest!.FileName.Should().Be("RandomCorpLive.addin");
+    }
+
+    [Fact]
+    public void Fuzzy_filestem_match_classifies_as_InstalledActive()
+    {
+        // Manifest filename "LumionLiveSync.addin" — strip suffix to
+        // "LumionLiveSync", which contains "Lumion".
+        var scan = new[] { (Manifest("LumionLiveSync.addin", false), SearchPath()) };
+        var required = new List<RequiredAddin>
+        {
+            new() { TabName = "Lumion", AddinFile = "Lumion.addin" },
+        };
+        var results = RequiredAddinQa.Classify(scan, required);
+        results[0].Status.Should().Be(RequiredAddinStatus.InstalledActive);
+    }
+
+    [Fact]
+    public void Live_ribbon_tab_match_classifies_as_InstalledActive_even_when_no_manifest_matches()
+    {
+        // Pathological case: addin's manifest filename + displayName
+        // bear no resemblance to its tab title (set programmatically),
+        // but the tab IS on the ribbon — the picker would show Loaded,
+        // so QA must agree.
+        var scan = new[] { (Manifest("RandomCo.addin", false), SearchPath()) };
+        var required = new List<RequiredAddin>
+        {
+            new() { TabName = "Lumion", AddinFile = "Lumion.addin" },
+        };
+        var loadedTabs = new[] { "Architecture", "Lumion", "View" };
+
+        var results = RequiredAddinQa.Classify(scan, required, loadedTabs);
+        results[0].Status.Should().Be(RequiredAddinStatus.InstalledActive);
+        results[0].MatchedManifest.Should().BeNull();
+    }
+
+    [Fact]
+    public void NotInstalled_when_neither_manifest_nor_ribbon_matches()
+    {
+        var scan = new[] { (Manifest("Unrelated.addin", false), SearchPath()) };
+        var required = new List<RequiredAddin>
+        {
+            new() { TabName = "Lumion", AddinFile = "Lumion.addin" },
+        };
+        var loadedTabs = new[] { "Architecture", "View" };
+
+        var results = RequiredAddinQa.Classify(scan, required, loadedTabs);
+        results[0].Status.Should().Be(RequiredAddinStatus.NotInstalled);
+    }
+
     [Fact]
     public void Mixed_required_list_returns_one_result_per_input_in_order()
     {
