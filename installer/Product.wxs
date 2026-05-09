@@ -90,21 +90,15 @@
     </StandardDirectory>
 
     <!-- Single feature for v0: install everything. Per-Revit conditional
-         install (using REVIT<NN>_REG above) is a future refinement. -->
+         install (using REVIT<NN>_REG above) is a future refinement.
+
+         <Files Include> auto-harvests the source tree into per-file
+         components and binds them to this feature. Path is relative to
+         this .wxs file's directory (installer/). -->
     <Feature Id="Main" Title="RST" Level="1">
-      <ComponentGroupRef Id="Addins2025Components" />
-      <ComponentGroupRef Id="App2025Components" />
+      <Files Include="..\build\R25\addins\**" Directory="Addins2025Dir" />
+      <Files Include="..\build\R25\app\**"    Directory="R25AppDir" />
     </Feature>
-
-    <!-- File harvesting via <Files> auto-generates components per file.
-         Path is relative to this .wxs file's directory (installer/). -->
-    <ComponentGroup Id="Addins2025Components" Directory="Addins2025Dir">
-      <Files Include="..\build\R25\addins\**" />
-    </ComponentGroup>
-
-    <ComponentGroup Id="App2025Components" Directory="R25AppDir">
-      <Files Include="..\build\R25\app\**" />
-    </ComponentGroup>
 
   </Package>
 

@@ -53,8 +53,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>NU1701</WarningsNotAsErrors>
     <NoWarn>1591</NoWarn>
-    <DebugType>portable</DebugType>
-    <DebugSymbols>true</DebugSymbols>
+    <!-- WiX (.wixproj) only accepts 'full' or 'none' for -pdbType.
+         Restrict the portable PDB to managed projects so the WiX SDK
+         doesn't inherit an invalid value (RST-012). -->
+    <DebugType Condition="'$(MSBuildProjectExtension)' != '.wixproj'">portable</DebugType>
+    <DebugSymbols Condition="'$(MSBuildProjectExtension)' != '.wixproj'">true</DebugSymbols>
   </PropertyGroup>
 
   <!-- Code-signing hooks (no-ops in dev — wired up in RST-013). -->
