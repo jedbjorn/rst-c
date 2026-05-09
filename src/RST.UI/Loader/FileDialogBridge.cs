@@ -66,4 +66,41 @@ internal static class FileDialogBridge
             return dlg.ShowDialog() == true ? dlg.FileName : null;
         }));
     }
+
+    public static string? OpenZip()
+    {
+        var app = Application.Current;
+        if (app is null) return null;
+
+        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "Import RST Profile (.zip)",
+                Filter = "RST Profile Package (*.zip)|*.zip|All Files (*.*)|*.*",
+                Multiselect = false,
+            };
+            return dlg.ShowDialog() == true ? dlg.FileName : null;
+        }));
+    }
+
+    public static string? SaveZip(string suggestedFileName)
+    {
+        var app = Application.Current;
+        if (app is null) return null;
+
+        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = "Export RST Profile (.zip)",
+                Filter = "RST Profile Package (*.zip)|*.zip|All Files (*.*)|*.*",
+                FileName = suggestedFileName,
+                DefaultExt = ".zip",
+                AddExtension = true,
+                OverwritePrompt = true,
+            };
+            return dlg.ShowDialog() == true ? dlg.FileName : null;
+        }));
+    }
 }
