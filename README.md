@@ -177,8 +177,9 @@ Revit major, split into two trees:
   per-user Add-Ins directory.
 - `build/R<NN>/app/` — the engine and its transitives (Serilog,
   WebView2, etc.) plus `Assets/` and `runtimes/`. Drops into
-  `%AppData%\RST\app\` and is loaded by the bootstrap via an
-  `AssemblyDependencyResolver`.
+  `%AppData%\RST\R<NN>\app\` (per-major subdir, since engine binaries
+  are not interchangeable across Revit majors) and is loaded by the
+  bootstrap via an `AssemblyDependencyResolver`.
 
 Close Revit, then:
 
@@ -186,23 +187,28 @@ Close Revit, then:
 # Add-Ins payload (manifest + bootstrap thunk)
 Copy-Item -Force "build\R25\addins\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
 
-# Engine payload (dlls, assets, native runtimes)
-New-Item -ItemType Directory -Force "$env:APPDATA\RST\app" | Out-Null
-Copy-Item -Recurse -Force "build\R25\app\*" "$env:APPDATA\RST\app\"
+# Engine payload (dlls, assets, native runtimes) — per-major subdir
+New-Item -ItemType Directory -Force "$env:APPDATA\RST\R25\app" | Out-Null
+Copy-Item -Recurse -Force "build\R25\app\*" "$env:APPDATA\RST\R25\app\"
 ```
 
 If you previously installed rst-c under the pre-RST-033 single-tree
-layout, also clear the leftover engine folder once:
+layout (engine bundled in the addins dir), or the pre-RST-037 flat
+`app\` layout, clear the leftovers once:
 
 ```powershell
+# Pre-RST-033 layout (engine bundled in addins dir)
 Remove-Item -Recurse -Force "$env:APPDATA\Autodesk\Revit\Addins\2025\RST" `
             -ErrorAction SilentlyContinue
+# Pre-RST-037 flat app dir
+Remove-Item -Recurse -Force "$env:APPDATA\RST\app" -ErrorAction SilentlyContinue
 ```
 
 Start Revit. The **rst-c** tab should appear with the Loader button.
 User data (profiles, logs, branding, active-profile state) lives at
 `%AppData%\RST\` and is unaffected by reinstalls — only the
-`%AppData%\RST\app\` subfolder gets overwritten.
+`%AppData%\RST\R<NN>\app\` subfolder for the matching Revit major gets
+overwritten.
 
 ## Build
 
