@@ -266,22 +266,29 @@ public class LoaderBridge
     {
         LogEntry(nameof(AddProfile));
         // File-dialog import. Marshalled to UI thread by the host window.
-        var path = FileDialogBridge.OpenJson();
+        // RST-019: zip-only — the package carries profile.json + bundled
+        // assets (branding logo) so the receiver gets a true copy.
+        var path = FileDialogBridge.OpenZip();
         if (string.IsNullOrEmpty(path))
         {
             Log.Information("Bridge.add_profile: dialog cancelled");
             return Serialize(new { ok = false, error = "cancelled" });
         }
 
-        Profile profile;
+        ProfilePackage package;
         try
         {
             using var fs = File.OpenRead(path!);
-            profile = ProfileSerializer.Read(fs);
+            package = ProfileZip.Unpack(fs);
+        }
+        catch (InvalidDataException ex)
+        {
+            Log.Warning(ex, "Bridge.add_profile: not a valid profile package: {Path}", path);
+            return Serialize(new { ok = false, error = "Not a valid RST profile package: " + ex.Message });
         }
         catch (ProfileLoadException ex)
         {
-            Log.Warning(ex, "Bridge.add_profile: profile load failed for {Path}", path);
+            Log.Warning(ex, "Bridge.add_profile: profile.json load failed: {Path}", path);
             return Serialize(new { ok = false, error = ex.Message });
         }
         catch (IOException ex)
@@ -290,9 +297,18 @@ public class LoaderBridge
             return Serialize(new { ok = false, error = "Read failed: " + ex.Message });
         }
 
-        var fileName = ProfileStore.Save(profile);
-        Log.Information("Bridge.add_profile OK: imported {Source} → {FileName}", path, fileName);
-        return Serialize(new { ok = true, profile = ToProfileDto(fileName, profile) });
+        try
+        {
+            var fileName = ProfileZip.Install(package);
+            Log.Information("Bridge.add_profile OK: imported {Source} (logo={HasLogo}) → {FileName}",
+                            path, package.LogoBytes is not null, fileName);
+            return Serialize(new { ok = true, profile = ToProfileDto(fileName, package.Profile) });
+        }
+        catch (IOException ex)
+        {
+            Log.Error(ex, "Bridge.add_profile: install failed for {Path}", path);
+            return Serialize(new { ok = false, error = "Install failed: " + ex.Message });
+        }
     }
 
     public string RemoveProfile(string profileNameJson, string profileIdJson)
@@ -447,8 +463,10 @@ public class LoaderBridge
     }
 
     /// <summary>
-    /// Export the in-memory profile to a user-chosen JSON path (Save
-    /// dialog). Does NOT touch the local profiles store.
+    /// Export the in-memory profile to a user-chosen .zip path (Save
+    /// dialog). RST-018: bundles the resolved branding (per-profile if
+    /// set, else machine-wide default) so the receiver gets a true
+    /// copy. Does NOT touch the local profiles store.
     /// </summary>
     public string ExportProfile(string profileJson)
     {
@@ -466,21 +484,28 @@ public class LoaderBridge
             return Serialize(new { ok = false, error = "Empty profile" });
         }
 
-        var suggested = string.IsNullOrWhiteSpace(profile.ProfileName)
-            ? "rst_profile.json"
-            : ProfileStore.CanonicalFileName(profile);
-        var path = FileDialogBridge.SaveJson(suggested);
+        var safeName = string.IsNullOrWhiteSpace(profile.ProfileName)
+            ? "rst_profile"
+            : Path.GetFileNameWithoutExtension(ProfileStore.CanonicalFileName(profile));
+        var suggested = safeName + ".zip";
+        var path = FileDialogBridge.SaveZip(suggested);
         if (string.IsNullOrEmpty(path))
         {
             Log.Information("Bridge.export_profile: dialog cancelled");
             return Serialize(new { ok = false, error = "cancelled" });
         }
 
+        // Snapshot the resolved branding for this profile. Per-profile
+        // override wins if set; otherwise picks up the machine-wide
+        // default the admin has installed (BrandingDefaults.Resolve).
+        var (logoPath, url) = BrandingDefaults.Resolve(profile);
+
         try
         {
             using var fs = File.Create(path!);
-            ProfileSerializer.Write(profile, fs);
-            Log.Information("Bridge.export_profile OK: name={Name} → {Path}", profile.ProfileName, path);
+            ProfileZip.Pack(profile, logoPath, url, fs);
+            Log.Information("Bridge.export_profile OK: name={Name} hasLogo={HasLogo} → {Path}",
+                            profile.ProfileName, logoPath is not null, path);
             return Serialize(new { ok = true, path });
         }
         catch (IOException ex)
