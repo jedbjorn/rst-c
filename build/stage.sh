@@ -62,6 +62,16 @@ rm -f "$OUT/app/RST.Bootstrap.dll" \
       "$OUT/app/RST.Bootstrap.pdb" \
       "$OUT/app/RST.Bootstrap.deps.json"
 
+# RST-038: drop the netstandard placeholder for System.Management. The
+# Windows-specific implementation lives at runtimes/win/lib/net8.0/. With
+# the bin-root stub present, AssemblyLoadContext.Default finds it FIRST
+# and our AssemblyDependencyResolver fallback never fires — the stub
+# throws PlatformNotSupportedException on every WMI query. Removing it
+# forces the resolver to read RST.Engine.deps.json and return the
+# runtime-specific path. (Same risk applies to any future package that
+# ships both a netstandard ref + a runtimes/win-* implementation.)
+rm -f "$OUT/app/System.Management.dll"
+
 echo "==> staged:"
 ( cd "$OUT" && find addins app -type f | sort | sed 's/^/    /' )
 echo "==> done"
