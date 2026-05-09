@@ -11,6 +11,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
@@ -184,6 +185,17 @@ public sealed class RstApplication : IExternalApplication
         return Result.Succeeded;
     }
 
+    /// <summary>
+    /// Hard cap on session logs we keep on disk. Each Revit launch creates
+    /// a new <c>rst_&lt;timestamp&gt;.log</c> with a unique filename, so
+    /// Serilog's own <c>retainedFileCountLimit</c> never trips
+    /// (it only prunes size-rolled files derived from the same base path).
+    /// We prune at boot instead. RST-032: also surfaced as an OOB cleanup
+    /// target in <see cref="CleanupDefaults"/> so users have a hard exit
+    /// via the Health tool if the boot-time prune ever fails.
+    /// </summary>
+    private const int MaxSessionLogs = 5;
+
     private static void ConfigureLogging()
     {
         var logsDir = Path.Combine(
@@ -195,6 +207,12 @@ public sealed class RstApplication : IExternalApplication
             logsDir,
             $"rst_{DateTime.Now:yyyy-MM-dd_HHmmss}.log");
 
+        // Prune BEFORE Serilog opens its file handle so we don't fight
+        // the writer. The new file isn't on disk yet — the path string
+        // we just minted is excluded defensively in case it survived
+        // a prior crashed launch with the same second.
+        PruneOldSessionLogs(logsDir, sessionLog);
+
         // DEBUG minimum during dev so per-step traces (catalog stages, bridge
         // entry args, navigation source) land in the file. Promote to
         // Information once the loader/builder are stable.
@@ -203,9 +221,42 @@ public sealed class RstApplication : IExternalApplication
             .Enrich.WithProperty("Component", "RST.Engine")
             .WriteTo.File(sessionLog,
                           outputTemplate: "{Timestamp:HH:mm:ss.fff} {Level:u3} {Message:lj}{NewLine}{Exception}",
-                          rollingInterval: RollingInterval.Infinite,
-                          retainedFileCountLimit: 20)
+                          rollingInterval: RollingInterval.Infinite)
             .CreateLogger();
+    }
+
+    private static void PruneOldSessionLogs(string logsDir, string newSessionPath)
+    {
+        try
+        {
+            var existing = Directory.GetFiles(logsDir, "rst_*.log")
+                .Where(p => !string.Equals(p, newSessionPath, StringComparison.OrdinalIgnoreCase))
+                .Select(p => new FileInfo(p))
+                .Where(fi => fi.Exists)
+                .OrderByDescending(fi => fi.LastWriteTimeUtc)
+                .ToArray();
+
+            // We're about to add one new file; keep (Max - 1) most-recent
+            // old files so the cap holds at Max once the new one writes.
+            int keep = Math.Max(0, MaxSessionLogs - 1);
+            foreach (var fi in existing.Skip(keep))
+            {
+                try { fi.Delete(); }
+                catch
+                {
+                    // Best-effort. A locked file (concurrent Revit instance,
+                    // tail/grep on the file) just lingers until the next
+                    // launch — or the user can hit RST Logs in the Health
+                    // cleanup modal as the hard exit.
+                }
+            }
+        }
+        catch
+        {
+            // Logger isn't up yet, so we can't surface this — and that's
+            // the whole point of the OOB cleanup-target safety net. Boot
+            // continues even if pruning fails entirely.
+        }
     }
 
     private static string ThisVersion =>
