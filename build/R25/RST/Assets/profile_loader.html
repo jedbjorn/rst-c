@@ -872,6 +872,8 @@
   let ALL_TABS = [];
   let previousHiddenTabs = [];
   let USER_CONFIG = null;  // cached user add-in config
+  // Per-profile user prefs (RST-026): {profiles: { <id>: {hiddenTabs, disableUnusedAddins, presetsAdopted} }}
+  let USER_PROFILE_PREFS = { profiles: {} };
 
   // ── PROFILE DATA ─────────────────────────────────────────────────────────────
   // Full schema matching TabCreator's exportConfig() output.
@@ -1260,22 +1262,75 @@
       addinsContainer.innerHTML = '<div class="detail-section-label">Required Add-ins for this profile</div><div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 0">None</div>';
     }
 
-    // Seed RSTify + disable-unused state from the profile's admin
-    // presets when the user has selected a profile that ISN'T currently
-    // active. The active profile keeps the per-session pointer
-    // (active_profile.json hidden_tabs / disable_non_required) so the
-    // user's last in-session tweaks aren't clobbered by re-selecting
-    // their loaded profile.
-    if (!_isActiveProfile(profile)) {
-      var presets = profile.presets || {};
-      previousHiddenTabs = Array.isArray(presets.hiddenTabs) ? presets.hiddenTabs.slice() : [];
-      var dt = document.getElementById('disableToggle');
-      if (dt) dt.checked = !!presets.disableUnusedAddins;
+    // RST-026: per-profile RSTify + disable-unused user prefs are the
+    // single source of truth for the picker / footer toggle. If this
+    // profile has a saved entry, use it. If not — and the profile
+    // ships admin presets — fire the "Adopt presets?" prompt once,
+    // persist the answer, and re-render. Otherwise empty defaults.
+    var prefsMap = (USER_PROFILE_PREFS && USER_PROFILE_PREFS.profiles) || {};
+    var existing = profile.id ? prefsMap[profile.id] : null;
+    var dtEl = document.getElementById('disableToggle');
+    if (existing) {
+      previousHiddenTabs = Array.isArray(existing.hiddenTabs) ? existing.hiddenTabs.slice() : [];
+      if (dtEl) dtEl.checked = !!existing.disableUnusedAddins;
+    } else {
+      previousHiddenTabs = [];
+      if (dtEl) dtEl.checked = false;
+      if (profileHasPresets(profile) && profile.id) {
+        // Fire async; selectCard returns now with empty defaults so the
+        // picker isn't blocked. The prompt resolution updates state and
+        // re-renders this card.
+        askAdoptPresets(profile);
+      }
     }
 
     // RSTify tab toggles (left column)
     renderTabToggles(profile);
 
+  }
+
+  function profileHasPresets(profile) {
+    if (!profile || !profile.presets) return false;
+    var p = profile.presets;
+    var hasTabs = Array.isArray(p.hiddenTabs) && p.hiddenTabs.length > 0;
+    var hasDisable = !!p.disableUnusedAddins;
+    return hasTabs || hasDisable;
+  }
+
+  function askAdoptPresets(profile) {
+    var presets = profile.presets || {};
+    var n = (presets.hiddenTabs || []).length;
+    var summary = 'Admin defaults: '
+                + (n === 0 ? 'no tabs hidden' : (n + ' tab' + (n === 1 ? '' : 's') + ' to hide'))
+                + (presets.disableUnusedAddins ? ', disable unused add-ins on.' : '.');
+    var explanation =
+      'RSTify hides selected ribbon tabs to declutter Revit while this profile is active. ' +
+      'Disable Unused Add-ins additionally renames non-required .addin files so they don’t load on the next launch.\n\n' +
+      summary + '\n\n' +
+      'Adopt these defaults for "' + profile.profile + '"? You can change them anytime.';
+
+    RSTmsgConfirm('Adopt RSTify Presets?', explanation).then(function(yes) {
+      var hidden = yes && Array.isArray(presets.hiddenTabs) ? presets.hiddenTabs.slice() : [];
+      var disableUnused = yes ? !!presets.disableUnusedAddins : false;
+      // Persist with presetsAdopted=true regardless of yes/no so the
+      // prompt fires only once per profile per machine.
+      window.pywebview.api.record_user_profile_prefs(
+        profile.id, hidden, disableUnused, true
+      ).then(function() {
+        USER_PROFILE_PREFS.profiles = USER_PROFILE_PREFS.profiles || {};
+        USER_PROFILE_PREFS.profiles[profile.id] = {
+          hiddenTabs: hidden, disableUnusedAddins: disableUnused, presetsAdopted: true,
+        };
+        if (selectedProfile === profile) {
+          previousHiddenTabs = hidden.slice();
+          var dt = document.getElementById('disableToggle');
+          if (dt) dt.checked = disableUnused;
+          renderTabToggles(profile);
+        }
+      }).catch(function(err) {
+        rstLog('error', 'selector: record_user_profile_prefs failed', { err: String(err) });
+      });
+    });
   }
 
   // ── REVIT VERSION DISPLAY ─────────────────────────────────────────────────────
@@ -1721,6 +1776,14 @@
         if (idx !== -1 && cards[idx]) selectCard(cards[idx], idx);
       }
     }).catch(function(err) { console.error('get_user_config error:', err); });
+
+    // Fetch per-profile user prefs (RST-026) — picker / footer toggle
+    // seed source. Adopt prompt key off the presetsAdopted flag.
+    window.pywebview.api.get_user_profile_prefs().then(function(prefs) {
+      USER_PROFILE_PREFS = (prefs && prefs.profiles) ? prefs : { profiles: {} };
+      rstLog('info', 'selector: user_profile_prefs loaded',
+             { count: Object.keys(USER_PROFILE_PREFS.profiles || {}).length });
+    }).catch(function(err) { console.error('get_user_profile_prefs error:', err); });
 
     // Fetch active Revit version
     window.pywebview.api.get_revit_version().then(function(ver) {
