@@ -819,6 +819,21 @@
 
 </div>
 
+<!-- QA Add-in Check Overlay (rendered after Load Profile bridge call) -->
+<div class="confirm-overlay" id="qaOverlay">
+  <div class="confirm-card">
+    <div class="confirm-title">Add-in Check</div>
+    <div class="confirm-subtitle" id="qaSubtitle"></div>
+    <div id="qaSections"></div>
+    <div class="confirm-restart" id="qaRestart" style="display:none">
+      Revit must restart for the auto-restored add-ins to load.
+    </div>
+    <div class="confirm-actions">
+      <button class="overlay-btn overlay-btn-primary" id="qaContinueBtn">Continue</button>
+    </div>
+  </div>
+</div>
+
 <!-- Confirm Disable Overlay -->
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-card">
@@ -1271,6 +1286,80 @@
     });
   }
 
+  // ── QA MODAL ────────────────────────────────────────────────────────────────
+  // Render the QA result returned by load_profile. Always shown — even
+  // when allClear=true — so the admin always confirms the state of
+  // required add-ins before the Loader closes. Returns a Promise that
+  // resolves when the user clicks Continue.
+  function showQaModal(qa) {
+    return new Promise(function(resolve) {
+      var subtitleEl = document.getElementById('qaSubtitle');
+      var sectionsEl = document.getElementById('qaSections');
+      var restartEl  = document.getElementById('qaRestart');
+      var btn        = document.getElementById('qaContinueBtn');
+      var overlay    = document.getElementById('qaOverlay');
+
+      var restored      = (qa && qa.restored)      || [];
+      var notInstalled  = (qa && qa.not_installed) || [];
+      var allClear      = !!(qa && qa.all_clear);
+
+      if (allClear) {
+        subtitleEl.textContent = 'All required add-ins are installed and active.';
+      } else {
+        subtitleEl.textContent = 'Review the required-add-in status for "' + escHtml(selectedProfile.profile) + '" before continuing.';
+      }
+
+      var html = '';
+
+      if (restored.length > 0) {
+        html += '<div class="confirm-col" style="margin-bottom:14px">';
+        html += '  <div class="confirm-col-label staying">Auto-Restored (Was Disabled)</div>';
+        html += '  <div class="confirm-list" style="text-align:left;padding:0 6px">';
+        restored.forEach(function(r) {
+          var label = r.tabName || r.addinFile || '(unknown)';
+          var sub = r.addinFile && r.addinFile !== r.tabName ? ' — ' + r.addinFile : '';
+          html += '<div class="confirm-list-item" style="max-width:none;text-align:left">' +
+                  escHtml(label) + escHtml(sub) + '</div>';
+        });
+        html += '  </div>';
+        html += '</div>';
+      }
+
+      if (notInstalled.length > 0) {
+        html += '<div class="confirm-col" style="margin-bottom:14px">';
+        html += '  <div class="confirm-col-label try-disable">Missing — Not Installed</div>';
+        html += '  <div class="confirm-list" style="text-align:left;padding:0 6px">';
+        notInstalled.forEach(function(n) {
+          var label = n.tabName || n.addinFile || '(unknown)';
+          var url = n.url || '';
+          var linkHtml = url
+            ? ' <a href="' + escHtml(url) + '" target="_blank" style="color:var(--accent);text-decoration:none" ' +
+              'onmouseenter="this.style.textDecoration=\'underline\'" onmouseleave="this.style.textDecoration=\'none\'">download ↗</a>'
+            : ' <span style="color:var(--text3)">(no link)</span>';
+          html += '<div class="confirm-list-item" style="max-width:none;text-align:left;white-space:normal">' +
+                  escHtml(label) + linkHtml + '</div>';
+        });
+        html += '  </div>';
+        html += '</div>';
+      }
+
+      if (allClear) {
+        html += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:14px 0;text-align:center">' +
+                'Nothing to fix — every required add-in is on disk and active.' +
+                '</div>';
+      }
+
+      sectionsEl.innerHTML = html;
+      restartEl.style.display = restored.length > 0 ? 'block' : 'none';
+
+      btn.onclick = function() {
+        overlay.classList.remove('visible');
+        resolve();
+      };
+      overlay.classList.add('visible');
+    });
+  }
+
   // ── LOAD PROFILE ──────────────────────────────────────────────────────────────
   function showLoadingAndClose(title, body) {
     RSTmsgWait(title, body);
@@ -1335,17 +1424,32 @@
         showLoadingAndClose('Loading ' + selectedProfile.profile, lines.join(' '));
       }
 
-      var failed = (result.failed_disables || []);
-      if (failed.length > 0) {
-        var names = failed.map(function(f) { return f.name; }).filter(Boolean);
-        var body = (names.length === 1)
-          ? names[0] + ' was not disabled. You do not have admin permissions.'
-          : 'The following add-ins were not disabled (admin permissions required): ' + names.join(', ');
-        RSTmsgInform('Some add-ins skipped', body);
-        setTimeout(proceed, 3000);
-      } else {
-        proceed();
-      }
+      // QA modal — always shown. Restored entries get an auto-restore
+      // notice + restart warning; missing entries get a download link
+      // when the registry knows the URL; all-clear gets a brief
+      // positive confirmation. Awaited before any close-the-window
+      // path runs.
+      var afterQa = function() {
+        var failed = (result.failed_disables || []);
+        if (failed.length > 0) {
+          var names = failed.map(function(f) { return f.name; }).filter(Boolean);
+          var body = (names.length === 1)
+            ? names[0] + ' was not disabled. You do not have admin permissions.'
+            : 'The following add-ins were not disabled (admin permissions required): ' + names.join(', ');
+          RSTmsgInform('Some add-ins skipped', body);
+          setTimeout(proceed, 3000);
+        } else {
+          proceed();
+        }
+      };
+
+      var qa = result.qa_check || { restored: [], not_installed: [], all_clear: true };
+      rstLog('info', 'selector: load_profile QA', {
+        restored: (qa.restored || []).length,
+        notInstalled: (qa.not_installed || []).length,
+        allClear: !!qa.all_clear,
+      });
+      showQaModal(qa).then(afterQa);
     }).catch(function(err) {
       RSTmsgInform('Error', 'Error loading profile: ' + (err.message || err));
     });
