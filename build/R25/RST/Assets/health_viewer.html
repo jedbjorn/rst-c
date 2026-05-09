@@ -417,65 +417,15 @@
     <button type="button" class="rst-footer-btn" id="btnClose">Close</button>
   </div>
 
+  <!-- Cleanup modal — checkboxes rendered dynamically from the active
+       profile's CleanupTargets (RST-031). Loader fills #junkRows on open;
+       Run posts the checked target ids back to Bridge.clean_junk. -->
   <div class="rst-junk-overlay" id="junkOverlay">
     <div class="rst-junk-card">
       <div class="rst-junk-title">Clean Junk Files</div>
-      <div class="rst-junk-subtitle">Deselect any category to skip. Files locked by running applications are skipped automatically.</div>
+      <div class="rst-junk-subtitle">Deselect any target to skip. Files locked by running applications are skipped automatically.</div>
 
-      <div class="rst-junk-row">
-        <div class="rst-junk-row-text">
-          <div class="rst-junk-row-label">Windows Temp Files</div>
-          <span class="rst-junk-row-hint">Everything in %LOCALAPPDATA%\Temp</span>
-        </div>
-        <label class="rst-toggle">
-          <input type="checkbox" data-category="temp" checked>
-          <div class="rst-toggle-track"><div class="rst-toggle-thumb"></div></div>
-        </label>
-      </div>
-
-      <div class="rst-junk-row">
-        <div class="rst-junk-row-text">
-          <div class="rst-junk-row-label">Revit PacCache</div>
-          <span class="rst-junk-row-hint">Revit package cache</span>
-        </div>
-        <label class="rst-toggle">
-          <input type="checkbox" data-category="pacCache" checked>
-          <div class="rst-toggle-track"><div class="rst-toggle-thumb"></div></div>
-        </label>
-      </div>
-
-      <div class="rst-junk-row">
-        <div class="rst-junk-row-text">
-          <div class="rst-junk-row-label">Revit Journals</div>
-          <span class="rst-junk-row-hint">All journal files, every installed Revit version</span>
-        </div>
-        <label class="rst-toggle">
-          <input type="checkbox" data-category="journals" checked>
-          <div class="rst-toggle-track"><div class="rst-toggle-thumb"></div></div>
-        </label>
-      </div>
-
-      <div class="rst-junk-row">
-        <div class="rst-junk-row-text">
-          <div class="rst-junk-row-label">Collaboration Cache</div>
-          <span class="rst-junk-row-hint">Central model cache, excluding today's activity</span>
-        </div>
-        <label class="rst-toggle">
-          <input type="checkbox" data-category="collabCache" checked>
-          <div class="rst-toggle-track"><div class="rst-toggle-thumb"></div></div>
-        </label>
-      </div>
-
-      <div class="rst-junk-row">
-        <div class="rst-junk-row-text">
-          <div class="rst-junk-row-label">Recent Files List</div>
-          <span class="rst-junk-row-hint">Clear Revit's recent-files menu, every installed version</span>
-        </div>
-        <label class="rst-toggle">
-          <input type="checkbox" data-category="recentFiles" checked>
-          <div class="rst-toggle-track"><div class="rst-toggle-thumb"></div></div>
-        </label>
-      </div>
+      <div id="junkRows"></div>
 
       <div class="rst-junk-actions">
         <button type="button" class="rst-junk-btn" id="junkCancel">Cancel</button>
@@ -725,12 +675,24 @@
 
   // ── Footer buttons + Junk cleanup modal ──────────────────────────────────
   const junkOverlay = document.getElementById('junkOverlay');
+  const junkRows = document.getElementById('junkRows');
+
+  // Per-target list snapshot kept around for result formatting (so the
+  // "X deleted / Y locked" lines can label each row by its display name
+  // without round-tripping a second bridge call).
+  let cleanupTargets = [];
 
   document.getElementById('btnClose').addEventListener('click', function () {
     window.pywebview.api.close_window();
   });
 
-  document.getElementById('btnClean').addEventListener('click', function () {
+  document.getElementById('btnClean').addEventListener('click', async function () {
+    try {
+      cleanupTargets = (await window.pywebview.api.get_cleanup_targets()) || [];
+    } catch (e) {
+      cleanupTargets = [];
+    }
+    renderJunkRows(cleanupTargets);
     junkOverlay.classList.add('visible');
   });
 
@@ -738,46 +700,83 @@
     junkOverlay.classList.remove('visible');
   });
 
+  function renderJunkRows(targets) {
+    junkRows.innerHTML = '';
+    if (!targets || targets.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'rst-junk-row';
+      empty.innerHTML = '<div class="rst-junk-row-text"><div class="rst-junk-row-label">No cleanup targets configured</div>' +
+                        '<span class="rst-junk-row-hint">Add some in the Builder → Junk Cleanup section.</span></div>';
+      junkRows.appendChild(empty);
+      return;
+    }
+    targets.forEach(function (t) {
+      const row = document.createElement('div');
+      row.className = 'rst-junk-row';
+      const text = document.createElement('div');
+      text.className = 'rst-junk-row-text';
+      const label = document.createElement('div');
+      label.className = 'rst-junk-row-label';
+      label.textContent = t.name || '(unnamed)';
+      const hint = document.createElement('span');
+      hint.className = 'rst-junk-row-hint';
+      hint.textContent = t.path || '';
+      text.appendChild(label);
+      text.appendChild(hint);
+      const toggle = document.createElement('label');
+      toggle.className = 'rst-toggle';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.dataset.targetId = t.id || t.name || '';
+      const track = document.createElement('div');
+      track.className = 'rst-toggle-track';
+      track.innerHTML = '<div class="rst-toggle-thumb"></div>';
+      toggle.appendChild(cb);
+      toggle.appendChild(track);
+      row.appendChild(text);
+      row.appendChild(toggle);
+      junkRows.appendChild(row);
+    });
+  }
+
   document.getElementById('junkRun').addEventListener('click', async function () {
-    const cats = {};
-    junkOverlay.querySelectorAll('input[data-category]').forEach(function (el) {
-      cats[el.dataset.category] = el.checked;
+    const selectedIds = [];
+    junkRows.querySelectorAll('input[type=checkbox]').forEach(function (el) {
+      if (el.checked && el.dataset.targetId) selectedIds.push(el.dataset.targetId);
     });
 
-    const anySelected = Object.values(cats).some(Boolean);
     junkOverlay.classList.remove('visible');
 
-    if (!anySelected) {
-      RSTmsgInform('Nothing selected', 'No categories were chosen for cleanup.');
+    if (selectedIds.length === 0) {
+      RSTmsgInform('Nothing selected', 'No targets were chosen for cleanup.');
       return;
     }
 
     const confirmed = await RSTmsgConfirm(
       'Delete selected junk?',
-      'This will permanently delete files in the selected categories. Files locked by running applications are skipped.'
+      'This will permanently delete files in the selected targets. Files locked by running applications are skipped.'
     );
     if (!confirmed) return;
 
     RSTmsgWait('Cleaning', 'Deleting selected junk files');
     try {
-      const result = await window.pywebview.api.clean_junk(cats);
+      const result = await window.pywebview.api.clean_junk(selectedIds);
       RSTmsgWaitClose();
       const d = (result && result.deleted) || {};
       const s = (result && result.skipped) || {};
-      const lines = [];
-      function fmt(label, cat) {
-        if (!cats[cat]) return;
-        const del = (d[cat] || 0).toLocaleString();
-        const skip = s[cat] || 0;
-        lines.push(skip > 0
-          ? `${label}: ${del} deleted, ${skip.toLocaleString()} locked/in-use`
-          : `${label}: ${del} deleted`);
-      }
-      fmt('Temp',     'temp');
-      fmt('PacCache', 'pacCache');
-      fmt('Journals', 'journals');
-      fmt('Collab',   'collabCache');
-      fmt('Recent',   'recentFiles');
+      const selectedSet = new Set(selectedIds);
+      const lines = cleanupTargets
+        .filter(function (t) { return selectedSet.has(t.id || t.name || ''); })
+        .map(function (t) {
+          const key = t.id || t.name || '';
+          const del = (d[key] || 0).toLocaleString();
+          const skip = s[key] || 0;
+          const label = t.name || key;
+          return skip > 0
+            ? `${label}: ${del} deleted, ${skip.toLocaleString()} locked/in-use`
+            : `${label}: ${del} deleted`;
+        });
       RSTmsgInform('Cleanup complete', lines.join('\n'));
     } catch (e) {
       RSTmsgWaitClose();

@@ -11,10 +11,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using RST.Core.Configuration;
 using RST.Core.Health;
+using RST.Core.Profiles;
 using Serilog;
 
 namespace RST.UI.Health;
@@ -91,24 +93,66 @@ public class HealthBridge
     }
 
     /// <summary>
-    /// Run cleanup categories and return { deleted, skipped } per-category
-    /// counts. <paramref name="categoriesJson"/> is the JSON object written
-    /// by the JS shim (one boolean per known key).
+    /// Surface the cleanup targets the active profile carries, falling back
+    /// to <see cref="CleanupDefaults.Build"/> when no profile is loaded or
+    /// the profile predates RST-031. The Health viewer renders one checkbox
+    /// per enabled target.
     /// </summary>
-    public string CleanJunk(string categoriesJson)
+    public string GetCleanupTargets()
     {
-        LogEntry(nameof(CleanJunk), ("cats", categoriesJson));
-        var dict = Deserialize<Dictionary<string, bool>>(categoriesJson) ?? new();
-        var cats = new CleanCategories
-        {
-            Temp        = dict.TryGetValue("temp",        out var t) && t,
-            PacCache    = dict.TryGetValue("pacCache",    out var p) && p,
-            Journals    = dict.TryGetValue("journals",    out var j) && j,
-            CollabCache = dict.TryGetValue("collabCache", out var c) && c,
-            RecentFiles = dict.TryGetValue("recentFiles", out var r) && r,
-        };
-        var result = HealthCleaner.Run(cats);
+        LogEntry(nameof(GetCleanupTargets));
+        var targets = ResolveActiveTargets();
+        // Hide disabled entries from the user — admins can re-enable in
+        // the Builder; users only see what the admin currently authorises.
+        var visible = targets.Where(t => t.Enabled).ToArray();
+        Log.Information("Bridge.get_cleanup_targets → {Visible}/{Total} (active profile-aware)",
+                        visible.Length, targets.Count);
+        return Serialize(visible);
+    }
+
+    /// <summary>
+    /// Run the cleaner against <paramref name="selectedIdsJson"/> — JSON
+    /// array of <see cref="CleanupTarget.Id"/> strings the user checked.
+    /// Bridge re-resolves targets from the active profile so the curated
+    /// admin list stays the source of truth (the JS layer can't mint
+    /// arbitrary paths). Returns { deleted, skipped } keyed by target id.
+    /// </summary>
+    public string CleanJunk(string selectedIdsJson)
+    {
+        LogEntry(nameof(CleanJunk), ("selected", selectedIdsJson));
+        var ids = Deserialize<string[]>(selectedIdsJson) ?? Array.Empty<string>();
+        var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+        var targets = ResolveActiveTargets()
+            .Where(t => t.Enabled && idSet.Contains(string.IsNullOrEmpty(t.Id) ? t.Name : t.Id))
+            .ToArray();
+        var result = HealthCleaner.Run(targets);
         return Serialize(new { deleted = result.Deleted, skipped = result.Skipped });
+    }
+
+    /// <summary>
+    /// Read the active profile from disk and return its CleanupTargets
+    /// list, or the OOB defaults when the active profile is blank,
+    /// missing, or pre-RST-031 (CleanupTargets == null).
+    /// </summary>
+    private static List<CleanupTarget> ResolveActiveTargets()
+    {
+        try
+        {
+            var ap = ActiveProfile.Read();
+            if (!ap.IsBlank)
+            {
+                var entry = ProfileStore.Resolve(ap.ProfileName, ap.ProfileId);
+                if (entry is not null && entry.Profile.CleanupTargets is not null)
+                {
+                    return entry.Profile.CleanupTargets;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "HealthBridge.ResolveActiveTargets failed; falling back to defaults");
+        }
+        return CleanupDefaults.Build();
     }
 
     public string CloseWindow()
