@@ -9,6 +9,7 @@ using System.Diagnostics;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using RST.Engine.Scanning;
 using RST.UI.Loader;
 using Serilog;
 
@@ -29,7 +30,8 @@ public sealed class BuilderCommand : IExternalCommand
         {
             var catalog = RstApplication.GetOrBuildCatalog(revitVersion);
             var scheduler = RstApplication.GetSwitchScheduler();
-            LoaderHost.ShowModalToBuilder(revitVersion, catalog, scheduler);
+            var allTabs = RibbonTabEnumerator.Enumerate();
+            LoaderHost.ShowModalToBuilder(revitVersion, catalog, scheduler, allTabs);
             Log.Information("=== Builder session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }

@@ -16,9 +16,8 @@
 //   live    — get_profiles, get_active_profile, load_profile, add_profile,
 //             remove_profile, unload_profile, close_window, get_revit_version,
 //             get_catalog, save_profile, export_profile (RST-006: builder)
-//   stubbed — get_addin_lookup, get_loaded_addins, get_all_tabs,
-//             get_user_config, get_disable_preview, restore_addins
-//             (return empty/safe defaults; their features land in later flags)
+//   stubbed — get_addin_lookup, get_user_config (return empty/safe
+//             defaults; their features land in later flags)
 
 using System;
 using System.Collections.Generic;
@@ -42,6 +41,7 @@ public class LoaderBridge
 {
     private readonly string _revitVersion;
     private readonly IReadOnlyList<ScannedCommand> _catalog;
+    private readonly IReadOnlyList<string> _allTabs;
     private readonly Action _closeRequested;
     private readonly IProfileSwitchScheduler? _switchScheduler;
 
@@ -54,16 +54,18 @@ public class LoaderBridge
     public LoaderBridge(string revitVersion,
                         IReadOnlyList<ScannedCommand> catalog,
                         Action closeRequested,
-                        IProfileSwitchScheduler? switchScheduler = null)
+                        IProfileSwitchScheduler? switchScheduler = null,
+                        IReadOnlyList<string>? allTabs = null)
     {
         _revitVersion = revitVersion ?? "";
         _catalog = catalog ?? Array.Empty<ScannedCommand>();
+        _allTabs = allTabs ?? Array.Empty<string>();
         _closeRequested = closeRequested ?? (() => { });
         _switchScheduler = switchScheduler;
         try { BrandingDefaults.EnsureSeeded(); }
         catch (Exception ex) { Log.Warning(ex, "BrandingDefaults.EnsureSeeded failed (non-fatal)"); }
-        Log.Information("LoaderBridge ready: revit={RevitVersion}, catalog={CatalogCount} commands, liveSwitch={LiveSwitch}",
-                        _revitVersion, _catalog.Count, _switchScheduler is not null);
+        Log.Information("LoaderBridge ready: revit={RevitVersion}, catalog={CatalogCount} commands, tabs={TabCount}, liveSwitch={LiveSwitch}",
+                        _revitVersion, _catalog.Count, _allTabs.Count, _switchScheduler is not null);
     }
 
     // ---- live methods --------------------------------------------------
@@ -642,15 +644,16 @@ public class LoaderBridge
     }
 
     /// <summary>
-    /// Phase-2 follow-up — currently returns an empty list. Upstream
-    /// walks the live ribbon and surfaces tab names so the Builder's
-    /// required-addins picker can offer "by tab" matches without the
-    /// user knowing the .addin file name.
+    /// Distinct non-contextual ribbon tab titles, snapshotted when the
+    /// loader window opened. Drives the RSTify "Hide These Tabs" picker
+    /// (profile_loader.html:971 renderTabToggles). Snapshot is fine
+    /// because the modal blocks the UI thread, so the ribbon can't
+    /// change while the picker is shown.
     /// </summary>
     public string GetAllTabs()
     {
         LogEntry(nameof(GetAllTabs));
-        return Serialize(Array.Empty<string>());
+        return Serialize(_allTabs);
     }
 
     /// <summary>
