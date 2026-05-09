@@ -1,0 +1,3257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RST — Profile Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="rst_components.css">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #161b27;
+    --surface2: #1e2536;
+    --surface3: #242d42;
+    --border: #2a3347;
+    --border2: #3a4560;
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --heading: #f8fafc;
+    --header-h: 54px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  .window-header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .window-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    color: var(--heading);
+    text-transform: uppercase;
+  }
+  .header-sep { width: 1px; height: 22px; background: var(--border); }
+  .header-field { display: flex; align-items: center; gap: 8px; }
+  .header-field label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+  }
+  .header-field input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    min-width: 160px;
+    outline: none;
+  }
+  .header-field input:focus { border-color: var(--accent); }
+  .header-spacer { flex: 1; }
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 7px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+  }
+  .btn:hover:not(:disabled) { border-color: var(--text2); color: var(--heading); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover:not(:disabled) { background: #3b7cf5; }
+  .btn.danger {
+    background: transparent;
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  .btn.danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); border-color: var(--danger); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--text2);
+    border-color: var(--border);
+  }
+  .btn.icon {
+    padding: 4px 7px;
+    font-size: 10px;
+    min-width: 22px;
+  }
+
+  /* Exit confirm modal — shown only when the Builder has unsaved
+     changes and the user clicks Exit. Three actions: save+exit,
+     discard+exit, cancel. Backdrop pattern mirrors profile_loader.html's
+     confirm-overlay. */
+  .exit-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  .exit-modal-backdrop[hidden] { display: none; }
+  .exit-modal-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 22px 26px;
+    max-width: 460px;
+    width: 90%;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  }
+  .exit-modal-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--heading);
+    margin-bottom: 6px;
+  }
+  .exit-modal-body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.5;
+    margin-bottom: 18px;
+  }
+  .exit-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  /* RST Presets modal — toggle switches matching the Loader's RSTify
+     picker (profile_loader.html lines 692-708). Same colors so the
+     two surfaces feel like one continuous affordance. */
+  .preset-tab-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 4px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text1);
+  }
+  .preset-tab-row:hover { background: rgba(255,255,255,0.03); border-radius: 4px; }
+  .tab-toggle-switch { position: relative; width: 30px; height: 17px; flex-shrink: 0; }
+  .tab-toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .tab-toggle-track {
+    position: absolute; inset: 0; border-radius: 9px;
+    background: var(--surface3); border: 1px solid var(--border2);
+    transition: background 0.2s, border-color 0.2s; cursor: pointer;
+  }
+  .tab-toggle-thumb {
+    position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+    border-radius: 50%; background: var(--text3); transition: transform 0.2s, background 0.2s;
+  }
+  .tab-toggle-switch input:checked + .tab-toggle-track {
+    background: rgba(245,158,11,0.18); border-color: rgba(245,158,11,0.45);
+  }
+  .tab-toggle-switch input:checked + .tab-toggle-track .tab-toggle-thumb {
+    transform: translateX(13px); background: var(--warn);
+  }
+
+  /* Profile selector dropdown — sits where the back button used to;
+     replaces back-navigation with same-window profile switching. */
+  .profile-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 9px;
+    border-radius: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+    min-width: 170px;
+    height: 26px;
+  }
+  .profile-selector:hover { border-color: var(--border2); }
+  .profile-selector:focus { outline: none; border-color: var(--accent); }
+
+  /* ── BODY 3-PANE ── */
+  .body { flex: 1; display: flex; min-height: 0; }
+  .pane {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    min-height: 0;
+    overflow: hidden;
+  }
+  .pane:last-child { border-right: none; }
+  .pane-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    flex-shrink: 0;
+    gap: 10px;
+  }
+  .pane-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+  }
+  .pane-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+  /* ── LEFT: CATALOG ── */
+  .pane.left { width: 340px; flex-shrink: 0; background: var(--surface); }
+  .catalog-search {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .catalog-search input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .catalog-search input:focus { border-color: var(--accent); }
+  .cat-tab {
+    margin-bottom: 4px;
+  }
+  .cat-tab-header, .cat-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text2);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .cat-tab-header:hover, .cat-panel-header:hover { color: var(--heading); background: var(--surface2); }
+  .cat-tab-header { font-weight: 600; color: var(--text); }
+  .cat-supertab > .cat-tab-header {
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  /* When the Autodesk Native supertab is open, indent its inner tabs so
+     the nesting reads visually. */
+  .cat-supertab > .cat-tab-children > .cat-tab > .cat-tab-header { padding-left: 22px; }
+  .cat-supertab > .cat-tab-children > .cat-tab > .cat-tab-children > .cat-panel > .cat-panel-header { padding-left: 38px; }
+  .cat-supertab > .cat-tab-children > .cat-tab > .cat-tab-children > .cat-panel > .cat-panel-children > .cat-cmd { padding-left: 54px; }
+  .cat-panel-header { padding-left: 26px; }
+  .cat-caret {
+    display: inline-block;
+    width: 9px;
+    text-align: center;
+    color: var(--text3);
+    transition: transform 0.1s;
+  }
+  .cat-tab.collapsed > .cat-tab-children,
+  .cat-panel.collapsed > .cat-panel-children { display: none; }
+  .cat-tab.collapsed > .cat-tab-header > .cat-caret,
+  .cat-panel.collapsed > .cat-panel-header > .cat-caret { transform: rotate(-90deg); }
+  .cat-cmd-count {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+  }
+  .cat-cmd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px 4px 42px;
+    cursor: grab;
+    color: var(--text);
+    font-size: 12px;
+    border-left: 2px solid transparent;
+  }
+  .cat-cmd:hover {
+    background: var(--surface2);
+    border-left-color: var(--accent);
+  }
+  .cat-cmd:active { cursor: grabbing; }
+  .cat-cmd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-cmd-id {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+  }
+  .cat-empty {
+    padding: 18px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+
+  /* ── CENTER: PANELS CANVAS ── */
+  .pane.center { flex: 1; background: var(--bg); min-width: 0; }
+  .canvas-wrap { padding: 16px 20px 24px; }
+  .canvas-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 32px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    margin: 16px 0;
+  }
+  .panel-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .panel-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .panel-card.drag-over {
+    border-color: var(--accent3);
+    box-shadow: 0 0 0 1px var(--accent3);
+  }
+  .panel-card.drop-before { border-top: 2px solid var(--accent3); }
+  .panel-card.drop-after  { border-bottom: 2px solid var(--accent3); }
+  .panel-stripe { height: 3px; }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: grab;
+  }
+  .panel-head:active { cursor: grabbing; }
+  .panel-name-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--heading);
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    padding: 4px 6px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .panel-name-input:focus, .panel-name-input:hover { border-color: var(--border2); background: var(--surface3); }
+  .panel-slot-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+  }
+  .panel-actions { display: flex; gap: 4px; }
+  .panel-body {
+    padding: 12px 14px;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .panel-body.empty {
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: grab;
+    transition: border-color 0.1s;
+  }
+  .slot:hover { border-color: var(--border2); }
+  .slot.drag-source { opacity: 0.4; }
+  .slot.drop-before { border-top: 2px solid var(--accent3); }
+  .slot.drop-after  { border-bottom: 2px solid var(--accent3); }
+  .slot-type {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .slot-type.tool  { color: var(--accent); border-color: rgba(79, 142, 247, 0.4); }
+  .slot-type.stack { color: var(--accent2); border-color: rgba(124, 58, 237, 0.4); }
+  .slot-type.url   { color: var(--accent3); border-color: rgba(16, 185, 129, 0.4); }
+  .slot-name-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 3px 5px;
+    border-radius: 3px;
+    outline: none;
+    min-width: 0;
+  }
+  .slot-name-input:focus { border-color: var(--border2); background: var(--surface2); }
+  .slot-cmd {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .slot-actions { display: flex; gap: 3px; flex-shrink: 0; }
+
+  /* Pick-icon button on tool cards (replaces the legacy 'tool' badge). */
+  .slot-icon-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid rgba(79, 142, 247, 0.4);
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    height: 22px;
+    color: var(--accent);
+  }
+  .slot-icon-btn:hover { border-color: var(--accent); background: rgba(79, 142, 247, 0.08); }
+  .slot-icon-btn-thumb {
+    width: 14px; height: 14px;
+    image-rendering: pixelated;
+    flex-shrink: 0;
+  }
+  .slot-icon-btn-placeholder {
+    width: 14px; height: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--text3);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .slot-icon-btn-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Icon picker modal (vendored 48-PNG iconpack + None option). */
+  .icon-picker-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .icon-picker-overlay.visible { display: flex; }
+  .icon-picker-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 680px;
+    max-width: 92vw;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .icon-picker-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .icon-picker-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text2);
+  }
+  .icon-picker-grid {
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    gap: 6px;
+    overflow-y: auto;
+  }
+  .icon-tile {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    min-height: 70px;
+    color: var(--text3);
+  }
+  .icon-tile:hover { border-color: var(--accent); color: var(--text); }
+  .icon-tile.selected { border-color: var(--accent3); background: var(--surface3); color: var(--text); }
+  .icon-tile img { width: 32px; height: 32px; image-rendering: pixelated; }
+  .icon-tile-none {
+    width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 22px; color: var(--text3);
+  }
+  .icon-tile-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    word-break: break-all;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  /* Junk Cleanup Configure modal (RST-031) — same surface aesthetic
+     as the icon picker, wider for the path inputs. */
+  .cleanup-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .cleanup-overlay.visible { display: flex; }
+  .cleanup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 760px;
+    max-width: 94vw;
+    max-height: 86vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .cleanup-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .cleanup-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text2);
+  }
+  .cleanup-body {
+    padding: 12px 16px;
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+    gap: 8px;
+  }
+  .cleanup-help {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    line-height: 1.5;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cleanup-help code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    color: var(--accent);
+  }
+  .cleanup-row {
+    display: grid;
+    grid-template-columns: 36px 160px 1fr 130px 28px;
+    gap: 6px;
+    align-items: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  .cleanup-row:hover { border-color: var(--border2); }
+  .cleanup-row .tab-toggle-switch { margin: 0; }
+  .cleanup-row input[type="text"], .cleanup-row select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid transparent;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .cleanup-row input[type="text"]:focus,
+  .cleanup-row select:focus { border-color: var(--border2); background: var(--surface3); }
+  .cleanup-row select { cursor: pointer; }
+  .cleanup-actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    gap: 8px;
+  }
+  .cleanup-empty {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+    text-align: center;
+    padding: 24px 8px;
+  }
+
+  /* ── RIGHT: PROPERTIES + STACKS ── */
+  .pane.right { width: 340px; flex-shrink: 0; background: var(--surface); }
+  .prop-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .prop-section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+  .prop-row { margin-bottom: 10px; }
+  .prop-row:last-child { margin-bottom: 0; }
+  .prop-row label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .prop-row input[type="text"], .prop-row input[type="number"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 9px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .prop-row input:focus { border-color: var(--accent); }
+  .prop-row .opacity-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .prop-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .prop-row .opacity-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    min-width: 32px;
+    text-align: right;
+  }
+  .prop-row .color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .prop-row input[type="color"] {
+    width: 40px;
+    height: 28px;
+    padding: 2px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .prop-row .color-hex {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: lowercase;
+  }
+  .prop-row .logo-row { display: flex; align-items: center; gap: 6px; }
+  .prop-row .logo-name {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .prop-row .logo-name.empty { color: var(--text3); font-style: italic; }
+  .prop-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 4px 0;
+  }
+  .url-editor {
+    margin-top: 6px;
+    padding: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .url-editor input[type="text"] {
+    width: 100%;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .url-editor input:focus { border-color: var(--accent); }
+  .url-editor .url-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  /* ── HEADER BRANDING BUTTON + POPOVER ── */
+  .branding-anchor { position: relative; display: flex; align-items: center; }
+  .branding-anchor .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .branding-caret {
+    font-size: 8px;
+    color: var(--text3);
+  }
+  .branding-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent3);
+    flex-shrink: 0;
+  }
+  .branding-dot.empty {
+    background: transparent;
+    border: 1px solid var(--border2);
+  }
+  .branding-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    padding: 14px 16px;
+    width: 320px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .branding-popover[hidden] { display: none; }
+  .branding-popover .prop-section-label { margin-bottom: 0; }
+  .branding-popover .prop-row { margin-bottom: 0; }
+  .branding-popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+  .stack-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+  .stack-card-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .stack-name-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--heading);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 5px;
+    border-radius: 3px;
+    outline: none;
+    min-width: 0;
+  }
+  .stack-name-input:focus, .stack-name-input:hover { border-color: var(--border2); background: var(--surface3); }
+  .stack-tool-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+  .stack-tool {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 7px;
+    background: var(--surface3);
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .stack-tool-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stack-tool-cmd {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+  }
+  .stack-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: center;
+    padding: 6px;
+  }
+  /* ── BOTTOM LIVE PREVIEW STRIP ── */
+  .preview-strip {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    max-height: 220px;
+  }
+  .preview-strip-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .preview-strip-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+  }
+  .preview-tab-pill {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: var(--text2);
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 3px 11px;
+  }
+  .preview-strip-hint {
+    margin-left: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+  /* Preview canvas mimics Revit's ribbon background. Defaults to Revit
+     2024+ dark theme; flips to the light-theme color when the OS reports
+     a light preference (WebView2 honors `prefers-color-scheme`). The
+     true preview matches what the user sees in Revit, independent of
+     the builder UI's own (always-dark) chrome. */
+  .preview-canvas {
+    flex: 1;
+    display: flex;
+    gap: 4px;
+    padding: 10px 16px 12px;
+    overflow-x: auto;
+    background: #2D2D30; /* Revit dark ribbon */
+    align-items: flex-start;
+  }
+  @media (prefers-color-scheme: light) {
+    .preview-canvas { background: #E1E1E1; } /* Revit light ribbon */
+  }
+  .preview-canvas-empty {
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    padding: 18px;
+  }
+
+  /* Reused preview-cell classes (mirror selector's profile_loader.html).
+     Background applied per-panel via inline style (panel.color blended
+     with profile.panelOpacity → rgba). Subtle 1px ring keeps panels
+     distinct against either canvas theme. */
+  .p-panel {
+    border-radius: 5px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 100px;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+  }
+  /* Stripe is no longer rendered — color is on the panel itself. */
+  .p-panel-stripe { display: none; }
+  .p-panel-inner {
+    flex: 1;
+    padding: 8px 8px 6px;
+    display: flex;
+    gap: 5px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    min-height: 58px;
+  }
+  .p-panel-name {
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.18);
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+    text-align: center;
+  }
+  .p-rib-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    width: 44px;
+    flex-shrink: 0;
+  }
+  .p-rib-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+  .p-rib-icon-img {
+    width: 18px;
+    height: 18px;
+    image-rendering: pixelated;
+  }
+  .p-rib-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    color: var(--text2);
+    text-align: center;
+    line-height: 1.3;
+    font-weight: 300;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .p-rib-stack { display: flex; flex-direction: column; gap: 2px; width: 72px; flex-shrink: 0; }
+  .p-rib-stack-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 5px;
+    background: var(--surface2);
+    border: 1px solid rgba(124,58,237,0.22);
+    border-radius: 3px;
+  }
+  .p-rib-stack-icon {
+    width: 13px; height: 13px;
+    border-radius: 2px;
+    background: rgba(124,58,237,0.1);
+    border: 1px solid rgba(124,58,237,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; flex-shrink: 0;
+    color: #a78bfa;
+  }
+  .p-rib-stack-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 300;
+  }
+  .p-panel-empty {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    align-self: center;
+    margin: auto;
+  }
+
+  .toast {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 5px;
+    font-size: 12px;
+    z-index: 9999;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--danger); color: var(--danger); }
+  .toast.ok  { border-color: var(--accent3); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="window-header">
+  <select id="profileSelector" class="profile-selector" onchange="onProfileSelectChange(this.value)" title="Switch profile or start a new one">
+    <option value="__new__">+ New Profile</option>
+    <!-- existing profiles populated by populateProfileSelector() at boot -->
+  </select>
+  <div class="header-sep"></div>
+  <div class="window-title">Profile Builder</div>
+  <div class="header-sep"></div>
+  <div class="branding-anchor">
+    <button id="brandingBtn" class="btn" onclick="toggleBrandingPopover(event)" title="Company Tab Branding">
+      <span id="brandingBtnDot" class="branding-dot empty"></span>
+      <span>Branding</span>
+      <span class="branding-caret">▾</span>
+    </button>
+    <div id="brandingPopover" class="branding-popover" hidden>
+      <div class="prop-section-label">Company Tab Branding</div>
+      <div class="prop-row">
+        <label>Logo</label>
+        <div class="logo-row">
+          <button class="btn" onclick="pickLogo()">Pick…</button>
+          <button class="btn ghost" onclick="clearLogo()" title="Clear logo">×</button>
+          <span id="propLogoName" class="logo-name empty">(none)</span>
+        </div>
+      </div>
+      <div class="prop-row">
+        <label>URL</label>
+        <input id="propBrandingUrl" type="text" placeholder="https://example.com" onchange="setBrandingUrl(this.value)">
+      </div>
+      <div class="branding-popover-actions">
+        <button class="btn primary" onclick="closeBrandingPopover()">Done</button>
+      </div>
+    </div>
+  </div>
+  <div class="header-field">
+    <label>Name</label>
+    <input id="profileNameInput" type="text" placeholder="Profile name" oninput="profile.profile = this.value">
+  </div>
+  <div class="header-field">
+    <label>Tab</label>
+    <input id="profileTabInput" type="text" placeholder="Ribbon tab" oninput="profile.tab = this.value; document.getElementById('previewTabPill').textContent = this.value || '—'">
+  </div>
+  <div class="header-spacer"></div>
+  <button class="btn ghost" onclick="exportJson()">Export ZIP</button>
+  <button class="btn primary" onclick="saveProfile()">Save</button>
+  <button class="btn ghost" onclick="exitBuilder()" title="Close the Builder">Exit</button>
+</div>
+
+<!-- Body: 3 panes -->
+<div class="body">
+
+  <!-- LEFT: catalog -->
+  <div class="pane left">
+    <div class="pane-header">
+      <span class="pane-label">Commands</span>
+      <span class="pane-label" id="catalogCount" style="color:var(--text3)">0</span>
+    </div>
+    <div class="catalog-search">
+      <input id="catalogSearch" type="text" placeholder="Filter…" oninput="renderCatalog()">
+    </div>
+    <div class="pane-scroll" id="catalogTree"></div>
+  </div>
+
+  <!-- CENTER: panels canvas -->
+  <div class="pane center">
+    <div class="pane-header">
+      <span class="pane-label">Panels</span>
+      <button class="btn" onclick="addPanel()">+ Add Panel</button>
+    </div>
+    <div class="pane-scroll">
+      <div class="canvas-wrap" id="canvas"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: properties + stacks -->
+  <div class="pane right">
+    <div class="pane-header">
+      <span class="pane-label">Properties</span>
+    </div>
+    <div class="pane-scroll">
+      <div class="prop-section">
+        <div class="prop-section-label">Profile</div>
+        <div class="prop-row">
+          <label>Min Revit Version</label>
+          <input id="propMinVersion" type="text" value="0.1.0" oninput="profile.min_version = this.value">
+        </div>
+        <div class="prop-row">
+          <label>Panel Opacity</label>
+          <div class="opacity-row">
+            <input id="propOpacity" type="range" min="10" max="100" step="5" value="100" oninput="setOpacity(this.value)">
+            <span class="opacity-val" id="propOpacityVal">100</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="prop-section" id="selectedPanelSection">
+        <div class="prop-section-label">Selected Panel</div>
+        <div id="selectedPanelBody">
+          <div class="prop-empty">No panel selected.</div>
+        </div>
+      </div>
+
+      <div class="prop-section" id="stacksSection">
+        <div class="prop-section-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Stacks</span>
+          <button class="btn icon" onclick="addStack()">+ New</button>
+        </div>
+        <div id="stackList"></div>
+      </div>
+
+      <div class="prop-section" id="presetsSection">
+        <div class="prop-section-label">RST Presets</div>
+        <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+            Pre-configure RSTify hidden tabs + Disable Unused Add-ins so the
+            profile ships with a sensible Loader state out of the box.
+          </div>
+          <div id="presetsSummary"
+               style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+          <button class="btn" onclick="openPresetsModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
+        </div>
+      </div>
+
+      <div class="prop-section" id="cleanupSection">
+        <div class="prop-section-label">Junk Cleanup</div>
+        <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+            Targets the Health tool's "Clean Junk Files" sweeps. Ship with
+            sensible OOB defaults; remove or extend per profile.
+          </div>
+          <div id="cleanupSummary"
+               style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+          <button class="btn" onclick="openCleanupModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Presets Configure Modal — reuses exit-modal-backdrop styling. -->
+<div class="exit-modal-backdrop" id="presetsOverlay" hidden>
+  <div class="exit-modal-card" style="max-width:520px">
+    <div class="exit-modal-title">RST Presets</div>
+    <div class="exit-modal-body" style="margin-bottom:12px">
+      Defaults applied when a user selects this profile in the Loader. They can still tweak per load.
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="prop-section-label" style="margin-bottom:6px">RSTify — Hide These Tabs</div>
+      <div id="presetsTabsList"
+           style="max-height:240px;overflow-y:auto;padding-right:6px;border:1px solid var(--border);border-radius:4px;padding:8px"></div>
+    </div>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--border);cursor:pointer">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text1)">Disable Unused Add-ins</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">
+          Default state for the Loader's footer toggle on first load.
+        </div>
+      </div>
+      <span class="tab-toggle-switch">
+        <input type="checkbox" id="presetsDisableUnused">
+        <div class="tab-toggle-track"><div class="tab-toggle-thumb"></div></div>
+      </span>
+    </label>
+    <div class="exit-modal-actions" style="margin-top:16px">
+      <button class="btn ghost" onclick="closePresetsModal()">Cancel</button>
+      <button class="btn primary" onclick="savePresetsModal()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Junk Cleanup Configure Modal — list of CleanupTarget rows the user
+     can edit/remove + "Add Target" + "Restore Defaults". Styling mirrors
+     the icon picker (RST-030) and tool slot cards. -->
+<div class="cleanup-overlay" id="cleanupOverlay">
+  <div class="cleanup-card">
+    <div class="cleanup-head">
+      <div class="cleanup-title">Junk Cleanup Targets</div>
+      <button class="btn ghost" onclick="closeCleanupModal()">Cancel</button>
+    </div>
+    <div class="cleanup-body">
+      <div class="cleanup-help">
+        Path tokens: <code>%LocalAppData%</code>, <code>%AppData%</code>, <code>%UserProfile%</code>,
+        <code>{revit-version}</code> (expands to every installed Revit major).
+        Kind: <strong>directory</strong> purges file contents recursively;
+        <strong>iniRecentFiles</strong> strips the [Recent File List] section
+        from a Revit.ini.
+      </div>
+      <div id="cleanupRows"></div>
+    </div>
+    <div class="cleanup-actions">
+      <button class="btn ghost" onclick="restoreCleanupDefaults()" title="Replace the list with the OOB defaults">Restore Defaults</button>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="addCleanupRow()">+ Add Target</button>
+      <button class="btn primary" onclick="saveCleanupModal()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Live tab preview (mirrors selector's read-only preview) -->
+<div class="preview-strip">
+  <div class="preview-strip-head">
+    <span class="preview-strip-label">Live Preview</span>
+    <div class="preview-tab-pill" id="previewTabPill">—</div>
+    <span class="preview-strip-hint">Read Only</span>
+  </div>
+  <div class="preview-canvas" id="previewCanvas"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Tool icon picker — opened by the Pick Icon button on tool slot cards.
+     Iconpack list comes from LoaderBridge.ListIconpack (cached after first
+     fetch). Selecting a tile sets slot.iconFile = "pack:<name>" or null
+     for the None tile, and re-renders the canvas + preview. -->
+<div id="iconPickerOverlay" class="icon-picker-overlay">
+  <div class="icon-picker-card">
+    <div class="icon-picker-head">
+      <div class="icon-picker-title">Pick an icon</div>
+      <button class="btn ghost" onclick="closeIconPicker()">Cancel</button>
+    </div>
+    <div class="icon-picker-grid" id="iconPickerGrid"></div>
+  </div>
+</div>
+
+<!-- Exit confirm modal — see exitBuilder() / showExitConfirmModal(). -->
+<div id="exitModal" class="exit-modal-backdrop" hidden>
+  <div class="exit-modal-card">
+    <div class="exit-modal-title">Unsaved changes</div>
+    <div class="exit-modal-body">
+      You have unsaved changes to this profile. What would you like to do?
+    </div>
+    <div class="exit-modal-actions">
+      <button class="btn ghost" onclick="cancelExit()">Cancel</button>
+      <button class="btn ghost" onclick="confirmExitDiscard()">Discard &amp; Exit</button>
+      <button class="btn primary" onclick="confirmExitSaveAndClose()">Save &amp; Exit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── FEATURE FLAGS ────────────────────────────────────────────────────────────
+  // Stacks: model + serializer + RibbonBuilder all stay live, so existing
+  // profiles with stack slots still load/save/render. Only the *authoring*
+  // surfaces (right-pane Stacks section, drop-into-stack target) are hidden
+  // when this is false. Flip back to true when stacks come back.
+  var STACKS_ENABLED = false;
+
+  // ── PROFILE STATE ────────────────────────────────────────────────────────────
+  // Mirrors the on-disk JSON shape (RST.Core.Profiles.Profile) — bridge
+  // round-trips this verbatim through save_profile / export_profile.
+  let profile = {
+    schemaVersion: 1,
+    id: null,
+    profile: '',
+    tab: '',
+    min_version: '0.1.0',
+    exportDate: '',
+    panelOpacity: 100,
+    requiredAddins: [],
+    hideRules: [],
+    stacks: {},
+    panels: [],
+    branding: null,
+    presets: { hiddenTabs: [], disableUnusedAddins: false },
+    cleanupTargets: cleanupDefaultsSeed(),
+  };
+
+  let catalog = [];                   // [{id, displayName, sourceTab, sourcePanel, ...}]
+  let ADDIN_LOOKUP = {};              // curated name → {displayName, file, url}; loaded at boot
+  let ALL_TABS = [];                  // ribbon tab titles, loaded once at boot for the presets picker
+  let nativeByTab = new Map();        // origin=Native:    tab → Map(panel → [cmd])
+  let otherByTab  = new Map();        // origin=non-Native: tab → Map(panel → [cmd])
+  let collapsed = new Set();          // tab/panel keys collapsed in the tree
+  let nativeBundleOpen = false;       // user toggled the Autodesk Native supertab open?
+  let selectedPanelIndex = -1;
+  let mode = 'new';                   // 'new' | 'edit'
+
+  // Profile-switch state. The dropdown in the header is the only path to
+  // change which profile is being edited (no back-to-loader, no URL params
+  // — Builder and Loader are separate entry points).
+  let profilesList = [];              // refreshed after every save
+  let activeProfileId = null;         // id of the currently-loaded profile
+  let activeHiddenTabs = [];          // user's last RSTify settings
+  let activeDisableNonRequired = false;
+  let currentRevitVersion = '';
+
+  // Dirty-tracking — JSON snapshot of `profile` taken whenever the
+  // editor lands on a "clean" state (boot, dropdown switch, post-save).
+  // exitBuilder() compares the current profile JSON against this; a
+  // mismatch surfaces the unsaved-changes confirm modal.
+  let pristineProfile = '';
+
+  // Rename-as-copy tracking. The profile name when an existing profile
+  // was loaded into the editor (or '' for a brand-new profile). On
+  // save, if profile.profile has changed away from this, we save as a
+  // new profile (clear id → bridge mints a fresh GUID, ProfileStore
+  // writes a new file) instead of renaming in place. Tab name change
+  // is independent and does NOT trigger a copy. Updated after every
+  // successful save so the saved name becomes the new baseline.
+  let originalNameOnLoad = '';
+
+  // Drag state — single-source-of-truth for what's being dragged. HTML5
+  // DataTransfer is too coarse for our typed payloads (catalog entry vs
+  // slot vs panel), so we keep the descriptor here and only stuff the
+  // kind tag into DataTransfer for cross-doc safety.
+  let drag = null;
+
+  // ── BOOT ─────────────────────────────────────────────────────────────────────
+  function boot() {
+    // Bridge is installed by the host; pywebview-shim.js wraps it in
+    // window.pywebview.api before firing pywebviewready. If the shim
+    // hasn't fired yet, wait for it.
+    if (window.pywebview && window.pywebview.api) {
+      bootAfterBridge();
+    } else {
+      window.addEventListener('pywebviewready', bootAfterBridge, { once: true });
+    }
+  }
+
+  function bootAfterBridge() {
+    rstLog('info', 'builder boot', { stacksEnabled: STACKS_ENABLED });
+    if (!STACKS_ENABLED) {
+      var stacksSection = document.getElementById('stacksSection');
+      if (stacksSection) stacksSection.style.display = 'none';
+    }
+
+    // Default branding is machine-wide; fetch first so the popover and
+    // header dot reflect current state even before any profile loads.
+    loadDefaultBrandingFromBridge();
+
+    // Fetch all bootstrap data in parallel — catalog, profiles list,
+    // active-profile snapshot (for the auto-reload-on-save check), and
+    // the running Revit version (passed back through load_profile).
+    Promise.all([
+      window.pywebview.api.get_catalog(),
+      window.pywebview.api.get_profiles(),
+      window.pywebview.api.get_active_profile(),
+      window.pywebview.api.get_revit_version(),
+      window.pywebview.api.get_addin_lookup(),
+      window.pywebview.api.get_all_tabs()
+    ]).then(function(results) {
+      catalog = Array.isArray(results[0]) ? results[0] : [];
+      indexCatalog();
+      renderCatalog();
+      document.getElementById('catalogCount').textContent = catalog.length;
+      rstLog(catalog.length === 0 ? 'warn' : 'info',
+             'builder: get_catalog returned',
+             { length: catalog.length, sample: catalog[0] || null });
+
+      profilesList = results[1] || [];
+      populateProfileSelector();
+
+      var ap = results[2];
+      activeProfileId = ap && ap.id ? ap.id : null;
+      activeHiddenTabs = ap && Array.isArray(ap.hidden_tabs) ? ap.hidden_tabs : [];
+      activeDisableNonRequired = !!(ap && ap.disable_non_required);
+      rstLog('info', 'builder: active profile snapshot', {
+        id: activeProfileId,
+        hiddenTabs: activeHiddenTabs.length,
+        disableNonRequired: activeDisableNonRequired
+      });
+
+      currentRevitVersion = results[3] || '';
+
+      ADDIN_LOOKUP = (results[4] && typeof results[4] === 'object') ? results[4] : {};
+      rstLog('info', 'builder: addin lookup loaded', { keys: Object.keys(ADDIN_LOOKUP).length });
+
+      ALL_TABS = Array.isArray(results[5]) ? results[5] : [];
+      rstLog('info', 'builder: all tabs loaded', { count: ALL_TABS.length });
+
+      // Default the dropdown to "+ New Profile" — the user picks an
+      // existing profile from the dropdown if they want to edit one.
+      startFresh();
+      renderAll();
+    }).catch(function(err) {
+      rstLog('error', 'builder: boot fetches threw', { err: String(err) });
+      catalog = [];
+      profilesList = [];
+      startFresh();
+      renderAll();
+    });
+  }
+
+  // Reset the editor to a blank "new profile" state, with one empty
+  // panel so the canvas isn't completely empty.
+  function startFresh() {
+    profile.schemaVersion  = 1;
+    profile.id             = null;
+    profile.profile        = '';
+    profile.tab            = '';
+    profile.min_version    = '0.1.0';
+    profile.exportDate     = '';
+    profile.panelOpacity   = 100;
+    profile.requiredAddins = [];
+    profile.hideRules      = [];
+    profile.stacks         = {};
+    profile.panels         = [];
+    profile.branding       = null;
+    profile.presets        = { hiddenTabs: [], disableUnusedAddins: false };
+    profile.cleanupTargets = cleanupDefaultsSeed();
+    selectedPanelIndex     = -1;
+    mode = 'new';
+    originalNameOnLoad = '';
+    addPanel();   // canvas isn't empty on first paint
+    renderPresetsSummary();
+    renderCleanupSummary();
+    snapshotPristine();
+  }
+
+  // Capture the current `profile` state as the "clean" baseline. Called
+  // from startFresh, dropdown-driven loadIntoProfile, and after a
+  // successful save so subsequent edits are correctly flagged dirty.
+  function snapshotPristine() {
+    try { pristineProfile = JSON.stringify(profile); }
+    catch (e) { pristineProfile = ''; }
+  }
+
+  function isProfileDirty() {
+    try { return JSON.stringify(profile) !== pristineProfile; }
+    catch (e) { return true; }   // assume dirty if we can't compare
+  }
+
+  // Populate the header <select> with the current profilesList. Keeps
+  // the user's selection across refreshes when possible.
+  function populateProfileSelector() {
+    var sel = document.getElementById('profileSelector');
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '';
+    var newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ New Profile';
+    sel.appendChild(newOpt);
+    profilesList.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.id || p.profile;
+      opt.textContent = p.profile + (p.id && p.id === activeProfileId ? '  (loaded)' : '');
+      sel.appendChild(opt);
+    });
+    var found = Array.from(sel.options).some(function(o) { return o.value === prev; });
+    sel.value = found ? prev : '__new__';
+  }
+
+  // Dropdown handler. "__new__" → reset to fresh. Any other value is a
+  // profile id (or name fallback) → load it into the editor.
+  function onProfileSelectChange(value) {
+    if (value === '__new__') {
+      rstLog('info', 'builder: dropdown → new profile');
+      startFresh();
+      renderAll();
+      return;
+    }
+    var match = profilesList.find(function(p) {
+      return (p.id && p.id === value) || p.profile === value;
+    });
+    if (!match) {
+      rstLog('warn', 'builder: dropdown change: profile not found', { value: value });
+      startFresh();
+      renderAll();
+      return;
+    }
+    rstLog('info', 'builder: dropdown → load existing', { name: match.profile, id: match.id });
+    loadIntoProfile(match);
+    mode = 'edit';
+    originalNameOnLoad = profile.profile || '';
+    syncHeader();
+    renderAll();
+    snapshotPristine();
+  }
+
+  function loadIntoProfile(src) {
+    // Copy in the DTO shape — `_filename` is bridge-only metadata, drop it.
+    profile.schemaVersion  = src.schemaVersion || 1;
+    profile.id             = src.id || null;
+    profile.profile        = src.profile || '';
+    profile.tab            = src.tab || '';
+    profile.min_version    = src.min_version || '0.1.0';
+    profile.exportDate     = src.exportDate || '';
+    profile.panelOpacity   = src.panelOpacity != null ? src.panelOpacity : 100;
+    profile.requiredAddins = src.requiredAddins || [];
+    profile.hideRules      = src.hideRules || [];
+    profile.stacks         = src.stacks || {};
+    profile.panels         = src.panels || [];
+    // Per-profile Branding is no longer authored — global default applies.
+    // Legacy non-null values are dropped silently; runtime resolver falls
+    // back to %AppData%\RST\branding.png + branding.json.
+    profile.branding       = null;
+    var srcPresets = src.presets || {};
+    profile.presets = {
+      hiddenTabs: Array.isArray(srcPresets.hiddenTabs) ? srcPresets.hiddenTabs.slice() : [],
+      disableUnusedAddins: !!srcPresets.disableUnusedAddins,
+    };
+    // Pre-RST-031 profiles arrive without cleanupTargets — seed defaults so
+    // the right-pane summary + Configure modal aren't blank for legacy data.
+    profile.cleanupTargets = Array.isArray(src.cleanupTargets)
+      ? src.cleanupTargets.map(function(t) { return Object.assign({}, t); })
+      : cleanupDefaultsSeed();
+    if (profile.panels.length > 0) selectedPanelIndex = 0;
+    renderPresetsSummary();
+    renderCleanupSummary();
+    rstLog('info', 'builder: loaded existing profile into editor', {
+      name: profile.profile, id: profile.id, panels: profile.panels.length,
+      stacks: Object.keys(profile.stacks).length,
+      presetHiddenTabs: profile.presets.hiddenTabs.length,
+      presetDisableUnused: profile.presets.disableUnusedAddins,
+    });
+  }
+
+  function syncHeader() {
+    document.getElementById('profileNameInput').value = profile.profile || '';
+    document.getElementById('profileTabInput').value = profile.tab || '';
+    document.getElementById('propMinVersion').value = profile.min_version || '0.1.0';
+    var op = profile.panelOpacity != null ? profile.panelOpacity : 100;
+    document.getElementById('propOpacity').value = op;
+    document.getElementById('propOpacityVal').textContent = op;
+    syncBranding();
+  }
+
+  // ── BRANDING (machine-wide) ─────────────────────────────────────────────────
+  // Branding lives at %AppData%\RST\branding.png + branding.json — one company
+  // brand per machine, applied to every profile that does not carry its own
+  // override. Profile.branding stays null in saved JSON; the runtime resolver
+  // (BrandingDefaults.Resolve) falls back to the machine default.
+  var defaultBranding = { hasLogo: false, fileName: null, url: null };
+
+  function loadDefaultBrandingFromBridge() {
+    if (!window.pywebview || !window.pywebview.api) return Promise.resolve();
+    return window.pywebview.api.load_default_branding().then(function(b) {
+      if (b && typeof b === 'object') {
+        defaultBranding = {
+          hasLogo: !!b.hasLogo,
+          fileName: b.fileName || null,
+          url: b.url || null,
+        };
+      }
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: load_default_branding threw', { err: String(err) });
+    });
+  }
+
+  function syncBranding() {
+    document.getElementById('propBrandingUrl').value = defaultBranding.url || '';
+    var nameEl = document.getElementById('propLogoName');
+    if (defaultBranding.hasLogo) {
+      nameEl.textContent = defaultBranding.fileName || 'branding.png';
+      nameEl.classList.remove('empty');
+    } else {
+      nameEl.textContent = '(none)';
+      nameEl.classList.add('empty');
+    }
+    // Header button dot — filled when any branding is set, hollow otherwise.
+    var dot = document.getElementById('brandingBtnDot');
+    if (dot) {
+      var isSet = !!(defaultBranding.hasLogo || defaultBranding.url);
+      dot.classList.toggle('empty', !isSet);
+    }
+  }
+
+  function toggleBrandingPopover(e) {
+    if (e) e.stopPropagation();
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    if (pop.hasAttribute('hidden')) openBrandingPopover();
+    else closeBrandingPopover();
+  }
+
+  function openBrandingPopover() {
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    pop.removeAttribute('hidden');
+    syncBranding();
+    // Defer so the click that opened it doesn't immediately close it.
+    setTimeout(function() {
+      document.addEventListener('mousedown', brandingDismissHandler, true);
+    }, 0);
+  }
+
+  function closeBrandingPopover() {
+    var pop = document.getElementById('brandingPopover');
+    if (!pop) return;
+    pop.setAttribute('hidden', '');
+    document.removeEventListener('mousedown', brandingDismissHandler, true);
+  }
+
+  function brandingDismissHandler(e) {
+    var pop = document.getElementById('brandingPopover');
+    var btn = document.getElementById('brandingBtn');
+    if (!pop || pop.hasAttribute('hidden')) return;
+    if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+    closeBrandingPopover();
+  }
+
+  function setBrandingUrl(v) {
+    if (!window.pywebview || !window.pywebview.api) return;
+    var trimmed = normalizeUrl((v || '').trim());
+    window.pywebview.api.save_default_branding_url(trimmed).then(function(result) {
+      if (!result || !result.ok) {
+        showToast('Save URL failed: ' + ((result && result.error) || 'unknown'), 'err');
+        return;
+      }
+      defaultBranding.url = trimmed || null;
+      rstLog('info', 'builder: default branding url saved', { urlSet: !!defaultBranding.url });
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: save_default_branding_url threw', { err: String(err) });
+      showToast('Save URL failed: ' + err, 'err');
+    });
+  }
+
+  function pickLogo() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    window.pywebview.api.pick_logo_file().then(function(result) {
+      if (!result || !result.ok) {
+        if (result && result.error && result.error !== 'cancelled') {
+          showToast('Logo pick failed: ' + result.error, 'err');
+        }
+        return;
+      }
+      defaultBranding.hasLogo = true;
+      defaultBranding.fileName = result.fileName || 'branding.png';
+      rstLog('info', 'builder: default logo updated', { fileName: defaultBranding.fileName });
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: pick_logo_file threw', { err: String(err) });
+      showToast('Logo pick failed: ' + err, 'err');
+    });
+  }
+
+  function clearLogo() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    window.pywebview.api.clear_default_logo().then(function(result) {
+      if (!result || !result.ok) {
+        showToast('Clear logo failed: ' + ((result && result.error) || 'unknown'), 'err');
+        return;
+      }
+      defaultBranding.hasLogo = false;
+      defaultBranding.fileName = null;
+      rstLog('info', 'builder: default logo cleared');
+      syncBranding();
+    }).catch(function(err) {
+      rstLog('error', 'builder: clear_default_logo threw', { err: String(err) });
+      showToast('Clear logo failed: ' + err, 'err');
+    });
+  }
+
+  // ── CATALOG INDEX + RENDER ───────────────────────────────────────────────────
+  function indexCatalog() {
+    nativeByTab = new Map();
+    otherByTab  = new Map();
+    catalog.forEach(function(c) {
+      // Bucket-1 (native): commands whose origin is Native — i.e., they
+      // came from BuiltinCommandScanner walking PostableCommand. After
+      // the headless filter (PR #16), every native here has both
+      // sourceTab and sourcePanel from the ribbon walk's enrichment.
+      // Grouped together under the "Autodesk Native" supertab so the
+      // tree isn't dominated by 20+ Revit tabs.
+      //
+      // Bucket-2 (other): everything else — third-party addins
+      // (Kinship, Enscape, …) and host-tab-promoted vendor panels.
+      // Surfaced at the top level as one entry per vendor.
+      var bucket = c.origin === 'Native' ? nativeByTab : otherByTab;
+      var tab = c.sourceTab || '(unknown)';
+      var panel = c.sourcePanel || '(unknown)';
+      if (!bucket.has(tab)) bucket.set(tab, new Map());
+      var pmap = bucket.get(tab);
+      if (!pmap.has(panel)) pmap.set(panel, []);
+      pmap.get(panel).push(c);
+    });
+    rstLog('info', 'builder: catalog indexed', {
+      total: catalog.length,
+      nativeTabs: nativeByTab.size,
+      otherTabs:  otherByTab.size,
+    });
+  }
+
+  // Build a single .cat-tab DOM element for one (tab, pmap, query) tuple.
+  // Returns { element, count } when the tab has at least one matched
+  // command, or null when fully filtered out by the search query.
+  function buildTabEl(tab, pmap, q) {
+    var tabKey = 'tab:' + tab;
+    var tabEl = document.createElement('div');
+    tabEl.className = 'cat-tab' + (collapsed.has(tabKey) ? ' collapsed' : '');
+
+    var tabCmdCount = 0;
+    var panelEls = [];
+
+    Array.from(pmap.keys()).sort().forEach(function(panel) {
+      var cmds = pmap.get(panel);
+      var matched = q
+        ? cmds.filter(function(c) {
+            return (c.displayName && c.displayName.toLowerCase().indexOf(q) >= 0)
+                || (c.id && c.id.toLowerCase().indexOf(q) >= 0);
+          })
+        : cmds;
+      if (matched.length === 0) return;
+
+      var pKey = 'panel:' + tab + '/' + panel;
+      var pEl = document.createElement('div');
+      pEl.className = 'cat-panel' + (collapsed.has(pKey) ? ' collapsed' : '');
+
+      var pHead = document.createElement('div');
+      pHead.className = 'cat-panel-header';
+      pHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(panel) + '</span><span class="cat-cmd-count">' + matched.length + '</span>';
+      pHead.onclick = function() { toggleCollapsed(pKey); };
+      pEl.appendChild(pHead);
+
+      var pBody = document.createElement('div');
+      pBody.className = 'cat-panel-children';
+      matched.forEach(function(c) {
+        var cmdEl = document.createElement('div');
+        cmdEl.className = 'cat-cmd';
+        cmdEl.title = c.id;
+        cmdEl.draggable = true;
+        cmdEl.innerHTML =
+          '<span class="cat-cmd-name">' + escHtml(c.displayName || c.id) + '</span>' +
+          '<span class="cat-cmd-id">' + escHtml(shortId(c.id)) + '</span>';
+        cmdEl.ondblclick = function() { addToolToSelectedPanel(c); };
+        cmdEl.ondragstart = function(e) {
+          drag = { kind: 'catalog', cmd: c };
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('text/plain', 'catalog:' + c.id);
+        };
+        cmdEl.ondragend = function() { drag = null; };
+        pBody.appendChild(cmdEl);
+      });
+      pEl.appendChild(pBody);
+      panelEls.push(pEl);
+      tabCmdCount += matched.length;
+    });
+
+    if (panelEls.length === 0) return null;
+
+    var tHead = document.createElement('div');
+    tHead.className = 'cat-tab-header';
+    tHead.innerHTML = '<span class="cat-caret">▾</span><span>' + escHtml(tab) + '</span><span class="cat-cmd-count">' + tabCmdCount + '</span>';
+    tHead.onclick = function() { toggleCollapsed(tabKey); };
+    tabEl.appendChild(tHead);
+
+    var tBody = document.createElement('div');
+    tBody.className = 'cat-tab-children';
+    panelEls.forEach(function(p) { tBody.appendChild(p); });
+    tabEl.appendChild(tBody);
+
+    return { element: tabEl, count: tabCmdCount };
+  }
+
+  function renderCatalog() {
+    var q = (document.getElementById('catalogSearch').value || '').toLowerCase().trim();
+    var tree = document.getElementById('catalogTree');
+    tree.innerHTML = '';
+
+    if (catalog.length === 0) {
+      tree.innerHTML = '<div class="cat-empty">No commands available.<br>Open the Loader from inside Revit to populate the catalog.</div>';
+      return;
+    }
+
+    var anyMatch = false;
+
+    // Autodesk Native supertab — bundles every Revit-shipped tab so the
+    // tree isn't 25 expanders deep. Collapsed by default; auto-expanded
+    // when the user is searching (so matches inside aren't hidden).
+    if (nativeByTab.size > 0) {
+      var nativeTabEls = [];
+      var nativeTotal = 0;
+      Array.from(nativeByTab.keys()).sort().forEach(function(tab) {
+        var built = buildTabEl(tab, nativeByTab.get(tab), q);
+        if (built) {
+          nativeTabEls.push(built.element);
+          nativeTotal += built.count;
+        }
+      });
+      if (nativeTabEls.length > 0) {
+        var supertabEl = document.createElement('div');
+        var collapseSuper = !q && !nativeBundleOpen;
+        supertabEl.className = 'cat-tab cat-supertab' + (collapseSuper ? ' collapsed' : '');
+
+        var sHead = document.createElement('div');
+        sHead.className = 'cat-tab-header';
+        sHead.innerHTML = '<span class="cat-caret">▾</span><span>Autodesk Native</span><span class="cat-cmd-count">' + nativeTotal + '</span>';
+        sHead.onclick = function() { nativeBundleOpen = !nativeBundleOpen; renderCatalog(); };
+        supertabEl.appendChild(sHead);
+
+        var sBody = document.createElement('div');
+        sBody.className = 'cat-tab-children';
+        nativeTabEls.forEach(function(t) { sBody.appendChild(t); });
+        supertabEl.appendChild(sBody);
+
+        tree.appendChild(supertabEl);
+        anyMatch = true;
+      }
+    }
+
+    // Third-party at top level — one expandable entry per vendor (or
+    // host-tab-promoted panel name from PR #11: Kinship, Enscape, …).
+    Array.from(otherByTab.keys()).sort().forEach(function(tab) {
+      var built = buildTabEl(tab, otherByTab.get(tab), q);
+      if (built) {
+        tree.appendChild(built.element);
+        anyMatch = true;
+      }
+    });
+
+    if (!anyMatch && q) {
+      tree.innerHTML = '<div class="cat-empty">No matches for "' + escHtml(q) + '".</div>';
+    }
+  }
+
+  function toggleCollapsed(key) {
+    if (collapsed.has(key)) collapsed.delete(key);
+    else collapsed.add(key);
+    renderCatalog();
+  }
+
+  function shortId(id) {
+    if (!id) return '';
+    if (id.length <= 18) return id;
+    return id.substring(0, 8) + '…' + id.substring(id.length - 8);
+  }
+
+  // ── PANELS / SLOTS / STATE MUTATIONS ─────────────────────────────────────────
+  function addPanel() {
+    profile.panels.push({
+      name: 'Panel ' + (profile.panels.length + 1),
+      color: '#4f8ef7',
+      slots: [],
+    });
+    selectedPanelIndex = profile.panels.length - 1;
+    renderCanvas();
+  }
+
+  function deletePanel(idx) {
+    profile.panels.splice(idx, 1);
+    if (selectedPanelIndex >= profile.panels.length) selectedPanelIndex = profile.panels.length - 1;
+    renderCanvas();
+  }
+
+  function selectPanel(idx) {
+    selectedPanelIndex = idx;
+    renderCanvas();
+  }
+
+  function movePanel(idx, delta) {
+    var to = idx + delta;
+    if (to < 0 || to >= profile.panels.length) return;
+    var [p] = profile.panels.splice(idx, 1);
+    profile.panels.splice(to, 0, p);
+    if (selectedPanelIndex === idx) selectedPanelIndex = to;
+    else if (selectedPanelIndex === to) selectedPanelIndex = idx;
+    renderCanvas();
+  }
+
+  function addToolToSelectedPanel(cmd) {
+    if (selectedPanelIndex < 0 || selectedPanelIndex >= profile.panels.length) {
+      addPanel();
+    }
+    profile.panels[selectedPanelIndex].slots.push({
+      type: 'tool',
+      name: cmd.displayName || cmd.id,
+      commandId: cmd.id,
+      sourceTab: cmd.sourceTab || null,
+      sourcePanel: cmd.sourcePanel || null,
+    });
+    renderCanvas();
+  }
+
+  function addStackRefToSelectedPanel(stackName) {
+    if (selectedPanelIndex < 0 || selectedPanelIndex >= profile.panels.length) addPanel();
+    profile.panels[selectedPanelIndex].slots.push({
+      type: 'stack',
+      name: stackName,
+    });
+    renderCanvas();
+  }
+
+  function deleteSlot(panelIdx, slotIdx) {
+    profile.panels[panelIdx].slots.splice(slotIdx, 1);
+    renderCanvas();
+  }
+
+  function moveSlot(panelIdx, slotIdx, delta) {
+    var slots = profile.panels[panelIdx].slots;
+    var to = slotIdx + delta;
+    if (to < 0 || to >= slots.length) return;
+    var [s] = slots.splice(slotIdx, 1);
+    slots.splice(to, 0, s);
+    renderCanvas();
+  }
+
+  function setOpacity(v) {
+    profile.panelOpacity = parseInt(v, 10);
+    document.getElementById('propOpacityVal').textContent = profile.panelOpacity;
+  }
+
+  // ── STACKS ──────────────────────────────────────────────────────────────────
+  function addStack() {
+    var n = 1;
+    while (profile.stacks['Stack ' + n]) n++;
+    profile.stacks['Stack ' + n] = { tools: [] };
+    renderStacks();
+  }
+
+  function renameStack(oldName, newName) {
+    newName = (newName || '').trim();
+    if (!newName || newName === oldName) { renderStacks(); return; }
+    if (profile.stacks[newName]) {
+      showToast('Stack "' + newName + '" already exists.', 'err');
+      renderStacks();
+      return;
+    }
+    profile.stacks[newName] = profile.stacks[oldName];
+    delete profile.stacks[oldName];
+    // Rewrite any slots that reference the old name.
+    profile.panels.forEach(function(p) {
+      p.slots.forEach(function(s) {
+        if (s.type === 'stack' && s.name === oldName) s.name = newName;
+      });
+    });
+    renderStacks();
+    renderCanvas();
+  }
+
+  function deleteStack(name) {
+    if (!confirm('Delete stack "' + name + '"? Slots referencing it will also be removed.')) return;
+    delete profile.stacks[name];
+    profile.panels.forEach(function(p) {
+      p.slots = p.slots.filter(function(s) { return !(s.type === 'stack' && s.name === name); });
+    });
+    renderStacks();
+    renderCanvas();
+  }
+
+  function addToolToStack(stackName, cmd) {
+    profile.stacks[stackName].tools.push({
+      type: 'tool',
+      name: cmd.displayName || cmd.id,
+      commandId: cmd.id,
+    });
+    renderStacks();
+  }
+
+  function removeToolFromStack(stackName, toolIdx) {
+    profile.stacks[stackName].tools.splice(toolIdx, 1);
+    renderStacks();
+  }
+
+  // ── RENDER ──────────────────────────────────────────────────────────────────
+  function renderAll() {
+    renderCanvas();
+    renderStacks();
+    renderPreview();
+    syncHeader();
+    renderSelectedPanel();
+  }
+
+  // Per-panel branding pane — color, corner radius, and the URL-button
+  // editor. Re-rendered whenever the selection or the panel data changes.
+  function renderSelectedPanel() {
+    var body = document.getElementById('selectedPanelBody');
+    body.innerHTML = '';
+    if (selectedPanelIndex < 0 || selectedPanelIndex >= profile.panels.length) {
+      var stub = document.createElement('div');
+      stub.className = 'prop-empty';
+      stub.textContent = 'No panel selected.';
+      body.appendChild(stub);
+      return;
+    }
+    var panel = profile.panels[selectedPanelIndex];
+    var idx = selectedPanelIndex;
+
+    function row(labelText, control) {
+      var r = document.createElement('div');
+      r.className = 'prop-row';
+      var l = document.createElement('label');
+      l.textContent = labelText;
+      r.appendChild(l);
+      r.appendChild(control);
+      return r;
+    }
+
+    // Name (mirrors the inline panel-card name input).
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = panel.name || '';
+    nameInput.oninput = function() {
+      panel.name = this.value;
+      // Sync the inline input on the canvas card too.
+      var cards = document.querySelectorAll('.panel-card');
+      if (cards[idx]) {
+        var inline = cards[idx].querySelector('.panel-name-input');
+        if (inline) inline.value = panel.name;
+        var slotCount = cards[idx].querySelector('.panel-slot-count');
+        // count text doesn't depend on name; left intentionally
+      }
+      renderPreview();
+    };
+    body.appendChild(row('Name', nameInput));
+
+    // Color — type=color picker + hex echo.
+    var colorWrap = document.createElement('div');
+    colorWrap.className = 'color-row';
+    var colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    var initialColor = normalizeHex(panel.color) || '#4f8ef7';
+    colorInput.value = initialColor;
+    var hexLabel = document.createElement('span');
+    hexLabel.className = 'color-hex';
+    hexLabel.textContent = initialColor;
+    colorInput.oninput = function() {
+      panel.color = this.value;
+      hexLabel.textContent = this.value;
+      // Update card stripe + preview live.
+      var cards = document.querySelectorAll('.panel-card');
+      if (cards[idx]) {
+        var stripe = cards[idx].querySelector('.panel-stripe');
+        if (stripe) stripe.style.background = this.value;
+      }
+      renderPreview();
+    };
+    colorWrap.appendChild(colorInput);
+    colorWrap.appendChild(hexLabel);
+    body.appendChild(row('Color', colorWrap));
+
+    // Corner radius is no longer user-authored — pyRevit RST hardcoded
+    // PANEL_CORNER_RADIUS_PX = 5 and the C# runtime (RST-008) will do the
+    // same. Panel.CornerRadius stays in the model for round-trip fidelity
+    // with existing v1 profiles, but the builder doesn't surface it.
+
+    // URL button editor — collapsed by default; toggled open via button.
+    var urlSection = document.createElement('div');
+    urlSection.className = 'prop-row';
+    var urlLabel = document.createElement('label');
+    urlLabel.textContent = 'URL Buttons';
+    urlSection.appendChild(urlLabel);
+    var urlBtn = document.createElement('button');
+    urlBtn.className = 'btn';
+    urlBtn.textContent = '+ URL Button';
+    urlBtn.onclick = function() {
+      if (urlSection.querySelector('.url-editor')) return;
+      urlSection.appendChild(buildUrlEditor(idx, urlSection));
+    };
+    urlSection.appendChild(urlBtn);
+    body.appendChild(urlSection);
+  }
+
+  // Inline form to add a URL slot to the given panel. Slots persist as
+  // tool-type with commandId="URL:<href>" — same shape RibbonBuilder
+  // already understands.
+  function buildUrlEditor(panelIdx, parent) {
+    var box = document.createElement('div');
+    box.className = 'url-editor';
+    var nameIn = document.createElement('input');
+    nameIn.type = 'text';
+    nameIn.placeholder = 'Button label';
+    var urlIn = document.createElement('input');
+    urlIn.type = 'text';
+    urlIn.placeholder = 'https://example.com';
+    var actions = document.createElement('div');
+    actions.className = 'url-actions';
+    var cancel = document.createElement('button');
+    cancel.className = 'btn ghost';
+    cancel.textContent = 'Cancel';
+    cancel.onclick = function() { parent.removeChild(box); };
+    var add = document.createElement('button');
+    add.className = 'btn primary';
+    add.textContent = 'Add';
+    add.onclick = function() {
+      var name = (nameIn.value || '').trim();
+      var url = normalizeUrl((urlIn.value || '').trim());
+      if (!name) { showToast('Button label required.', 'err'); return; }
+      if (!url) { showToast('URL required.', 'err'); return; }
+      profile.panels[panelIdx].slots.push({
+        type: 'tool',
+        name: name,
+        commandId: 'URL:' + url,
+      });
+      rstLog('info', 'builder: url button added', { panelIdx: panelIdx, name: name, url: url });
+      parent.removeChild(box);
+      renderCanvas();
+    };
+    actions.appendChild(cancel);
+    actions.appendChild(add);
+    box.appendChild(nameIn);
+    box.appendChild(urlIn);
+    box.appendChild(actions);
+    setTimeout(function() { nameIn.focus(); }, 0);
+    return box;
+  }
+
+  // Mirrors RST.Engine.Ribbon.UrlNormalizer — coerce user input into
+  // something ShellExecute will open. Bare hostnames get https://, bare
+  // emails get mailto:, anything with a recognized scheme passes through.
+  function normalizeUrl(v) {
+    if (!v) return '';
+    var s = String(v).trim();
+    if (!s) return '';
+    var schemes = ['http://', 'https://', 'mailto:', 'ftp://', 'file://', 'tel:'];
+    var lc = s.toLowerCase();
+    for (var i = 0; i < schemes.length; i++) {
+      if (lc.indexOf(schemes[i]) === 0) return s;
+    }
+    if (s.indexOf('@') >= 0 && s.indexOf('/') < 0) return 'mailto:' + s;
+    return 'https://' + s;
+  }
+
+  // <input type="color"> rejects shorthand (#abc) and uppercase variants;
+  // canonicalise so the picker initialises to the panel's current color
+  // even when the JSON used a shorthand or all-caps form.
+  function normalizeHex(v) {
+    if (!v) return null;
+    var s = String(v).trim().toLowerCase();
+    var m3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(s);
+    if (m3) return '#' + m3[1] + m3[1] + m3[2] + m3[2] + m3[3] + m3[3];
+    if (/^#[0-9a-f]{6}$/.test(s)) return s;
+    return null;
+  }
+
+  // Convert "#RRGGBB" + opacity (0-100) to "rgba(r,g,b,a)" for the live
+  // preview. Mirrors PanelStyling.cs in the running ribbon — see-through
+  // panels at low opacity, fully opaque at 100, sane fallback when the
+  // hex is malformed.
+  function hexToRgba(hex, opacityPct) {
+    var h = (hex || '').trim().replace(/^#/, '');
+    if (h.length !== 6) return 'rgba(79,142,247,1)';
+    var r = parseInt(h.slice(0, 2), 16);
+    var g = parseInt(h.slice(2, 4), 16);
+    var b = parseInt(h.slice(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return 'rgba(79,142,247,1)';
+    var pct = (opacityPct == null || isNaN(opacityPct)) ? 100 : opacityPct;
+    var a = Math.max(0, Math.min(100, pct)) / 100;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+  }
+
+  function renderPreview() {
+    document.getElementById('previewTabPill').textContent = profile.tab || '—';
+    var canvas = document.getElementById('previewCanvas');
+
+    if (!profile.panels || profile.panels.length === 0) {
+      canvas.innerHTML = '<div class="preview-canvas-empty">No panels configured.</div>';
+      return;
+    }
+
+    var panelOpacity = profile.panelOpacity != null ? profile.panelOpacity : 100;
+
+    canvas.innerHTML = profile.panels.map(function(panel) {
+      var innerHtml = (panel.slots || []).map(function(slot) {
+        if (!slot) return '';
+        if (slot.type === 'tool') {
+          var packName = parsePackIcon(slot.iconFile);
+          var iconHtml = packName
+            ? '<img class="p-rib-icon-img" alt="" src="icons/pack/32_' + escHtml(packName) + '.png">'
+            : '⬜';
+          return '<div class="p-rib-btn">' +
+                   '<div class="p-rib-icon">' + iconHtml + '</div>' +
+                   '<div class="p-rib-label">' + escHtml(slot.name || '') + '</div>' +
+                 '</div>';
+        }
+        if (slot.type === 'stack') {
+          var stackDef = profile.stacks[slot.name];
+          var tools = (stackDef && stackDef.tools) || [];
+          if (tools.length === 0) {
+            // Render a stub stack so an empty stack-ref is still visible.
+            return '<div class="p-rib-stack"><div class="p-rib-stack-item">' +
+                     '<div class="p-rib-stack-icon">≡</div>' +
+                     '<div class="p-rib-stack-label" style="opacity:0.5">' + escHtml(slot.name) + ' (empty)</div>' +
+                   '</div></div>';
+          }
+          return '<div class="p-rib-stack">' +
+                   tools.map(function(t) {
+                     return '<div class="p-rib-stack-item">' +
+                              '<div class="p-rib-stack-icon">≡</div>' +
+                              '<div class="p-rib-stack-label">' + escHtml(t.name) + '</div>' +
+                            '</div>';
+                   }).join('') +
+                 '</div>';
+        }
+        return '';
+      }).join('');
+
+      var panelBg = hexToRgba(panel.color || '#4f8ef7', panelOpacity);
+      return '<div class="p-panel" style="background:' + panelBg + '">' +
+               '<div class="p-panel-inner">' + (innerHtml || '<span class="p-panel-empty">Empty</span>') + '</div>' +
+               '<div class="p-panel-name">' + escHtml(panel.name) + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  function renderCanvas() {
+    var canvas = document.getElementById('canvas');
+    canvas.innerHTML = '';
+
+    if (profile.panels.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'canvas-empty';
+      empty.textContent = 'No panels yet. Click "+ Add Panel" to start.';
+      canvas.appendChild(empty);
+      return;
+    }
+
+    profile.panels.forEach(function(panel, pIdx) {
+      var card = document.createElement('div');
+      card.className = 'panel-card' + (pIdx === selectedPanelIndex ? ' selected' : '');
+      card.onclick = function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        selectPanel(pIdx);
+      };
+
+      // Panel-level drag = reorder among panels.
+      card.ondragover = function(e) {
+        if (!drag) return;
+        if (drag.kind === 'panel' && drag.panelIdx !== pIdx) {
+          e.preventDefault();
+          var rect = card.getBoundingClientRect();
+          var before = (e.clientY - rect.top) < rect.height / 2;
+          card.classList.toggle('drop-before', before);
+          card.classList.toggle('drop-after', !before);
+        } else if (drag.kind === 'catalog' || drag.kind === 'slot') {
+          e.preventDefault();
+          card.classList.add('drag-over');
+        }
+      };
+      card.ondragleave = function() {
+        card.classList.remove('drop-before', 'drop-after', 'drag-over');
+      };
+      card.ondrop = function(e) {
+        e.preventDefault();
+        card.classList.remove('drop-before', 'drop-after', 'drag-over');
+        if (!drag) return;
+        if (drag.kind === 'panel' && drag.panelIdx !== pIdx) {
+          var rect = card.getBoundingClientRect();
+          var before = (e.clientY - rect.top) < rect.height / 2;
+          var to = pIdx + (before ? 0 : 1);
+          var [moved] = profile.panels.splice(drag.panelIdx, 1);
+          if (drag.panelIdx < to) to--;
+          profile.panels.splice(to, 0, moved);
+          selectedPanelIndex = to;
+          renderCanvas();
+        } else if (drag.kind === 'catalog') {
+          // Drop catalog command into this panel as a tool slot.
+          profile.panels[pIdx].slots.push({
+            type: 'tool',
+            name: drag.cmd.displayName || drag.cmd.id,
+            commandId: drag.cmd.id,
+            sourceTab: drag.cmd.sourceTab || null,
+            sourcePanel: drag.cmd.sourcePanel || null,
+          });
+          selectedPanelIndex = pIdx;
+          renderCanvas();
+        } else if (drag.kind === 'slot' && drag.panelIdx !== pIdx) {
+          // Move slot to end of this panel.
+          var src = profile.panels[drag.panelIdx].slots.splice(drag.slotIdx, 1)[0];
+          profile.panels[pIdx].slots.push(src);
+          selectedPanelIndex = pIdx;
+          renderCanvas();
+        }
+      };
+
+      var stripe = document.createElement('div');
+      stripe.className = 'panel-stripe';
+      stripe.style.background = panel.color || '#4f8ef7';
+      card.appendChild(stripe);
+
+      var head = document.createElement('div');
+      head.className = 'panel-head';
+      head.draggable = true;
+      head.ondragstart = function(e) {
+        drag = { kind: 'panel', panelIdx: pIdx };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'panel:' + pIdx);
+      };
+      head.ondragend = function() {
+        drag = null;
+        document.querySelectorAll('.panel-card').forEach(function(c) {
+          c.classList.remove('drop-before', 'drop-after', 'drag-over');
+        });
+      };
+
+      var nameInput = document.createElement('input');
+      nameInput.className = 'panel-name-input';
+      nameInput.value = panel.name;
+      nameInput.onclick = function(e) { e.stopPropagation(); };
+      nameInput.oninput = function() { panel.name = this.value; renderPreview(); };
+      head.appendChild(nameInput);
+
+      var slotCount = document.createElement('span');
+      slotCount.className = 'panel-slot-count';
+      slotCount.textContent = panel.slots.length + ' slot' + (panel.slots.length === 1 ? '' : 's');
+      head.appendChild(slotCount);
+
+      var actions = document.createElement('div');
+      actions.className = 'panel-actions';
+      actions.innerHTML = '';
+      actions.appendChild(makeBtn('▲', function() { movePanel(pIdx, -1); }, 'Move up'));
+      actions.appendChild(makeBtn('▼', function() { movePanel(pIdx, +1); }, 'Move down'));
+      actions.appendChild(makeBtn('×', function() {
+        if (confirm('Delete panel "' + panel.name + '"?')) deletePanel(pIdx);
+      }, 'Delete panel', 'danger'));
+      head.appendChild(actions);
+      card.appendChild(head);
+
+      var body = document.createElement('div');
+      body.className = 'panel-body' + (panel.slots.length === 0 ? ' empty' : '');
+      if (panel.slots.length === 0) {
+        body.textContent = 'Drop a command here, or click one in the Commands pane.';
+      } else {
+        panel.slots.forEach(function(slot, sIdx) {
+          body.appendChild(makeSlotEl(panel, pIdx, slot, sIdx));
+        });
+      }
+      card.appendChild(body);
+
+      canvas.appendChild(card);
+    });
+    renderPreview();
+    renderSelectedPanel();
+  }
+
+  function makeSlotEl(panel, pIdx, slot, sIdx) {
+    var el = document.createElement('div');
+    el.className = 'slot';
+    el.draggable = true;
+    el.ondragstart = function(e) {
+      drag = { kind: 'slot', panelIdx: pIdx, slotIdx: sIdx };
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'slot:' + pIdx + ':' + sIdx);
+      el.classList.add('drag-source');
+      e.stopPropagation();   // don't bubble to the panel-head drag
+    };
+    el.ondragend = function() {
+      drag = null;
+      el.classList.remove('drag-source');
+      document.querySelectorAll('.slot').forEach(function(s) {
+        s.classList.remove('drop-before', 'drop-after');
+      });
+    };
+    el.ondragover = function(e) {
+      if (!drag) return;
+      if (drag.kind === 'slot' || drag.kind === 'catalog') {
+        e.preventDefault();
+        e.stopPropagation();
+        var rect = el.getBoundingClientRect();
+        var before = (e.clientY - rect.top) < rect.height / 2;
+        el.classList.toggle('drop-before', before);
+        el.classList.toggle('drop-after', !before);
+      }
+    };
+    el.ondragleave = function() {
+      el.classList.remove('drop-before', 'drop-after');
+    };
+    el.ondrop = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drop-before', 'drop-after');
+      if (!drag) return;
+      var rect = el.getBoundingClientRect();
+      var before = (e.clientY - rect.top) < rect.height / 2;
+      var insertAt = sIdx + (before ? 0 : 1);
+
+      if (drag.kind === 'catalog') {
+        var newSlot = {
+          type: 'tool',
+          name: drag.cmd.displayName || drag.cmd.id,
+          commandId: drag.cmd.id,
+          sourceTab: drag.cmd.sourceTab || null,
+          sourcePanel: drag.cmd.sourcePanel || null,
+        };
+        profile.panels[pIdx].slots.splice(insertAt, 0, newSlot);
+        selectedPanelIndex = pIdx;
+        renderCanvas();
+        return;
+      }
+
+      if (drag.kind === 'slot') {
+        if (drag.panelIdx === pIdx && drag.slotIdx === sIdx) return;
+        var src = profile.panels[drag.panelIdx].slots.splice(drag.slotIdx, 1)[0];
+        // If we removed from the same panel above the insertion point, the
+        // index shifts left by one.
+        if (drag.panelIdx === pIdx && drag.slotIdx < insertAt) insertAt--;
+        profile.panels[pIdx].slots.splice(insertAt, 0, src);
+        selectedPanelIndex = pIdx;
+        renderCanvas();
+      }
+    };
+
+    if (slot.type === 'tool') {
+      // Pick-icon button — replaces the legacy "tool" badge. Shows the
+      // currently picked icon's thumbnail (or "+" placeholder when none),
+      // opens the iconpack modal on click.
+      var iconBtn = document.createElement('button');
+      iconBtn.type = 'button';
+      iconBtn.className = 'slot-icon-btn';
+      iconBtn.title = 'Pick icon';
+      refreshSlotIconBtn(iconBtn, slot);
+      iconBtn.onclick = function(e) {
+        e.stopPropagation();
+        openIconPicker(slot, function() {
+          refreshSlotIconBtn(iconBtn, slot);
+          renderPreview();
+        });
+      };
+      el.appendChild(iconBtn);
+    } else {
+      var typeTag = document.createElement('span');
+      typeTag.className = 'slot-type ' + (slot.type || 'tool');
+      typeTag.textContent = slot.type || 'tool';
+      el.appendChild(typeTag);
+    }
+
+    var nameInput = document.createElement('input');
+    nameInput.className = 'slot-name-input';
+    nameInput.value = slot.name || '';
+    nameInput.oninput = function() { slot.name = this.value; renderPreview(); };
+    el.appendChild(nameInput);
+
+    if (slot.type === 'tool' && slot.commandId) {
+      var cmdLabel = document.createElement('span');
+      cmdLabel.className = 'slot-cmd';
+      cmdLabel.title = slot.commandId;
+      cmdLabel.textContent = shortId(slot.commandId);
+      el.appendChild(cmdLabel);
+    }
+
+    var actions = document.createElement('div');
+    actions.className = 'slot-actions';
+    actions.appendChild(makeBtn('▲', function() { moveSlot(pIdx, sIdx, -1); }, 'Move up'));
+    actions.appendChild(makeBtn('▼', function() { moveSlot(pIdx, sIdx, +1); }, 'Move down'));
+    actions.appendChild(makeBtn('×', function() { deleteSlot(pIdx, sIdx); }, 'Remove', 'danger'));
+    el.appendChild(actions);
+    return el;
+  }
+
+  function renderStacks() {
+    if (!STACKS_ENABLED) return;
+    var list = document.getElementById('stackList');
+    list.innerHTML = '';
+    var names = Object.keys(profile.stacks).sort();
+    if (names.length === 0) {
+      list.innerHTML = '<div class="stack-empty">No stacks. Add one and drop commands into it.</div>';
+      return;
+    }
+    names.forEach(function(name) {
+      var stack = profile.stacks[name];
+      var card = document.createElement('div');
+      card.className = 'stack-card';
+
+      // Drop target — catalog commands drop into the stack tools list.
+      card.ondragover = function(e) {
+        if (drag && drag.kind === 'catalog') {
+          e.preventDefault();
+          card.style.borderColor = 'var(--accent3)';
+        }
+      };
+      card.ondragleave = function() { card.style.borderColor = ''; };
+      card.ondrop = function(e) {
+        if (!drag || drag.kind !== 'catalog') return;
+        e.preventDefault();
+        card.style.borderColor = '';
+        addToolToStack(name, drag.cmd);
+      };
+
+      var head = document.createElement('div');
+      head.className = 'stack-card-head';
+
+      var nameInput = document.createElement('input');
+      nameInput.className = 'stack-name-input';
+      nameInput.value = name;
+      nameInput.onblur = function() { renameStack(name, this.value); };
+      nameInput.onkeydown = function(e) { if (e.key === 'Enter') this.blur(); };
+      head.appendChild(nameInput);
+
+      head.appendChild(makeBtn('+ Panel', function() { addStackRefToSelectedPanel(name); }, 'Drop a stack-ref into the selected panel'));
+      head.appendChild(makeBtn('×', function() { deleteStack(name); }, 'Delete stack', 'danger'));
+      card.appendChild(head);
+
+      var toolsEl = document.createElement('div');
+      toolsEl.className = 'stack-tool-list';
+      if (stack.tools.length === 0) {
+        toolsEl.innerHTML = '<div class="stack-empty" style="padding:4px">Drop commands here.</div>';
+      } else {
+        stack.tools.forEach(function(t, ti) {
+          var tEl = document.createElement('div');
+          tEl.className = 'stack-tool';
+          tEl.innerHTML =
+            '<span class="stack-tool-name">' + escHtml(t.name) + '</span>' +
+            (t.commandId ? '<span class="stack-tool-cmd">' + escHtml(shortId(t.commandId)) + '</span>' : '');
+          var rm = makeBtn('×', function() { removeToolFromStack(name, ti); }, 'Remove', 'danger');
+          tEl.appendChild(rm);
+          toolsEl.appendChild(tEl);
+        });
+      }
+      card.appendChild(toolsEl);
+      list.appendChild(card);
+    });
+    renderPreview();
+  }
+
+  // ── RST PRESETS ─────────────────────────────────────────────────────────────
+  // Admin-authored Loader defaults: hidden tabs (RSTify) + disable-unused
+  // toggle. Persisted on profile.presets and surfaced by the Loader when a
+  // user selects a non-active profile (so the picker + footer toggle land
+  // pre-configured). The Loader still lets the user tweak per load.
+
+  // Tabs that should never appear in the hide picker — same set as the
+  // Loader's renderTabToggles. Built-in core tabs are always visible by
+  // contract; the profile's own tab obviously can't be hidden.
+  var PRESET_CORE_TABS = new Set(['Modify', 'Manage', 'View', 'Annotate', 'Add-Ins', 'Create']);
+
+  function renderPresetsSummary() {
+    var el = document.getElementById('presetsSummary');
+    if (!el) return;
+    var p = profile.presets || { hiddenTabs: [], disableUnusedAddins: false };
+    var n = (p.hiddenTabs || []).length;
+    var parts = [];
+    parts.push(n === 0 ? 'No tabs hidden' : (n + ' tab' + (n === 1 ? '' : 's') + ' hidden'));
+    parts.push('Disable Unused: ' + (p.disableUnusedAddins ? 'on' : 'off'));
+    el.textContent = parts.join('  •  ');
+  }
+
+  function openPresetsModal() {
+    var p = profile.presets || { hiddenTabs: [], disableUnusedAddins: false };
+    var preset = new Set(p.hiddenTabs || []);
+    var lockedTab = (profile.tab || '').trim();
+
+    // Picker source — every ribbon tab the admin's machine knows about
+    // minus core tabs and the profile's own tab. Tabs that were in the
+    // preset list but aren't on the current ribbon (e.g. an addin the
+    // admin is editing on a stripped-down machine) are still rendered
+    // so they're visible/removable rather than silently dropped.
+    var fromRibbon = (ALL_TABS || []).filter(function(t) {
+      return t && !PRESET_CORE_TABS.has(t) && t !== lockedTab;
+    });
+    var fromPreset = (p.hiddenTabs || []).filter(function(t) {
+      return t && fromRibbon.indexOf(t) === -1 && t !== lockedTab && !PRESET_CORE_TABS.has(t);
+    });
+    var tabs = fromRibbon.concat(fromPreset);
+
+    var list = document.getElementById('presetsTabsList');
+    if (tabs.length === 0) {
+      list.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 4px">' +
+                       'No tabs available to hide on this machine.</div>';
+    } else {
+      list.innerHTML = tabs.map(function(t) {
+        var checked = preset.has(t) ? ' checked' : '';
+        return '<label class="preset-tab-row">' +
+               '<span>' + escHtml(t) + '</span>' +
+               '<span class="tab-toggle-switch">' +
+               '<input type="checkbox" data-tab="' + escAttr(t) + '"' + checked + '>' +
+               '<div class="tab-toggle-track"><div class="tab-toggle-thumb"></div></div>' +
+               '</span>' +
+               '</label>';
+      }).join('');
+    }
+
+    document.getElementById('presetsDisableUnused').checked = !!p.disableUnusedAddins;
+    document.getElementById('presetsOverlay').hidden = false;
+  }
+
+  function closePresetsModal() {
+    document.getElementById('presetsOverlay').hidden = true;
+  }
+
+  function savePresetsModal() {
+    var checkboxes = document.querySelectorAll('#presetsTabsList input[type="checkbox"]');
+    var hidden = [];
+    checkboxes.forEach(function(cb) {
+      if (cb.checked && cb.dataset.tab) hidden.push(cb.dataset.tab);
+    });
+    var disableUnused = document.getElementById('presetsDisableUnused').checked;
+    profile.presets = { hiddenTabs: hidden, disableUnusedAddins: disableUnused };
+    rstLog('info', 'builder: presets updated', {
+      hiddenTabs: hidden.length, disableUnusedAddins: disableUnused,
+    });
+    renderPresetsSummary();
+    closePresetsModal();
+  }
+
+  // ── JUNK CLEANUP TARGETS (RST-031) ─────────────────────────────────────────
+  // Per-profile list consumed by the Health tool's "Clean Junk Files" sweep.
+  // Schema mirrors RST.Core.Profiles.CleanupTarget — id, name, path, kind,
+  // enabled. Path tokens %LocalAppData% / %AppData% / %UserProfile% / and
+  // {revit-version} are expanded by RST.UI.Health.CleanupPathResolver at
+  // run time.
+  var CLEANUP_KIND_DIRECTORY        = 'directory';
+  var CLEANUP_KIND_INI_RECENT_FILES = 'iniRecentFiles';
+
+  // OOB seed list — kept in sync with RST.Core.Profiles.CleanupDefaults.cs
+  // (verified by RST.Tests/Profiles/CleanupDefaultsParityTests if added).
+  function cleanupDefaultsSeed() {
+    return [
+      { id: 'rst.cleanup.temp',        name: 'Temp',                path: '%LocalAppData%\\Temp',                                          kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.pacCache',    name: 'PacCache',            path: '%LocalAppData%\\Autodesk\\Revit\\PacCache',                     kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.journals',    name: 'Journals',            path: '%LocalAppData%\\Autodesk\\Revit\\{revit-version}\\Journals',     kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.collabCache', name: 'Collaboration Cache', path: '%LocalAppData%\\Autodesk\\Revit\\{revit-version}\\CollaborationCache', kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+      { id: 'rst.cleanup.recentFiles', name: 'Recent File List',    path: '%AppData%\\Autodesk\\Revit\\{revit-version}\\Revit.ini',         kind: CLEANUP_KIND_INI_RECENT_FILES, enabled: true },
+      { id: 'rst.cleanup.rstLogs',     name: 'RST Logs',            path: '%AppData%\\RST\\logs',                                            kind: CLEANUP_KIND_DIRECTORY,        enabled: true },
+    ];
+  }
+
+  function ensureCleanupTargets() {
+    if (!Array.isArray(profile.cleanupTargets) || profile.cleanupTargets.length === 0) {
+      profile.cleanupTargets = cleanupDefaultsSeed();
+    }
+    return profile.cleanupTargets;
+  }
+
+  function renderCleanupSummary() {
+    var el = document.getElementById('cleanupSummary');
+    if (!el) return;
+    var t = profile.cleanupTargets;
+    if (!Array.isArray(t)) { el.textContent = 'Defaults will be used.'; return; }
+    var enabled = t.filter(function(x) { return x && x.enabled; }).length;
+    el.textContent = enabled + ' of ' + t.length + ' target' + (t.length === 1 ? '' : 's') + ' enabled.';
+  }
+
+  function openCleanupModal() {
+    ensureCleanupTargets();
+    renderCleanupRows();
+    document.getElementById('cleanupOverlay').classList.add('visible');
+  }
+
+  function closeCleanupModal() {
+    document.getElementById('cleanupOverlay').classList.remove('visible');
+  }
+
+  function renderCleanupRows() {
+    var host = document.getElementById('cleanupRows');
+    host.innerHTML = '';
+    var targets = profile.cleanupTargets || [];
+    if (targets.length === 0) {
+      host.innerHTML = '<div class="cleanup-empty">No targets. Use "+ Add Target" or "Restore Defaults".</div>';
+      return;
+    }
+    targets.forEach(function(t, idx) { host.appendChild(buildCleanupRow(t, idx)); });
+  }
+
+  function buildCleanupRow(target, idx) {
+    var row = document.createElement('div');
+    row.className = 'cleanup-row';
+
+    var enableLabel = document.createElement('label');
+    enableLabel.className = 'tab-toggle-switch';
+    enableLabel.title = 'Enable / disable this target';
+    var enableCb = document.createElement('input');
+    enableCb.type = 'checkbox';
+    enableCb.checked = target.enabled !== false;
+    enableCb.onchange = function() { target.enabled = this.checked; };
+    var enableTrack = document.createElement('div');
+    enableTrack.className = 'tab-toggle-track';
+    enableTrack.innerHTML = '<div class="tab-toggle-thumb"></div>';
+    enableLabel.appendChild(enableCb);
+    enableLabel.appendChild(enableTrack);
+
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Name';
+    nameInput.value = target.name || '';
+    nameInput.oninput = function() { target.name = this.value; };
+
+    var pathInput = document.createElement('input');
+    pathInput.type = 'text';
+    pathInput.placeholder = '%LocalAppData%\\…';
+    pathInput.value = target.path || '';
+    pathInput.oninput = function() { target.path = this.value; };
+
+    var kindSelect = document.createElement('select');
+    [CLEANUP_KIND_DIRECTORY, CLEANUP_KIND_INI_RECENT_FILES].forEach(function(k) {
+      var opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = k;
+      if ((target.kind || CLEANUP_KIND_DIRECTORY) === k) opt.selected = true;
+      kindSelect.appendChild(opt);
+    });
+    kindSelect.onchange = function() { target.kind = this.value; };
+
+    var rmBtn = makeBtn('×', function() {
+      profile.cleanupTargets.splice(idx, 1);
+      renderCleanupRows();
+    }, 'Remove target', 'danger');
+
+    row.appendChild(enableLabel);
+    row.appendChild(nameInput);
+    row.appendChild(pathInput);
+    row.appendChild(kindSelect);
+    row.appendChild(rmBtn);
+    return row;
+  }
+
+  function addCleanupRow() {
+    if (!Array.isArray(profile.cleanupTargets)) profile.cleanupTargets = [];
+    profile.cleanupTargets.push({
+      id: 'rst.cleanup.user.' + Date.now() + '.' + Math.floor(Math.random() * 1000),
+      name: '',
+      path: '',
+      kind: CLEANUP_KIND_DIRECTORY,
+      enabled: true,
+    });
+    renderCleanupRows();
+  }
+
+  function restoreCleanupDefaults() {
+    profile.cleanupTargets = cleanupDefaultsSeed();
+    renderCleanupRows();
+  }
+
+  function saveCleanupModal() {
+    // Strip blank entries (no name AND no path) so the saved profile
+    // doesn't carry empty rows. In-place edits are already live on
+    // profile.cleanupTargets via the row's oninput handlers.
+    profile.cleanupTargets = (profile.cleanupTargets || []).filter(function(t) {
+      return t && ((t.name && t.name.trim()) || (t.path && t.path.trim()));
+    });
+    renderCleanupSummary();
+    closeCleanupModal();
+    rstLog('info', 'builder: cleanup targets saved', {
+      count: profile.cleanupTargets.length,
+      enabled: profile.cleanupTargets.filter(function(x) { return x.enabled; }).length,
+    });
+  }
+
+  // escHtml is defined later in the file; reuse it.
+  function escAttr(s) { return escHtml(s); }
+
+  // ── REQUIRED-ADDIN DETECTION ────────────────────────────────────────────────
+  // Mirror upstream pyRevit RST/ui/profile_manager.html getDetectedAddins
+  // (lines 1861-1929). Walks every placed slot + stack tool, classifies by
+  // sourceTab/sourcePanel, and returns one entry per distinct third-party
+  // tab or panel. The Loader's normalizeRequiredAddins (profile_loader.html:892)
+  // already handles this {tabName, addinFile, url} shape.
+  //
+  // Enrichment from ADDIN_LOOKUP (curated registry vendored under
+  // Assets/lookup/addin_lookup.json): for every detected tab/panel, we look
+  // up addinFile + url and bake them into the entry. Once the profile is
+  // saved, it travels to user machines self-contained — the Loader uses
+  // the baked-in URL to render the "info ↗" download link without needing
+  // the lookup file on the user side.
+
+  var BUILTIN_TABS = new Set([
+    'Architecture', 'Structure', 'Systems', 'Steel', 'Precast',
+    'Insert', 'Annotate', 'Analyze', 'Massing & Site', 'Collaborate',
+    'View', 'Manage', 'Modify', 'Add-Ins', 'Create', 'RST',
+    'FormIt', 'FormIt Converter', 'eTransmit',
+  ]);
+  // Panels Revit ships on built-in tabs that aren't third-party add-ins.
+  // Keeps Macros / External Tools / etc. out of the requiredAddins list.
+  // Mirrors /home/jedi/RST/RST.tab/Loader.panel/ProfileLoader.pushbutton/
+  // script.py:_BUILTIN_PANELS.
+  var BUILTIN_PANELS = new Set([
+    'Align', 'Macros', 'External', 'External Tools',
+    'Analysis', 'Selection', 'Visual Programming',
+  ]);
+
+  function computeRequiredAddins() {
+    // commandId → {sourceTab, sourcePanel} index. Stack tools store only
+    // {type,name,commandId} (addToolToStack), so we resolve their tab/panel
+    // through the catalog rather than duplicating the data on each tool.
+    var byId = {};
+    catalog.forEach(function(c) {
+      if (c && c.id) byId[c.id] = { sourceTab: c.sourceTab || null, sourcePanel: c.sourcePanel || null };
+    });
+
+    var thirdPartyTabs  = new Set();   // tools on non-built-in tabs → tab name is the addin
+    var thirdPartyPanels = new Set();  // tools on built-in tabs → addin lives in the panel name
+
+    function classify(srcTab, srcPanel) {
+      if (!srcTab) return;
+      if (srcTab === 'Custom' || srcTab.indexOf('CustomCtrl_') === 0) return;
+      if (BUILTIN_TABS.has(srcTab)) {
+        if (!srcPanel) return;
+        if (BUILTIN_TABS.has(srcPanel) || BUILTIN_PANELS.has(srcPanel)) return;
+        thirdPartyPanels.add(srcPanel);
+      } else {
+        thirdPartyTabs.add(srcTab);
+      }
+    }
+
+    (profile.panels || []).forEach(function(panel) {
+      (panel.slots || []).forEach(function(slot) {
+        if (!slot) return;
+        if (slot.type === 'tool') {
+          classify(slot.sourceTab, slot.sourcePanel);
+        } else if (slot.type === 'stack') {
+          var stack = profile.stacks ? profile.stacks[slot.name] : null;
+          if (!stack) return;
+          (stack.tools || []).forEach(function(t) {
+            var info = (t && t.commandId) ? byId[t.commandId] : null;
+            if (info) classify(info.sourceTab, info.sourcePanel);
+          });
+        }
+      });
+    });
+
+    // Direct key lookup, then fuzzy fallback against displayName so a
+    // panel or tab that doesn't exactly match a registry key (e.g.
+    // "Lumion" panel vs "Lumion" key — direct hit; or "DiRoots Suite"
+    // panel vs "DiRoots" key — fuzzy hit) still picks up URL/file data.
+    function enrich(name) {
+      var direct = ADDIN_LOOKUP[name];
+      if (direct) return { addinFile: direct.file || null, url: direct.url || '' };
+      var nameLower = name.toLowerCase();
+      var keys = Object.keys(ADDIN_LOOKUP);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var entry = ADDIN_LOOKUP[k] || {};
+        var dn = (entry.displayName || '').toLowerCase();
+        var kl = k.toLowerCase();
+        if (kl && (kl.indexOf(nameLower) !== -1 || nameLower.indexOf(kl) !== -1)) {
+          return { addinFile: entry.file || null, url: entry.url || '' };
+        }
+        if (dn && (dn.indexOf(nameLower) !== -1 || nameLower.indexOf(dn) !== -1)) {
+          return { addinFile: entry.file || null, url: entry.url || '' };
+        }
+      }
+      return { addinFile: null, url: '' };
+    }
+
+    var entries = [];
+    thirdPartyTabs.forEach(function(name) {
+      var e = enrich(name);
+      entries.push({ tabName: name, addinFile: e.addinFile, url: e.url });
+    });
+    thirdPartyPanels.forEach(function(name) {
+      var e = enrich(name);
+      entries.push({ tabName: name, addinFile: e.addinFile, url: e.url });
+    });
+    return entries;
+  }
+
+  // ── BRIDGE I/O ──────────────────────────────────────────────────────────────
+  // Save handler bound to the header Save button — fire-and-forget,
+  // delegates to saveAndMaybeReload (which carries the auto-reload-if-
+  // active flow). Errors land in the toast via the inner Promise chain;
+  // we still .catch here so an uncaught rejection isn't logged twice.
+  function saveProfile() {
+    saveAndMaybeReload().catch(function(err) {
+      rstLog('error', 'builder: saveProfile chain rejected', { err: String(err) });
+    });
+  }
+
+  // Validate, save, and (if the saved profile matches the active one)
+  // trigger a live ribbon reload via load_profile. Returns a Promise:
+  // resolves on full success (including the reload sub-call); rejects
+  // on validation or save failure. Used by both saveProfile and the
+  // Save & Exit modal action.
+  function saveAndMaybeReload() {
+    if (!profile.profile || !profile.profile.trim()) {
+      rstLog('warn', 'builder: save aborted (no name)');
+      showToast('Profile name required.', 'err');
+      return Promise.reject(new Error('no name'));
+    }
+    if (!profile.tab || !profile.tab.trim()) {
+      rstLog('warn', 'builder: save aborted (no tab)', { name: profile.profile });
+      showToast('Tab name required.', 'err');
+      return Promise.reject(new Error('no tab'));
+    }
+    // Rename-as-copy: if the user loaded an existing profile and then
+    // changed its name, save as a NEW profile (fresh id + fresh
+    // exportDate) rather than renaming in place. The original profile
+    // stays on disk untouched. Tab name change does not trigger this —
+    // a profile can legitimately be renamed-and-retabbed in place.
+    var renamedAway = mode === 'edit'
+                   && originalNameOnLoad
+                   && profile.profile.trim() !== originalNameOnLoad.trim();
+    var savedAsCopy = false;
+    if (renamedAway) {
+      // Collision guard — if the new name matches another existing
+      // profile (different id), bail rather than silently overwriting it.
+      var newNameLower = profile.profile.trim().toLowerCase();
+      var collision = (profilesList || []).some(function(p) {
+        return p && p.id && p.id !== profile.id
+               && (p.profile || '').trim().toLowerCase() === newNameLower;
+      });
+      if (collision) {
+        rstLog('warn', 'builder: rename-as-copy aborted (name collision)', {
+          newName: profile.profile, originalName: originalNameOnLoad,
+        });
+        showToast('A profile named "' + profile.profile + '" already exists. Choose a different name.', 'err');
+        return Promise.reject(new Error('name collision'));
+      }
+      rstLog('info', 'builder: rename detected → saving as copy', {
+        originalName: originalNameOnLoad, newName: profile.profile, sourceId: profile.id,
+      });
+      profile.id = null;
+      profile.exportDate = '';
+      savedAsCopy = true;
+    }
+
+    // Auto-derive requiredAddins from placed tools' sourceTab/sourcePanel
+    // before sending to the bridge. Done at save time (rather than on every
+    // slot drop) to keep the editing path cheap; the Loader only consumes
+    // requiredAddins on profile load, so save-time refresh is enough.
+    profile.requiredAddins = computeRequiredAddins();
+    rstLog('info', 'builder: save attempt', {
+      name: profile.profile, tab: profile.tab, panels: profile.panels.length,
+      stacks: Object.keys(profile.stacks).length, mode: mode, id: profile.id,
+      requiredAddins: profile.requiredAddins.length, savedAsCopy: savedAsCopy,
+    });
+    return window.pywebview.api.save_profile(profile).then(function(result) {
+      if (!(result && result.ok)) {
+        var msg = (result && result.error) || 'unknown';
+        rstLog('error', 'builder: save failed', { error: msg });
+        showToast('Save failed: ' + msg, 'err');
+        throw new Error('save failed: ' + msg);
+      }
+      rstLog('info', 'builder: save OK', { fileName: result.fileName, id: result.profile && result.profile.id });
+      // Stash the assigned id so subsequent saves overwrite the same row.
+      if (result.profile) {
+        profile.id = result.profile.id;
+        profile.exportDate = result.profile.exportDate;
+      }
+      mode = 'edit';
+      // The just-saved name is the new baseline — further edits to this
+      // record without a name change are in-place updates. Renaming
+      // again will spawn another copy.
+      originalNameOnLoad = profile.profile || '';
+
+      var savedIsActive = profile.id && profile.id === activeProfileId;
+
+      // Refresh the dropdown so just-saved (or just-renamed) profiles
+      // appear; preserve the current selection across the refresh.
+      window.pywebview.api.get_profiles().then(function(list) {
+        profilesList = list || [];
+        populateProfileSelector();
+        var sel = document.getElementById('profileSelector');
+        if (sel && profile.id) sel.value = profile.id;
+      }).catch(function() { /* non-fatal */ });
+
+      // Saved state IS the disk now — reset dirty baseline.
+      snapshotPristine();
+
+      if (!savedIsActive) {
+        var msg = savedAsCopy
+          ? 'Saved as new profile "' + profile.profile + '" — original kept.'
+          : 'Saved as ' + result.fileName;
+        showToast(msg, 'ok');
+        return result;
+      }
+      // Trigger a live reload — same code path the Loader uses on
+      // Apply. Keeps the user's last hidden_tabs / disable_non_required
+      // settings, just rebuilds the ribbon with the new profile bytes.
+      rstLog('info', 'builder: saved profile is active — auto-reloading');
+      return window.pywebview.api.load_profile(
+        profile.profile,
+        activeDisableNonRequired,
+        currentRevitVersion,
+        activeHiddenTabs,
+        profile.id
+      ).then(function(loadResult) {
+        if (loadResult && loadResult.ok) {
+          rstLog('info', 'builder: auto-reload OK', { restart_needed: loadResult.restart_needed });
+          showToast('Saved & ribbon reloaded.', 'ok');
+        } else {
+          rstLog('warn', 'builder: auto-reload returned ok=false', { result: loadResult });
+          showToast('Saved (auto-reload failed).', 'err');
+        }
+        return result;
+      });
+    });
+  }
+
+  // ── EXIT FLOW ───────────────────────────────────────────────────────────────
+  // Exit button: clean → close. Dirty → confirm modal (Save & Exit /
+  // Discard & Exit / Cancel). Save & Exit chains through saveAndMaybeReload,
+  // so closing happens only after the save (and the auto-reload if the
+  // edited profile was the active one) completes.
+  function exitBuilder() {
+    if (!isProfileDirty()) {
+      rstLog('info', 'builder: exit clicked, no unsaved changes — closing');
+      closeBuilderWindow();
+      return;
+    }
+    rstLog('info', 'builder: exit clicked with unsaved changes — prompting');
+    showExitConfirmModal();
+  }
+
+  function confirmExitSaveAndClose() {
+    rstLog('info', 'builder: exit modal → Save & Exit');
+    hideExitConfirmModal();
+    saveAndMaybeReload().then(function() {
+      closeBuilderWindow();
+    }).catch(function(err) {
+      // Save failed — keep the window open so the user can fix the
+      // validation error or whatever the save bridge complained about.
+      rstLog('warn', 'builder: Save & Exit aborted (save failed)', { err: String(err) });
+    });
+  }
+
+  function confirmExitDiscard() {
+    rstLog('info', 'builder: exit modal → Discard & Exit');
+    hideExitConfirmModal();
+    closeBuilderWindow();
+  }
+
+  function cancelExit() {
+    rstLog('info', 'builder: exit modal → Cancel');
+    hideExitConfirmModal();
+  }
+
+  function showExitConfirmModal() {
+    var m = document.getElementById('exitModal');
+    if (m) m.hidden = false;
+  }
+
+  function hideExitConfirmModal() {
+    var m = document.getElementById('exitModal');
+    if (m) m.hidden = true;
+  }
+
+  function closeBuilderWindow() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.close_window) {
+      window.pywebview.api.close_window();
+    }
+  }
+
+  function exportJson() {
+    if (!profile.profile || !profile.profile.trim()) {
+      rstLog('warn', 'builder: export aborted (no name)');
+      showToast('Profile name required.', 'err'); return;
+    }
+    rstLog('info', 'builder: export attempt', { name: profile.profile });
+    window.pywebview.api.export_profile(profile).then(function(result) {
+      if (result && result.ok) {
+        rstLog('info', 'builder: export OK', { path: result.path });
+        showToast('Exported to ' + result.path, 'ok');
+      } else if (result && result.error !== 'cancelled') {
+        rstLog('error', 'builder: export failed', { error: result.error });
+        showToast('Export failed: ' + result.error, 'err');
+      } else {
+        rstLog('info', 'builder: export cancelled');
+      }
+    }).catch(function(err) {
+      rstLog('error', 'builder: export threw', { err: String(err) });
+      showToast('Export failed: ' + err, 'err');
+    });
+  }
+
+  // ── HELPERS ─────────────────────────────────────────────────────────────────
+  function makeBtn(label, onClick, title, variant) {
+    var b = document.createElement('button');
+    b.className = 'btn icon' + (variant ? ' ' + variant : '');
+    b.textContent = label;
+    if (title) b.title = title;
+    b.onclick = function(e) { e.stopPropagation(); onClick(); };
+    return b;
+  }
+
+  function escHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showToast(msg, kind) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + (kind || '');
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(function() { t.className = 'toast'; }, 2400);
+  }
+
+  // ── ICON PICKER ────────────────────────────────────────────────────────────
+  // Vendored 48-icon pack lives under Assets/icons/pack/32_<name>.png and
+  // is enumerated once via LoaderBridge.list_iconpack(). Selection writes
+  // slot.iconFile = "pack:<name>" (or null for None); ProfileTabBuilder
+  // resolves the same string back at ribbon-build time.
+  var iconPackCache = null;
+
+  function parsePackIcon(s) {
+    if (!s || typeof s !== 'string') return null;
+    if (s.toLowerCase().indexOf('pack:') !== 0) return null;
+    return s.substring(5).trim();
+  }
+
+  function refreshSlotIconBtn(btn, slot) {
+    btn.innerHTML = '';
+    var name = parsePackIcon(slot.iconFile);
+    if (name) {
+      var img = document.createElement('img');
+      img.className = 'slot-icon-btn-thumb';
+      img.alt = name;
+      img.src = 'icons/pack/32_' + name + '.png';
+      btn.appendChild(img);
+    } else {
+      var ph = document.createElement('span');
+      ph.className = 'slot-icon-btn-placeholder';
+      ph.textContent = '+';
+      btn.appendChild(ph);
+    }
+    var label = document.createElement('span');
+    label.className = 'slot-icon-btn-label';
+    label.textContent = name || 'Icon';
+    btn.appendChild(label);
+  }
+
+  function ensureIconPack(cb) {
+    if (iconPackCache !== null) { cb(iconPackCache); return; }
+    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.list_iconpack) {
+      iconPackCache = [];
+      cb(iconPackCache);
+      return;
+    }
+    window.pywebview.api.list_iconpack().then(function(list) {
+      iconPackCache = (list || []).map(function(e) { return e.name; });
+      rstLog('info', 'iconpack loaded', { count: iconPackCache.length });
+      cb(iconPackCache);
+    }).catch(function(err) {
+      rstLog('error', 'iconpack list failed', { err: String(err) });
+      iconPackCache = [];
+      cb(iconPackCache);
+    });
+  }
+
+  function closeIconPicker() {
+    var overlay = document.getElementById('iconPickerOverlay');
+    overlay.classList.remove('visible');
+  }
+
+  function openIconPicker(slot, onApply) {
+    var overlay = document.getElementById('iconPickerOverlay');
+    var grid = document.getElementById('iconPickerGrid');
+    ensureIconPack(function(names) {
+      grid.innerHTML = '';
+      var current = parsePackIcon(slot.iconFile);
+
+      function addTile(name, isNone) {
+        var t = document.createElement('button');
+        t.type = 'button';
+        var sel = isNone ? (current === null) : (current === name);
+        t.className = 'icon-tile' + (sel ? ' selected' : '');
+        t.title = isNone ? 'No icon (default)' : name;
+        if (isNone) {
+          t.innerHTML = '<span class="icon-tile-none">∅</span><span class="icon-tile-label">none</span>';
+        } else {
+          var img = document.createElement('img');
+          img.alt = '';
+          img.src = 'icons/pack/32_' + name + '.png';
+          t.appendChild(img);
+          var lbl = document.createElement('span');
+          lbl.className = 'icon-tile-label';
+          lbl.textContent = name;
+          t.appendChild(lbl);
+        }
+        t.onclick = function() {
+          slot.iconFile = isNone ? null : ('pack:' + name);
+          closeIconPicker();
+          onApply();
+        };
+        grid.appendChild(t);
+      }
+
+      addTile(null, true);
+      names.forEach(function(n) { addTile(n, false); });
+      overlay.classList.add('visible');
+    });
+  }
+
+  // Best-effort JS → Serilog. Bridge may not be ready at the moment of
+  // call (e.g. window.onerror firing before pywebviewready); guard.
+  function rstLog(level, message, payload) {
+    try {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.log_event) {
+        window.pywebview.api.log_event(level, message, payload || {});
+      }
+    } catch (e) { /* best-effort only */ }
+  }
+
+  window.addEventListener('error', function(e) {
+    rstLog('error', 'window.onerror', {
+      msg: e.message, src: e.filename, line: e.lineno, col: e.colno,
+    });
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    rstLog('error', 'unhandledrejection', { reason: String(e.reason) });
+  });
+
+  document.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
