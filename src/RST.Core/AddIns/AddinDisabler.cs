@@ -100,15 +100,46 @@ public static class AddinDisabler
     /// </summary>
     public static RestoreResult RestoreAll(
         string revitVersion,
+        Action<string, Exception>? onError = null) =>
+        RestoreFiltered(AddinDirectoryScanner.ScanWithSource(revitVersion),
+                        manifest => true,
+                        onError);
+
+    /// <summary>
+    /// Rename only the .addin.RSTdisabled files that match
+    /// <paramref name="required"/> (by file name first, AddinId GUID
+    /// second) back to plain <c>.addin</c>. Used by Load Profile QA so
+    /// a previously-disabled required addin auto-reactivates without
+    /// touching unrelated disabled files. Idempotent.
+    /// </summary>
+    public static RestoreResult RestoreRequired(
+        string revitVersion,
+        IReadOnlyList<RequiredAddin> required,
+        Action<string, Exception>? onError = null) =>
+        RestoreFiltered(AddinDirectoryScanner.ScanWithSource(revitVersion),
+                        manifest => IsRequired(manifest,
+                                               BuildRequiredFileSet(required),
+                                               BuildRequiredIdSet(required)),
+                        onError);
+
+    /// <summary>
+    /// Test seam — accepts a pre-built scan and a predicate. Public
+    /// callers go through <see cref="RestoreAll"/> /
+    /// <see cref="RestoreRequired"/> which scan the live filesystem.
+    /// </summary>
+    internal static RestoreResult RestoreFiltered(
+        IEnumerable<(AddinManifest Manifest, AddinSearchPath Source)> scan,
+        Func<AddinManifest, bool> shouldRestore,
         Action<string, Exception>? onError = null)
     {
         int restored = 0, failed = 0;
         var restoredFiles = new List<string>();
         var failedFiles = new List<string>();
 
-        foreach (var (manifest, source) in AddinDirectoryScanner.ScanWithSource(revitVersion))
+        foreach (var (manifest, _source) in scan)
         {
             if (!manifest.IsDisabled) continue;
+            if (!shouldRestore(manifest)) continue;
             // Restore is non-destructive — even read-only paths that
             // somehow got disabled get put back. (Won't happen via
             // DisableNonRequired but a manual rename / pyRevit version

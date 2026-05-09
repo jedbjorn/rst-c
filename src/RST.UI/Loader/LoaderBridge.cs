@@ -136,6 +136,67 @@ public class LoaderBridge
         Log.Information("Bridge.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs}",
                         profileName, profileId, disableNonRequired, hiddenTabs.Length);
 
+        // QA: classify required-addin status for THIS profile before
+        // anything else fires. Auto-restore any InstalledDisabled
+        // entries (rename .RSTdisabled → .addin) so the next Revit
+        // launch picks them up. Surface NotInstalled entries so the
+        // UI can show the user a download link. Anything restored
+        // forces restart_needed=true (DLLs already resident this
+        // session don't hot-reload).
+        var qaRestored = new List<object>();
+        var qaNotInstalled = new List<object>();
+        bool qaForcedRestart = false;
+        try
+        {
+            var qa = RequiredAddinQa.Classify(_revitVersion, entry.Profile.RequiredAddins);
+            int activeCount = 0, disabledCount = 0, missingCount = 0;
+            var disabledMatches = new List<RequiredAddin>();
+            foreach (var r in qa)
+            {
+                switch (r.Status)
+                {
+                    case RequiredAddinStatus.InstalledActive:
+                        activeCount++;
+                        break;
+                    case RequiredAddinStatus.InstalledDisabled:
+                        disabledCount++;
+                        disabledMatches.Add(r.Required);
+                        qaRestored.Add(new
+                        {
+                            tabName = r.Required.TabName,
+                            addinFile = r.MatchedManifest?.FileName ?? r.Required.AddinFile,
+                        });
+                        break;
+                    case RequiredAddinStatus.NotInstalled:
+                        missingCount++;
+                        qaNotInstalled.Add(new
+                        {
+                            tabName = r.Required.TabName,
+                            addinFile = r.Required.AddinFile,
+                            url = r.Required.Url ?? "",
+                        });
+                        break;
+                }
+            }
+            Log.Information("Bridge.load_profile QA: active={Active} disabled={Disabled} missing={Missing}",
+                            activeCount, disabledCount, missingCount);
+
+            if (disabledMatches.Count > 0)
+            {
+                var restoreResult = AddinDisabler.RestoreRequired(
+                    _revitVersion,
+                    disabledMatches,
+                    onError: (path, ex) => Log.Warning(ex, "AddinDisabler.RestoreRequired: rename failed for {Path}", path));
+                Log.Information("Bridge.load_profile QA: auto-restored {Count} required addins, failed={Failed}",
+                                restoreResult.RestoredCount, restoreResult.Failed);
+                if (restoreResult.RestoredCount > 0) qaForcedRestart = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Bridge.load_profile: QA classification threw — proceeding without auto-restore");
+        }
+
         // Disable non-required addins by renaming .addin → .addin.RSTdisabled.
         // Effective on the next Revit launch — already-loaded DLLs stay
         // resident this session, so any disable forces restart_needed=true
@@ -184,6 +245,7 @@ public class LoaderBridge
             }
         }
         if (disableForcedRestart) restartNeeded = true;
+        if (qaForcedRestart) restartNeeded = true;
 
         return Serialize(new
         {
@@ -191,6 +253,12 @@ public class LoaderBridge
             warnings = Array.Empty<string>(),
             restart_needed = restartNeeded,
             failed_disables = failedDisables,
+            qa_check = new
+            {
+                restored = qaRestored,
+                not_installed = qaNotInstalled,
+                all_clear = qaRestored.Count == 0 && qaNotInstalled.Count == 0,
+            },
         });
     }
 

@@ -70,6 +70,14 @@ public sealed class RequiredAddin
     [JsonPropertyName("displayName")]  public string? DisplayName { get; set; }
     [JsonPropertyName("addinFile")]    public string? AddinFile   { get; set; }
     [JsonPropertyName("addinId")]      public string? AddinId     { get; set; }
+    /// <summary>
+    /// Curated download URL baked in at profile-create time from
+    /// addin_lookup.json (RST-022). Used by the Loader's QA modal to
+    /// surface a clickable link when the addin is missing on the
+    /// user's machine. Empty/null when the registry didn't know the
+    /// addin or no URL was listed.
+    /// </summary>
+    [JsonPropertyName("url")]          public string? Url         { get; set; }
 }
 
 /// <summary>RSTify rule — a tab to hide while the profile is active.</summary>

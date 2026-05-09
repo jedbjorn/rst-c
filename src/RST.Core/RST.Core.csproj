@@ -25,4 +25,10 @@
     <PackageReference Include="System.Text.Json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Tests need internal seams (RestoreFiltered, BuildRequiredFileSet/IdSet,
+         IsRequired) for AddinDisabler / RequiredAddinQa coverage. -->
+    <InternalsVisibleTo Include="RST.Tests" />
+  </ItemGroup>
+
 </Project>
