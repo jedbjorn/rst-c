@@ -39,6 +39,13 @@ public sealed class BrandingDefaults
     /// <summary>Filename stored in Profile.Branding.LogoFile when a profile opts into branding.</summary>
     public const string LogoFileName = "branding.png";
 
+    /// <summary>
+    /// Square edge length the branding panel renders at and the encoder
+    /// targets when resizing a picked logo. Single source of truth shared
+    /// between RST.UI's PickLogoFile and RST.Engine's PanelStyling.
+    /// </summary>
+    public const int PanelSizePx = 85;
+
     /// <summary>True when a logo file currently exists on disk.</summary>
     public static bool HasLogo => File.Exists(LogoPath);
 
