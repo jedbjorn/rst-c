@@ -1260,6 +1260,19 @@
       addinsContainer.innerHTML = '<div class="detail-section-label">Required Add-ins for this profile</div><div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 0">None</div>';
     }
 
+    // Seed RSTify + disable-unused state from the profile's admin
+    // presets when the user has selected a profile that ISN'T currently
+    // active. The active profile keeps the per-session pointer
+    // (active_profile.json hidden_tabs / disable_non_required) so the
+    // user's last in-session tweaks aren't clobbered by re-selecting
+    // their loaded profile.
+    if (!_isActiveProfile(profile)) {
+      var presets = profile.presets || {};
+      previousHiddenTabs = Array.isArray(presets.hiddenTabs) ? presets.hiddenTabs.slice() : [];
+      var dt = document.getElementById('disableToggle');
+      if (dt) dt.checked = !!presets.disableUnusedAddins;
+    }
+
     // RSTify tab toggles (left column)
     renderTabToggles(profile);
 

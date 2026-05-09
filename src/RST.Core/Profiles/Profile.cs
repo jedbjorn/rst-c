@@ -61,6 +61,31 @@ public sealed class Profile
     /// <summary>Optional per-profile branding overrides (logo, colors).</summary>
     [JsonPropertyName("branding")]
     public Branding? Branding { get; set; }
+
+    /// <summary>
+    /// Admin-authored RSTify + disable-unused defaults for this profile.
+    /// Loader uses these to seed the picker / footer toggle when the
+    /// user selects a profile that isn't currently active. The user's
+    /// per-session override (active_profile.json) takes priority for
+    /// the currently-loaded profile so they can tweak without losing
+    /// their selection on every reload.
+    /// </summary>
+    [JsonPropertyName("presets")]
+    public ProfilePresets? Presets { get; set; }
+}
+
+/// <summary>
+/// Admin-authored Loader defaults — RSTify hidden tabs + disable-unused
+/// toggle. Persisted with the profile so a freshly-imported profile
+/// loads with a sensible RSTify state out of the box.
+/// </summary>
+public sealed class ProfilePresets
+{
+    [JsonPropertyName("hiddenTabs")]
+    public List<string> HiddenTabs { get; set; } = new();
+
+    [JsonPropertyName("disableUnusedAddins")]
+    public bool DisableUnusedAddins { get; set; }
 }
 
 /// <summary>Required add-in descriptor — used to detect missing dependencies on load.</summary>
