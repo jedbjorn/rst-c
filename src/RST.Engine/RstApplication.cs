@@ -121,13 +121,11 @@ public sealed class RstApplication : IExternalApplication
             ProfileTabBuilder.BuildOrRebuild(uiApp, entry.Profile);
 
             // Apply hide rules at startup so the user sees the same ribbon
-            // they last left, then flip the RSTify button icon to match.
-            // Mirrors /home/jedi/RST/startup.py lines 821-870.
-            if (active.HiddenTabs is { Length: > 0 })
-            {
-                int hidden = RstifyToggle.Hide(active.HiddenTabs);
-                if (hidden > 0) RstifyToggle.RefreshIcon(active: true);
-            }
+            // they last left. ApplyForActiveProfile both hides and flips
+            // the icon, and shares its state-tracking with the live-switch
+            // path so the two can't drift. Mirrors
+            // /home/jedi/RST/startup.py lines 821-870.
+            RstifyToggle.ApplyForActiveProfile(active.HiddenTabs);
         }
         catch (Exception ex)
         {
