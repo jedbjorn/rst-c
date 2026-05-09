@@ -15,9 +15,20 @@
 //   2. Surface NotInstalled entries with their baked-in download URL
 //      so the user knows what to grab.
 //
-// Match policy mirrors RequiredAddinMatcher: addinFile name first,
-// AddinId GUID second. Both are authoritative — if either matches a
-// scanned manifest, the requirement is satisfied.
+// Match policy is three-tier:
+//   1. addinFile name (exact, case-insensitive)
+//   2. AddinId GUID (exact, case-insensitive)
+//   3. fuzzy fallback — live ribbon tab title that contains the
+//      requirement's tab name (or vice-versa), or a manifest
+//      displayName / file-stem that does the same. Mirrors the
+//      JS-side isAddinLoaded heuristic in profile_loader.html so
+//      the picker's "Loaded" badge and the QA modal agree about
+//      whether an addin counts as installed.
+//
+// Without tier 3 the QA over-reports Missing whenever the actual
+// installed .addin filename differs from what the curated registry
+// recorded (e.g. registry says "Lumion.addin" but the user's
+// install ships "LumionLiveSync.addin").
 
 using System.Collections.Generic;
 using RST.Core.Profiles;
@@ -44,15 +55,21 @@ public static class RequiredAddinQa
     /// scanned manifests for <paramref name="revitVersion"/>. Returns
     /// one result per input, in input order.
     /// </summary>
+    /// <param name="loadedRibbonTabs">Optional list of live ribbon
+    /// tab titles. When passed, a tab name match is treated as
+    /// authoritative "loaded" even if no manifest fuzzy-matches —
+    /// mirrors how the Loader picker decides "Loaded".</param>
     public static IReadOnlyList<RequiredAddinQaResult> Classify(
         string revitVersion,
-        IReadOnlyList<RequiredAddin>? required) =>
-        Classify(AddinDirectoryScanner.ScanWithSource(revitVersion), required);
+        IReadOnlyList<RequiredAddin>? required,
+        IReadOnlyList<string>? loadedRibbonTabs = null) =>
+        Classify(AddinDirectoryScanner.ScanWithSource(revitVersion), required, loadedRibbonTabs);
 
     /// <summary>Test seam — accepts an already-built scan.</summary>
     internal static IReadOnlyList<RequiredAddinQaResult> Classify(
         IEnumerable<(AddinManifest Manifest, AddinSearchPath Source)> scan,
-        IReadOnlyList<RequiredAddin>? required)
+        IReadOnlyList<RequiredAddin>? required,
+        IReadOnlyList<string>? loadedRibbonTabs = null)
     {
         var results = new List<RequiredAddinQaResult>();
         if (required is null || required.Count == 0) return results;
@@ -65,6 +82,20 @@ public static class RequiredAddinQa
         {
             if (req is null) continue;
             var match = FindMatch(manifests, req);
+
+            // Tier 3: live ribbon tab match. If the addin owns a tab
+            // by the requirement's name, it's loaded in the running
+            // session — even when its .addin filename / displayName
+            // don't fuzzy-match (uncommon in practice but possible
+            // for addins whose tab title is set programmatically).
+            if (match is null && loadedRibbonTabs is not null
+                && !string.IsNullOrWhiteSpace(req.TabName)
+                && TabIsOnRibbon(req.TabName, loadedRibbonTabs))
+            {
+                results.Add(new RequiredAddinQaResult(req, RequiredAddinStatus.InstalledActive, null));
+                continue;
+            }
+
             var status = match is null
                 ? RequiredAddinStatus.NotInstalled
                 : (match.IsDisabled
@@ -73,6 +104,21 @@ public static class RequiredAddinQa
             results.Add(new RequiredAddinQaResult(req, status, match));
         }
         return results;
+    }
+
+    private static bool TabIsOnRibbon(string tabName, IReadOnlyList<string> ribbon)
+    {
+        var t = tabName.Trim();
+        if (t.Length == 0) return false;
+        for (var i = 0; i < ribbon.Count; i++)
+        {
+            var r = ribbon[i];
+            if (string.IsNullOrEmpty(r)) continue;
+            if (r.IndexOf(t, System.StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf(r, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
     }
 
     private static AddinManifest? FindMatch(IReadOnlyList<AddinManifest> manifests, RequiredAddin req)
@@ -105,6 +151,48 @@ public static class RequiredAddinQa
                 }
             }
         }
+        // Tier 3 — fuzzy substring match against manifest displayName /
+        // file-stem and entry Name. Mirrors the JS-side isAddinLoaded
+        // heuristic in profile_loader.html so the picker's Loaded badge
+        // and the QA modal agree. Triggered when the registry's
+        // "addinFile" hint doesn't match the user's actual filename
+        // (e.g. registry "Lumion.addin" vs installed "LumionLiveSync.addin").
+        if (!string.IsNullOrWhiteSpace(req.TabName))
+        {
+            var tab = req.TabName.Trim();
+            for (var i = 0; i < manifests.Count; i++)
+            {
+                if (FuzzyMatchesTab(manifests[i], tab))
+                    return manifests[i];
+            }
+        }
         return null;
+    }
+
+    private static bool FuzzyMatchesTab(AddinManifest manifest, string tab)
+    {
+        var stem = StripAddinSuffix(manifest.FileName);
+        if (Contains(stem, tab) || Contains(tab, stem)) return true;
+        foreach (var entry in manifest.Entries)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.Name)
+                && (Contains(entry.Name!, tab) || Contains(tab, entry.Name!)))
+                return true;
+        }
+        return false;
+    }
+
+    private static string StripAddinSuffix(string fileName)
+    {
+        const string addin = ".addin";
+        if (fileName.EndsWith(addin, System.StringComparison.OrdinalIgnoreCase))
+            return fileName.Substring(0, fileName.Length - addin.Length);
+        return fileName;
+    }
+
+    private static bool Contains(string haystack, string needle)
+    {
+        if (string.IsNullOrEmpty(haystack) || string.IsNullOrEmpty(needle)) return false;
+        return haystack.IndexOf(needle, System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }
