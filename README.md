@@ -170,14 +170,39 @@ behaves unexpectedly.
 ## Install
 
 Pre-built bundles ship on `main` under `build/R<NN>/` — one folder per
-Revit major. Close Revit, then copy the matching bundle into
-`%AppData%\Autodesk\Revit\Addins\<version>\`:
+Revit major, split into two trees:
+
+- `build/R<NN>/addins/` — the `.addin` manifest plus `RST.Bootstrap.dll`,
+  the tiny IExternalApplication thunk Revit loads. Drops into the
+  per-user Add-Ins directory.
+- `build/R<NN>/app/` — the engine and its transitives (Serilog,
+  WebView2, etc.) plus `Assets/` and `runtimes/`. Drops into
+  `%AppData%\RST\app\` and is loaded by the bootstrap via an
+  `AssemblyDependencyResolver`.
+
+Close Revit, then:
 
 ```powershell
-Copy-Item -Recurse -Force "build\R25\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
+# Add-Ins payload (manifest + bootstrap thunk)
+Copy-Item -Force "build\R25\addins\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
+
+# Engine payload (dlls, assets, native runtimes)
+New-Item -ItemType Directory -Force "$env:APPDATA\RST\app" | Out-Null
+Copy-Item -Recurse -Force "build\R25\app\*" "$env:APPDATA\RST\app\"
+```
+
+If you previously installed rst-c under the pre-RST-033 single-tree
+layout, also clear the leftover engine folder once:
+
+```powershell
+Remove-Item -Recurse -Force "$env:APPDATA\Autodesk\Revit\Addins\2025\RST" `
+            -ErrorAction SilentlyContinue
 ```
 
 Start Revit. The **rst-c** tab should appear with the Loader button.
+User data (profiles, logs, branding, active-profile state) lives at
+`%AppData%\RST\` and is unaffected by reinstalls — only the
+`%AppData%\RST\app\` subfolder gets overwritten.
 
 ## Build
 
@@ -189,6 +214,14 @@ dotnet restore
 dotnet build -c "Debug R25"     # Revit 2025
 dotnet build -c "Debug R26"     # Revit 2026
 dotnet build -c "Debug R27"     # Revit 2027 (needs .NET 10 SDK)
+```
+
+To produce a shippable `build/R<NN>/{addins,app}/` bundle from a
+clean source tree:
+
+```bash
+build/stage.sh R25            # Release config by default
+build/stage.sh R26 Debug      # Debug build for VM diagnostics
 ```
 
 ## License

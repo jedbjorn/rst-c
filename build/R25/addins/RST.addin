@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST.addin — Revit application manifest.
+
+  Points at RST.Bootstrap.dll (a tiny IExternalApplication thunk) which
+  lives alongside this manifest in the Add-Ins directory. The bootstrap
+  loads the actual engine from %AppData%\RST\app\ via an
+  AssemblyDependencyResolver — see RST-033 for the layout split.
+
+  Installed under %AppData%\Autodesk\Revit\Addins\<ver>\ (per-user) by
+  the WiX installer (RST-012). For dev/test installs, the bootstrap DLL
+  + this manifest are dropped here directly while the engine + its
+  transitives go to %AppData%\RST\app\.
+
+  ClientId is the canonical RST application ID — do NOT change once
+  shipped, this is how Revit identifies the add-in across upgrades.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>RST</Name>
+    <Assembly>RST.Bootstrap.dll</Assembly>
+    <FullClassName>RST.Bootstrap.RstBootstrap</FullClassName>
+    <ClientId>4f8ef7a0-0001-4000-8000-525354000001</ClientId>
+    <VendorId>RSTC</VendorId>
+    <VendorDescription>Designs/OS — https://github.com/jedbjorn/RST-C</VendorDescription>
+  </AddIn>
+</RevitAddIns>
