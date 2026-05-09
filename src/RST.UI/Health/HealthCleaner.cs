@@ -22,126 +22,84 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using RST.Core.Profiles;
 using Serilog;
 
 namespace RST.UI.Health;
 
-/// <summary>Per-category counts returned by Run().</summary>
+/// <summary>
+/// Per-target counts returned by Run(). Both dictionaries are keyed by
+/// <see cref="CleanupTarget.Id"/> when the target carries one, falling
+/// back to <see cref="CleanupTarget.Name"/> for legacy/handcrafted
+/// entries that didn't get a stable id.
+/// </summary>
 public sealed class CleanResult
 {
-    public Dictionary<string, int> Deleted { get; } = new()
-    {
-        ["temp"] = 0, ["pacCache"] = 0, ["journals"] = 0, ["collabCache"] = 0, ["recentFiles"] = 0,
-    };
-    public Dictionary<string, int> Skipped { get; } = new()
-    {
-        ["temp"] = 0, ["pacCache"] = 0, ["journals"] = 0, ["collabCache"] = 0, ["recentFiles"] = 0,
-    };
-}
-
-/// <summary>Selectable cleanup categories.</summary>
-public sealed class CleanCategories
-{
-    public bool Temp        { get; set; }
-    public bool PacCache    { get; set; }
-    public bool Journals    { get; set; }
-    public bool CollabCache { get; set; }
-    public bool RecentFiles { get; set; }
+    public Dictionary<string, int> Deleted { get; } = new();
+    public Dictionary<string, int> Skipped { get; } = new();
 }
 
 public static class HealthCleaner
 {
-    private static readonly Regex RevitAppDataDirRe = new(
-        @"^Autodesk Revit \d{4}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     private static readonly Regex RecentFileEntryRe = new(
         @"^\s*File\d+\s*=", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public static CleanResult Run(CleanCategories cats)
+    /// <summary>
+    /// Run the cleanup against <paramref name="selectedTargets"/>. Each
+    /// target's <see cref="CleanupTarget.Path"/> is expanded via
+    /// <see cref="CleanupPathResolver"/> to 0..N concrete paths and the
+    /// kind-appropriate operation is applied to each. Counts roll up
+    /// per target id. Disabled targets are skipped silently.
+    /// </summary>
+    public static CleanResult Run(IEnumerable<CleanupTarget> selectedTargets)
     {
-        if (cats is null) throw new ArgumentNullException(nameof(cats));
-        Log.Information("HealthCleaner.Run: temp={T} pacCache={P} journals={J} collab={C} recent={R}",
-                        cats.Temp, cats.PacCache, cats.Journals, cats.CollabCache, cats.RecentFiles);
+        if (selectedTargets is null) throw new ArgumentNullException(nameof(selectedTargets));
 
         var result = new CleanResult();
-        var userDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-
-        var tempDir = Path.Combine(localAppData, "Temp");
-        var pacDir = Path.Combine(localAppData, "Autodesk", "Revit", "PacCache");
-        var revitLocalRoot = Path.Combine(localAppData, "Autodesk", "Revit");
-        var revitRoaming = Path.Combine(roaming, "Autodesk", "Revit");
-
-        if (cats.Temp)
+        int targetCount = 0;
+        foreach (var target in selectedTargets)
         {
-            var (d, s) = PurgeFlat(tempDir, "temp");
-            result.Deleted["temp"] = d; result.Skipped["temp"] = s;
-        }
+            if (target is null || !target.Enabled) continue;
+            targetCount++;
+            var key = string.IsNullOrEmpty(target.Id) ? target.Name : target.Id;
+            result.Deleted[key] = 0;
+            result.Skipped[key] = 0;
 
-        if (cats.PacCache)
-        {
-            var (d, s) = PurgeFlat(pacDir, "pacCache");
-            result.Deleted["pacCache"] = d; result.Skipped["pacCache"] = s;
-        }
-
-        if (cats.Journals || cats.CollabCache)
-        {
-            foreach (var entry in SafeListDir(revitLocalRoot))
+            var resolved = CleanupPathResolver.Resolve(target.Path);
+            if (resolved.Count == 0)
             {
-                if (!RevitAppDataDirRe.IsMatch(entry)) continue;
-                var vDir = Path.Combine(revitLocalRoot, entry);
-                if (!Directory.Exists(vDir)) continue;
-                if (cats.Journals)
+                Log.Information("HealthCleaner: target {Name} ({Path}) resolved to 0 paths — skipping",
+                                target.Name, target.Path);
+                continue;
+            }
+
+            foreach (var concrete in resolved)
+            {
+                var label = $"{target.Name}/{Path.GetFileName(concrete) ?? "?"}";
+                (int d, int s) outcome = target.Kind switch
                 {
-                    var (d, s) = PurgeFlat(Path.Combine(vDir, "Journals"), $"journals/{entry}");
-                    result.Deleted["journals"] += d; result.Skipped["journals"] += s;
-                }
-                if (cats.CollabCache)
-                {
-                    var (d, s) = PurgeCollabCache(Path.Combine(vDir, "CollaborationCache"), $"collabCache/{entry}");
-                    result.Deleted["collabCache"] += d; result.Skipped["collabCache"] += s;
-                }
+                    CleanupTarget.KindIniRecentFiles => PurgeRecentFileList(concrete, label),
+                    CleanupTarget.KindDirectory      => PurgeFlat(concrete, label),
+                    _ => SkipUnknownKind(target, label),
+                };
+                result.Deleted[key] += outcome.d;
+                result.Skipped[key] += outcome.s;
             }
         }
 
-        if (cats.RecentFiles)
-        {
-            foreach (var entry in SafeListDir(revitRoaming))
-            {
-                if (!RevitAppDataDirRe.IsMatch(entry)) continue;
-                var iniPath = Path.Combine(revitRoaming, entry, "Revit.ini");
-                var (d, s) = PurgeRecentFileList(iniPath, $"recentFiles/{entry}");
-                result.Deleted["recentFiles"] += d; result.Skipped["recentFiles"] += s;
-            }
-        }
-
-        Log.Information("HealthCleaner.Run done: deleted={Deleted} skipped={Skipped}", result.Deleted, result.Skipped);
+        Log.Information("HealthCleaner.Run done: targets={Count} deleted={Deleted} skipped={Skipped}",
+                        targetCount, result.Deleted, result.Skipped);
         return result;
     }
 
-    // ── internal ───────────────────────────────────────────────────────
-
-    private static IEnumerable<string> SafeListDir(string root)
+    private static (int deleted, int skipped) SkipUnknownKind(CleanupTarget target, string label)
     {
-        if (!Directory.Exists(root))
-        {
-            Log.Information("HealthCleaner: missing {Root}", root);
-            return Array.Empty<string>();
-        }
-        try
-        {
-            var names = new List<string>();
-            foreach (var path in Directory.GetDirectories(root))
-                names.Add(Path.GetFileName(path));
-            return names;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "HealthCleaner.SafeListDir failed for {Root}", root);
-            return Array.Empty<string>();
-        }
+        Log.Warning("HealthCleaner: target {Name} has unknown kind={Kind} — skipping {Label}",
+                    target.Name, target.Kind, label);
+        return (0, 0);
     }
+
+    // ── internal ───────────────────────────────────────────────────────
 
     /// <summary>
     /// Walk <paramref name="path"/> recursively and try to delete every
@@ -176,13 +134,6 @@ public static class HealthCleaner
         Log.Information("[{Label}] {Path}: deleted={Deleted} skipped={Skipped}", label, path, deleted, skipped);
         return (deleted, skipped);
     }
-
-    /// <summary>
-    /// Same shape as PurgeFlat — separate method so future tweaks
-    /// (date filters, GUID-targeted sweeps) don't have to fork.
-    /// </summary>
-    public static (int deleted, int skipped) PurgeCollabCache(string path, string label)
-        => PurgeFlat(path, label);
 
     /// <summary>
     /// Strip <c>FileN=</c> entries inside <c>[Recent File List]</c> while

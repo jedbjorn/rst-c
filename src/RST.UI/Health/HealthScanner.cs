@@ -34,7 +34,8 @@ public static class HealthScanner
         string? modelPath = null,
         double? modelSizeMb = null,
         int? warningsCount = null,
-        IReadOnlyDictionary<string, int>? warningsBySeverity = null)
+        IReadOnlyDictionary<string, int>? warningsBySeverity = null,
+        IEnumerable<RST.Core.Profiles.CleanupTarget>? cleanupTargets = null)
     {
         Log.Information("HealthScanner.Capture: starting");
 
@@ -81,12 +82,138 @@ public static class HealthScanner
                 : new Dictionary<string, int>(warningsBySeverity),
         };
 
+        if (cleanupTargets is not null)
+        {
+            snap.Cleanup = MeasureCleanup(cleanupTargets);
+        }
+
         Log.Information(
-            "HealthScanner.Capture: done device={Device} ramUsed={RamUsed}MB diskFree={DiskFree}GB",
+            "HealthScanner.Capture: done device={Device} ramUsed={RamUsed}MB diskFree={DiskFree}GB junkBytes={JunkBytes}",
             snap.Identity.DeviceName,
             snap.Ram.UsedMB ?? 0,
-            snap.Disk.AvailableGB ?? 0);
+            snap.Disk.AvailableGB ?? 0,
+            snap.Cleanup?.TotalSizeBytes ?? 0);
         return snap;
+    }
+
+    /// <summary>
+    /// Walk every enabled cleanup target's resolved paths and tally on-disk
+    /// size + file count. Surfaces in the Hardware section's Junk Files
+    /// sub-list so users see how much space the next "Clean Junk Files"
+    /// pass would reclaim, before deleting anything.
+    /// </summary>
+    public static CleanupSummary MeasureCleanup(IEnumerable<RST.Core.Profiles.CleanupTarget> targets)
+    {
+        var summary = new CleanupSummary();
+        foreach (var t in targets)
+        {
+            if (t is null || !t.Enabled) continue;
+            var ts = new CleanupTargetSummary
+            {
+                Id   = string.IsNullOrEmpty(t.Id) ? t.Name : t.Id,
+                Name = t.Name,
+                Path = t.Path,
+                Kind = t.Kind,
+            };
+            var resolved = CleanupPathResolver.Resolve(t.Path);
+            ts.ResolvedPaths = resolved.ToList();
+
+            foreach (var concrete in resolved)
+            {
+                if (string.Equals(t.Kind, RST.Core.Profiles.CleanupTarget.KindIniRecentFiles, StringComparison.Ordinal))
+                {
+                    var (entries, skipped) = CountIniRecentEntries(concrete);
+                    ts.FileCount += entries;
+                    ts.Skipped   += skipped;
+                    // No bytes — operation strips ini entries, doesn't free disk.
+                }
+                else
+                {
+                    var (count, bytes, skipped) = MeasureDirectory(concrete);
+                    ts.FileCount += count;
+                    ts.SizeBytes += bytes;
+                    ts.Skipped   += skipped;
+                }
+            }
+
+            summary.Targets.Add(ts);
+            summary.TotalFileCount += ts.FileCount;
+            summary.TotalSizeBytes += ts.SizeBytes;
+            summary.TotalSkipped   += ts.Skipped;
+        }
+        return summary;
+    }
+
+    private static (long count, long bytes, long skipped) MeasureDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return (0, 0, 0);
+        long count = 0, bytes = 0, skipped = 0;
+        var stack = new Stack<string>();
+        stack.Push(path);
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            string[] files;
+            try { files = Directory.GetFiles(current); }
+            catch (Exception ex) { Log.Debug(ex, "MeasureDirectory: file enum failed for {Dir}", current); continue; }
+
+            foreach (var f in files)
+            {
+                try
+                {
+                    var fi = new FileInfo(f);
+                    if (!fi.Exists) continue;
+                    bytes += fi.Length;
+                    count++;
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    Log.Debug(ex, "MeasureDirectory: stat failed for {File}", f);
+                }
+            }
+
+            string[] subs;
+            try { subs = Directory.GetDirectories(current); }
+            catch (Exception ex) { Log.Debug(ex, "MeasureDirectory: subdir enum failed for {Dir}", current); continue; }
+            foreach (var s in subs) stack.Push(s);
+        }
+        return (count, bytes, skipped);
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex _iniRecentRe =
+        new(@"^\s*File\d+\s*=", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static (long entries, long skipped) CountIniRecentEntries(string iniPath)
+    {
+        if (!File.Exists(iniPath)) return (0, 0);
+        try
+        {
+            // Same UTF-16 LE BOM detection as HealthCleaner uses on rewrite,
+            // so the count agrees with what a subsequent CleanJunk would
+            // actually strip.
+            var bytes = File.ReadAllBytes(iniPath);
+            var (text, _) = HealthCleaner.DecodeIniBytes(bytes);
+            bool inSection = false;
+            long entries = 0;
+            foreach (var raw in text.Split('\n'))
+            {
+                var line = raw.Trim().Trim('\r');
+                if (line.StartsWith("[", StringComparison.Ordinal) &&
+                    line.EndsWith("]", StringComparison.Ordinal))
+                {
+                    inSection = string.Equals(line, "[Recent File List]", StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
+                if (inSection && _iniRecentRe.IsMatch(raw)) entries++;
+            }
+            return (entries, 0);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "CountIniRecentEntries failed for {Path}", iniPath);
+            return (0, 1);
+        }
     }
 
     // ─── RAM ────────────────────────────────────────────────────────────

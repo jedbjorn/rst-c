@@ -63,6 +63,17 @@ public sealed class Profile
     public Branding? Branding { get; set; }
 
     /// <summary>
+    /// Per-profile junk-cleanup targets shown in the Health tool. Null
+    /// (legacy profiles pre-RST-031) means "use CleanupDefaults" at
+    /// runtime; an empty list means the admin removed every target and
+    /// the user sees no cleanup options. The Builder seeds new profiles
+    /// with the OOB defaults so this only stays null for unmigrated
+    /// hand-edited or pre-RST-031 profiles.
+    /// </summary>
+    [JsonPropertyName("cleanupTargets")]
+    public List<CleanupTarget>? CleanupTargets { get; set; }
+
+    /// <summary>
     /// Admin-authored RSTify + disable-unused defaults for this profile.
     /// Loader uses these to seed the picker / footer toggle when the
     /// user selects a profile that isn't currently active. The user's
