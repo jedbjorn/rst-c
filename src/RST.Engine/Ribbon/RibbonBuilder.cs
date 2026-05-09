@@ -22,6 +22,7 @@ internal static class RibbonBuilder
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
     private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
+    private const string HealthClassName = "RST.Engine.Commands.HealthCommand";
 
     public static void Build(UIControlledApplication app)
     {
@@ -34,11 +35,11 @@ internal static class RibbonBuilder
 
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
-        // Single panel, three side-by-side Large buttons:
-        // Builder | Loader | RSTify. Lives on Revit's built-in Add-Ins
-        // tab (single-arg CreateRibbonPanel overload). No custom RST tab
-        // — RST tools share the External Tools area with every other
-        // add-in.
+        // Single panel, four side-by-side Large buttons:
+        // Builder | Loader | RSTify | Health. Lives on Revit's built-in
+        // Add-Ins tab (single-arg CreateRibbonPanel overload). No custom
+        // RST tab — RST tools share the External Tools area with every
+        // other add-in.
         var rstPanel = app.CreateRibbonPanel(RstPanelTitle);
 
         var builderBtn = new PushButtonData(
@@ -76,8 +77,20 @@ internal static class RibbonBuilder
             LargeImage = IconAssets.RstifyIconOff ?? IconAssets.Default32,
         };
 
+        var healthBtn = new PushButtonData(
+            name: "RST_Health",
+            text: "Health",
+            assemblyName: assemblyPath,
+            className: HealthClassName)
+        {
+            ToolTip = "System health snapshot, Revit context, and cache cleanup.",
+            Image = IconAssets.HealthIcon ?? IconAssets.Default32,
+            LargeImage = IconAssets.HealthIcon ?? IconAssets.Default32,
+        };
+
         rstPanel.AddItem(builderBtn);
         rstPanel.AddItem(loaderBtn);
         rstPanel.AddItem(rstifyBtn);
+        rstPanel.AddItem(healthBtn);
     }
 }
