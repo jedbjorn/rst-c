@@ -10,24 +10,21 @@
   -->
 
   <PropertyGroup>
-    <Configurations>Debug R24;Debug R25;Debug R26;Debug R27;Release R24;Release R25;Release R26;Release R27</Configurations>
+    <Configurations>Debug R25;Debug R26;Debug R27;Release R25;Release R26;Release R27</Configurations>
     <Configuration Condition="'$(Configuration)' == ''">Debug R25</Configuration>
   </PropertyGroup>
 
-  <!-- Revit version derived from Configuration name (R24/R25/R26/R27). -->
+  <!-- Revit version derived from Configuration name (R25/R26/R27). -->
   <PropertyGroup>
-    <RevitVersion Condition="$(Configuration.Contains('R24'))">2024</RevitVersion>
     <RevitVersion Condition="$(Configuration.Contains('R25'))">2025</RevitVersion>
     <RevitVersion Condition="$(Configuration.Contains('R26'))">2026</RevitVersion>
     <RevitVersion Condition="$(Configuration.Contains('R27'))">2027</RevitVersion>
   </PropertyGroup>
 
   <!-- Target framework selected from Revit version:
-         2024         → net48
          2025, 2026   → net8.0-windows
          2027         → net10.0-windows (requires .NET 10 SDK installed) -->
   <PropertyGroup>
-    <RevitTargetFramework Condition="'$(RevitVersion)' == '2024'">net48</RevitTargetFramework>
     <RevitTargetFramework Condition="'$(RevitVersion)' == '2025'">net8.0-windows</RevitTargetFramework>
     <RevitTargetFramework Condition="'$(RevitVersion)' == '2026'">net8.0-windows</RevitTargetFramework>
     <RevitTargetFramework Condition="'$(RevitVersion)' == '2027'">net10.0-windows</RevitTargetFramework>

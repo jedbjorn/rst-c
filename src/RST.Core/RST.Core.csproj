@@ -5,20 +5,13 @@
     Hosts the JSON profile model, validators, schema migrations, the
     in-memory command/addin catalog, and the profile↔ribbon mapping
     that does NOT touch Autodesk.* types.
-
-    Multi-targets so it can be consumed both by net48 (Revit 2024) and
-    net8.0-windows (Revit 2025+).
   -->
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>RST.Core</RootNamespace>
     <AssemblyName>RST.Core</AssemblyName>
     <IsPackable>false</IsPackable>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <Nullable>annotations</Nullable>
   </PropertyGroup>
 
   <ItemGroup>

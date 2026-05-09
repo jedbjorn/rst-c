@@ -6,7 +6,7 @@ Architects, modellers, BIM coordinators, and trainees rarely need the same
 ribbon — rst-c lets each role get the ribbon that fits the work, without
 hunting through tabs or relearning where commands live.
 
-It ships as a single signed managed add-in for Revit 2024 through 2027,
+It ships as a single signed managed add-in for Revit 2025 through 2027,
 installs into the standard per-user add-in directory, and runs without
 pyRevit, Python, or any other external runtime.
 
@@ -157,12 +157,11 @@ behaves unexpectedly.
 
 ## Targets
 
-| Revit version | TFM              |
-|---------------|------------------|
-| 2024          | `net48`          |
-| 2025          | `net8.0-windows` |
-| 2026          | `net8.0-windows` |
-| 2027          | `net8.0-windows` |
+| Revit version | TFM               |
+|---------------|-------------------|
+| 2025          | `net8.0-windows`  |
+| 2026          | `net8.0-windows`  |
+| 2027          | `net10.0-windows` |
 
 (2027 is provisional pending Autodesk's release.)
 
@@ -186,7 +185,8 @@ from NuGet.
 ```bash
 dotnet restore
 dotnet build -c "Debug R25"     # Revit 2025
-dotnet build -c "Debug R24"     # Revit 2024 (needs .NET Framework 4.8 reference assemblies on Linux)
+dotnet build -c "Debug R26"     # Revit 2026
+dotnet build -c "Debug R27"     # Revit 2027 (needs .NET 10 SDK)
 ```
 
 ## License

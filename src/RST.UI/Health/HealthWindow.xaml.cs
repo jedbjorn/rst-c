@@ -59,7 +59,6 @@ public partial class HealthWindow : Window
                 accessKind: CoreWebView2HostResourceAccessKind.Allow);
 
             var shimPath = Path.Combine(assetsDir, "pywebview-shim.js");
-            // Sync read for net48 parity (no ReadAllTextAsync); ~2 KB once at window construction.
             var shim = File.ReadAllText(shimPath);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(shim);
 
