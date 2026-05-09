@@ -27,20 +27,34 @@ internal static class IconAssets
 {
     private static ImageSource? _default32;
     private static bool _default32Attempted;
+    private static ImageSource? _default16;
+    private static bool _default16Attempted;
     private static ImageSource? _loader;
     private static bool _loaderAttempted;
+    private static ImageSource? _loader16;
+    private static bool _loader16Attempted;
     private static ImageSource? _builder;
     private static bool _builderAttempted;
+    private static ImageSource? _builder16;
+    private static bool _builder16Attempted;
     private static ImageSource? _rstifyOff;
     private static bool _rstifyOffAttempted;
+    private static ImageSource? _rstifyOff16;
+    private static bool _rstifyOff16Attempted;
     private static ImageSource? _rstifyOn;
     private static bool _rstifyOnAttempted;
+    private static ImageSource? _rstifyOn16;
+    private static bool _rstifyOn16Attempted;
     private static ImageSource? _health;
     private static bool _healthAttempted;
+    private static ImageSource? _health16;
+    private static bool _health16Attempted;
 
     /// <summary>
     /// 32x32 visible default icon (Assets/icons/default_32.png). Used as
-    /// both Image and LargeImage on any button without a per-slot icon.
+    /// LargeImage fallback on any button without a per-slot icon. For the
+    /// matching 16x16 used as Image (small / Quick Access Toolbar slot),
+    /// see <see cref="Default16"/>.
     /// </summary>
     public static ImageSource? Default32
     {
@@ -50,6 +64,23 @@ internal static class IconAssets
             _default32Attempted = true;
             _default32 = LoadBundled("icons/default_32.png");
             return _default32;
+        }
+    }
+
+    /// <summary>
+    /// 16x16 visible default icon (Assets/icons/default_16.png). Used as
+    /// the Image (small) fallback so QAT-pinned buttons render a real 16
+    /// instead of letting Revit downscale a 32 (which produces a soft,
+    /// off-center result).
+    /// </summary>
+    public static ImageSource? Default16
+    {
+        get
+        {
+            if (_default16Attempted) return _default16;
+            _default16Attempted = true;
+            _default16 = LoadBundled("icons/default_16.png");
+            return _default16;
         }
     }
 
@@ -65,6 +96,18 @@ internal static class IconAssets
         }
     }
 
+    /// <summary>16x16 small variant for QAT (Assets/icons/icon_loader_16.png).</summary>
+    public static ImageSource? LoaderIcon16
+    {
+        get
+        {
+            if (_loader16Attempted) return _loader16;
+            _loader16Attempted = true;
+            _loader16 = LoadBundled("icons/icon_loader_16.png");
+            return _loader16;
+        }
+    }
+
     /// <summary>32x32 icon for the Builder ribbon button (Assets/icons/icon_creator.png).</summary>
     public static ImageSource? BuilderIcon
     {
@@ -74,6 +117,18 @@ internal static class IconAssets
             _builderAttempted = true;
             _builder = LoadBundled("icons/icon_creator.png");
             return _builder;
+        }
+    }
+
+    /// <summary>16x16 small variant for QAT (Assets/icons/icon_creator_16.png).</summary>
+    public static ImageSource? BuilderIcon16
+    {
+        get
+        {
+            if (_builder16Attempted) return _builder16;
+            _builder16Attempted = true;
+            _builder16 = LoadBundled("icons/icon_creator_16.png");
+            return _builder16;
         }
     }
 
@@ -89,6 +144,18 @@ internal static class IconAssets
         }
     }
 
+    /// <summary>16x16 small variant for QAT (Assets/icons/icon_minify_16.png).</summary>
+    public static ImageSource? RstifyIconOff16
+    {
+        get
+        {
+            if (_rstifyOff16Attempted) return _rstifyOff16;
+            _rstifyOff16Attempted = true;
+            _rstifyOff16 = LoadBundled("icons/icon_minify_16.png");
+            return _rstifyOff16;
+        }
+    }
+
     /// <summary>RSTify "active" icon — hidden tabs are currently suppressed.</summary>
     public static ImageSource? RstifyIconOn
     {
@@ -101,6 +168,18 @@ internal static class IconAssets
         }
     }
 
+    /// <summary>16x16 small variant for QAT (Assets/icons/icon_minify_on_16.png).</summary>
+    public static ImageSource? RstifyIconOn16
+    {
+        get
+        {
+            if (_rstifyOn16Attempted) return _rstifyOn16;
+            _rstifyOn16Attempted = true;
+            _rstifyOn16 = LoadBundled("icons/icon_minify_on_16.png");
+            return _rstifyOn16;
+        }
+    }
+
     /// <summary>Heart icon for the Health ribbon button (Assets/icons/icon_health.png).</summary>
     public static ImageSource? HealthIcon
     {
@@ -110,6 +189,18 @@ internal static class IconAssets
             _healthAttempted = true;
             _health = LoadBundled("icons/icon_health.png");
             return _health;
+        }
+    }
+
+    /// <summary>16x16 small variant for QAT (Assets/icons/icon_health_16.png).</summary>
+    public static ImageSource? HealthIcon16
+    {
+        get
+        {
+            if (_health16Attempted) return _health16;
+            _health16Attempted = true;
+            _health16 = LoadBundled("icons/icon_health_16.png");
+            return _health16;
         }
     }
 
