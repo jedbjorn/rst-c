@@ -63,6 +63,10 @@ Support for:
 - coloring panels, including opacity settings
 - Tab and Profile naming
 
+Profiles can be edited in the Builder using the drop down at the top left. Editing a profile and then renaming it creates a copy of that profile, 
+allowing for different flavors of the same profile to be created and curated. Profile deletion is done at the system level within the Loader by selecting
+the profile and clicking "delete profile". 
+
 Profiles are saved to the users %AppData% folder at creation and transmitted profiles are copied to that location.
 No need to save the zips anywhere, just import via the Loader. 
 
