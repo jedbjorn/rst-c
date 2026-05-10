@@ -29,7 +29,7 @@ internal static class RibbonBuilder
     /// rendered colour without picking a darker hex.
     /// </summary>
     private const string RstPanelColor = "#c5d8d8";
-    private const double RstPanelAlpha = 0.5;
+    private const double RstPanelAlpha = 0.8;
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
     private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
