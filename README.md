@@ -163,57 +163,43 @@ behaves unexpectedly.
 
 | Revit version | TFM              |
 |---------------|------------------|
-| 2025          | `net8.0-windows` |
-| 2026          | `net8.0-windows` |
-| 2027          | `net8.0-windows` |
+| 2025          | `net8.0-windows`  |
+| 2026          | `net8.0-windows`  |
+| 2027          | `net10.0-windows` |
 
 ## Install
 
-Pre-built bundles ship on `main` under `build/R<NN>/` — one folder per
-Revit major, split into two trees:
+MSIs ship as GitHub Release assets — the unified `RST.msi` covers Revit
+2025 + 2026; Revit 2027 currently ships as a separate preview MSI
+(`RST-R27.msi`) and will fold back into the unified installer once its
+build path stabilises. Both are per-user — no admin elevation.
 
-- `build/R<NN>/addins/` — the `.addin` manifest plus `RST.Bootstrap.dll`,
-  the tiny IExternalApplication thunk Revit loads. Drops into the
-  per-user Add-Ins directory.
-- `build/R<NN>/app/` — the engine and its transitives (Serilog,
-  WebView2, etc.) plus `Assets/` and `runtimes/`. Drops into
-  `%AppData%\RST\R<NN>\app\` (per-major subdir, since engine binaries
-  are not interchangeable across Revit majors) and is loaded by the
-  bootstrap via an `AssemblyDependencyResolver`.
+1. Grab the latest from the [Releases](https://github.com/jedbjorn/rst-c/releases) page.
+2. Close Revit (the engine DLLs are locked while it's running).
+3. Double-click the MSI, or `msiexec /i RST.msi`.
+4. Launch Revit. The RST tools (Builder / Loader / RSTify / Health)
+   appear on the Add-Ins tab; the active profile's tab appears
+   alongside it (when one is active).
 
-Close Revit, then:
-
-```powershell
-# Add-Ins payload (manifest + bootstrap thunk)
-Copy-Item -Force "build\R25\addins\*" "$env:APPDATA\Autodesk\Revit\Addins\2025\"
-
-# Engine payload (dlls, assets, native runtimes) — per-major subdir
-New-Item -ItemType Directory -Force "$env:APPDATA\RST\R25\app" | Out-Null
-Copy-Item -Recurse -Force "build\R25\app\*" "$env:APPDATA\RST\R25\app\"
-```
+User data (profiles, logs, branding, active-profile state) lives at
+`%AppData%\RST\` and is preserved across reinstalls — only
+`%AppData%\RST\R<NN>\app\` (the engine subfolder for the matching Revit
+major) gets overwritten.
 
 If you previously installed rst-c under the pre-RST-033 single-tree
-layout (engine bundled in the addins dir), or the pre-RST-037 flat
+layout (engine bundled in the addins dir) or the pre-RST-037 flat
 `app\` layout, clear the leftovers once:
 
 ```powershell
-# Pre-RST-033 layout (engine bundled in addins dir)
 Remove-Item -Recurse -Force "$env:APPDATA\Autodesk\Revit\Addins\2025\RST" `
             -ErrorAction SilentlyContinue
-# Pre-RST-037 flat app dir
 Remove-Item -Recurse -Force "$env:APPDATA\RST\app" -ErrorAction SilentlyContinue
 ```
 
-Start Revit. The **rst-c** tab should appear with the Loader button.
-User data (profiles, logs, branding, active-profile state) lives at
-`%AppData%\RST\` and is unaffected by reinstalls — only the
-`%AppData%\RST\R<NN>\app\` subfolder for the matching Revit major gets
-overwritten.
-
 ## Build
 
-Local builds need only the .NET 8 SDK — Revit API references resolve
-from NuGet.
+Local builds need the .NET 8 SDK; .NET 10 SDK is additionally required
+to target Revit 2027. Revit API references resolve from NuGet.
 
 ```bash
 dotnet restore
@@ -222,13 +208,17 @@ dotnet build -c "Debug R26"     # Revit 2026
 dotnet build -c "Debug R27"     # Revit 2027 (needs .NET 10 SDK)
 ```
 
-To produce a shippable `build/R<NN>/{addins,app}/` bundle from a
-clean source tree:
+To produce a runnable bundle for a single Revit major:
 
 ```bash
-build/stage.sh R25            # Release config by default
+build/stage.sh R25            # Release config by default → build/R25/{addins,app}
 build/stage.sh R26 Debug      # Debug build for VM diagnostics
 ```
+
+The staged tree is local-build / CI-runtime material — not committed.
+For an MSI build, run `dotnet build installer\RST.Installer.wixproj`
+(unified R25 + R26) or `dotnet build installer-r27\RST.Installer.R27.wixproj`
+on Windows after staging the relevant majors.
 
 ## License
 
