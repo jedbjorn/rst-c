@@ -114,4 +114,53 @@ public sealed class UserProfilePrefsTests : IDisposable
         var act = () => prefs.Set("", new List<string>(), false, path: _path);
         act.Should().Throw<ArgumentException>();
     }
+
+    // RST-046: panel-opacity override
+    [Fact]
+    public void SetPanelOpacityOverride_creates_entry_and_round_trips()
+    {
+        var prefs = UserProfilePrefs.Read(_path);
+        prefs.SetPanelOpacityOverride("abc", 50, path: _path);
+
+        var reloaded = UserProfilePrefs.Read(_path);
+        reloaded.Profiles.Should().ContainKey("abc");
+        reloaded.Profiles["abc"].PanelOpacityOverride.Should().Be(50);
+    }
+
+    [Fact]
+    public void SetPanelOpacityOverride_null_clears_override()
+    {
+        var prefs = UserProfilePrefs.Read(_path);
+        prefs.SetPanelOpacityOverride("abc", 50, path: _path);
+        prefs.SetPanelOpacityOverride("abc", null, path: _path);
+
+        var reloaded = UserProfilePrefs.Read(_path);
+        reloaded.Profiles["abc"].PanelOpacityOverride.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetPanelOpacityOverride_with_empty_id_throws()
+    {
+        var prefs = UserProfilePrefs.Read(_path);
+        var act = () => prefs.SetPanelOpacityOverride("", 50, path: _path);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void SetPanelOpacityOverride_does_not_disturb_RSTify_state()
+    {
+        // Slider write path must leave hiddenTabs / disableUnusedAddins
+        // / presetsAdopted untouched on the same entry.
+        var prefs = UserProfilePrefs.Read(_path);
+        prefs.Set("abc", new[] { "Architecture" }, disableUnusedAddins: true,
+                  presetsAdopted: true, path: _path);
+        prefs.SetPanelOpacityOverride("abc", 60, path: _path);
+
+        var reloaded = UserProfilePrefs.Read(_path);
+        var e = reloaded.Profiles["abc"];
+        e.HiddenTabs.Should().BeEquivalentTo(new[] { "Architecture" });
+        e.DisableUnusedAddins.Should().BeTrue();
+        e.PresetsAdopted.Should().BeTrue();
+        e.PanelOpacityOverride.Should().Be(60);
+    }
 }

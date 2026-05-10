@@ -40,6 +40,16 @@ public sealed class UserProfilePrefsEntry
     /// </summary>
     [JsonPropertyName("presetsAdopted")]
     public bool PresetsAdopted { get; set; }
+
+    /// <summary>
+    /// User's per-profile panel-opacity override (10-100). When set,
+    /// REPLACES <c>profile.PanelOpacity</c> at ribbon-build time for
+    /// every panel in the profile. Null means "no override; use the
+    /// admin's value." Sticky once set — survives admin profile
+    /// updates. See ProfileTabBuilder for the consumer.
+    /// </summary>
+    [JsonPropertyName("panelOpacityOverride")]
+    public int? PanelOpacityOverride { get; set; }
 }
 
 public sealed class UserProfilePrefs
@@ -109,6 +119,27 @@ public sealed class UserProfilePrefs
         entry.HiddenTabs = new List<string>(hiddenTabs ?? Array.Empty<string>());
         entry.DisableUnusedAddins = disableUnusedAddins;
         if (presetsAdopted.HasValue) entry.PresetsAdopted = presetsAdopted.Value;
+        Write(path);
+    }
+
+    /// <summary>
+    /// Upsert just the panel-opacity override for one profile. Pass
+    /// <c>null</c> to clear it. Persists immediately. Kept separate
+    /// from <see cref="Set"/> so the slider write path doesn't
+    /// disturb the RSTify hidden-tabs / disable-unused state on the
+    /// same entry.
+    /// </summary>
+    public void SetPanelOpacityOverride(string profileId, int? value, string? path = null)
+    {
+        if (string.IsNullOrEmpty(profileId))
+            throw new ArgumentException("profileId required", nameof(profileId));
+
+        if (!Profiles.TryGetValue(profileId, out var entry))
+        {
+            entry = new UserProfilePrefsEntry();
+            Profiles[profileId] = entry;
+        }
+        entry.PanelOpacityOverride = value;
         Write(path);
     }
 }
