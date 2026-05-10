@@ -13,12 +13,20 @@
 // commands.
 
 using Autodesk.Revit.UI;
+using Serilog;
 
 namespace RST.Engine.Ribbon;
 
 internal static class RibbonBuilder
 {
     private const string RstPanelTitle = "RST";
+
+    /// <summary>
+    /// RST tools panel backdrop. Paired with the #d9d9d9 chip background
+    /// baked into the brand icon PNGs (RST-043) so the four buttons stay
+    /// visible against both Revit's light and dark themes.
+    /// </summary>
+    private const string RstPanelColor = "#c5d8d8";
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
     private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
@@ -95,5 +103,23 @@ internal static class RibbonBuilder
         rstPanel.AddItem(loaderBtn);
         rstPanel.AddItem(rstifyBtn);
         rstPanel.AddItem(healthBtn);
+    }
+
+    /// <summary>
+    /// Apply the RST tools panel backdrop. Must be called after the ribbon
+    /// is fully constructed (ApplicationInitialized timing) — at OnStartup
+    /// AwComponentManager.Ribbon hasn't materialised the new panel yet.
+    /// Lookup is title-only (cross-tab) because the host Add-Ins tab title
+    /// is locale-dependent.
+    /// </summary>
+    public static void ApplyToolsPanelStyling()
+    {
+        var panel = PanelStyling.FindAwPanelInAnyTab(RstPanelTitle);
+        if (panel is null)
+        {
+            Log.Debug("RibbonBuilder: RST tools panel not found at styling time — skipping ApplyColor");
+            return;
+        }
+        PanelStyling.ApplyColor(panel, RstPanelColor, alpha: 1.0);
     }
 }

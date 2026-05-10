@@ -106,6 +106,11 @@ public sealed class RstApplication : IExternalApplication
             }
             var uiApp = new UIApplication(app);
 
+            // Style the RST tools panel now that AwComponentManager.Ribbon
+            // is populated. Applies regardless of whether a profile is
+            // active — the four-button panel is permanent (RST-043).
+            RibbonBuilder.ApplyToolsPanelStyling();
+
             var active = ActiveProfile.Read();
             if (active.IsBlank)
             {
