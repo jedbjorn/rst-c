@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST-R27.msi — preview-only standalone installer for Revit 2027 support.
+
+  RST-013 ships R27 as a standalone MSI rather than folding into the
+  unified RST.msi (R25+R26) until the R27 build path stabilises in CI.
+  Once R27 lands in the unified MSI, this project is end-of-lifed; users
+  uninstall RST-R27.msi before installing the unified build.
+
+  Layout (R27 only):
+    %AppData%\Autodesk\Revit\Addins\2027\
+      RST.addin
+      RST.Bootstrap.dll
+      RST.Bootstrap.pdb
+    %AppData%\RST\R27\app\
+      RST.Engine.dll, RST.UI.dll, RST.Core.dll
+      Serilog*.dll, Microsoft.Web.WebView2.*.dll
+      RST.Engine.deps.json, *.pdb
+      Assets\**\*
+      runtimes\<rid>\native\WebView2Loader.dll
+      runtimes\win\lib\net10.0\System.Management.dll
+
+  UpgradeCode is independent of the unified MSI's UpgradeCode by design
+  — both MSIs coexist on disk during the preview window. Both GUIDs are
+  fixed identities of the RST product family and must never change once
+  shipped.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="RST (Revit 2027 preview)"
+           Manufacturer="Designs/OS"
+           Version="0.1.0"
+           UpgradeCode="02BE4399-A563-4B15-BD12-ECF5D8486FB3"
+           Scope="perUser"
+           Compressed="yes">
+
+    <SummaryInformation Description="Curated Revit ribbon — Revit 2027 preview" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="REVIT2027_REG">
+      <RegistrySearch Id="Revit2027Search" Root="HKLM"
+                      Key="SOFTWARE\Autodesk\Revit\2027"
+                      Name="InstallationLocation" Type="raw" />
+    </Property>
+
+    <StandardDirectory Id="AppDataFolder">
+      <Directory Id="AutodeskFolder" Name="Autodesk">
+        <Directory Id="RevitFolder" Name="Revit">
+          <Directory Id="RevitAddinsFolder" Name="Addins">
+            <Directory Id="Addins2027Dir" Name="2027" />
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="RstFolder" Name="RST">
+        <Directory Id="R27Dir" Name="R27">
+          <Directory Id="R27AppDir" Name="app" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="RST (R27 preview)" Level="1">
+      <Files Include="..\..\build\R27\addins\**" Directory="Addins2027Dir" />
+      <Files Include="..\..\build\R27\app\**"    Directory="R27AppDir" />
+    </Feature>
+
+  </Package>
+
+</Wix>
