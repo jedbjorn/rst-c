@@ -24,9 +24,12 @@ internal static class RibbonBuilder
     /// <summary>
     /// RST tools panel backdrop. Paired with the #d9d9d9 chip background
     /// baked into the brand icon PNGs (RST-043) so the four buttons stay
-    /// visible against both Revit's light and dark themes.
+    /// visible against both Revit's light and dark themes. The 0.5 alpha
+    /// lets the underlying ribbon canvas show through, deepening the
+    /// rendered colour without picking a darker hex.
     /// </summary>
     private const string RstPanelColor = "#c5d8d8";
+    private const double RstPanelAlpha = 0.5;
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
     private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
@@ -120,6 +123,6 @@ internal static class RibbonBuilder
             Log.Debug("RibbonBuilder: RST tools panel not found at styling time — skipping ApplyColor");
             return;
         }
-        PanelStyling.ApplyColor(panel, RstPanelColor, alpha: 1.0);
+        PanelStyling.ApplyColor(panel, RstPanelColor, RstPanelAlpha);
     }
 }
