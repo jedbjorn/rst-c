@@ -1,0 +1,31 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+
+  <!--
+    RST.Installer.R27 — produces RST-R27.msi (Revit 2027 preview).
+
+    Standalone counterpart to ../installer/RST.Installer.wixproj (which
+    produces RST.msi for R25 + R26). Lives in a sibling directory rather
+    than under installer/ because the WiX SDK 6 implicit `**\*.wxs` glob
+    is recursive — colocating the two .wxs files inside installer/ makes
+    the unified wixproj try to compile both, which fails.
+
+    Build: from this directory, `dotnet build`.
+      Output: bin/<Configuration>/RST-R27.msi.
+
+    Harvest source: ../build/R27/{addins,app}/. `build/stage.sh R27`
+    must populate that tree first.
+
+    See Product.wxs header for the rationale on shipping R27 as a
+    standalone MSI during the RST-013 stabilisation window.
+  -->
+
+  <PropertyGroup>
+    <OutputName>RST-R27</OutputName>
+    <OutputType>Package</OutputType>
+    <Configurations>Debug;Release</Configurations>
+    <!-- Same per-user ICE suppressions as the unified installer (see
+         ../RST.Installer.wixproj for rationale). -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+  </PropertyGroup>
+
+</Project>
