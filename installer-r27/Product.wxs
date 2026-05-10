@@ -29,7 +29,7 @@
 
   <Package Name="RST (Revit 2027 preview)"
            Manufacturer="Designs/OS"
-           Version="0.1.0"
+           Version="1.0.0"
            UpgradeCode="02BE4399-A563-4B15-BD12-ECF5D8486FB3"
            Scope="perUser"
            Compressed="yes">
