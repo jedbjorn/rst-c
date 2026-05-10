@@ -1,0 +1,125 @@
+name: build
+
+# RST-013 — CI matrix for the multi-Revit build path.
+#
+#   • test         — xunit on RST.Tests (configuration-agnostic)
+#   • stage        — matrix R25/R26/R27, runs build/stage.sh per major,
+#                    uploads the bundle as a per-major artifact. R27 is
+#                    soft-fail (continue-on-error) until the build path
+#                    stabilises — first ever R27 build runs here, since
+#                    .NET 10 SDK is CI-only.
+#   • msi-unified  — Windows runner. Downloads R25 + R26 artifacts, runs
+#                    installer/RST.Installer.wixproj → RST.msi
+#                    (R25 + R26 in one MSI).
+#   • msi-r27      — Windows runner. Downloads R27 artifact, runs
+#                    installer-r27/RST.Installer.R27.wixproj → RST-R27.msi
+#                    (preview-only standalone). Soft-fail to keep the
+#                    workflow green when R27 stage has soft-failed.
+#
+# WiX MSI emission is officially Windows-only (installer/README.md). The
+# WiX SDK MSBuild path on Linux emits WIX0000 ("behavior is undefined")
+# and trips WIX0389 on every Directory/@Name. Stage jobs stay on Linux —
+# `dotnet build` of net8/net10-windows TFMs works there via
+# EnableWindowsTargeting. Only the WiX step pays the Windows-runner cost.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+
+  test:
+    name: Test (xunit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet test src/RST.Tests/RST.Tests.csproj -c Release --nologo
+
+  stage:
+    name: Stage ${{ matrix.major }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - major: R25
+          - major: R26
+          - major: R27
+    # R27 is the first-ever build of the .NET 10 / Revit 2027 target —
+    # let it soft-fail without taking down R25/R26 or the workflow.
+    continue-on-error: ${{ matrix.major == 'R27' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # .NET 10 isn't GA — pull the preview channel only for R27. (When
+      # SDK 10 ships GA, drop the conditional and merge into the main
+      # setup-dotnet step.)
+      - uses: actions/setup-dotnet@v4
+        if: matrix.major == 'R27'
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+      - run: build/stage.sh ${{ matrix.major }} Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-${{ matrix.major }}
+          path: build/${{ matrix.major }}/
+          if-no-files-found: error
+
+  msi-unified:
+    name: MSI (R25 + R26)
+    needs: stage
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R25
+          path: build/R25/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R26
+          path: build/R26/
+      - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST.msi
+          path: installer/bin/Release/RST.msi
+          if-no-files-found: error
+
+  msi-r27:
+    name: MSI (R27 preview)
+    needs: stage
+    runs-on: windows-latest
+    # R27 stage is soft-fail; if its artifact is missing the download step
+    # below errors out. Soft-fail this job so the overall workflow stays
+    # green for R25 + R26 shippable artifacts.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R27
+          path: build/R27/
+      - run: dotnet build installer-r27/RST.Installer.R27.wixproj -c Release --nologo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST-R27.msi
+          path: installer-r27/bin/Release/RST-R27.msi
+          if-no-files-found: error
