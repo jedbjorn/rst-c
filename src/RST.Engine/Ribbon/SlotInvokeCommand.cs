@@ -56,6 +56,7 @@ internal sealed class SlotInvokeCommand : ICommand
                     {
                         Log.Warning("SlotInvokeCommand: Revit command id not found ({CommandId}, display={DisplayName})",
                                     _target.Payload, _target.DisplayName);
+                        ShowMissingAddinDialog(_target.DisplayName);
                         return;
                     }
                     _ui.PostCommand(id);
@@ -66,6 +67,52 @@ internal sealed class SlotInvokeCommand : ICommand
         {
             Log.Error(ex, "SlotInvokeCommand failed (kind={Kind}, payload={Payload}, display={DisplayName})",
                       _target.Kind, _target.Payload, _target.DisplayName);
+            ShowFailureDialog(_target.DisplayName, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Surface a missing-target click via Revit's TaskDialog. The most
+    /// common cause is the source add-in not being installed (or disabled
+    /// in the Add-In Manager) for this Revit major. Defensive try/catch
+    /// around .Show() — a click handler that throws while reporting an
+    /// error is worse than the silent failure we're trying to fix.
+    /// </summary>
+    private static void ShowMissingAddinDialog(string displayName)
+    {
+        try
+        {
+            var dlg = new TaskDialog("RST")
+            {
+                MainInstruction = $"“{displayName}” couldn’t run.",
+                MainContent =
+                    "The add-in this button needs doesn’t appear to be installed in this Revit version " +
+                    "(or it is disabled in Revit’s Add-In Manager). Install or enable the add-in and try again.",
+                CommonButtons = TaskDialogCommonButtons.Close,
+            };
+            dlg.Show();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "SlotInvokeCommand: missing-addin TaskDialog failed (display={DisplayName})", displayName);
+        }
+    }
+
+    private static void ShowFailureDialog(string displayName, string error)
+    {
+        try
+        {
+            var dlg = new TaskDialog("RST")
+            {
+                MainInstruction = $"“{displayName}” couldn’t run.",
+                MainContent = $"The button failed unexpectedly: {error}\n\nDetails are in %AppData%\\RST\\logs\\.",
+                CommonButtons = TaskDialogCommonButtons.Close,
+            };
+            dlg.Show();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "SlotInvokeCommand: failure TaskDialog failed (display={DisplayName})", displayName);
         }
     }
 }
