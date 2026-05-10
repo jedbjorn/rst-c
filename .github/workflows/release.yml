@@ -1,0 +1,66 @@
+name: release
+
+# RST-013 phase 3 — tag-driven GitHub Release.
+#
+# Push a tag matching `v*` (e.g. `v0.1.0`, `v1.0.0`, `v0.2.0-rc.1`) and
+# this workflow:
+#   1. Runs the full _build.yml pipeline against the tagged commit.
+#   2. Downloads the produced MSI artifacts.
+#   3. Creates a GitHub Release with the MSIs attached, auto-generated
+#      release notes, and pre-release flag set when the tag carries a
+#      hyphenated suffix (alpha/beta/rc).
+#
+# Tag → Release. Nothing else triggers a release; pushes to main do not
+# auto-tag.
+#
+# Versioning: the MSI's <Package Version="…"> in installer/Product.wxs
+# (and installer-r27/Product.wxs) is the source of truth for the
+# installed product version. Bump it before tagging — the tag is just
+# the release name, not threaded into the build. (Tag-driven Version
+# threading is a future refinement.)
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+
+  build:
+    uses: ./.github/workflows/_build.yml
+
+  release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: ./artifacts/
+      # R27 MSI is soft-fail upstream; tolerate its artifact being absent.
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-R27.msi
+          path: ./artifacts/
+        continue-on-error: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          # Hyphenated tags (v1.0.0-rc.1, v0.2.0-alpha) → pre-release.
+          prerel=()
+          if [[ "$tag" == *-* ]]; then
+            prerel=(--prerelease)
+          fi
+          # Upload whatever MSIs are present in artifacts/. R27 may be
+          # missing if its stage soft-failed.
+          gh release create "$tag" \
+            artifacts/*.msi \
+            --title "$tag" \
+            --generate-notes \
+            "${prerel[@]}"

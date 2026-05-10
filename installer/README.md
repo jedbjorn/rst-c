@@ -72,5 +72,20 @@ shipped.
 
 ## Releasing
 
-Code signing + GitHub Actions matrix build land in **RST-013**. Until
-then, MSIs are built locally and shared by hand.
+CI builds the MSI on every push to `main` (workflow artifact
+`RST.msi`). Cutting a release is a tag push:
+
+```bash
+# Bump <Package Version="…"> in installer/Product.wxs (and
+# installer-r27/Product.wxs if R27 is shipping) first.
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The `release` workflow rebuilds against the tagged commit, attaches
+`RST.msi` (and `RST-R27.msi` if its stage produced an artifact) to a
+new GitHub Release, and auto-generates release notes from commits since
+the previous tag. Hyphenated tags (`v1.0.0-rc.1`, `v0.2.0-alpha`) are
+flagged as pre-release.
+
+Code signing remains a separate flag — current MSIs ship unsigned.
