@@ -84,7 +84,19 @@ internal static class ProfileTabBuilder
             return;
         }
 
-        var alpha = Math.Max(10, Math.Min(100, profile.PanelOpacity)) / 100.0;
+        // RST-046: per-user, per-profile panel-opacity override REPLACES
+        // profile.PanelOpacity when set. Sticky across sessions; admin
+        // profile updates do not clear the user's override.
+        int? userOverride = !string.IsNullOrEmpty(profile.Id)
+            ? UserProfilePrefs.Read().Get(profile.Id!)?.PanelOpacityOverride
+            : null;
+        int effectiveOpacity = userOverride ?? profile.PanelOpacity;
+        var alpha = Math.Max(10, Math.Min(100, effectiveOpacity)) / 100.0;
+        if (userOverride.HasValue)
+        {
+            Log.Information("ProfileTabBuilder: opacity override active for profile={Id} admin={Admin} user={User}",
+                            profile.Id, profile.PanelOpacity, userOverride.Value);
+        }
         int panelIndex = 0;
         int slotCount = 0;
 

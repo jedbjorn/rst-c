@@ -275,8 +275,14 @@
     top: 1px;
   }
 
-  .tab-preview-ro-badge {
+  .tab-preview-topbar-right {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .tab-preview-ro-badge {
     font-family: 'DM Mono', monospace;
     font-size: 8px;
     letter-spacing: 0.1em;
@@ -286,6 +292,37 @@
     border: 1px solid var(--border);
     border-radius: 3px;
     padding: 2px 7px;
+  }
+
+  /* RST-046: per-user, per-profile panel-opacity override slider.
+     Touch the slider → override is recorded and replaces the admin's
+     profile.PanelOpacity at ribbon-build time. Sticky once set. */
+  .opacity-override-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .opacity-override-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+
+  .opacity-override-slider {
+    width: 100px;
+    accent-color: var(--accent, #4f8ef7);
+    cursor: pointer;
+  }
+
+  .opacity-override-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    min-width: 22px;
+    text-align: right;
   }
 
   /* Preview canvas mimics Revit's ribbon background. Defaults to Revit 2024+
@@ -769,7 +806,16 @@
         <div class="tab-preview-wrap">
           <div class="tab-preview-topbar">
             <div class="tab-pill" id="previewTabPill">—</div>
-            <span class="tab-preview-ro-badge">Read Only</span>
+            <div class="tab-preview-topbar-right">
+              <div class="opacity-override-control" id="opacityOverrideControl">
+                <label class="opacity-override-label" for="opacityOverride">Override Panel Opacity</label>
+                <input type="range" id="opacityOverride" class="opacity-override-slider"
+                       min="10" max="100" step="1" value="100"
+                       oninput="onOpacityOverrideInput()" onchange="onOpacityOverrideChange()" />
+                <span class="opacity-override-value" id="opacityOverrideValue">100</span>
+              </div>
+              <span class="tab-preview-ro-badge">Read Only</span>
+            </div>
           </div>
           <div class="tab-canvas-ro" id="tabCanvas">
             <!-- rendered by renderTabPreview() -->
@@ -1108,7 +1154,7 @@
     return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
   }
 
-  function renderTabPreview(profile) {
+  function renderTabPreview(profile, effectiveOpacityOverride) {
     document.getElementById('previewTabPill').textContent = profile.tab || '—';
     const canvas = document.getElementById('tabCanvas');
 
@@ -1117,7 +1163,12 @@
       return;
     }
 
-    const panelOpacity = profile.panelOpacity != null ? profile.panelOpacity : 100;
+    // RST-046: caller passes the effective opacity (override-or-admin)
+    // so the preview matches what the ribbon will render. Falls back
+    // to profile.panelOpacity when no override has been set.
+    const panelOpacity = effectiveOpacityOverride != null
+      ? effectiveOpacityOverride
+      : (profile.panelOpacity != null ? profile.panelOpacity : 100);
 
     canvas.innerHTML = profile.panels.map(panel => {
       const innerHtml = (panel.slots || []).map(slot => {
@@ -1149,6 +1200,34 @@
     }).join('');
   }
 
+  // ── OPACITY OVERRIDE (RST-046) ────────────────────────────────────────────────
+  // Live preview on every input event; persist on change (slider release).
+  // Override REPLACES profile.panelOpacity in ProfileTabBuilder when set.
+  function onOpacityOverrideInput() {
+    var slider = document.getElementById('opacityOverride');
+    var valEl = document.getElementById('opacityOverrideValue');
+    if (!slider) return;
+    var v = parseInt(slider.value, 10);
+    if (isNaN(v)) return;
+    if (valEl) valEl.textContent = String(v);
+    if (selectedProfile) renderTabPreview(selectedProfile, v);
+  }
+
+  function onOpacityOverrideChange() {
+    if (!selectedProfile || !selectedProfile.id) return;
+    var slider = document.getElementById('opacityOverride');
+    if (!slider) return;
+    var v = parseInt(slider.value, 10);
+    if (isNaN(v)) return;
+    window.pywebview.api.record_panel_opacity_override(selectedProfile.id, v).then(function() {
+      USER_PROFILE_PREFS.profiles = USER_PROFILE_PREFS.profiles || {};
+      USER_PROFILE_PREFS.profiles[selectedProfile.id] = USER_PROFILE_PREFS.profiles[selectedProfile.id] || {};
+      USER_PROFILE_PREFS.profiles[selectedProfile.id].panelOpacityOverride = v;
+    }).catch(function(err) {
+      rstLog('error', 'selector: record_panel_opacity_override failed', { err: String(err) });
+    });
+  }
+
   // ── CARD SELECTION ────────────────────────────────────────────────────────────
   function clearDetailPane() {
     selectedProfile = null;
@@ -1178,8 +1257,22 @@
       <div class="detail-meta-item"><span>Updated</span><span class="val" style="margin-left:5px">${escHtml(profile.exportDate)}</span></div>
     `;
 
+    // RST-046: seed opacity-override slider from saved user prefs
+    // (override wins) or fall back to admin's profile.panelOpacity.
+    var prefsForProfile = profile.id ? (USER_PROFILE_PREFS && USER_PROFILE_PREFS.profiles ? USER_PROFILE_PREFS.profiles[profile.id] : null) : null;
+    var savedOverride = (prefsForProfile && typeof prefsForProfile.panelOpacityOverride === 'number')
+      ? prefsForProfile.panelOpacityOverride
+      : null;
+    var effectiveOpacity = savedOverride != null
+      ? savedOverride
+      : (profile.panelOpacity != null ? profile.panelOpacity : 100);
+    var opacitySlider = document.getElementById('opacityOverride');
+    var opacitySliderVal = document.getElementById('opacityOverrideValue');
+    if (opacitySlider) opacitySlider.value = String(effectiveOpacity);
+    if (opacitySliderVal) opacitySliderVal.textContent = String(effectiveOpacity);
+
     // Tab preview
-    renderTabPreview(profile);
+    renderTabPreview(profile, effectiveOpacity);
 
     // Show the two-column row
     document.getElementById('addinTogglesRow').style.display = 'flex';

@@ -925,6 +925,46 @@ public class LoaderBridge
     }
 
     /// <summary>
+    /// Upsert the user's panel-opacity override for one profile id.
+    /// JS payload: opacityJson is an int (10-100) to set or null to
+    /// clear. The override REPLACES <c>profile.PanelOpacity</c> at
+    /// ribbon-build time (see ProfileTabBuilder). Persists in the
+    /// same user_profile_prefs.json entry as RSTify state but on a
+    /// separate field, so the slider write path doesn't disturb
+    /// hidden-tabs or disable-unused.
+    /// </summary>
+    public string RecordPanelOpacityOverride(string profileIdJson, string opacityJson)
+    {
+        LogEntry(nameof(RecordPanelOpacityOverride),
+                 ("id", profileIdJson), ("opacity", opacityJson));
+        var profileId = Deserialize<string>(profileIdJson) ?? "";
+        if (string.IsNullOrEmpty(profileId))
+            return Serialize(new { ok = false, error = "profileId required" });
+
+        int? opacity = Deserialize<int?>(opacityJson);
+        if (opacity.HasValue)
+        {
+            // Clamp at the boundary — slider only emits 10-100, but
+            // defensive against bad JS payloads.
+            opacity = Math.Max(10, Math.Min(100, opacity.Value));
+        }
+
+        try
+        {
+            var prefs = UserProfilePrefs.Read();
+            prefs.SetPanelOpacityOverride(profileId, opacity);
+            Log.Information("Bridge.record_panel_opacity_override OK: id={Id} opacity={Opacity}",
+                            profileId, opacity?.ToString() ?? "null");
+            return Serialize(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Bridge.record_panel_opacity_override: write failed for {Id}", profileId);
+            return Serialize(new { ok = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Compute the disable-preview classification for the named profile:
     /// staying (required), disabling (writeable + non-required),
     /// tryDisable (read-only + non-required — Revit install dir),
