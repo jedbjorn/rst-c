@@ -12,6 +12,7 @@
 // is called so the catalog scanner skips this tab when enumerating
 // commands.
 
+using System;
 using Autodesk.Revit.UI;
 using Serilog;
 
@@ -22,13 +23,16 @@ internal static class RibbonBuilder
     private const string RstPanelTitle = "RST";
 
     /// <summary>
-    /// RST tools panel backdrop. Paired with the #d9d9d9 chip background
-    /// baked into the brand icon PNGs (RST-043) so the four buttons stay
-    /// visible against both Revit's light and dark themes. The 0.5 alpha
-    /// lets the underlying ribbon canvas show through, deepening the
-    /// rendered colour without picking a darker hex.
+    /// RST tools panel backdrop, themed. Paired with the #d9d9d9 chip
+    /// background baked into the brand icon PNGs (RST-043) so the four
+    /// buttons stay visible against both Revit's light and dark themes.
+    /// Selected at ApplicationInitialized via UIThemeManager.CurrentTheme;
+    /// not re-applied on live theme switch (Revit restart picks up the
+    /// new colour). The 0.5 alpha lets the underlying ribbon canvas show
+    /// through, deepening the rendered colour without picking a flat hex.
     /// </summary>
-    private const string RstPanelColor = "#c5d8d8";
+    private const string RstPanelColorLight = "#c5d8d8";
+    private const string RstPanelColorDark  = "#5a7878";
     private const double RstPanelAlpha = 0.5;
     private const string LoaderClassName = "RST.Engine.Commands.LoaderCommand";
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
@@ -113,7 +117,9 @@ internal static class RibbonBuilder
     /// is fully constructed (ApplicationInitialized timing) — at OnStartup
     /// AwComponentManager.Ribbon hasn't materialised the new panel yet.
     /// Lookup is title-only (cross-tab) because the host Add-Ins tab title
-    /// is locale-dependent.
+    /// is locale-dependent. Colour picks light/dark based on
+    /// UIThemeManager.CurrentTheme at apply time; falls back to the light
+    /// hex when the API throws (older Revit majors / unexpected state).
     /// </summary>
     public static void ApplyToolsPanelStyling()
     {
@@ -123,6 +129,23 @@ internal static class RibbonBuilder
             Log.Debug("RibbonBuilder: RST tools panel not found at styling time — skipping ApplyColor");
             return;
         }
-        PanelStyling.ApplyColor(panel, RstPanelColor, RstPanelAlpha);
+        var color = ResolveThemedColor();
+        PanelStyling.ApplyColor(panel, color, RstPanelAlpha);
+    }
+
+    private static string ResolveThemedColor()
+    {
+        try
+        {
+            if (UIThemeManager.CurrentTheme == UITheme.Dark)
+            {
+                return RstPanelColorDark;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "RibbonBuilder: UIThemeManager.CurrentTheme threw — defaulting to light hex");
+        }
+        return RstPanelColorLight;
     }
 }
