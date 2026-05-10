@@ -6,9 +6,18 @@ Architects, modellers, BIM coordinators, and trainees rarely need the same
 ribbon — rst-c lets each role get the ribbon that fits the work, without
 hunting through tabs or relearning where commands live.
 
-It ships as a single signed managed add-in for Revit 2025 through 2027,
+It ships as a single managed add-in for Revit 2025 through 2027,
 installs into the standard per-user add-in directory, and runs without
 pyRevit, Python, or any other external runtime.
+
+## Download
+
+Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
+
+- `RST.msi` — Revit 2025 + 2026
+- `RST-R27.msi` — Revit 2027
+
+Per-user install; no admin rights required. Run the matching MSI, then launch Revit — the rst-c tab appears on the ribbon.
 
 ## Intention
 

@@ -40,7 +40,7 @@
 
   <Package Name="RST"
            Manufacturer="Designs/OS"
-           Version="0.1.0"
+           Version="1.0.0"
            UpgradeCode="AF0331FC-5280-492A-94BD-95EDF108BE74"
            Scope="perUser"
            Compressed="yes">
