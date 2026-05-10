@@ -125,6 +125,30 @@ internal static class PanelStyling
     }
 
     /// <summary>
+    /// Find a RibbonPanel by Source.Title across every tab in the ribbon.
+    /// Used for panels whose host tab title is locale-dependent (e.g. the
+    /// "Add-Ins" tab where RibbonBuilder drops the RST tools panel —
+    /// localised in non-English Revit installs). Returns the first match
+    /// or null when the ribbon is not yet ready / no panel matches.
+    /// </summary>
+    public static AwRibbonPanel? FindAwPanelInAnyTab(string panelTitle)
+    {
+        var ribbon = AwComponentManager.Ribbon;
+        if (ribbon is null) return null;
+        foreach (var tab in ribbon.Tabs)
+        {
+            if (tab is null) continue;
+            foreach (var panel in tab.Panels)
+            {
+                if (panel?.Source is null) continue;
+                if (string.Equals(panel.Source.Title, panelTitle, StringComparison.Ordinal))
+                    return panel;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Build the leftmost branding panel — square logo with rounded
     /// corners and no button. Title strip is suppressed visually (transparent
     /// brush + empty Title) but the source's Name carries the active profile
