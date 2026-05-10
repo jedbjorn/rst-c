@@ -61,14 +61,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      # .NET 10 isn't GA — pull the preview channel only for R27. (When
-      # SDK 10 ships GA, drop the conditional and merge into the main
-      # setup-dotnet step.)
+      # SDK 10 is GA (10.0.203 as of 2026-05-10); install alongside SDK 8
+      # only when building R27 to keep R25/R26 jobs lean.
       - uses: actions/setup-dotnet@v4
         if: matrix.major == 'R27'
         with:
           dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
       - run: build/stage.sh ${{ matrix.major }} Release
       - uses: actions/upload-artifact@v4
         with:
