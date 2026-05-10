@@ -62,8 +62,8 @@
     </StandardDirectory>
 
     <Feature Id="Main" Title="RST (R27 preview)" Level="1">
-      <Files Include="..\..\build\R27\addins\**" Directory="Addins2027Dir" />
-      <Files Include="..\..\build\R27\app\**"    Directory="R27AppDir" />
+      <Files Include="..\build\R27\addins\**" Directory="Addins2027Dir" />
+      <Files Include="..\build\R27\app\**"    Directory="R27AppDir" />
     </Feature>
 
   </Package>
