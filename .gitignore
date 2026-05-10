@@ -29,9 +29,9 @@ artifacts/
 publish/
 *.binlog
 
-## Re-include shipped bundles under build/R<NN>/
-!build/R*/**/*.pdb
-!build/R*/**/*.dll.config
+## Staged R<NN> trees are local-build / CI-runtime artefacts only
+## (MSIs ship via GitHub Releases; local installs build on demand).
+build/R*/
 
 ## RST-specific
 src/**/Resources/Profiles/*.json
