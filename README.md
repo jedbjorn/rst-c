@@ -54,6 +54,10 @@ touched. The Loader is meant to feel closer to picking a workspace than
 to running an extension command — most users will only ever see this
 one window.
 
+
+https://github.com/user-attachments/assets/7ac96408-d531-4930-a1ad-446b2994739c
+
+
 ### Profile Builder
 
 The Builder is the admin counterpart to the Loader. It scans the live
@@ -99,6 +103,10 @@ The intent is to let admins fold company resources — the wiki, the
 SharePoint document library, the BIM standards PDF, the helpdesk inbox —
 into the same ribbon people already use, instead of asking them to
 remember a separate set of bookmarks.
+
+
+https://github.com/user-attachments/assets/3e216ab3-2597-400e-9010-cbb45df10b89
+
 
 ### Branding Panel
 
@@ -149,6 +157,10 @@ collaboration cache, with cleanup targets configurable per profile.
 Everything runs locally; nothing is uploaded. The intent is to give an
 end user something concrete to send a BIM lead when Revit is misbehaving,
 without asking them to dig through Windows settings.
+
+
+https://github.com/user-attachments/assets/01fb84a3-a340-4a91-bba7-7936da277014
+
 
 ### Profile Export and Import
 
