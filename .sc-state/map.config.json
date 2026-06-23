@@ -1,0 +1,10 @@
+{
+  "skip_dirs": [".sc-worktrees", ".super-coder", ".sc-state", "build", ".vs", "bin", "obj"],
+  "skip_files": ["*.lock", "*.tmp"],
+  "role_overrides": [
+    { "glob": "*.csproj", "role": "config" },
+    { "glob": "*.sln", "role": "config" },
+    { "glob": "*.props", "role": "config" },
+    { "glob": "*.xaml", "role": "code" }
+  ]
+}
