@@ -129,8 +129,7 @@ public sealed class AddinScannerTests
                 source.Path.Should().NotBeNullOrEmpty();
                 Directory.Exists(source.Path).Should().BeTrue(
                     $"source path {source.Path} for {manifest.FileName} must exist");
-                manifest.FilePath.Should().StartWith(source.Path,
-                    System.StringComparison.OrdinalIgnoreCase,
+                manifest.FilePath.Should().StartWithEquivalentOf(source.Path,
                     $"{manifest.FileName} must be under its tagged source {source.Path}");
             }
         }
