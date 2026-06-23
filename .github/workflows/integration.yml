@@ -1,0 +1,38 @@
+name: integration
+
+# Run integration tests on the self-hosted Windows runner (W10C_DOS-ARCH_Testing).
+# This runner has Revit + real third-party add-ins installed, which is what the
+# tests exercise. Tests are NOT part of the PR gate — the runner is shared and
+# may be offline or in use. Trigger manually or it auto-runs after main merges.
+#
+# Runner registration labels required: self-hosted, windows, revit
+# Setup doc: docs/integration-runner-setup.md
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/RST.Core/**'
+      - 'src/RST.IntegrationTests/**'
+      - '.github/workflows/integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Integration (Revit VM)
+    runs-on: [self-hosted, windows, revit]
+    environment: integration-vm   # requires maintainer approval — protects the shared runner on a public repo
+    # Shared runner — don't block the queue for a single run.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run integration tests
+        run: dotnet test src/RST.IntegrationTests/RST.IntegrationTests.csproj -c Release --nologo --logger "console;verbosity=normal"
