@@ -24,6 +24,7 @@ jobs:
   integration:
     name: Integration (Revit VM)
     runs-on: [self-hosted, windows, revit]
+    environment: integration-vm   # requires maintainer approval — protects the shared runner on a public repo
     # Shared runner — don't block the queue for a single run.
     timeout-minutes: 15
     steps:
