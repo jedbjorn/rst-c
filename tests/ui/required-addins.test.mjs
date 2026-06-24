@@ -68,6 +68,13 @@ const profile = {
     { name: 'Panel 3', slots: [
       { type: 'tool', commandId: 'CustomCtrl_%DiRootsOne%Data IO%OneParameter', sourceTab: 'DiRootsOne', sourcePanel: 'Data IO' },
     ]},
+    // Autodesk-published tool on its OWN tab + panel — neither in
+    // BUILTIN_TABS nor BUILTIN_PANELS. Pre-SC-001 this leaked into
+    // requiredAddins as a phantom "Not Installed"; origin=Autodesk now
+    // short-circuits it just like Native.
+    { name: 'Autodesk Tools', slots: [
+      { type: 'tool', commandId: 'ID_DYNAMO_PLAYER', sourceTab: 'Dynamo', sourcePanel: 'Visual Programming Extras' },
+    ]},
   ],
   stacks: {},
 };
@@ -75,6 +82,7 @@ const profile = {
 const catalog = [
   { id: 'ID_SETTINGS_COLORFILLSCHEMES', sourceTab: 'Architecture', sourcePanel: 'Room & Area', origin: 'Native' },
   { id: 'ID_OBJECTS_ROOM_FILL', sourceTab: 'Annotate', sourcePanel: 'Color Fill', origin: 'Native' },
+  { id: 'ID_DYNAMO_PLAYER', sourceTab: 'Dynamo', sourcePanel: 'Visual Programming Extras', origin: 'Autodesk' },
   { id: 'CustomCtrl_%CustomCtrl_%pyRevit%Analysis%ColorSplasher', sourceTab: 'pyRevit', sourcePanel: 'Analysis', origin: 'Custom' },
   { id: 'CustomCtrl_%Add-Ins%Kinship%KinshipUploadThis2Library', sourceTab: 'Kinship', sourcePanel: null, origin: 'Custom' },
   { id: 'CustomCtrl_%DiRootsOne%Data IO%OneParameter', sourceTab: 'DiRootsOne', sourcePanel: 'Data IO', origin: 'Custom' },
@@ -88,6 +96,8 @@ const tabs = buildComputeFn(catalog, profile)().map(r => r.tabName).sort();
 
 check('excludes built-in panel "Room & Area"', !tabs.includes('Room & Area'));
 check('excludes built-in panel "Color Fill"', !tabs.includes('Color Fill'));
+check('excludes Autodesk-origin tab "Dynamo"', !tabs.includes('Dynamo'));
+check('excludes Autodesk-origin panel "Visual Programming Extras"', !tabs.includes('Visual Programming Extras'));
 check('keeps third-party "pyRevit"', tabs.includes('pyRevit'));
 check('keeps third-party "Kinship"', tabs.includes('Kinship'));
 check('keeps third-party "DiRootsOne"', tabs.includes('DiRootsOne'));
@@ -101,6 +111,14 @@ const nativeOnly = buildComputeFn(
   { panels: [{ slots: [{ type: 'tool', commandId: 'ID_FOO', sourceTab: 'Manage', sourcePanel: 'Some Unlisted Panel' }] }], stacks: {} },
 )();
 check('origin=Native short-circuits regardless of panel name', nativeOnly.length === 0);
+
+// SC-001: same short-circuit for Autodesk-published tools — an Autodesk-origin
+// command on its own (non-allowlisted) tab + panel is never a required add-in.
+const autodeskOnly = buildComputeFn(
+  [{ id: 'ID_BAR', sourceTab: 'Generative Design', sourcePanel: 'Studies', origin: 'Autodesk' }],
+  { panels: [{ slots: [{ type: 'tool', commandId: 'ID_BAR', sourceTab: 'Generative Design', sourcePanel: 'Studies' }] }], stacks: {} },
+)();
+check('origin=Autodesk short-circuits regardless of tab/panel name', autodeskOnly.length === 0);
 
 if (failures.length) {
   console.error('FAIL — computeRequiredAddins regression:');

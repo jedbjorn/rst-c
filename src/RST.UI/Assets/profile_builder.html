@@ -2847,16 +2847,20 @@
 
     // origin is the authoritative signal. OriginClassifier marks every
     // command Revit ships on its own ribbon (enumerated from PostableCommand)
-    // as Native — those are built-in Revit tools, never a third-party
-    // dependency, no matter which panel they happen to sit on. The
-    // BUILTIN_TABS / BUILTIN_PANELS name allowlists below are an incomplete
-    // fallback (Revit has dozens of built-in panels — "Room & Area",
-    // "Color Fill", … — that no static list can fully enumerate), so a
-    // Native command leaking through them used to be recorded as a bogus
-    // required-addin and then surfaced as "Not Installed" on load. Short-
-    // circuiting on origin fixes that at the source.
+    // as Native, and every Autodesk-published command (DLL under Program
+    // Files\Autodesk, or an Autodesk publisher) as Autodesk. Neither is a
+    // third-party dependency we surface as "Not Installed", no matter which
+    // panel they happen to sit on. The BUILTIN_TABS / BUILTIN_PANELS name
+    // allowlists below are an incomplete fallback (Revit has dozens of
+    // built-in panels — "Room & Area", "Color Fill", … — that no static list
+    // can fully enumerate), so a Native/Autodesk command leaking through them
+    // used to be recorded as a bogus required-addin and then surfaced as
+    // "Not Installed" on load. Short-circuiting on origin fixes that at the
+    // source. (Separately-installable Autodesk add-ins — Dynamo, Insight — are
+    // intentionally not flagged: per FnB they're treated as always present.)
     function classify(srcTab, srcPanel, origin) {
-      if (origin === 'Native') return;   // built-in Revit tool — never a dependency
+      // Native = Revit built-in; Autodesk = Autodesk-published — never a dependency.
+      if (origin === 'Native' || origin === 'Autodesk') return;
       if (!srcTab) return;
       if (srcTab === 'Custom' || srcTab.indexOf('CustomCtrl_') === 0) return;
       if (BUILTIN_TABS.has(srcTab)) {
