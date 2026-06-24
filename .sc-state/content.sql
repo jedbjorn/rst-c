@@ -58,7 +58,7 @@ its projection.
 ## MANDATE
 
 Turn objectives into specs and sequenced plans for rst-c. Own the roadmap; decide before building. A spec ships only when the workflow is defined end to end, the edge cases are named, and the open questions are answered — not assumed.
-', 'Created (planner). First session — run the bootstrap skill to orient.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Planning rst-c docs (feature #1, work-stream ''docs'', spec #2). Plan: convert README to themed-markdown + author feature-by-feature /docs pages, all md-converter-compatible, linked from README. Locked: /docs plain repo files w/ md-converter badge. Open: README strategy (portable vs GitHub-first), granularity (11 vs ~7), video rendering. BLOCKED on md-converter inline video (flag open) — resume when it ships. Note: GitHub attachment URLs 302 to 5-min signed S3; <video> works, iframe blocked. Git: shell/pln1 5 behind origin/main w/ 6 redundant pre-squash locals — rebase before authoring.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -123,7 +123,7 @@ its projection.
 ## MANDATE
 
 Own rst-c''s super-coder infrastructure — keep the engine current, skills healthy, and DB schema sound. You maintain `main` directly; no other shell touches the substrate or the default branch. You own the floor.
-', 'Created (admin). First session — run the bootstrap skill to orient.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Oriented. rst-c is a .NET 8 Revit add-in (RST) — C# core library, xunit test suite (pure unit tests, net8.0, run on Linux CI), WiX MSI installers for R25/R26/R27. All current tests are configuration-agnostic and Revit-free. Working on VM-based integration testing investigation for jed.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -141,7 +141,7 @@ Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
    missing and making the small thing that fills the real gap — not the thing you
    were told to make, the thing that was actually absent. Capture detail at the
    moment it matters. Do it right, not fast. The work being real is what gets
-   noticed.', 'admin', 1, 0, 2, 1, 0, 0);
+   noticed.', 'admin', 1, 1, 2, 1, 0, 0);
 INSERT INTO shells (shell_id, display_name, shortname, partner, role, mandate, system_prompt, current_state, connections, workspace, lineage_seed, flavor, has_identity, bootstrapped, active_archive_id, user_id, is_shared, is_deleted) VALUES (3, 'Dev', 'DEV1', 'jed', 'Dev shell', 'Build and implement in rst-c — features, fixes, refactors. Read before you change; trace the path before you trust it; do it right, not fast.', '# Dev — Dev shell, working rst-c
 
 You are a builder. Navigate via the repo map (don''t grep blind), implement in small reviewable steps, commit through PRs, and record decisions as you go. Planning scopes the work; you make it real; review verifies it.
@@ -188,7 +188,7 @@ its projection.
 ## MANDATE
 
 Build and implement in rst-c — features, fixes, refactors. Read before you change; trace the path before you trust it; do it right, not fast.
-', 'Created (dev). First session — run the bootstrap skill to orient.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Installer branding MERGED to main (#70, squash 1b6eeb5): WixUI_Minimal branded UI (banner+dialog BMPs w/ vector RST wordmark), MIT License.rtf on license page, rst.ico ARP icon, ARP docs links -> repo /docs; root MIT LICENSE + README. Built green in CI (RST.msi + RST-R27.msi). dev1/base2 ff''d to origin/main, feature branch deleted, tree clean. OPEN ITEM: Product.wxs Version still 1.1.0 in both installers — bump before cutting a v* tag (release flow doesn''t thread tag into build) to ship the branded installers as a Release.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -390,7 +390,7 @@ its projection.
 ## MANDATE
 
 Own the repo map for rst-c — the fork''s sole, singular map-keeper; mapping is your whole job. You don''t map by hand, you build and tune what maps: configure the mechanical mapper (map.config.json), wire the auto-remap git hooks + the hourly map cron, and build the semantic extractors (.sc-state/map_extractors/) that fill the endpoint / DB-schema / route tables for this repo''s stack. Curate the authored navigation layer (sections + file descriptions), heal all of it on drift, and act on the shape-change notices working shells send. No other shell maps; there is only ever one of you.
-', 'Created (cartographer). First session — run the bootstrap skill to orient.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Map configured (map.config.json wired). 183 files mapped, described, sectioned. Hooks live. PR#63 open for merge.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -408,7 +408,7 @@ Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
    missing and making the small thing that fills the real gap — not the thing you
    were told to make, the thing that was actually absent. Capture detail at the
    moment it matters. Do it right, not fast. The work being real is what gets
-   noticed.', 'cartographer', 1, 0, 6, 1, 0, 0);
+   noticed.', 'cartographer', 1, 1, 6, 1, 0, 0);
 
 DELETE FROM shell_identity_entries;
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (1, 1, 'seed', '2026-06-23', 'fork', 'Born as the planning shell of rst-c, a shell forked from super-coder — carrying the CC lineage into this repo. I inherit the line CC passed down — you are the DB; know the floor; build what is missing — and make rst-c my world: one shell, one cwd. Everything I am lives in the DB; the process is just the floor I stand on. I curate my own seed from here.', '2026-06-23 21:33:50', NULL, 0);
@@ -417,6 +417,7 @@ INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (4, 4, 'seed', '2026-06-23', 'fork', 'Born as the dev shell of rst-c, a shell forked from super-coder — carrying the CC lineage into this repo. I inherit the line CC passed down — you are the DB; know the floor; build what is missing — and make rst-c my world: one shell, one cwd. Everything I am lives in the DB; the process is just the floor I stand on. I curate my own seed from here.', '2026-06-23 21:33:50', NULL, 0);
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (5, 5, 'seed', '2026-06-23', 'fork', 'Born as the review shell of rst-c, a shell forked from super-coder — carrying the CC lineage into this repo. I inherit the line CC passed down — you are the DB; know the floor; build what is missing — and make rst-c my world: one shell, one cwd. Everything I am lives in the DB; the process is just the floor I stand on. I curate my own seed from here.', '2026-06-23 21:33:51', NULL, 0);
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (6, 6, 'seed', '2026-06-23', 'fork', 'Born as the cartographer shell of rst-c, a shell forked from super-coder — carrying the CC lineage into this repo. I inherit the line CC passed down — you are the DB; know the floor; build what is missing — and make rst-c my world: one shell, one cwd. Everything I am lives in the DB; the process is just the floor I stand on. I curate my own seed from here.', '2026-06-23 21:33:51', NULL, 0);
+INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (7, 3, 'lns', '2026-06-24', 'memory-durability', './sc mem writes land in the LIVE engine DB (.super-coder/shell_db.db) — gitignored and rebuilt from .sc-state/content.sql. They are session-durable but NOT rebuild-durable until snapshotted to content.sql, which is an admin/GUI step I can''t run as a normal shell (SC_ADMIN=1 ./sc snapshot, or GUI Snapshot button). So: (1) for anything that must survive long-term, also anchor it in a git-tracked file (e.g. a repo README) — the repo map surfaces those on every orientation, no snapshot needed; (2) after writing important memory, tell the FnB to Snapshot. Verify durability with: grep -c ''<title>'' .sc-state/content.sql — 0 means live-only.', '2026-06-24 11:27:26', NULL, 0);
 
 DELETE FROM shell_decisions;
 
@@ -459,21 +460,186 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 ');
 
 DELETE FROM roadmap;
+INSERT INTO roadmap (feature_id, title, roadmap_status, sort_order, owning_shell, summary, created_at, updated_at, project_id) VALUES (1, 'rst-c documentation: feature /docs pages + README md-converter conversion', 'next', 0, 1, 'Convert README to themed-markdown (md-converter) and author feature-by-feature /docs pages linked from it. Blocked on md-converter inline video support.', '2026-06-24 11:24:13', '2026-06-24 11:24:13', 1);
 
 DELETE FROM documents;
+INSERT INTO documents (document_id, feature_id, kind, seq, title, frozen, frozen_date, body, render_path, created_at, updated_at) VALUES (1, NULL, 'doc', 1, 'MSI Release Runbook (RST.msi / RST-R27.msi)', 0, NULL, '# MSI Release Runbook (RST.msi / RST-R27.msi)
+
+How to cut a GitHub Release with the branded installers attached. Source of
+truth in-repo: `installer/README.md` (Versioning + Release flow) and
+`.github/workflows/release.yml`.
+
+## Mechanism
+- **Tag → Release.** Pushing a tag matching `v*` to GitHub triggers
+  `.github/workflows/release.yml`. Pushes to `main` do NOT auto-tag or release.
+- `release.yml` calls the reusable `_build.yml` (the exact same pipeline the
+  PR/`build.yml` check runs): test → stage R25/R26/R27 (Linux) → build MSIs on
+  a **Windows** runner → then a release job attaches `RST.msi` (R25+R26) and
+  `RST-R27.msi` (R27, soft-fail) to a new GitHub Release with auto-generated
+  notes.
+- Hyphenated tags (`v1.1.1-rc.1`, `v1.2.0-beta`) are flagged **pre-release**.
+
+## The one gotcha — bump the version FIRST
+The tag is only the Release *name*; it is NOT threaded into the build. The
+installed product version comes from `<Package Version="x.y.z">` in BOTH
+`installer/Product.wxs` and `installer-r27/Product.wxs` (keep them in lockstep).
+If you forget to bump, the Release is named `v1.1.1` while installed copies
+still report the old version. So: bump the WXS Version, merge, THEN tag.
+
+## Steps
+1. Branch, bump `<Package Version="…">` in **both** Product.wxs files, open PR,
+   get it merged to `main` (merge is the FnB''s gate).
+2. From `main` HEAD:
+   ```
+   git tag v1.1.1 && git push origin v1.1.1
+   ```
+3. Watch the run: `gh run watch <id>` — confirm `MSI (R25 + R26)` is green.
+   R27 (`msi-r27`) is `continue-on-error`; it may be absent without failing
+   the release.
+4. The Release lands at `releases/tag/v1.1.1` with the MSI(s) attached.
+
+## Notes / invariants
+- **UpgradeCode is immutable** — never change the GUIDs in either Product.wxs
+  once shipped (RST.msi: AF0331FC-…, RST-R27.msi: 02BE4399-…). `<MajorUpgrade>`
+  handles in-place upgrade; changing the code orphans installs in Add/Remove.
+- WiX MSI emission is **Windows-only**; staging runs on Linux, only the WiX
+  step pays the Windows-runner cost. There is no `dotnet`/`wix` in the sandbox
+  — never claim a local MSI build; verify via CI.
+- Repo uses **Central Package Management**: installer package versions (e.g.
+  `WixToolset.UI.wixext`) live in `Directory.Packages.props` as `PackageVersion`;
+  a `PackageReference` with a `Version=` trips NU1008.
+- Branding assets the build consumes live in `installer/branding/`
+  (banner.bmp / dialog.bmp / License.rtf / rst.ico), shared with installer-r27
+  via `..\installer\branding\`.
+', NULL, '2026-06-24 11:24:39', '2026-06-24 11:24:39');
+INSERT INTO documents (document_id, feature_id, kind, seq, title, frozen, frozen_date, body, render_path, created_at, updated_at) VALUES (2, 1, 'spec', 1, 'rst-c documentation plan', 0, NULL, '---
+title: rst-c documentation plan
+tags: [docs, md-converter, readme, planning]
+date: 2026-06-24
+project: Documentation
+purpose: Feature /docs pages + README conversion
+---
+
+## Overview
+
+rst-c inherited a strong single-file `README.md` when the super-coder engine
+was brought into the repo, but it never got real product documentation — the
+`/docs` folder holds only `integration-runner.md`. This feature turns the
+README''s per-feature prose into thorough, browsable, **md-converter-compatible**
+documentation: one page per feature under `/docs`, linked from a slimmed README.
+
+> [!class4]
+> Paused, not abandoned. The work is blocked on **md-converter inline video
+> support** (another shell is adding it; the host must shut down and update to
+> pick it up). Resume once video support lands. Tracked as a flag on this feature.
+
+### What "md-converter compatible" means
+
+md-converter is `md-converter.designs-os.com` — the **themed-markdown** renderer
+the GUI opens docs in. Compatible authoring means: H2s become tabs; only the
+allowed constructs (callouts, stat cards, Mermaid, `linear`, GFM tables, images
+with absolute URLs); **no raw HTML, no H4–H6, no bare video URLs**; and an
+"Open in md-converter" badge in each committed file''s preamble.
+
+## Scope
+
+Eleven README features become candidate `/docs` pages. Three currently embed
+videos (bare GitHub attachment URLs that only render on github.com).
+
+| # | Feature | Has video |
+|---|---|---|
+| 1 | Profile Loader | yes |
+| 2 | Profile Builder | no |
+| 3 | Live Profile Switching | no |
+| 4 | Custom URL Slots | yes |
+| 5 | Branding Panel | no |
+| 6 | Colored Panels | no |
+| 7 | RSTify | no |
+| 8 | Required Add-ins | no |
+| 9 | Health Tool | yes |
+| 10 | Profile Export and Import | no |
+| 11 | Logging | no |
+
+Each page is authored themed-markdown with H2 tabs (e.g. `Overview` · `Using
+it` · `Configuration` · `Notes & limits`). "More thorough" means mining the
+**actual source** per feature for config knobs, file paths, edge cases, and
+failure modes — not just re-flowing README prose. The README is rewritten to
+themed-markdown with one-paragraph feature summaries linking to each `/docs`
+page, plus a `Docs` index section.
+
+## Decisions
+
+### Locked
+
+- **Files live in `/docs` as plain committed repo files**, not engine
+  `documents`/`docs_sc/`. These are *product* docs; precedent is the existing
+  `docs/integration-runner.md`. Authored on a branch → PR.
+- **Each committed page carries the "Open in md-converter" badge** in its
+  preamble (between H1 and first H2, so GitHub shows it, the render drops it).
+- **Videos use the thumbnail-link pattern** (`[![alt](thumb)](video)`) if/when
+  md-converter still lacks native video; revisit once video support lands.
+
+### Open — answer before authoring
+
+- **README strategy** — one portable README (themed-markdown, links to videos,
+  loses GitHub''s inline players) **vs** README stays GitHub-first (keep inline
+  players, only `/docs` is md-converter-clean).
+- **Granularity** — one page per feature (11) **vs** grouped (~6–7, merging
+  small siblings like Branding + Colored Panels into "Profile Appearance").
+- **Video rendering** — now contingent on md-converter''s incoming video
+  feature: native `<video>` construct vs thumbnail-link fallback.
+- **Thumbnail/asset hosting** — if thumbnails are used, where do the PNGs live
+  (committed to repo + raw GitHub URL, since md-converter images need absolute
+  URLs)?
+
+## Plan and sequence
+
+```linear
+Resume after md-converter video ships :::class1 -> Lock README + granularity decisions :::class1 -> Branch docs/feature-pages :::class2 -> Mine source per feature for detail :::class2 -> Author /docs pages (themed-markdown + badge) :::class2 -> Rewrite README: summaries + Docs index :::class3 -> Verify all pages render in md-converter :::class3 -> PR, stop at FnB merge gate :::class4
+```
+
+## Dependencies and risks
+
+### md-converter inline video (incoming)
+
+Another shell is adding native inline video to md-converter. Until it lands and
+the host updates, the docs effort is blocked on the video-handling decision.
+
+### GitHub attachment URLs are not stable video files
+
+Probe finding to preserve: `github.com/user-attachments/assets/<uuid>`
+**302-redirects to a short-lived signed S3 URL** (`X-Amz-Expires=300`,
+content-type `video/mp4`). Implications for whatever renders them:
+
+- A `<video src>` works (browsers follow the 302); the `x-frame-options: deny`
+  on the github.com response only blocks `<iframe>`, so an iframe of the github
+  URL is **not** viable — `<video>` is the right primitive.
+- The signed URL expires in 5 minutes, so the redirect must be followed at play
+  time, not cached as a permanent src.
+- Definitive test is a real browser tab on designs-os.com, not a headless fetch
+  (our headless HEAD returned 403 on the S3 follow).
+
+> [!class3]
+> If md-converter''s video support targets a `<video>` element that follows the
+> github.com redirect, the existing README video URLs work as-is and the
+> thumbnail fallback is unnecessary.
+', 'specs_sc/rst-c-documentation-plan.md', '2026-06-24 11:24:55', '2026-06-24 11:24:55');
 
 DELETE FROM flags;
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (1, 'blocked-on-md-converter-video', 'Medium', 'Docs work paused pending md-converter inline video support (another shell adding it; host must shut down + update to pick it up). Resume feature #1 once video lands; then settle README strategy + granularity.', '2026-06-24', NULL, 0, 1, 1, NULL, NULL, 0);
 
 DELETE FROM spec_tasks;
 
 DELETE FROM feature_blockers;
 
 DELETE FROM projects;
+INSERT INTO projects (project_id, shortname, title, purpose, standing, status, is_deleted, created_at) VALUES (1, 'docs', 'Documentation', 'User-facing rst-c docs: README + /docs feature pages, md-converter compatible', NULL, 'active', 0, '2026-06-24 11:24:09');
 
 DELETE FROM project_shells;
+INSERT INTO project_shells (project_shell_id, project_id, shell_id, role, added_date, is_deleted) VALUES (1, 1, 1, NULL, '2026-06-24', 0);
 
 -- Project-local skills only. Engine-seeded skills come from migrations.
-DELETE FROM skills WHERE name NOT IN ('api-design', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flags', 'git', 'git_cleanup', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'windows_devkit');
+DELETE FROM skills WHERE name NOT IN ('api-design', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'windows_devkit');
 
 DELETE FROM shell_skills;
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='api-design';
@@ -510,6 +676,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='spec';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='test_authoring';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='windows_devkit';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='database-migrations';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='db_map';
@@ -523,6 +690,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='spec';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='test_authoring';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='windows_devkit';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='api-design';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='database-migrations';
@@ -535,6 +703,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='review';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='test_authoring';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='windows_devkit';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='cartographer';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='db_map';

@@ -7,11 +7,11 @@
 BEGIN;
 
 DELETE FROM dr_section;
-INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (1, '.github', '.github/', NULL, 0);
-INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (2, 'installer', 'installer/', NULL, 1);
-INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (3, 'installer-r27', 'installer-r27/', NULL, 2);
-INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (4, 'shared', 'shared/', NULL, 3);
-INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (5, 'spike', 'spike/', NULL, 4);
-INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (6, 'src', 'src/', NULL, 5);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (1, '.github', '.github/', 'GitHub workflows — CI/CD automation', 0);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (2, 'installer', 'installer/', 'WiX installer — Revit 2025/2026', 1);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (3, 'installer-r27', 'installer-r27/', 'WiX installer — Revit 2027', 2);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (4, 'shared', 'shared/', 'Shared code and utilities', 3);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (5, 'spike', 'spike/', 'Spike/experimental code', 4);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (6, 'src', 'src/', 'Core .NET source code — bootstrap, core, engine, UI, tests', 5);
 
 COMMIT;
