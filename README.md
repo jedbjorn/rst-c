@@ -1,16 +1,22 @@
+---
+title: rst-c
+tags: [rst-c, revit, ribbon, profiles]
+date: 2026-06-24
+project: rst-c
+purpose: Native Revit add-in for curated ribbon profiles
+---
+
 # rst-c
 
-A native Revit add-in that gives admins a way to build curated ribbon
-toolbar profiles, and gives end users a one-click way to load them.
-Architects, modellers, BIM coordinators, and trainees rarely need the same
-ribbon — rst-c lets each role get the ribbon that fits the work, without
-hunting through tabs or relearning where commands live.
+[![Open in md-converter](https://img.shields.io/badge/Open%20in-md--converter-6b46c1?style=flat-square)](https://md-converter.designs-os.com/?url=https://github.com/jedbjorn/rst-c/blob/main/README.md)
 
-It ships as a single managed add-in for Revit 2025 through 2027,
-installs into the standard per-user add-in directory, and runs without
-pyRevit, Python, or any other external runtime.
+## Overview
 
-## Download
+rst-c is a native Revit add-in that gives admins a way to build curated ribbon toolbar profiles, and gives end users a one-click way to load them. Architects, modellers, BIM coordinators, and trainees rarely need the same ribbon — rst-c lets each role get the ribbon that fits the work, without hunting through tabs or relearning where commands live.
+
+It ships as a single managed add-in for Revit 2025 through 2027, installs into the standard per-user add-in directory, and runs without pyRevit, Python, or any other external runtime.
+
+### Download
 
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
@@ -19,228 +25,104 @@ Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com
 
 Per-user install; no admin rights required. Run the matching MSI, then launch Revit — the rst-c tab appears on the ribbon.
 
-## Intention
+### Why rst-c
 
-The goal is a ribbon that respects the work in front of you. Revit's
-native ribbon assumes every user wants every tool, and every add-in
-vendor assumes their tab is the most important one. The result, on a
-real machine with five or six add-ins installed, is a ribbon dense
-enough that finding the right command is itself a task.
+Revit's native ribbon assumes every user wants every tool, and every add-in vendor assumes their tab is the most important one. The result, on a real machine with five or six add-ins installed, is a ribbon dense enough that finding the right command is itself a task.
 
-rst-c treats the ribbon as a curated surface. An admin assembles a
-profile — a tab full of panels full of tools, drawn from anywhere in
-Revit's command catalogue — and an end user loads that profile to get
-exactly that surface and nothing else. Profiles are JSON, profiles are
-shareable, profiles can be swapped live without restarting Revit, and
-everything that runs runs in-process inside Revit's own .NET host. There
-is no IPC, no second runtime, no GitHub clone step on the user's
-machine. Install the add-in, drop in a profile, get back to drawing.
+rst-c treats the ribbon as a curated surface. An admin assembles a profile — a tab full of panels full of tools, drawn from anywhere in Revit's command catalogue — and an end user loads that profile to get exactly that surface and nothing else. Profiles are JSON, profiles are shareable, profiles can be swapped live without restarting Revit, and everything that runs runs in-process inside Revit's own .NET host. There is no IPC, no second runtime, no GitHub clone step on the user's machine.
 
-The port from the original pyRevit-based RST is what enables this. A
-single managed assembly can be code-signed, installed by an MSI, and
-shipped through normal IT channels — the operational story that pyRevit
-extensions never quite had.
+The port from the original pyRevit-based RST enables this: a single managed assembly can be code-signed, installed by an MSI, and shipped through normal IT channels.
 
 ## Features
 
 ### Profile Loader
 
-The Loader is the end-user face of rst-c. It opens as a WebView2 window
-listing every profile installed on the machine, shows what's in each
-one before you commit, and applies the chosen profile to the ribbon
-with a single click. After Apply, the rst-c tab rebuilds with the
-profile's panels and tools in place; nothing else on the ribbon is
-touched. The Loader is meant to feel closer to picking a workspace than
-to running an extension command — most users will only ever see this
-one window.
+The Loader is the end-user face of rst-c. It opens as a WebView2 window listing every profile installed on the machine, shows what is in each one before you commit, and applies the chosen profile to the ribbon with a single click. After Apply, the rst-c tab rebuilds with the profile's panels and tools in place; nothing else on the ribbon is touched. Profile switching is live — no Revit restart required.
 
+**[Profile Loader docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/profile-loader.md)**
 
-https://github.com/user-attachments/assets/7ac96408-d531-4930-a1ad-446b2994739c
+### Profile Builder, Live Switching & Export
 
+The Builder is the admin counterpart to the Loader. It scans the live Revit session for every command on every tab and presents them as a searchable catalogue you can drag into panels on a new profile tab. Each tool gets a name, an icon, and a panel assignment. The Builder also handles per-profile metadata — branding, colours, cleanup targets, required add-ins — and exports the finished profile as a self-contained zip that any rst-c install can import. Editing a profile and renaming it creates a copy, enabling flavours of the same profile.
 
-### Profile Builder
-
-The Builder is the admin counterpart to the Loader. It scans the live
-Revit session for every command on every tab — native Revit commands,
-add-in commands, pyRevit buttons, anything Revit's ribbon API knows
-about — and presents them as a searchable catalogue you can drag into
-panels on a new profile tab. Each tool gets a name, an icon (chosen
-from a vendored 48-icon pack or auto-derived from the source command),
-and a panel assignment. The Builder also handles per-profile metadata —
-branding, colors, cleanup targets, required add-ins — and exports the
-finished profile as a self-contained zip that any other rst-c install
-can load.
-Support for: 
-- Giving tools a unique name on the built ribbon
-- Naming Panels individually
-- coloring panels, including opacity settings
-- Tab and Profile naming
-
-Profiles can be edited in the Builder using the drop down at the top left. Editing a profile and then renaming it creates a copy of that profile, 
-allowing for different flavors of the same profile to be created and curated. Profile deletion is done at the system level within the Loader by selecting
-the profile and clicking "delete profile". 
-
-Profiles are saved to the users %AppData% folder at creation and transmitted profiles are copied to that location.
-No need to save the zips anywhere, just import via the Loader. 
-
-### Live Profile Switching
-
-Switching profiles is done via the Loader tool and does not require a Revit restart. When the Loader
-applies a profile, rst-c rebuilds the profile tab in place using
-Revit's own ribbon and AdWindows APIs, on the next idle event. The
-intent is to make profile switching cheap enough to do mid-session — an
-architect moving from schematic design to construction documents, or a
-trainer cycling through teaching profiles in front of a class, should
-not have to close the model to change ribbons.
+**[Profile Builder docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/profile-builder.md)**
 
 ### Custom URL Slots
 
-A profile button can point at a URL, a `mailto:` address, a file path,
-or a UNC share, in addition to a Revit command. Bare hostnames
-(`gmail.com`) and bare emails (`support@example.com`) are normalised so
-they resolve cleanly through the user's default browser or mail client.
-The intent is to let admins fold company resources — the wiki, the
-SharePoint document library, the BIM standards PDF, the helpdesk inbox —
-into the same ribbon people already use, instead of asking them to
-remember a separate set of bookmarks.
+A profile button can point at a URL, a `mailto:` address, a file path, or a UNC share, in addition to a Revit command. Bare hostnames and bare email addresses are normalised so they resolve cleanly through the user's default browser or mail client. This lets admins fold company resources — the wiki, the SharePoint library, the BIM standards PDF, the helpdesk inbox — into the same ribbon people already use.
 
+**[Custom URL Slots docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/custom-url-slots.md)**
 
-https://github.com/user-attachments/assets/3e216ab3-2597-400e-9010-cbb45df10b89
+### Appearance — Branding & Coloured Panels
 
+Every profile tab can display an 85×85 branding image with rounded corners at the leading edge — typically a company logo, set once in the Builder and applied to all profiles thereafter. Each panel can carry a custom hex colour and opacity between 10% and 100%, drawn with ~5px rounded corners over Revit's native panel chrome. Logos travel inside the profile zip so a shared profile keeps its branding on any machine.
 
-### Branding Panel
+**[Appearance docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/appearance.md)**
 
-Every profile tab can display an 85×85 square branding image with
-rounded corners — typically a company or office logo. This is set in the Builder tool and the same branding will be applied to all future profiles created or edited after the branding image is set. The branding
-panel is non-interactive and lives at the leading edge of the tab, so
-the curated ribbon visibly belongs to the org that curated it. Logos
-ship inside the profile zip, so a profile shared to another office
-keeps its branding without extra setup.
+### Ribbon Tools — RSTify & Required Add-ins
 
-### Colored Panels
+RSTify is a tab-hiding mode: when enabled, rst-c hides every Revit and add-in tab the active profile did not draw from, leaving just the rst-c tab and any preserved tabs. It is per-profile and per-user — the admin sets a default in the Builder, the user can override from the Loader, and the ribbon icon shows the current state. Required Add-ins lets profiles declare the add-ins they depend on; rst-c auto-enables disabled ones and surfaces download links for missing ones on Apply.
 
-Each panel on a profile tab can carry a custom hex color and an opacity
-between 10% and 100%, with rounded corners drawn over Revit's native
-panel chrome via an AdWindows adapter. The intent is grouping by glance
-— a user who has used the profile twice should be able to find the
-"detailing" panel by color before they read any tool labels. The effect
-is purely visual; nothing about command behaviour changes.
-
-### RSTify
-
-RSTify is a profile-aware tab-hiding mode. When enabled, rst-c hides
-every Revit and add-in tab the active profile didn't draw from, leaving
-just the rst-c tab and any tabs the profile explicitly preserves. The
-intent is to remove the temptation to "fall back" into the unfiltered
-ribbon mid-task, which is the failure mode any curated ribbon system
-has to defend against. RSTify is per-profile and per-user — the admin
-sets a default in the Builder, the end user can override it from the
-Loader, and the ribbon icon shows the current state.
-
-### Required Add-ins
-
-Profiles can declare the add-ins they depend on. On Apply, rst-c
-checks the live Revit session against that list and either auto-enables
-the missing ones for the session or prompts the user, depending on how
-the profile is configured. The intent is to make a profile a complete
-environment statement — "this profile expects these tools to exist" —
-rather than a fragile collection of buttons that silently break when
-the underlying add-in isn't loaded.
+**[Ribbon Tools docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/ribbon-tools.md)**
 
 ### Health Tool
 
-Health is a one-click workstation and Revit-session snapshot: CPU, RAM,
-GPU, disk, display, network, OS, the active model and its size, and
-any warnings the session has accumulated. It also offers a Clean Junk
-Files step for Temp folders, the package cache, journal files, and the
-collaboration cache, with cleanup targets configurable per profile.
-Everything runs locally; nothing is uploaded. The intent is to give an
-end user something concrete to send a BIM lead when Revit is misbehaving,
-without asking them to dig through Windows settings.
+Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, disk, display, network, OS, the active model and its size, and any warnings the session has accumulated. It also offers a targeted junk file cleanup for Temp folders, the package cache, journal files, and the collaboration cache, with cleanup targets configurable per profile. Everything runs locally; nothing is uploaded.
 
-
-https://github.com/user-attachments/assets/01fb84a3-a340-4a91-bba7-7936da277014
-
-
-### Profile Export and Import
-
-Profiles export as `.rstprofile` zip bundles that contain the profile
-JSON, the branding image, and any other per-profile assets. A bundle
-can be emailed, dropped on a share, or committed to a repo, and another
-rst-c install can import it as-is. The intent is to make profile
-sharing as low-friction as sharing a Revit family — no install steps,
-no path fixing, no "works on my machine."
+**[Health Tool docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/health-tool.md)**
 
 ### Logging
 
-rst-c writes Serilog rolling files under `%AppData%\RST\`. Both C#-side
-and WebView2-side errors land in the same file via a `log_event`
-bridge, so a single log captures the full picture when something
-misbehaves. Session logs are capped so the directory does not grow
-unbounded, and the active log is the first place to look when a profile
-behaves unexpectedly.
+rst-c writes Serilog rolling files under `%AppData%\RST\logs\`. Both C#-side and WebView2-side events land in the same file via a `log_event` bridge, so a single log captures the full picture when something misbehaves. The active log is the first place to look when a profile behaves unexpectedly.
 
-## Targets
-
-| Revit version | TFM              |
-|---------------|------------------|
-| 2025          | `net8.0-windows`  |
-| 2026          | `net8.0-windows`  |
-| 2027          | `net10.0-windows` |
+**[Logging docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/logging.md)**
 
 ## Install
 
-MSIs ship as GitHub Release assets — the unified `RST.msi` covers Revit
-2025 + 2026; Revit 2027 currently ships as a separate preview MSI
-(`RST-R27.msi`) and will fold back into the unified installer once its
-build path stabilises. Both are per-user — no admin elevation.
+MSIs ship as GitHub Release assets. The unified `RST.msi` covers Revit 2025 + 2026; `RST-R27.msi` covers Revit 2027.
 
 1. Grab the latest from the [Releases](https://github.com/jedbjorn/rst-c/releases) page.
-2. Close Revit (the engine DLLs are locked while it's running).
-3. Double-click the MSI, or `msiexec /i RST.msi`.
-4. Launch Revit. The RST tools (Builder / Loader / RSTify / Health)
-   appear on the Add-Ins tab; the active profile's tab appears
-   alongside it (when one is active).
+2. Close Revit (the engine DLLs are locked while it is running).
+3. Run the MSI — double-click or `msiexec /i RST.msi`.
+4. Launch Revit. The RST tools appear on the Add-Ins tab.
 
-User data (profiles, logs, branding, active-profile state) lives at
-`%AppData%\RST\` and is preserved across reinstalls — only
-`%AppData%\RST\R<NN>\app\` (the engine subfolder for the matching Revit
-major) gets overwritten.
+Both installers are per-user — no admin elevation required. User data (profiles, logs, branding, active-profile state) lives at `%AppData%\RST\` and is preserved across reinstalls.
 
-If you previously installed rst-c under the pre-RST-033 single-tree
-layout (engine bundled in the addins dir) or the pre-RST-037 flat
-`app\` layout, clear the leftovers once:
+| Revit version | Installer | TFM |
+|---|---|---|
+| 2025 | `RST.msi` | `net8.0-windows` |
+| 2026 | `RST.msi` | `net8.0-windows` |
+| 2027 | `RST-R27.msi` | `net10.0-windows` |
+
+**If you previously installed an older layout:**
+
+Pre-RST-033 installs bundled the engine in the addins directory; pre-RST-037 used a flat `app\` layout. Clear the leftovers once:
 
 ```powershell
-Remove-Item -Recurse -Force "$env:APPDATA\Autodesk\Revit\Addins\2025\RST" `
-            -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force "$env:APPDATA\Autodesk\Revit\Addins\2025\RST" -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force "$env:APPDATA\RST\app" -ErrorAction SilentlyContinue
 ```
 
 ## Build
 
-Local builds need the .NET 8 SDK; .NET 10 SDK is additionally required
-to target Revit 2027. Revit API references resolve from NuGet.
+Local builds need the .NET 8 SDK. Revit 2027 additionally requires the .NET 10 SDK. Revit API references resolve from NuGet.
 
 ```bash
 dotnet restore
 dotnet build -c "Debug R25"     # Revit 2025
 dotnet build -c "Debug R26"     # Revit 2026
-dotnet build -c "Debug R27"     # Revit 2027 (needs .NET 10 SDK)
+dotnet build -c "Debug R27"     # Revit 2027 — needs .NET 10 SDK
 ```
 
 To produce a runnable bundle for a single Revit major:
 
 ```bash
-build/stage.sh R25            # Release config by default → build/R25/{addins,app}
-build/stage.sh R26 Debug      # Debug build for VM diagnostics
+build/stage.sh R25              # Release config by default → build/R25/{addins,app}
+build/stage.sh R26 Debug        # Debug build for VM diagnostics
 ```
 
-The staged tree is local-build / CI-runtime material — not committed.
-For an MSI build, run `dotnet build installer\RST.Installer.wixproj`
-(unified R25 + R26) or `dotnet build installer-r27\RST.Installer.R27.wixproj`
-on Windows after staging the relevant majors.
+For an MSI build, run `dotnet build installer\RST.Installer.wixproj` (unified R25 + R26) or `dotnet build installer-r27\RST.Installer.R27.wixproj` on Windows after staging.
 
 ## License
 
-[MIT](LICENSE) © Designs/OS
+MIT
