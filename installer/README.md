@@ -44,6 +44,27 @@ dotnet build installer-r27\RST.Installer.R27.wixproj -c Release
 # → installer-r27\bin\Release\RST-R27.msi
 ```
 
+## Setup UI & branding
+
+Both MSIs reference the `WixUI_Minimal` dialog set (from `WixToolset.UI.wixext`, pinned to the SDK version in each `.wixproj`). The interactive flow is welcome + license → progress → finish; a silent `/qn` install skips it entirely. Per-user installs have nothing to configure, so the minimal flow is deliberate — no install-dir or feature-selection dialogs.
+
+Artwork and the license live in `installer/branding/` and are **shared** by both projects — `installer-r27/Product.wxs` references them with `..\installer\branding\…` (the same `..\` source pattern as its `<Files>` harvest):
+
+| Asset | Bound to | Size / format | Shown on |
+|---|---|---|---|
+| `banner.bmp` | `WixUIBannerBmp` | 493×58 BMP | top of every dialog |
+| `dialog.bmp` | `WixUIDialogBmp` | 493×312 BMP | welcome + exit pages |
+| `License.rtf` | `WixUILicenseRtf` | RTF | license page (MIT) |
+| `rst.ico` | `ARPPRODUCTICON` | 48×48 ICO | Add/Remove Programs |
+
+The bitmaps are generated from the bundled `src/RST.Engine/Assets/branding.png` mark (the blue "RST" monogram) — a brand sidebar with a vector "RST" wordmark on the welcome panel, the mark in the banner corner. WiX requires **BMP** for the banner/dialog and **RTF** for the license; PNG/Markdown are not accepted there.
+
+**Documentation links** surface in Add/Remove Programs (Settings → Apps → RST → Advanced options):
+
+- `ARPHELPLINK` → `https://github.com/jedbjorn/rst-c/tree/main/docs` (the repo's `/docs`)
+- `ARPURLINFOABOUT` → the repo
+- `ARPURLUPDATEINFO` → the latest release
+
 ## What the MSIs install
 
 Both MSIs use the RST-033 layout: a tiny bootstrap thunk in Revit's add-in directory, the engine + transitives in a per-major subdir under `%AppData%\RST\`. The bootstrap derives `R<major>` from `application.ControlledApplication.VersionNumber` at `OnStartup` (RST-037) and loads the matching engine.

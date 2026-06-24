@@ -39,4 +39,13 @@
     <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
   </PropertyGroup>
 
+  <!-- WixUI dialog set for the branded setup UI (WixUI_Minimal in
+       Product.wxs). The SDK auto-registers referenced wixext packages as
+       build extensions. Version is pinned centrally in
+       Directory.Packages.props (this repo uses Central Package Management,
+       so PackageReference must not carry a Version — NU1008). -->
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" />
+  </ItemGroup>
+
 </Project>
