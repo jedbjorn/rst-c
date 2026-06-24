@@ -1,0 +1,9 @@
+{
+  "name": "rst-ui-tests",
+  "private": true,
+  "type": "module",
+  "description": "Headless regression tests for the inline JS in src/RST.UI/Assets/*.html. Zero-dependency — runs on plain Node (no install needed). Picked up by `./sc test`.",
+  "scripts": {
+    "test": "node required-addins.test.mjs"
+  }
+}

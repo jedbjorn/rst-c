@@ -2828,18 +2828,35 @@
   ]);
 
   function computeRequiredAddins() {
-    // commandId → {sourceTab, sourcePanel} index. Stack tools store only
-    // {type,name,commandId} (addToolToStack), so we resolve their tab/panel
-    // through the catalog rather than duplicating the data on each tool.
+    // commandId → {sourceTab, sourcePanel, origin} index. Stack tools store
+    // only {type,name,commandId} (addToolToStack), so we resolve their
+    // tab/panel through the catalog rather than duplicating the data on each
+    // tool. We also carry `origin` because it's the authoritative
+    // built-in-vs-third-party signal (see classify below).
     var byId = {};
     catalog.forEach(function(c) {
-      if (c && c.id) byId[c.id] = { sourceTab: c.sourceTab || null, sourcePanel: c.sourcePanel || null };
+      if (c && c.id) byId[c.id] = {
+        sourceTab: c.sourceTab || null,
+        sourcePanel: c.sourcePanel || null,
+        origin: c.origin || null,
+      };
     });
 
     var thirdPartyTabs  = new Set();   // tools on non-built-in tabs → tab name is the addin
     var thirdPartyPanels = new Set();  // tools on built-in tabs → addin lives in the panel name
 
-    function classify(srcTab, srcPanel) {
+    // origin is the authoritative signal. OriginClassifier marks every
+    // command Revit ships on its own ribbon (enumerated from PostableCommand)
+    // as Native — those are built-in Revit tools, never a third-party
+    // dependency, no matter which panel they happen to sit on. The
+    // BUILTIN_TABS / BUILTIN_PANELS name allowlists below are an incomplete
+    // fallback (Revit has dozens of built-in panels — "Room & Area",
+    // "Color Fill", … — that no static list can fully enumerate), so a
+    // Native command leaking through them used to be recorded as a bogus
+    // required-addin and then surfaced as "Not Installed" on load. Short-
+    // circuiting on origin fixes that at the source.
+    function classify(srcTab, srcPanel, origin) {
+      if (origin === 'Native') return;   // built-in Revit tool — never a dependency
       if (!srcTab) return;
       if (srcTab === 'Custom' || srcTab.indexOf('CustomCtrl_') === 0) return;
       if (BUILTIN_TABS.has(srcTab)) {
@@ -2855,13 +2872,16 @@
       (panel.slots || []).forEach(function(slot) {
         if (!slot) return;
         if (slot.type === 'tool') {
-          classify(slot.sourceTab, slot.sourcePanel);
+          // Resolve origin from the catalog by commandId; fall back to the
+          // slot's stored tab/panel when the command isn't in the catalog.
+          var info = (slot.commandId) ? byId[slot.commandId] : null;
+          classify(slot.sourceTab, slot.sourcePanel, info ? info.origin : null);
         } else if (slot.type === 'stack') {
           var stack = profile.stacks ? profile.stacks[slot.name] : null;
           if (!stack) return;
           (stack.tools || []).forEach(function(t) {
             var info = (t && t.commandId) ? byId[t.commandId] : null;
-            if (info) classify(info.sourceTab, info.sourcePanel);
+            if (info) classify(info.sourceTab, info.sourcePanel, info.origin);
           });
         }
       });
