@@ -33,6 +33,10 @@
     <!-- WebView2 — RST.UI hosts the legacy HTML/CSS/JS loader inside WPF. -->
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
 
+    <!-- Installer UI — WixUI dialog set for the branded MSI setup. Tracks
+         the WixToolset.Sdk version pinned in the installer .wixproj files. -->
+    <PackageVersion Include="WixToolset.UI.wixext" Version="6.0.2" />
+
     <!-- Test stack. -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk"     Version="17.10.0" />
     <PackageVersion Include="xunit"                      Version="2.9.0" />

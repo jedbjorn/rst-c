@@ -29,9 +29,10 @@
   </PropertyGroup>
 
   <!-- WixUI dialog set for the branded setup UI (shared with the unified
-       installer). Version tracks the pinned WiX SDK (6.0.2). -->
+       installer). Version is pinned centrally in Directory.Packages.props
+       (Central Package Management — no Version here, see NU1008). -->
   <ItemGroup>
-    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+    <PackageReference Include="WixToolset.UI.wixext" />
   </ItemGroup>
 
 </Project>
