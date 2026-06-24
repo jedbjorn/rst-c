@@ -243,4 +243,4 @@ on Windows after staging the relevant majors.
 
 ## License
 
-TBD 
+[MIT](LICENSE) © Designs/OS

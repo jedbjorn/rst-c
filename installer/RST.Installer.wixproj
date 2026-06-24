@@ -39,4 +39,11 @@
     <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
   </PropertyGroup>
 
+  <!-- WixUI dialog set for the branded setup UI (WixUI_Minimal in
+       Product.wxs). Version tracks the pinned WiX SDK (6.0.2). The SDK
+       auto-registers referenced wixext packages as build extensions. -->
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+  </ItemGroup>
+
 </Project>
