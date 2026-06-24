@@ -36,7 +36,8 @@
   change it once shipped — it's how the MSI engine knows to upgrade
   prior installs in place rather than installing side-by-side.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="RST"
            Manufacturer="Designs/OS"
@@ -51,6 +52,25 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- Branded setup UI. WixUI_Minimal fits a per-user install with no
+         options to misconfigure: welcome + license -> progress -> finish.
+         The banner shows on every page; the dialog bitmap backs the
+         welcome/exit pages. Needs WixToolset.UI.wixext (see .wixproj).
+         Bitmaps + license live in branding/ (shared with installer-r27). -->
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUIBannerBmp"  Value="branding\banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp"  Value="branding\dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="branding\License.rtf" />
+
+    <!-- Add/Remove Programs identity + documentation links. ARPHELPLINK is
+         surfaced as the "Help" link in Settings > Apps and points at the
+         repo's /docs directory. -->
+    <Icon Id="RstIcon.ico" SourceFile="branding\rst.ico" />
+    <Property Id="ARPPRODUCTICON"   Value="RstIcon.ico" />
+    <Property Id="ARPHELPLINK"      Value="https://github.com/jedbjorn/rst-c/tree/main/docs" />
+    <Property Id="ARPURLINFOABOUT"  Value="https://github.com/jedbjorn/rst-c" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/jedbjorn/rst-c/releases/latest" />
 
     <!-- Per-Revit-major detection. v0 doesn't gate install on these
          (always-install-all is simpler and the spurious files in unused

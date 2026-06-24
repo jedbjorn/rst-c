@@ -25,7 +25,8 @@
   fixed identities of the RST product family and must never change once
   shipped.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="RST (Revit 2027 preview)"
            Manufacturer="Designs/OS"
@@ -39,6 +40,20 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- Branded setup UI — shares the unified installer's artwork + license
+         from ../installer/branding/ (same `..\` source pattern as the
+         <Files> harvest below). Needs WixToolset.UI.wixext (see .wixproj). -->
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUIBannerBmp"  Value="..\installer\branding\banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp"  Value="..\installer\branding\dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="..\installer\branding\License.rtf" />
+
+    <Icon Id="RstIcon.ico" SourceFile="..\installer\branding\rst.ico" />
+    <Property Id="ARPPRODUCTICON"   Value="RstIcon.ico" />
+    <Property Id="ARPHELPLINK"      Value="https://github.com/jedbjorn/rst-c/tree/main/docs" />
+    <Property Id="ARPURLINFOABOUT"  Value="https://github.com/jedbjorn/rst-c" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/jedbjorn/rst-c/releases/latest" />
 
     <Property Id="REVIT2027_REG">
       <RegistrySearch Id="Revit2027Search" Root="HKLM"
