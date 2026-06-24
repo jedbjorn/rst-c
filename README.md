@@ -12,7 +12,7 @@ purpose: Native Revit add-in for curated ribbon profiles
 
 ## Overview
 
-rst-c is a native Revit add-in that gives admins a way to build curated ribbon toolbar profiles, and gives end users a one-click way to load them. Architects, modellers, BIM coordinators, and trainees rarely need the same ribbon — rst-c lets each role get the ribbon that fits the work, without hunting through tabs or relearning where commands live.
+rst-c (Revit Standardization Tool) is a native Revit add-in that gives admins a way to build curated ribbon toolbar profiles, and gives end users a one-click way to load them. Architects, modellers, BIM coordinators, and trainees rarely need the same ribbon — rst-c lets each role get the ribbon that fits the work, without hunting through tabs or relearning where commands live.
 
 It ships as a single managed add-in for Revit 2025 through 2027, installs into the standard per-user add-in directory, and runs without pyRevit, Python, or any other external runtime.
 
