@@ -13,11 +13,11 @@ name: release
 # Tag → Release. Nothing else triggers a release; pushes to main do not
 # auto-tag.
 #
-# Versioning: the MSI's <Package Version="…"> in installer/Product.wxs
-# (and installer-r27/Product.wxs) is the source of truth for the
-# installed product version. Bump it before tagging — the tag is just
-# the release name, not threaded into the build. (Tag-driven Version
-# threading is a future refinement.)
+# Versioning: the MSI's <Package Version="…"> is threaded from the tag.
+# The `prepare` job strips the leading `v` and any `-prerelease` suffix to a
+# numeric a.b.c and passes it to _build.yml, which stamps both MSIs. So the
+# installed ProductVersion always matches the tag and a new tag always raises
+# it — driving MajorUpgrade / RemoveExistingProducts on in-place upgrade.
 
 on:
   push:
@@ -28,8 +28,24 @@ permissions:
 
 jobs:
 
+  prepare:
+    name: Resolve version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          tag="${GITHUB_REF_NAME#v}"   # v1.3.0 / v1.3.0-rc.1 → 1.3.0(-rc.1)
+          version="${tag%%-*}"         # strip -prerelease → numeric a.b.c for MSI
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "MSI ProductVersion: $version (tag ${GITHUB_REF_NAME})"
+
   build:
+    needs: prepare
     uses: ./.github/workflows/_build.yml
+    with:
+      product_version: ${{ needs.prepare.outputs.version }}
 
   release:
     name: GitHub Release

@@ -16,6 +16,27 @@
     v7 is a one-line change if/when needed.
   -->
 
+  <!--
+    MSI ProductVersion. Threaded from the release tag by the CI release
+    workflow (-p:RstMsiVersion=1.3.0); falls back to the value below for local
+    and push/PR builds. Keeping it a single property (not duplicated in the
+    .wxs) means a release can't ship an MSI whose ProductVersion doesn't match
+    the tag — the bug that silently broke in-place upgrades. Passed into the
+    .wxs as the $(var.RstMsiVersion) preprocessor variable via DefineConstants.
+
+    CI always passes -p:RstMsiVersion=<value> and that value is EMPTY on
+    push/PR builds. A command-line property is a *global* MSBuild property, so
+    it can't be reassigned by a PropertyGroup — `<RstMsiVersion Condition=…>`
+    silently no-ops and the .wxs gets Version="" (WIX0006/WIX0010). Derive a
+    *local* effective version instead (which the global can't shadow) and feed
+    that to the preprocessor constant.
+  -->
+  <PropertyGroup>
+    <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">1.2.0</RstMsiVersionEffective>
+    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputName>RST</OutputName>
     <OutputType>Package</OutputType>
