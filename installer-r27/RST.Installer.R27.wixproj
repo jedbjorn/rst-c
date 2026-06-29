@@ -20,10 +20,13 @@
   -->
 
   <!-- MSI ProductVersion threaded from the release tag; falls back for local
-       and push/PR builds. See ../installer/RST.Installer.wixproj for rationale. -->
+       and push/PR builds. A local effective version is used because CI passes
+       an empty global -p:RstMsiVersion= on push/PR, which a PropertyGroup can't
+       reassign. See ../installer/RST.Installer.wixproj for the full rationale. -->
   <PropertyGroup>
-    <RstMsiVersion Condition="'$(RstMsiVersion)' == ''">1.2.0</RstMsiVersion>
-    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersion)</DefineConstants>
+    <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">1.2.0</RstMsiVersionEffective>
+    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>

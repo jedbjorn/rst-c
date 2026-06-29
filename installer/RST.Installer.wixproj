@@ -23,10 +23,18 @@
     .wxs) means a release can't ship an MSI whose ProductVersion doesn't match
     the tag — the bug that silently broke in-place upgrades. Passed into the
     .wxs as the $(var.RstMsiVersion) preprocessor variable via DefineConstants.
+
+    CI always passes -p:RstMsiVersion=<value> and that value is EMPTY on
+    push/PR builds. A command-line property is a *global* MSBuild property, so
+    it can't be reassigned by a PropertyGroup — `<RstMsiVersion Condition=…>`
+    silently no-ops and the .wxs gets Version="" (WIX0006/WIX0010). Derive a
+    *local* effective version instead (which the global can't shadow) and feed
+    that to the preprocessor constant.
   -->
   <PropertyGroup>
-    <RstMsiVersion Condition="'$(RstMsiVersion)' == ''">1.2.0</RstMsiVersion>
-    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersion)</DefineConstants>
+    <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">1.2.0</RstMsiVersionEffective>
+    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>
