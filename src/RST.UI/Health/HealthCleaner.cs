@@ -60,6 +60,14 @@ public static class HealthCleaner
         foreach (var target in selectedTargets)
         {
             if (target is null || !target.Enabled) continue;
+            // Cleanup is locked to the built-in preset paths. A profile is
+            // importable/hand-editable (untrusted), so refuse to recursively
+            // delete anything the profile points at that isn't a preset.
+            if (!CleanupDefaults.IsPresetPath(target.Path))
+            {
+                Log.Warning("HealthCleaner: refusing non-preset target {Name} ({Path})", target.Name, target.Path);
+                continue;
+            }
             targetCount++;
             var key = string.IsNullOrEmpty(target.Id) ? target.Name : target.Id;
             result.Deleted[key] = 0;
@@ -211,8 +219,10 @@ public static class HealthCleaner
             // chosen from DecodeIniBytes — UTF-16 LE writes its own FFFE
             // header, UTF-8 with BOM keeps the EFBBBF prefix.
             File.WriteAllText(tmp, outBuilder.ToString(), encoding);
-            if (File.Exists(iniPath)) File.Delete(iniPath);
-            File.Move(tmp, iniPath);
+            // Atomic swap: File.Replace keeps the original Revit.ini intact
+            // until the rename completes, so a crash mid-operation can't leave
+            // the user with no Revit.ini (and thus lose every Revit preference).
+            File.Replace(tmp, iniPath, destinationBackupFileName: null);
             Log.Information("[{Label}] {Ini}: deleted={Deleted}", label, iniPath, deleted);
             return (deleted, 0);
         }
@@ -246,6 +256,17 @@ public static class HealthCleaner
         return (Encoding.UTF8.GetString(data), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
+    /// <summary>
+    /// True when <paramref name="dir"/> is a junction/symlink (reparse point).
+    /// Returns true on error so an unreadable entry is treated as "don't
+    /// descend" rather than risking a follow into an unknown target.
+    /// </summary>
+    internal static bool IsReparsePoint(string dir)
+    {
+        try { return (File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0; }
+        catch { return true; }
+    }
+
     private static IEnumerable<string> EnumerateFilesSafe(string root)
     {
         // Manual stack so a single inaccessible subdir doesn't kill the walk.
@@ -262,7 +283,14 @@ public static class HealthCleaner
             string[] subs;
             try { subs = Directory.GetDirectories(current); }
             catch (Exception ex) { Log.Debug(ex, "EnumerateFilesSafe: subdir enum failed for {Dir}", current); continue; }
-            foreach (var s in subs) stack.Push(s);
+            foreach (var s in subs)
+            {
+                // Never descend a junction/symlink — following a reparse point
+                // would delete files in the link's *target* tree, well outside
+                // the directory the user asked to clean.
+                if (IsReparsePoint(s)) { Log.Debug("EnumerateFilesSafe: skip reparse point {Dir}", s); continue; }
+                stack.Push(s);
+            }
         }
     }
 }

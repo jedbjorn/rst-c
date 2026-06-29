@@ -1261,18 +1261,17 @@
     </div>
     <div class="cleanup-body">
       <div class="cleanup-help">
-        Path tokens: <code>%LocalAppData%</code>, <code>%AppData%</code>, <code>%UserProfile%</code>,
-        <code>{revit-version}</code> (expands to every installed Revit major).
-        Kind: <strong>directory</strong> purges file contents recursively;
-        <strong>iniRecentFiles</strong> strips the [Recent File List] section
-        from a Revit.ini.
+        Choose which of the built-in cleanup targets this profile offers. For
+        safety, the target paths are fixed — only RST's preset locations
+        (Temp, package cache, journals, collaboration cache, recent-file list,
+        RST logs) can be cleaned. Toggle each target on or off; use
+        <strong>Restore Defaults</strong> to bring back any you removed.
       </div>
       <div id="cleanupRows"></div>
     </div>
     <div class="cleanup-actions">
       <button class="btn ghost" onclick="restoreCleanupDefaults()" title="Replace the list with the OOB defaults">Restore Defaults</button>
       <div style="flex:1"></div>
-      <button class="btn" onclick="addCleanupRow()">+ Add Target</button>
       <button class="btn primary" onclick="saveCleanupModal()">Apply</button>
     </div>
   </div>
@@ -2738,45 +2737,33 @@
     nameInput.value = target.name || '';
     nameInput.oninput = function() { target.name = this.value; };
 
+    // Path is fixed to the preset location — read-only. Custom cleanup paths
+    // are no longer authorable (the cleaner refuses any non-preset path).
     var pathInput = document.createElement('input');
     pathInput.type = 'text';
-    pathInput.placeholder = '%LocalAppData%\\…';
     pathInput.value = target.path || '';
-    pathInput.oninput = function() { target.path = this.value; };
+    pathInput.readOnly = true;
+    pathInput.title = 'Preset path — fixed for safety';
+    pathInput.style.opacity = '0.6';
 
-    var kindSelect = document.createElement('select');
-    [CLEANUP_KIND_DIRECTORY, CLEANUP_KIND_INI_RECENT_FILES].forEach(function(k) {
-      var opt = document.createElement('option');
-      opt.value = k;
-      opt.textContent = k;
-      if ((target.kind || CLEANUP_KIND_DIRECTORY) === k) opt.selected = true;
-      kindSelect.appendChild(opt);
-    });
-    kindSelect.onchange = function() { target.kind = this.value; };
+    // Kind is fixed per preset — show it read-only.
+    var kindField = document.createElement('input');
+    kindField.type = 'text';
+    kindField.value = target.kind || CLEANUP_KIND_DIRECTORY;
+    kindField.readOnly = true;
+    kindField.style.opacity = '0.6';
 
     var rmBtn = makeBtn('×', function() {
       profile.cleanupTargets.splice(idx, 1);
       renderCleanupRows();
-    }, 'Remove target', 'danger');
+    }, 'Remove from this profile (Restore Defaults brings it back)', 'danger');
 
     row.appendChild(enableLabel);
     row.appendChild(nameInput);
     row.appendChild(pathInput);
-    row.appendChild(kindSelect);
+    row.appendChild(kindField);
     row.appendChild(rmBtn);
     return row;
-  }
-
-  function addCleanupRow() {
-    if (!Array.isArray(profile.cleanupTargets)) profile.cleanupTargets = [];
-    profile.cleanupTargets.push({
-      id: 'rst.cleanup.user.' + Date.now() + '.' + Math.floor(Math.random() * 1000),
-      name: '',
-      path: '',
-      kind: CLEANUP_KIND_DIRECTORY,
-      enabled: true,
-    });
-    renderCleanupRows();
   }
 
   function restoreCleanupDefaults() {
