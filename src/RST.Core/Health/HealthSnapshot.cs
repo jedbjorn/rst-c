@@ -30,6 +30,15 @@ public sealed class HealthSnapshot
     /// active profile has zero enabled cleanup targets.
     /// </summary>
     [JsonPropertyName("cleanup")] public CleanupSummary? Cleanup { get; set; }
+
+    /// <summary>
+    /// Every display adapter detected (integrated + discrete), so a
+    /// multi-GPU machine reports both rather than just the first. The single
+    /// <see cref="Gpu"/> above stays the primary adapter for backward
+    /// compatibility (older viewers read it); this is the full list. Empty on
+    /// snapshots captured before this field existed.
+    /// </summary>
+    [JsonPropertyName("gpus")] public List<Gpu> Gpus { get; set; } = new();
 }
 
 public sealed class CleanupSummary
