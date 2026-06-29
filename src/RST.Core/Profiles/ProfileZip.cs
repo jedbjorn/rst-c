@@ -137,12 +137,24 @@ public static class ProfileZip
         appDataRoot ??= AppDataPaths.Root;
 
         var profile = package.Profile;
-        if (string.IsNullOrEmpty(profile.Id))
+        // profile.Id rides in untrusted from the imported zip's profile.json
+        // and is used below as a directory name. Coerce anything that isn't a
+        // real GUID (empty, "..\\..\\", "C:\\…", …) to a fresh GUID so it can
+        // never escape appDataRoot. The id is meant to be a GUID, so a
+        // legitimate package loses nothing.
+        if (!Guid.TryParse(profile.Id, out _))
             profile.Id = Guid.NewGuid().ToString();
 
         if (package.LogoBytes is not null)
         {
             var assetDir = Path.Combine(appDataRoot, profile.Id!);
+            // Defense in depth: refuse to write outside appDataRoot even if the
+            // GUID guard above is ever weakened.
+            var rootFull = Path.GetFullPath(appDataRoot);
+            var rootPrefix = rootFull.EndsWith(Path.DirectorySeparatorChar)
+                ? rootFull : rootFull + Path.DirectorySeparatorChar;
+            if (!Path.GetFullPath(assetDir).StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Profile asset path escapes the RST data root.");
             Directory.CreateDirectory(assetDir);
             var logoPath = Path.Combine(assetDir, "branding.png");
             File.WriteAllBytes(logoPath, package.LogoBytes);
