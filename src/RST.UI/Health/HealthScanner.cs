@@ -395,16 +395,88 @@ public static class HealthScanner
             {
                 gpu.Name = mo["Name"]?.ToString() ?? "";
                 gpu.DriverVersion = mo["DriverVersion"]?.ToString() ?? "";
+                // WMI AdapterRAM is uint32 and saturates at 4 GB — keep it only
+                // as a last-resort fallback below.
                 if (mo["AdapterRAM"] is uint ram)
                     gpu.VramTotalMB = (long)Math.Round(ram / (1024.0 * 1024.0));
                 break;
             }
+
+            // Prefer the 64-bit HardwareInformation.qwMemorySize from the
+            // display-adapter registry key. Win32_VideoController.AdapterRAM is
+            // a 32-bit field that caps at ~4096 MB, so any 6/8/12/24 GB card
+            // reports 4 GB through WMI; the registry QWORD reports the real size.
+            var vram64 = ReadGpuVramMbFromRegistry(gpu.Name);
+            if (vram64 > 0) gpu.VramTotalMB = vram64;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "HealthScanner.ReadGpu (Win32_VideoController) failed");
         }
         return gpu;
+    }
+
+    // Display-adapter class GUID — every GPU's registry key lives under here as
+    // a 4-digit subkey (0000, 0001, …) carrying DriverDesc + memory size.
+    private const string DisplayClassKey =
+        @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+
+    /// <summary>
+    /// Read total VRAM in MB from the 64-bit <c>HardwareInformation.qwMemorySize</c>
+    /// registry value. Prefers the adapter whose <c>DriverDesc</c> matches
+    /// <paramref name="gpuName"/>; falls back to the first adapter that reports a
+    /// size. Returns 0 when nothing usable is found (caller keeps the WMI value).
+    /// </summary>
+    private static long ReadGpuVramMbFromRegistry(string? gpuName)
+    {
+        try
+        {
+            using var root = Registry.LocalMachine.OpenSubKey(DisplayClassKey);
+            if (root is null) return 0;
+
+            long matched = 0, firstAny = 0;
+            foreach (var subName in root.GetSubKeyNames())
+            {
+                // Only the numbered adapter subkeys (0000, 0001, …); skip
+                // "Properties" and similar.
+                if (subName.Length != 4 || !int.TryParse(subName, out _)) continue;
+                using var sub = root.OpenSubKey(subName);
+                if (sub is null) continue;
+
+                var bytes = ReadMemorySizeBytes(sub);
+                if (bytes <= 0) continue;
+                var mb = (long)Math.Round(bytes / (1024.0 * 1024.0));
+                if (firstAny == 0) firstAny = mb;
+
+                var desc = sub.GetValue("DriverDesc")?.ToString();
+                if (!string.IsNullOrEmpty(gpuName) && !string.IsNullOrEmpty(desc)
+                    && string.Equals(desc, gpuName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matched = mb;
+                    break;
+                }
+            }
+            return matched > 0 ? matched : firstAny;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "HealthScanner.ReadGpuVramMbFromRegistry failed");
+            return 0;
+        }
+    }
+
+    private static long ReadMemorySizeBytes(RegistryKey adapter)
+    {
+        // qwMemorySize is the modern 64-bit QWORD; .NET surfaces REG_QWORD as a
+        // boxed long, but some drivers store it as an 8-byte REG_BINARY.
+        var qw = adapter.GetValue("HardwareInformation.qwMemorySize");
+        switch (qw)
+        {
+            case long l when l > 0: return l;
+            case int i when i > 0: return i;
+            case byte[] b when b.Length == 8: return BitConverter.ToInt64(b, 0);
+        }
+        return 0;
     }
 
     // ─── Disk media (WMI MSFT_PhysicalDisk; Win32_DiskDrive fallback) ──
