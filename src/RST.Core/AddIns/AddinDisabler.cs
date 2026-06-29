@@ -60,19 +60,23 @@ public static class AddinDisabler
         IReadOnlyList<RequiredAddin> required,
         Action<string, Exception>? onError = null)
     {
-        var requiredFiles = BuildRequiredFileSet(required);
-        var requiredIds = BuildRequiredIdSet(required);
+        // Materialise once and compute "required" via the SAME three-tier
+        // matcher the QA classifier uses, so a dependency matched only by the
+        // fuzzy tier (registry filename ≠ installed filename) is not disabled.
+        var scan = AddinDirectoryScanner.ScanWithSource(revitVersion).ToList();
+        var requiredNames = RequiredAddinQa.RequiredManifestFileNames(
+            scan.Select(s => s.Manifest).ToList(), required);
 
         int disabled = 0, skipReadOnly = 0, skipAlready = 0, failed = 0;
         var disabledFiles = new List<string>();
         var failedFiles = new List<string>();
 
-        foreach (var (manifest, source) in AddinDirectoryScanner.ScanWithSource(revitVersion))
+        foreach (var (manifest, source) in scan)
         {
             if (manifest.IsDisabled) { skipAlready++; continue; }
             if (source.ReadOnly)     { skipReadOnly++; continue; }
 
-            if (IsRequired(manifest, requiredFiles, requiredIds)) continue;
+            if (requiredNames.Contains(manifest.FileName)) continue;
 
             var dest = manifest.FilePath + DisabledSuffix;
             try
@@ -115,12 +119,17 @@ public static class AddinDisabler
     public static RestoreResult RestoreRequired(
         string revitVersion,
         IReadOnlyList<RequiredAddin> required,
-        Action<string, Exception>? onError = null) =>
-        RestoreFiltered(AddinDirectoryScanner.ScanWithSource(revitVersion),
-                        manifest => IsRequired(manifest,
-                                               BuildRequiredFileSet(required),
-                                               BuildRequiredIdSet(required)),
-                        onError);
+        Action<string, Exception>? onError = null)
+    {
+        // Same three-tier matcher as DisableNonRequired / QA, so a disabled
+        // required add-in matched only by the fuzzy tier is actually restored
+        // (the old 2-tier predicate silently left it disabled while the UI
+        // reported it restored).
+        var scan = AddinDirectoryScanner.ScanWithSource(revitVersion).ToList();
+        var requiredNames = RequiredAddinQa.RequiredManifestFileNames(
+            scan.Select(s => s.Manifest).ToList(), required);
+        return RestoreFiltered(scan, manifest => requiredNames.Contains(manifest.FileName), onError);
+    }
 
     /// <summary>
     /// Test seam — accepts a pre-built scan and a predicate. Public

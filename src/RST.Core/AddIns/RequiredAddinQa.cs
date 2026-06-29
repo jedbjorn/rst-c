@@ -106,6 +106,29 @@ public static class RequiredAddinQa
         return results;
     }
 
+    /// <summary>
+    /// The set of manifest FileNames (canonical, case-insensitive) that satisfy
+    /// any entry in <paramref name="required"/>, using the SAME three-tier match
+    /// as <see cref="Classify"/>. AddinDisabler consumes this so "required"
+    /// means the same thing at disable time, restore time, and QA time: a
+    /// profile's own dependency that matches only by the fuzzy tier is never
+    /// disabled, and is restored when it was disabled.
+    /// </summary>
+    public static HashSet<string> RequiredManifestFileNames(
+        IReadOnlyList<AddinManifest> manifests,
+        IReadOnlyList<RequiredAddin>? required)
+    {
+        var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        if (manifests is null || required is null) return set;
+        foreach (var req in required)
+        {
+            if (req is null) continue;
+            var m = FindMatch(manifests, req);
+            if (m is not null) set.Add(m.FileName);
+        }
+        return set;
+    }
+
     private static bool TabIsOnRibbon(string tabName, IReadOnlyList<string> ribbon)
     {
         var t = tabName.Trim();

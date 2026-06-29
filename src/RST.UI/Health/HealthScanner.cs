@@ -56,7 +56,8 @@ public static class HealthScanner
         // One WMI batch — every CIM query goes through Local in-proc
         // System.Management. Errors degrade per-section; missing CIM data
         // leaves the relevant snapshot fields null/empty.
-        snap.Gpu = ReadGpu();
+        snap.Gpus = ReadGpus();
+        snap.Gpu  = snap.Gpus.Count > 0 ? snap.Gpus[0] : new Gpu();
         var (mediaType, busType, friendlyName) = ReadDiskMedia();
         snap.Disk.Type = string.IsNullOrEmpty(mediaType) ? "Unknown" : mediaType;
         snap.Disk.BusType = busType;
@@ -393,27 +394,118 @@ public static class HealthScanner
 
     // ─── GPU (WMI) ──────────────────────────────────────────────────────
 
-    private static Gpu ReadGpu()
+    /// <summary>
+    /// Enumerate every display adapter (integrated + discrete) via WMI, each
+    /// with its real 64-bit VRAM matched from the registry by name. The first
+    /// entry is the primary adapter (Win32_VideoController order); callers use
+    /// it for the backward-compatible single <see cref="Gpu"/> field.
+    /// </summary>
+    private static List<Gpu> ReadGpus()
     {
-        var gpu = new Gpu();
+        var gpus = new List<Gpu>();
         try
         {
+            // All adapters' real (64-bit) VRAM, keyed by DriverDesc.
+            var adapters = ReadAdapterVramTable();
+
             using var searcher = new ManagementObjectSearcher(
                 "SELECT Name, DriverVersion, AdapterRAM FROM Win32_VideoController");
             foreach (var mo in searcher.Get().Cast<ManagementObject>())
             {
-                gpu.Name = mo["Name"]?.ToString() ?? "";
-                gpu.DriverVersion = mo["DriverVersion"]?.ToString() ?? "";
+                var name = mo["Name"]?.ToString() ?? "";
+                // Skip nameless / virtual adapters (RDP mirror, Basic Display)
+                // so the list is real cards only — no empty "GPU n" rows.
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                var gpu = new Gpu
+                {
+                    Name          = name,
+                    DriverVersion = mo["DriverVersion"]?.ToString() ?? "",
+                };
+                // WMI AdapterRAM is uint32 and saturates at 4 GB — first guess.
                 if (mo["AdapterRAM"] is uint ram)
                     gpu.VramTotalMB = (long)Math.Round(ram / (1024.0 * 1024.0));
-                break;
+
+                // Prefer the 64-bit registry size for THIS adapter, matched by
+                // name so a multi-GPU box never reports one card's VRAM for
+                // another. AdapterRAM caps at ~4096 MB, so any 6/8/12/24 GB card
+                // needs the registry QWORD for its true size.
+                var vram64 = adapters.FirstOrDefault(a =>
+                    !string.IsNullOrEmpty(gpu.Name) &&
+                    string.Equals(a.Desc, gpu.Name, StringComparison.OrdinalIgnoreCase)).Mb;
+                if (vram64 > 0) gpu.VramTotalMB = vram64;
+
+                gpus.Add(gpu);
+            }
+
+            // Unambiguous single-adapter fallback: exactly one GPU and exactly
+            // one sized registry adapter that didn't name-match (DriverDesc can
+            // differ from the WMI Name on some single-GPU rigs). Safe because
+            // there is only one card it could be.
+            if (gpus.Count == 1 && adapters.Count == 1
+                && (gpus[0].VramTotalMB is null || gpus[0].VramTotalMB <= 4096))
+                gpus[0].VramTotalMB = adapters[0].Mb;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "HealthScanner.ReadGpus (Win32_VideoController) failed");
+        }
+        return gpus;
+    }
+
+    // Display-adapter class GUID — every GPU's registry key lives under here as
+    // a 4-digit subkey (0000, 0001, …) carrying DriverDesc + memory size.
+    private const string DisplayClassKey =
+        @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+
+    /// <summary>
+    /// Read each display adapter's <c>DriverDesc</c> + total VRAM (MB) from the
+    /// 64-bit <c>HardwareInformation.qwMemorySize</c> registry value. One entry
+    /// per numbered adapter subkey that reports a usable size; empty on error.
+    /// Callers match an entry to a WMI GPU by <c>DriverDesc</c> == GPU name.
+    /// </summary>
+    private static List<(string Desc, long Mb)> ReadAdapterVramTable()
+    {
+        var list = new List<(string Desc, long Mb)>();
+        try
+        {
+            using var root = Registry.LocalMachine.OpenSubKey(DisplayClassKey);
+            if (root is null) return list;
+
+            foreach (var subName in root.GetSubKeyNames())
+            {
+                // Only the numbered adapter subkeys (0000, 0001, …); skip
+                // "Properties" and similar.
+                if (subName.Length != 4 || !int.TryParse(subName, out _)) continue;
+                using var sub = root.OpenSubKey(subName);
+                if (sub is null) continue;
+
+                var bytes = ReadMemorySizeBytes(sub);
+                if (bytes <= 0) continue;
+                var mb = (long)Math.Round(bytes / (1024.0 * 1024.0));
+                var desc = sub.GetValue("DriverDesc")?.ToString() ?? "";
+                list.Add((desc, mb));
             }
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "HealthScanner.ReadGpu (Win32_VideoController) failed");
+            Log.Debug(ex, "HealthScanner.ReadAdapterVramTable failed");
         }
-        return gpu;
+        return list;
+    }
+
+    private static long ReadMemorySizeBytes(RegistryKey adapter)
+    {
+        // qwMemorySize is the modern 64-bit QWORD; .NET surfaces REG_QWORD as a
+        // boxed long, but some drivers store it as an 8-byte REG_BINARY.
+        var qw = adapter.GetValue("HardwareInformation.qwMemorySize");
+        switch (qw)
+        {
+            case long l when l > 0: return l;
+            case int i when i > 0: return i;
+            case byte[] b when b.Length == 8: return BitConverter.ToInt64(b, 0);
+        }
+        return 0;
     }
 
     // ─── Disk media (WMI MSFT_PhysicalDisk; Win32_DiskDrive fallback) ──

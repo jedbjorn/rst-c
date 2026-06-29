@@ -105,11 +105,14 @@ public sealed class BrandingDefaults
         {
             var rel = b.LogoFile!.Replace('/', Path.DirectorySeparatorChar);
             var abs = Path.Combine(AppDataPaths.Root, rel);
-            if (File.Exists(abs))
+            // LogoFile is profile-supplied (untrusted on import). Confine the
+            // read to %AppData%\RST\ so a "..\\..\\" LogoFile can't load an
+            // arbitrary file off disk as the branding image.
+            if (AppDataPaths.IsUnderRoot(abs) && File.Exists(abs))
             {
                 return (abs, b.Url);
             }
-            // Per-profile path doesn't exist; fall through to default.
+            // Per-profile path missing or out of bounds; fall through to default.
         }
         var defaults = Load();
         return (HasLogo ? LogoPath : null, defaults.Url);
