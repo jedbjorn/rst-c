@@ -34,7 +34,13 @@ public abstract class SlotCommandBase : IExternalCommand
             switch (target.Kind)
             {
                 case SlotKind.Url:
-                    Process.Start(new ProcessStartInfo(UrlNormalizer.Normalize(target.Payload)) { UseShellExecute = true });
+                    if (!UrlNormalizer.TryGetLaunchTarget(target.Payload, out var launchUrl))
+                    {
+                        Log.Warning("RST slot {Index} refused unsupported/unsafe URL payload: {Payload}", Index, target.Payload);
+                        message = "This link type isn’t supported (only web, email, and phone links open).";
+                        return Result.Cancelled;
+                    }
+                    Process.Start(new ProcessStartInfo(launchUrl) { UseShellExecute = true });
                     return Result.Succeeded;
 
                 case SlotKind.Command:

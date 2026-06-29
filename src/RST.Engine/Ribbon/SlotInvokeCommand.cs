@@ -44,7 +44,14 @@ internal sealed class SlotInvokeCommand : ICommand
             switch (_target.Kind)
             {
                 case SlotKind.Url:
-                    Process.Start(new ProcessStartInfo(UrlNormalizer.Normalize(_target.Payload))
+                    if (!UrlNormalizer.TryGetLaunchTarget(_target.Payload, out var launchUrl))
+                    {
+                        Log.Warning("SlotInvokeCommand: refused unsupported/unsafe URL payload ({Payload}, display={DisplayName})",
+                                    _target.Payload, _target.DisplayName);
+                        ShowUnsupportedLinkDialog(_target.DisplayName);
+                        return;
+                    }
+                    Process.Start(new ProcessStartInfo(launchUrl)
                     {
                         UseShellExecute = true,
                     });
@@ -95,6 +102,33 @@ internal sealed class SlotInvokeCommand : ICommand
         catch (Exception ex)
         {
             Log.Debug(ex, "SlotInvokeCommand: missing-addin TaskDialog failed (display={DisplayName})", displayName);
+        }
+    }
+
+    /// <summary>
+    /// Surface a refused URL slot. We only launch http/https/mailto/tel; a
+    /// profile pointing a button at a file://, UNC, or other shell target is
+    /// refused (it would otherwise hand an arbitrary executable to
+    /// ShellExecute). Profiles are shareable, so this is a security boundary.
+    /// </summary>
+    private static void ShowUnsupportedLinkDialog(string displayName)
+    {
+        try
+        {
+            var dlg = new TaskDialog("RST")
+            {
+                MainInstruction = $"“{displayName}” couldn’t open.",
+                MainContent =
+                    "This button points at a link type RST won’t open for safety — only web (http/https), " +
+                    "email (mailto:), and phone (tel:) links are supported. File, network-share, and program " +
+                    "links are blocked. Ask your profile admin to use a web or email link instead.",
+                CommonButtons = TaskDialogCommonButtons.Close,
+            };
+            dlg.Show();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "SlotInvokeCommand: unsupported-link TaskDialog failed (display={DisplayName})", displayName);
         }
     }
 
