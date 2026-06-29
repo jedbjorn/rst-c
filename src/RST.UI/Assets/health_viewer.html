@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Defense in depth: block exfiltration to external origins. Inline
+     scripts/handlers/styles kept ('unsafe-inline'); connect/img/object/base/
+     form locked down — the local UI never needs them. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RST — Health</title>
 <link rel="stylesheet" href="rst_components.css">
@@ -516,6 +520,17 @@
     const wbs     = rv.warningsBySeverity || {};
     const cleanup = snap.cleanup || null;
 
+    // GPU rows: one per adapter when snap.gpus is present (multi-GPU machines
+    // report both integrated + discrete); fall back to the single snap.gpu for
+    // older snapshots. Label as "GPU 1/2/…" only when there's more than one.
+    const gpuList = (Array.isArray(snap.gpus) && snap.gpus.length) ? snap.gpus
+                  : (gpu.name ? [gpu] : []);
+    const gpuRows = gpuList.length
+      ? gpuList.map((g, i) => row(
+          gpuList.length > 1 ? `GPU ${i + 1}` : 'GPU',
+          `${g.name}<span class="sub">driver ${fmt.str(g.driverVersion)} · VRAM ${fmt.mb(g.vramTotalMB)}</span>`))
+      : [row('GPU', null)];
+
     // Severity ranking: ok < warn-soft < warn < danger
     const sevRank = { 'ok': 0, 'warn-soft': 1, 'warn': 2, 'danger': 3 };
     const worse = (a, b) => sevRank[a] >= sevRank[b] ? a : b;
@@ -607,9 +622,7 @@
           row('RAM', (ram.totalMB != null)
             ? `${fmt.mb(ram.totalMB)}<span class="sub${subCls(ramSev)}">${fmt.mb(ram.usedMB)} used · ${fmt.pct(ram.usedPercent)}</span>`
             : null),
-          row('GPU', gpu.name
-            ? `${gpu.name}<span class="sub">driver ${fmt.str(gpu.driverVersion)} · VRAM ${fmt.mb(gpu.vramTotalMB)}</span>`
-            : null),
+          ...gpuRows,
           row('Disk (C:)', (disk.totalGB != null)
             ? `${fmt.str(disk.friendlyName)}<span class="sub${subCls(diskSev)}">${fmt.str(disk.type)} · ${fmt.gb(disk.availableGB)} free of ${fmt.gb(disk.totalGB)} · ${fmt.pct(disk.usedPercent)} used</span>`
             : null),

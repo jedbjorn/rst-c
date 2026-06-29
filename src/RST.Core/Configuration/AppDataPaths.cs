@@ -50,4 +50,31 @@ public static class AppDataPaths
     {
         Directory.CreateDirectory(ProfilesDir);
     }
+
+    /// <summary>
+    /// True when <paramref name="absolutePath"/> resolves to a location at or
+    /// under <see cref="Root"/>. Used to confine filesystem operations driven
+    /// by profile-supplied values — an imported profile is untrusted input, so
+    /// a traversal ("..\\..\\") or rooted ("C:\\…") path must not escape
+    /// %AppData%\RST\. Returns false on null/empty or an unparseable path.
+    /// </summary>
+    public static bool IsUnderRoot(string? absolutePath)
+    {
+        if (string.IsNullOrEmpty(absolutePath)) return false;
+        string root, full;
+        try
+        {
+            root = Path.GetFullPath(Root);
+            full = Path.GetFullPath(absolutePath!);
+        }
+        catch
+        {
+            return false;
+        }
+        var prefix = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        return full.Equals(root, StringComparison.OrdinalIgnoreCase)
+            || full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
 }

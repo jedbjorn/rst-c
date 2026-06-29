@@ -41,7 +41,7 @@
 
   <Package Name="RST"
            Manufacturer="Designs/OS"
-           Version="1.2.0"
+           Version="$(var.RstMsiVersion)"
            UpgradeCode="AF0331FC-5280-492A-94BD-95EDF108BE74"
            Scope="perUser"
            Compressed="yes">

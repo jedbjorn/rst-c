@@ -68,10 +68,12 @@ public static class ProfileStore
     }
 
     /// <summary>
-    /// Persist <paramref name="profile"/> to <c>profiles/&lt;safeName&gt;_&lt;safeDate&gt;.json</c>.
-    /// If a file with the same id or name already exists, it's deleted first
-    /// (the new write replaces it under the canonical filename).
-    /// Returns the chosen filename.
+    /// Persist <paramref name="profile"/> to <c>profiles/&lt;safeName&gt;_&lt;safeId&gt;.json</c>.
+    /// The filename is keyed on the profile <see cref="Profile.Id"/> (not its
+    /// display name) so two distinct profiles that happen to share a name never
+    /// collide. Any prior file for the *same id* (e.g. saved under an old name)
+    /// is removed; a different profile that merely shares a name is left
+    /// untouched. The write is atomic (temp file + swap). Returns the filename.
     /// </summary>
     public static string Save(Profile profile, string? dir = null)
     {
@@ -83,16 +85,28 @@ public static class ProfileStore
             profile.Id = Guid.NewGuid().ToString();
 
         var fileName = CanonicalFileName(profile);
-        var existing = Resolve(profile.ProfileName, profile.Id, dir);
-        if (existing is not null && !string.Equals(existing.FileName, fileName, StringComparison.OrdinalIgnoreCase))
+        var path = Path.Combine(dir, fileName);
+
+        // Remove a prior file for THIS profile (same id) stored under a
+        // different name — but never delete a different profile that merely
+        // shares a display name (that was the data-loss bug).
+        foreach (var existing in List(dir))
         {
-            try { File.Delete(Path.Combine(dir, existing.FileName)); }
-            catch (IOException) { /* keep going — write below will overwrite if same path */ }
+            if (string.Equals(existing.Profile.Id, profile.Id, StringComparison.Ordinal) &&
+                !string.Equals(existing.FileName, fileName, StringComparison.OrdinalIgnoreCase))
+            {
+                try { File.Delete(Path.Combine(dir, existing.FileName)); }
+                catch (IOException) { /* best effort — the write below still lands */ }
+            }
         }
 
-        var path = Path.Combine(dir, fileName);
-        using (var fs = File.Create(path))
+        // Atomic write: serialise to a temp file, then swap into place so a
+        // crash mid-write can't truncate or lose the profile.
+        var tmp = path + ".rsttmp";
+        using (var fs = File.Create(tmp))
             ProfileSerializer.Write(profile, fs);
+        if (File.Exists(path)) File.Replace(tmp, path, destinationBackupFileName: null);
+        else File.Move(tmp, path);
 
         return fileName;
     }
@@ -109,10 +123,13 @@ public static class ProfileStore
     public static string CanonicalFileName(Profile profile)
     {
         var name = SafeFileSegment(profile.ProfileName);
-        var date = SafeFileSegment(string.IsNullOrEmpty(profile.ExportDate)
-            ? DateTime.UtcNow.ToString("yyyy-MM-dd")
-            : profile.ExportDate);
-        return $"{name}_{date}.json";
+        // Key the filename on the stable id, not the export date, so distinct
+        // profiles sharing a display name get distinct files (no collision /
+        // silent overwrite). Id is guaranteed non-empty by Save.
+        var id = SafeFileSegment(string.IsNullOrEmpty(profile.Id)
+            ? Guid.NewGuid().ToString()
+            : profile.Id);
+        return $"{name}_{id}.json";
     }
 
     private static string SafeFileSegment(string s)

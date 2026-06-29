@@ -175,6 +175,28 @@ public sealed class ProfileZipTests : IDisposable
         saved.Branding!.LogoFile.Should().Be($"{profileId}/branding.png");
     }
 
+    [Theory]
+    [InlineData(@"..\..\..\..\rst-escape-marker")]
+    [InlineData("/etc/cron.d/rst")]
+    [InlineData("")]
+    public void Install_coerces_unsafe_profile_id_to_guid_and_writes_under_root(string maliciousId)
+    {
+        // A crafted package whose profile.json carried a traversal/absolute id.
+        var profile = MakeProfile("Evil");
+        profile.Id = maliciousId;
+        var logoBytes = new byte[] { 7, 7, 7 };
+        var package = new ProfilePackage(profile, logoBytes);
+
+        ProfileZip.Install(package);
+
+        // Id must have been replaced with a real GUID...
+        Guid.TryParse(package.Profile.Id, out _).Should().BeTrue();
+        // ...and the asset must live under the data root, not outside it.
+        var asset = Path.Combine(_root, package.Profile.Id!, "branding.png");
+        File.Exists(asset).Should().BeTrue();
+        AppDataPaths.IsUnderRoot(asset).Should().BeTrue();
+    }
+
     [Fact]
     public void Install_without_logo_persists_profile_unchanged()
     {
