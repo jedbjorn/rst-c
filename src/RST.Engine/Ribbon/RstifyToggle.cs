@@ -190,11 +190,51 @@ internal static class RstifyToggle
         }
     }
 
+    // Title of the RST tools panel (Loader/Builder/RSTify/Health). Mirrors
+    // RibbonBuilder.RstPanelTitle — used to locate the host tab to protect.
+    private const string RstToolsPanelTitle = "RST";
+
+    /// <summary>
+    /// Title of the tab hosting the RST tools panel — the user's only escape
+    /// hatch (Loader/RSTify live here). The host tab is Revit's built-in
+    /// Add-Ins tab, whose title is locale-dependent, so we find it by the
+    /// panel it contains rather than by a hard-coded name. Null if not found.
+    /// </summary>
+    private static string? HostTabTitle()
+    {
+        var ribbon = AwComponentManager.Ribbon;
+        if (ribbon is null) return null;
+        foreach (var tab in ribbon.Tabs)
+        {
+            if (tab is null) continue;
+            foreach (var panel in tab.Panels)
+            {
+                if (panel?.Source is null) continue;
+                if (string.Equals(panel.Source.Title, RstToolsPanelTitle, StringComparison.Ordinal))
+                    return tab.Title;
+            }
+        }
+        return null;
+    }
+
     private static int SetVisibility(IReadOnlyCollection<string> titles, bool visible)
     {
         var ribbon = AwComponentManager.Ribbon;
         if (ribbon is null) return 0;
         var titleSet = new HashSet<string>(titles, StringComparer.Ordinal);
+
+        // Never hide the escape-hatch tab (the one hosting the RST tools panel)
+        // or any tab RST itself manages. Hiding the Add-Ins host tab would
+        // strip the only UI to switch profiles or toggle RSTify back on — a
+        // soft-lockout. A profile listing "Add-Ins" in hidden_tabs is refused.
+        if (!visible)
+        {
+            var host = HostTabTitle();
+            if (host is not null && titleSet.Remove(host))
+                Log.Information("RstifyToggle: refused to hide host tab '{Host}' (escape hatch)", host);
+            foreach (var managed in RstManagedTabs.Names) titleSet.Remove(managed);
+        }
+
         int count = 0;
         foreach (var tab in ribbon.Tabs)
         {
