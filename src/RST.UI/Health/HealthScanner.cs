@@ -56,7 +56,8 @@ public static class HealthScanner
         // One WMI batch — every CIM query goes through Local in-proc
         // System.Management. Errors degrade per-section; missing CIM data
         // leaves the relevant snapshot fields null/empty.
-        snap.Gpu = ReadGpu();
+        snap.Gpus = ReadGpus();
+        snap.Gpu  = snap.Gpus.Count > 0 ? snap.Gpus[0] : new Gpu();
         var (mediaType, busType, friendlyName) = ReadDiskMedia();
         snap.Disk.Type = string.IsNullOrEmpty(mediaType) ? "Unknown" : mediaType;
         snap.Disk.BusType = busType;
@@ -384,36 +385,63 @@ public static class HealthScanner
 
     // ─── GPU (WMI) ──────────────────────────────────────────────────────
 
-    private static Gpu ReadGpu()
+    /// <summary>
+    /// Enumerate every display adapter (integrated + discrete) via WMI, each
+    /// with its real 64-bit VRAM matched from the registry by name. The first
+    /// entry is the primary adapter (Win32_VideoController order); callers use
+    /// it for the backward-compatible single <see cref="Gpu"/> field.
+    /// </summary>
+    private static List<Gpu> ReadGpus()
     {
-        var gpu = new Gpu();
+        var gpus = new List<Gpu>();
         try
         {
+            // All adapters' real (64-bit) VRAM, keyed by DriverDesc.
+            var adapters = ReadAdapterVramTable();
+
             using var searcher = new ManagementObjectSearcher(
                 "SELECT Name, DriverVersion, AdapterRAM FROM Win32_VideoController");
             foreach (var mo in searcher.Get().Cast<ManagementObject>())
             {
-                gpu.Name = mo["Name"]?.ToString() ?? "";
-                gpu.DriverVersion = mo["DriverVersion"]?.ToString() ?? "";
-                // WMI AdapterRAM is uint32 and saturates at 4 GB — keep it only
-                // as a last-resort fallback below.
+                var name = mo["Name"]?.ToString() ?? "";
+                // Skip nameless / virtual adapters (RDP mirror, Basic Display)
+                // so the list is real cards only — no empty "GPU n" rows.
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                var gpu = new Gpu
+                {
+                    Name          = name,
+                    DriverVersion = mo["DriverVersion"]?.ToString() ?? "",
+                };
+                // WMI AdapterRAM is uint32 and saturates at 4 GB — first guess.
                 if (mo["AdapterRAM"] is uint ram)
                     gpu.VramTotalMB = (long)Math.Round(ram / (1024.0 * 1024.0));
-                break;
+
+                // Prefer the 64-bit registry size for THIS adapter, matched by
+                // name so a multi-GPU box never reports one card's VRAM for
+                // another. AdapterRAM caps at ~4096 MB, so any 6/8/12/24 GB card
+                // needs the registry QWORD for its true size.
+                var vram64 = adapters.FirstOrDefault(a =>
+                    !string.IsNullOrEmpty(gpu.Name) &&
+                    string.Equals(a.Desc, gpu.Name, StringComparison.OrdinalIgnoreCase)).Mb;
+                if (vram64 > 0) gpu.VramTotalMB = vram64;
+
+                gpus.Add(gpu);
             }
 
-            // Prefer the 64-bit HardwareInformation.qwMemorySize from the
-            // display-adapter registry key. Win32_VideoController.AdapterRAM is
-            // a 32-bit field that caps at ~4096 MB, so any 6/8/12/24 GB card
-            // reports 4 GB through WMI; the registry QWORD reports the real size.
-            var vram64 = ReadGpuVramMbFromRegistry(gpu.Name);
-            if (vram64 > 0) gpu.VramTotalMB = vram64;
+            // Unambiguous single-adapter fallback: exactly one GPU and exactly
+            // one sized registry adapter that didn't name-match (DriverDesc can
+            // differ from the WMI Name on some single-GPU rigs). Safe because
+            // there is only one card it could be.
+            if (gpus.Count == 1 && adapters.Count == 1
+                && (gpus[0].VramTotalMB is null || gpus[0].VramTotalMB <= 4096))
+                gpus[0].VramTotalMB = adapters[0].Mb;
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "HealthScanner.ReadGpu (Win32_VideoController) failed");
+            Log.Warning(ex, "HealthScanner.ReadGpus (Win32_VideoController) failed");
         }
-        return gpu;
+        return gpus;
     }
 
     // Display-adapter class GUID — every GPU's registry key lives under here as
@@ -422,19 +450,19 @@ public static class HealthScanner
         @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 
     /// <summary>
-    /// Read total VRAM in MB from the 64-bit <c>HardwareInformation.qwMemorySize</c>
-    /// registry value. Prefers the adapter whose <c>DriverDesc</c> matches
-    /// <paramref name="gpuName"/>; falls back to the first adapter that reports a
-    /// size. Returns 0 when nothing usable is found (caller keeps the WMI value).
+    /// Read each display adapter's <c>DriverDesc</c> + total VRAM (MB) from the
+    /// 64-bit <c>HardwareInformation.qwMemorySize</c> registry value. One entry
+    /// per numbered adapter subkey that reports a usable size; empty on error.
+    /// Callers match an entry to a WMI GPU by <c>DriverDesc</c> == GPU name.
     /// </summary>
-    private static long ReadGpuVramMbFromRegistry(string? gpuName)
+    private static List<(string Desc, long Mb)> ReadAdapterVramTable()
     {
+        var list = new List<(string Desc, long Mb)>();
         try
         {
             using var root = Registry.LocalMachine.OpenSubKey(DisplayClassKey);
-            if (root is null) return 0;
+            if (root is null) return list;
 
-            long matched = 0, firstAny = 0;
             foreach (var subName in root.GetSubKeyNames())
             {
                 // Only the numbered adapter subkeys (0000, 0001, …); skip
@@ -446,23 +474,15 @@ public static class HealthScanner
                 var bytes = ReadMemorySizeBytes(sub);
                 if (bytes <= 0) continue;
                 var mb = (long)Math.Round(bytes / (1024.0 * 1024.0));
-                if (firstAny == 0) firstAny = mb;
-
-                var desc = sub.GetValue("DriverDesc")?.ToString();
-                if (!string.IsNullOrEmpty(gpuName) && !string.IsNullOrEmpty(desc)
-                    && string.Equals(desc, gpuName, StringComparison.OrdinalIgnoreCase))
-                {
-                    matched = mb;
-                    break;
-                }
+                var desc = sub.GetValue("DriverDesc")?.ToString() ?? "";
+                list.Add((desc, mb));
             }
-            return matched > 0 ? matched : firstAny;
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "HealthScanner.ReadGpuVramMbFromRegistry failed");
-            return 0;
+            Log.Debug(ex, "HealthScanner.ReadAdapterVramTable failed");
         }
+        return list;
     }
 
     private static long ReadMemorySizeBytes(RegistryKey adapter)
