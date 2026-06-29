@@ -8,10 +8,12 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RST — Profile Builder</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="rst_components.css">
 <style>
   :root {
+    --font-body: 'Segoe UI', system-ui, sans-serif;
+    --font-display: 'Segoe UI', system-ui, sans-serif;
+    --font-mono: Consolas, 'Courier New', monospace;
     --bg: #0f1117;
     --surface: #161b27;
     --surface2: #1e2536;
@@ -33,7 +35,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
     height: 100vh;
@@ -54,7 +56,7 @@
     flex-shrink: 0;
   }
   .window-title {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 700;
     font-size: 14px;
     letter-spacing: 0.04em;
@@ -64,7 +66,7 @@
   .header-sep { width: 1px; height: 22px; background: var(--border); }
   .header-field { display: flex; align-items: center; gap: 8px; }
   .header-field label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -74,7 +76,7 @@
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     padding: 6px 10px;
     border-radius: 4px;
@@ -84,7 +86,7 @@
   .header-field input:focus { border-color: var(--accent); }
   .header-spacer { flex: 1; }
   .btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     padding: 7px 14px;
@@ -142,14 +144,14 @@
     box-shadow: 0 12px 40px rgba(0,0,0,0.45);
   }
   .exit-modal-title {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 600;
     color: var(--heading);
     margin-bottom: 6px;
   }
   .exit-modal-body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     color: var(--text2);
     line-height: 1.5;
@@ -171,7 +173,7 @@
     gap: 10px;
     padding: 6px 4px;
     cursor: pointer;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text1);
   }
@@ -202,7 +204,7 @@
     color: var(--text);
     padding: 5px 9px;
     border-radius: 4px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 11px;
     cursor: pointer;
     min-width: 170px;
@@ -232,7 +234,7 @@
     gap: 10px;
   }
   .pane-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -251,7 +253,7 @@
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     padding: 7px 10px;
     border-radius: 4px;
@@ -269,7 +271,7 @@
     cursor: pointer;
     user-select: none;
     color: var(--text2);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -304,7 +306,7 @@
     margin-left: auto;
     font-size: 9px;
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
   }
   .cat-cmd {
     display: flex;
@@ -323,7 +325,7 @@
   .cat-cmd:active { cursor: grabbing; }
   .cat-cmd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cat-cmd-id {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     flex-shrink: 0;
@@ -331,7 +333,7 @@
   .cat-empty {
     padding: 18px;
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     text-align: center;
@@ -342,7 +344,7 @@
   .canvas-wrap { padding: 16px 20px 24px; }
   .canvas-empty {
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 0.06em;
     padding: 32px;
@@ -385,7 +387,7 @@
     background: transparent;
     border: 1px solid transparent;
     color: var(--heading);
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 600;
     font-size: 13px;
     letter-spacing: 0.02em;
@@ -395,7 +397,7 @@
   }
   .panel-name-input:focus, .panel-name-input:hover { border-color: var(--border2); background: var(--surface3); }
   .panel-slot-count {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     letter-spacing: 0.06em;
@@ -412,7 +414,7 @@
     align-items: center;
     justify-content: center;
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
   }
@@ -432,7 +434,7 @@
   .slot.drop-before { border-top: 2px solid var(--accent3); }
   .slot.drop-after  { border-bottom: 2px solid var(--accent3); }
   .slot-type {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     color: var(--text3);
     text-transform: uppercase;
@@ -450,7 +452,7 @@
     background: transparent;
     border: 1px solid transparent;
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     padding: 3px 5px;
     border-radius: 3px;
@@ -459,7 +461,7 @@
   }
   .slot-name-input:focus { border-color: var(--border2); background: var(--surface2); }
   .slot-cmd {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     flex-shrink: 0;
@@ -498,7 +500,7 @@
     flex-shrink: 0;
   }
   .slot-icon-btn-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -530,7 +532,7 @@
     gap: 12px;
   }
   .icon-picker-title {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -563,7 +565,7 @@
     font-size: 22px; color: var(--text3);
   }
   .icon-tile-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     word-break: break-all;
     text-align: center;
@@ -597,7 +599,7 @@
     gap: 12px;
   }
   .cleanup-title {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -610,7 +612,7 @@
     gap: 8px;
   }
   .cleanup-help {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     line-height: 1.5;
@@ -641,7 +643,7 @@
     background: var(--surface);
     border: 1px solid transparent;
     color: var(--text);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     padding: 4px 6px;
     border-radius: 3px;
@@ -657,7 +659,7 @@
     gap: 8px;
   }
   .cleanup-empty {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text3);
     text-align: center;
@@ -671,7 +673,7 @@
     border-bottom: 1px solid var(--border);
   }
   .prop-section-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -682,7 +684,7 @@
   .prop-row:last-child { margin-bottom: 0; }
   .prop-row label {
     display: block;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     text-transform: uppercase;
@@ -694,7 +696,7 @@
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     padding: 6px 9px;
     border-radius: 4px;
@@ -708,7 +710,7 @@
   }
   .prop-row input[type="range"] { flex: 1; accent-color: var(--accent); }
   .prop-row .opacity-val {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text2);
     min-width: 32px;
@@ -730,14 +732,14 @@
   }
   .prop-row .color-hex {
     flex: 1;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     text-transform: lowercase;
   }
   .prop-row .logo-row { display: flex; align-items: center; gap: 6px; }
   .prop-row .logo-name {
     flex: 1;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text2);
     overflow: hidden;
@@ -748,7 +750,7 @@
   .prop-row .logo-name.empty { color: var(--text3); font-style: italic; }
   .prop-empty {
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     padding: 4px 0;
@@ -768,7 +770,7 @@
     background: var(--surface3);
     border: 1px solid var(--border);
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     padding: 5px 8px;
     border-radius: 3px;
@@ -847,7 +849,7 @@
     background: transparent;
     border: 1px solid transparent;
     color: var(--heading);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     font-weight: 500;
     padding: 3px 5px;
@@ -868,14 +870,14 @@
   }
   .stack-tool-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stack-tool-cmd {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     flex-shrink: 0;
   }
   .stack-empty {
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     text-align: center;
@@ -899,14 +901,14 @@
     flex-shrink: 0;
   }
   .preview-strip-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text3);
   }
   .preview-tab-pill {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.05em;
     color: var(--text2);
@@ -917,7 +919,7 @@
   }
   .preview-strip-hint {
     margin-left: auto;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -942,7 +944,7 @@
   }
   .preview-canvas-empty {
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.06em;
     padding: 18px;
@@ -975,7 +977,7 @@
   .p-panel-name {
     padding: 4px 8px;
     background: rgba(0,0,0,0.18);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1007,7 +1009,7 @@
     image-rendering: pixelated;
   }
   .p-rib-label {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 8px;
     color: var(--text2);
     text-align: center;
@@ -1038,7 +1040,7 @@
     color: #a78bfa;
   }
   .p-rib-stack-label {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 8px;
     color: var(--text2);
     white-space: nowrap;
@@ -1047,7 +1049,7 @@
     font-weight: 300;
   }
   .p-panel-empty {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     color: var(--text3);
     letter-spacing: 0.06em;
@@ -1192,12 +1194,12 @@
       <div class="prop-section" id="presetsSection">
         <div class="prop-section-label">RST Presets</div>
         <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);line-height:1.5">
             Pre-configure RSTify hidden tabs + Disable Unused Add-ins so the
             profile ships with a sensible Loader state out of the box.
           </div>
           <div id="presetsSummary"
-               style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+               style="font-family:var(--font-mono);font-size:9px;color:var(--text2);padding-top:4px"></div>
           <button class="btn" onclick="openPresetsModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
         </div>
       </div>
@@ -1205,12 +1207,12 @@
       <div class="prop-section" id="cleanupSection">
         <div class="prop-section-label">Junk Cleanup</div>
         <div class="prop-row" style="flex-direction:column;align-items:stretch;gap:6px">
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);line-height:1.5">
             Targets the Health tool's "Clean Junk Files" sweeps. Ship with
             sensible OOB defaults; remove or extend per profile.
           </div>
           <div id="cleanupSummary"
-               style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);padding-top:4px"></div>
+               style="font-family:var(--font-mono);font-size:9px;color:var(--text2);padding-top:4px"></div>
           <button class="btn" onclick="openCleanupModal()" style="margin-top:8px;align-self:flex-start">Configure</button>
         </div>
       </div>
@@ -1233,8 +1235,8 @@
     </div>
     <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--border);cursor:pointer">
       <div>
-        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text1)">Disable Unused Add-ins</div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text1)">Disable Unused Add-ins</div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);margin-top:2px">
           Default state for the Loader's footer toggle on first load.
         </div>
       </div>
@@ -2617,7 +2619,7 @@
 
     var list = document.getElementById('presetsTabsList');
     if (tabs.length === 0) {
-      list.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 4px">' +
+      list.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);padding:8px 4px">' +
                        'No tabs available to hide on this machine.</div>';
     } else {
       list.innerHTML = tabs.map(function(t) {
