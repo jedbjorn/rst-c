@@ -8,10 +8,12 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RST — Health</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="rst_components.css">
 <style>
   :root {
+    --font-body: 'Segoe UI', system-ui, sans-serif;
+    --font-display: 'Segoe UI', system-ui, sans-serif;
+    --font-mono: Consolas, 'Courier New', monospace;
     --bg: #0f1117;
     --surface: #161b27;
     --surface2: #1e2536;
@@ -33,7 +35,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
     height: 100vh;
@@ -54,7 +56,7 @@
   }
 
   .window-title {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 700;
     font-size: 13px;
     color: var(--heading);
@@ -69,7 +71,7 @@
   }
 
   .header-meta span {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -77,7 +79,7 @@
   }
 
   .header-meta strong {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-weight: 500;
     font-size: 12px;
     color: var(--text);
@@ -102,7 +104,7 @@
     color: var(--text3);
   }
   .empty-state h2 {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 600;
     font-size: 16px;
     color: var(--text2);
@@ -148,7 +150,7 @@
   }
 
   .rst-section__title {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 600;
     font-size: 13px;
     color: var(--heading);
@@ -198,7 +200,7 @@
   .rst-section__row:last-child { border-bottom: none; }
 
   .rst-section__row-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -208,7 +210,7 @@
   }
 
   .rst-section__row-value {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 13px;
     color: var(--text);
     word-break: break-word;
@@ -223,7 +225,7 @@
   /* Inline sub-value (monospace, smaller) */
   .sub {
     display: block;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text3);
     margin-top: 3px;
@@ -258,7 +260,7 @@
   .footer-spacer { flex: 1; }
 
   .rst-footer-btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -324,7 +326,7 @@
   }
 
   .rst-junk-title {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 700;
     font-size: 14px;
     color: var(--heading);
@@ -332,7 +334,7 @@
   }
 
   .rst-junk-subtitle {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     color: var(--text3);
@@ -352,14 +354,14 @@
   .rst-junk-row-text { flex: 1; }
 
   .rst-junk-row-label {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 13px;
     color: var(--text);
   }
 
   .rst-junk-row-hint {
     display: block;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text3);
     margin-top: 2px;
@@ -374,7 +376,7 @@
   }
 
   .rst-junk-btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     text-transform: uppercase;

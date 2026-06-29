@@ -10,10 +10,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RST — Profile Selector</title>
 <!-- NOTE: Window size is 1450x900. Set in profile_selector.py. -->
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="rst_components.css">
 <style>
   :root {
+    --font-body: 'Segoe UI', system-ui, sans-serif;
+    --font-display: 'Segoe UI', system-ui, sans-serif;
+    --font-mono: Consolas, 'Courier New', monospace;
     --bg: #0f1117;
     --surface: #161b27;
     --surface2: #1e2536;
@@ -35,7 +37,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
     height: 100vh;
@@ -57,7 +59,7 @@
   }
 
   .window-title {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-weight: 700;
     font-size: 13px;
     color: var(--heading);
@@ -80,7 +82,7 @@
   }
 
   .header-field label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -93,7 +95,7 @@
 
   .add-profile-btn {
     margin-left: auto;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -133,7 +135,7 @@
   }
 
   .pane-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 500;
     letter-spacing: 0.16em;
@@ -142,7 +144,7 @@
   }
 
   .profile-count {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     background: var(--surface2);
@@ -170,7 +172,7 @@
   .card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 
   .card-name {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-size: 13px;
     font-weight: 700;
     color: var(--heading);
@@ -178,7 +180,7 @@
   }
 
   .card-badge {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 500;
     letter-spacing: 0.08em;
@@ -194,7 +196,7 @@
   }
 
   .card-meta { display: flex; gap: 14px; flex-wrap: wrap; }
-  .meta-item { display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); }
+  .meta-item { display: flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--text3); }
   .meta-item .meta-val { color: var(--text2); }
 
   /* ── DETAIL PANE ── */
@@ -207,7 +209,7 @@
   }
 
   .detail-profile-name {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
     font-size: 22px;
     font-weight: 800;
     color: var(--heading);
@@ -221,7 +223,7 @@
   .detail-meta-row { display: flex; gap: 20px; flex-wrap: wrap; }
 
   .detail-meta-item {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text3);
     display: flex;
@@ -240,7 +242,7 @@
   }
 
   .detail-section-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 500;
     letter-spacing: 0.16em;
@@ -267,7 +269,7 @@
   }
 
   .tab-pill {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.05em;
     color: var(--text2);
@@ -288,7 +290,7 @@
   }
 
   .tab-preview-ro-badge {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -309,7 +311,7 @@
   }
 
   .opacity-override-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -323,7 +325,7 @@
   }
 
   .opacity-override-value {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text2);
     min-width: 22px;
@@ -377,7 +379,7 @@
   .p-panel-name {
     padding: 4px 8px;
     background: rgba(0,0,0,0.18);
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -407,7 +409,7 @@
   }
 
   .p-rib-label {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 8px;
     color: var(--text2);
     text-align: center;
@@ -442,7 +444,7 @@
   }
 
   .p-rib-stack-label {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 8px;
     color: var(--text2);
     white-space: nowrap;
@@ -452,7 +454,7 @@
   }
 
   .p-panel-empty {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     color: var(--text3);
     letter-spacing: 0.06em;
@@ -478,13 +480,13 @@
   .addin-row-name { flex: 1; }
 
   .addin-file {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     flex-shrink: 0;
   }
   .addin-status {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     padding: 2px 7px;
     border-radius: 3px;
@@ -512,7 +514,7 @@
 
   /* ── ORIGIN BADGES ── */
   .addin-origin {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 8px;
     padding: 1px 5px;
     border-radius: 3px;
@@ -554,7 +556,7 @@
     gap: 8px;
   }
   .footer-toggle-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.04em;
     color: var(--text3);
@@ -581,14 +583,14 @@
     box-shadow: 0 12px 40px rgba(0,0,0,0.4);
   }
   .confirm-title {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 600;
     color: var(--heading);
     margin-bottom: 4px;
   }
   .confirm-subtitle {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text3);
     margin-bottom: 18px;
@@ -600,7 +602,7 @@
   }
   .confirm-col { flex: 1; }
   .confirm-col-label {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 600;
     text-transform: uppercase;
@@ -617,7 +619,7 @@
     max-height: 200px;
     overflow-y: auto;
     overflow-x: hidden;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text2);
     line-height: 1.8;
@@ -632,7 +634,7 @@
     margin: 0 auto;
   }
   .confirm-restart {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text3);
     margin-bottom: 16px;
@@ -660,7 +662,7 @@
   }
 
   .unload-btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -675,7 +677,7 @@
   .unload-btn:hover { border-color: var(--border2); color: var(--text2); background: var(--surface2); }
 
   .delete-btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -690,7 +692,7 @@
   .delete-btn:hover { border-color: var(--danger); color: #fff; background: var(--danger); }
 
   .load-btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -744,7 +746,7 @@
 
   /* ── OVERLAY BUTTONS ── */
   .overlay-btn {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     padding: 6px 14px;
     border-radius: 5px;
@@ -775,7 +777,7 @@
   <div class="header-sep"></div>
   <div class="header-field">
     <label>Revit</label>
-    <span id="revitVersionDisplay" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);letter-spacing:0.04em">—</span>
+    <span id="revitVersionDisplay" style="font-family:var(--font-mono);font-size:11px;color:var(--text2);letter-spacing:0.04em">—</span>
   </div>
   <button class="add-profile-btn" onclick="addProfile()" style="margin-left:0">+ Import from File</button>
 </div>
@@ -1103,7 +1105,7 @@
     });
 
     if (rows.length === 0) {
-      list.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 0">No tabs available to hide</div>';
+      list.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);padding:8px 0">No tabs available to hide</div>';
     } else {
       list.innerHTML = rows.join('');
     }
@@ -1126,8 +1128,8 @@
     if (profiles.length === 0) {
       scroll.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:30px 20px;text-align:center">
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)">No profiles found</div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2)">No profiles found</div>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);line-height:1.5">
             Create a profile in the Profiler, or import an existing one.
           </div>
           <button class="add-profile-btn" onclick="addProfile()" style="margin-top:4px">+ Import Profile from File</button>
@@ -1173,7 +1175,7 @@
     const canvas = document.getElementById('tabCanvas');
 
     if (!profile.panels || profile.panels.length === 0) {
-      canvas.innerHTML = `<div style="color:var(--text3);font-family:'DM Mono',monospace;font-size:10px;padding:18px;letter-spacing:0.06em">No panels configured</div>`;
+      canvas.innerHTML = `<div style="color:var(--text3);font-family:var(--font-mono);font-size:10px;padding:18px;letter-spacing:0.06em">No panels configured</div>`;
       return;
     }
 
@@ -1346,7 +1348,7 @@
           var isNative = originVal === 'native';
           var addinUrl = addin.url || (known ? known.url : '');
           var urlHtml = !isNative && addinUrl
-            ? `<a href="${escHtml(addinUrl)}" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);text-decoration:none;flex-shrink:0" onmouseenter="this.style.textDecoration='underline'" onmouseleave="this.style.textDecoration='none'" title="${escHtml(addinUrl)}">info ↗</a>`
+            ? `<a href="${escHtml(addinUrl)}" target="_blank" style="font-family:var(--font-mono);font-size:9px;color:var(--accent);text-decoration:none;flex-shrink:0" onmouseenter="this.style.textDecoration='underline'" onmouseleave="this.style.textDecoration='none'" title="${escHtml(addinUrl)}">info ↗</a>`
             : '';
 
           return `<div class="addin-row">
@@ -1359,7 +1361,7 @@
         }).join('')}
       `;
     } else {
-      addinsContainer.innerHTML = '<div class="detail-section-label">Required Add-ins for this profile</div><div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:8px 0">None</div>';
+      addinsContainer.innerHTML = '<div class="detail-section-label">Required Add-ins for this profile</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);padding:8px 0">None</div>';
     }
 
     // RST-026: per-profile RSTify + disable-unused user prefs are the
@@ -1512,7 +1514,7 @@
       }
 
       if (allClear) {
-        html += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3);padding:14px 0;text-align:center">' +
+        html += '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);padding:14px 0;text-align:center">' +
                 'Nothing to fix — every required add-in is on disk and active.' +
                 '</div>';
       }
