@@ -16,6 +16,19 @@
     v7 is a one-line change if/when needed.
   -->
 
+  <!--
+    MSI ProductVersion. Threaded from the release tag by the CI release
+    workflow (-p:RstMsiVersion=1.3.0); falls back to the value below for local
+    and push/PR builds. Keeping it a single property (not duplicated in the
+    .wxs) means a release can't ship an MSI whose ProductVersion doesn't match
+    the tag — the bug that silently broke in-place upgrades. Passed into the
+    .wxs as the $(var.RstMsiVersion) preprocessor variable via DefineConstants.
+  -->
+  <PropertyGroup>
+    <RstMsiVersion Condition="'$(RstMsiVersion)' == ''">1.2.0</RstMsiVersion>
+    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersion)</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputName>RST</OutputName>
     <OutputType>Package</OutputType>

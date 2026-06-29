@@ -19,6 +19,13 @@
     standalone MSI during the RST-013 stabilisation window.
   -->
 
+  <!-- MSI ProductVersion threaded from the release tag; falls back for local
+       and push/PR builds. See ../installer/RST.Installer.wixproj for rationale. -->
+  <PropertyGroup>
+    <RstMsiVersion Condition="'$(RstMsiVersion)' == ''">1.2.0</RstMsiVersion>
+    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersion)</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputName>RST-R27</OutputName>
     <OutputType>Package</OutputType>

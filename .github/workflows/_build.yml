@@ -27,6 +27,15 @@ name: _build (reusable)
 
 on:
   workflow_call:
+    inputs:
+      product_version:
+        description: >-
+          Numeric MSI ProductVersion (a.b.c) to stamp into both MSIs. Empty for
+          push/PR builds — the wixproj fallback applies. release.yml derives it
+          from the tag so a release always raises ProductVersion (MajorUpgrade).
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -91,7 +100,7 @@ jobs:
         with:
           name: stage-R26
           path: build/R26/
-      - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo
+      - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
       - uses: actions/upload-artifact@v4
         with:
           name: RST.msi
@@ -115,7 +124,7 @@ jobs:
         with:
           name: stage-R27
           path: build/R27/
-      - run: dotnet build installer-r27/RST.Installer.R27.wixproj -c Release --nologo
+      - run: dotnet build installer-r27/RST.Installer.R27.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
       - uses: actions/upload-artifact@v4
         with:
           name: RST-R27.msi
