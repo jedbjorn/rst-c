@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Defense in depth: even if some value slips past escaping, block
+     exfiltration to external origins. Inline scripts/handlers/styles are
+     kept ('unsafe-inline') since the page relies on them; the lockdown is
+     on connect/img/object/base/form, which the local UI never needs. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RST — Profile Selector</title>
 <!-- NOTE: Window size is 1450x900. Set in profile_selector.py. -->
@@ -960,10 +965,19 @@
     });
   }
 
+  // Escapes for BOTH element-content and double/single-quoted attribute
+  // contexts. The previous textContent→innerHTML trick left " and '
+  // unescaped, so profile-supplied values interpolated into href/title
+  // attributes (e.g. a required add-in URL) could break out of the
+  // attribute. A shared profile is untrusted, so escape quotes too.
   function escHtml(s) {
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ── ADD-IN SESSION CHECK ──────────────────────────────────────────────────────
@@ -1175,7 +1189,7 @@
         if (!slot) return '';
         if (slot.type === 'tool') {
           return `<div class="p-rib-btn">
-            <div class="p-rib-icon">${slot.icon || '⬜'}</div>
+            <div class="p-rib-icon">${escHtml(slot.icon) || '⬜'}</div>
             <div class="p-rib-label">${escHtml(slot.baseName || slot.name)}</div>
           </div>`;
         } else if (slot.type === 'stack') {
@@ -1185,7 +1199,7 @@
           return `<div class="p-rib-stack">
             ${tools.map(t => `<div class="p-rib-stack-item">
               <div class="p-rib-stack-icon">≡</div>
-              <div class="p-rib-stack-label">${t.name}</div>
+              <div class="p-rib-stack-label">${escHtml(t.name)}</div>
             </div>`).join('')}
           </div>`;
         }
