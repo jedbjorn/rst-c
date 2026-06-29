@@ -19,6 +19,16 @@
     standalone MSI during the RST-013 stabilisation window.
   -->
 
+  <!-- MSI ProductVersion threaded from the release tag; falls back for local
+       and push/PR builds. A local effective version is used because CI passes
+       an empty global -p:RstMsiVersion= on push/PR, which a PropertyGroup can't
+       reassign. See ../installer/RST.Installer.wixproj for the full rationale. -->
+  <PropertyGroup>
+    <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">1.2.0</RstMsiVersionEffective>
+    <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputName>RST-R27</OutputName>
     <OutputType>Package</OutputType>
