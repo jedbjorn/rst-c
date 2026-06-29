@@ -1,6 +1,7 @@
 // ProfileStoreTests.cs — round-trip + resolution behaviour for ProfileStore.
 
 using System.IO;
+using System.Linq;
 using FluentAssertions;
 using RST.Core.Profiles;
 using Xunit;
@@ -34,7 +35,8 @@ public sealed class ProfileStoreTests
         using var dir = new TempDir();
         var fileName = ProfileStore.Save(MakeProfile("My Studio", "id-1"), dir.Path);
 
-        fileName.Should().Be("My_Studio_2026-05-04.json");
+        // Filename is keyed on the stable id, not the export date.
+        fileName.Should().Be("My_Studio_id-1.json");
         File.Exists(Path.Combine(dir.Path, fileName)).Should().BeTrue();
 
         var listed = ProfileStore.List(dir.Path);
@@ -55,15 +57,30 @@ public sealed class ProfileStoreTests
     }
 
     [Fact]
-    public void Save_replaces_existing_entry_with_same_id_under_new_filename()
+    public void Save_replaces_existing_entry_with_same_id()
     {
         using var dir = new TempDir();
         ProfileStore.Save(MakeProfile("X", "id-1", date: "2026-05-04"), dir.Path);
         ProfileStore.Save(MakeProfile("X", "id-1", date: "2026-05-10"), dir.Path);
 
+        // Same id → single file (id-keyed), and the latest content wins.
         var files = Directory.GetFiles(dir.Path, "*.json");
-        files.Should().ContainSingle()
-            .Which.Should().EndWith("_2026-05-10.json");
+        files.Should().ContainSingle().Which.Should().EndWith("_id-1.json");
+        ProfileStore.List(dir.Path).Single().Profile.ExportDate.Should().Be("2026-05-10");
+    }
+
+    [Fact]
+    public void Save_does_not_clobber_a_different_profile_with_the_same_name()
+    {
+        using var dir = new TempDir();
+        // Same display name + same export date, different ids — the old
+        // name+date filename scheme silently overwrote/deleted one of these.
+        ProfileStore.Save(MakeProfile("Studio", "id-A", date: "2026-01-01"), dir.Path);
+        ProfileStore.Save(MakeProfile("Studio", "id-B", date: "2026-01-01"), dir.Path);
+
+        Directory.GetFiles(dir.Path, "*.json").Should().HaveCount(2);
+        ProfileStore.List(dir.Path).Select(e => e.Profile.Id)
+            .Should().BeEquivalentTo(new[] { "id-A", "id-B" });
     }
 
     [Fact]
