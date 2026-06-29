@@ -8,7 +8,9 @@
 // Health viewer's per-target result counts can correlate with the
 // rendered checkbox even after names drift.
 
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RST.Core.Profiles;
 
@@ -83,4 +85,20 @@ public static class CleanupDefaults
             Enabled = true,
         },
     };
+
+    // The set of permitted cleanup paths, derived from the OOB list so it
+    // stays in sync. Cleanup is locked to these — custom paths are no longer
+    // authorable in the Builder, and an imported/hand-edited profile carrying
+    // a non-preset path must never drive a recursive delete.
+    private static readonly HashSet<string> PresetPaths =
+        new(Build().Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True when <paramref name="path"/> is one of the built-in preset cleanup
+    /// paths. The Health cleaner and its size-preview both refuse any target
+    /// whose path is not a preset, so a profile cannot point cleanup at an
+    /// arbitrary directory (C:\, a UNC share, the user's documents, …).
+    /// </summary>
+    public static bool IsPresetPath(string? path)
+        => !string.IsNullOrWhiteSpace(path) && PresetPaths.Contains(path!.Trim());
 }

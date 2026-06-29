@@ -108,6 +108,9 @@ public static class HealthScanner
         foreach (var t in targets)
         {
             if (t is null || !t.Enabled) continue;
+            // Mirror HealthCleaner: only preset paths are measured/offered, so
+            // the preview can never advertise (or count) a non-preset target.
+            if (!RST.Core.Profiles.CleanupDefaults.IsPresetPath(t.Path)) continue;
             var ts = new CleanupTargetSummary
             {
                 Id   = string.IsNullOrEmpty(t.Id) ? t.Name : t.Id,
@@ -176,7 +179,13 @@ public static class HealthScanner
             string[] subs;
             try { subs = Directory.GetDirectories(current); }
             catch (Exception ex) { Log.Debug(ex, "MeasureDirectory: subdir enum failed for {Dir}", current); continue; }
-            foreach (var s in subs) stack.Push(s);
+            // Don't traverse junctions/symlinks — keeps the measured size in
+            // step with the cleaner, which also skips reparse points.
+            foreach (var s in subs)
+            {
+                if (HealthCleaner.IsReparsePoint(s)) continue;
+                stack.Push(s);
+            }
         }
         return (count, bytes, skipped);
     }
