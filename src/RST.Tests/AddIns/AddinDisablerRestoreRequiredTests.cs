@@ -102,6 +102,30 @@ public sealed class AddinDisablerRestoreRequiredTests : IDisposable
     }
 
     [Fact]
+    public void Restores_required_disabled_manifest_matched_only_by_fuzzy_tab()
+    {
+        // Registry hint filename ("Lumion.addin") differs from the installed
+        // file ("LumionLiveSync.addin"); only the fuzzy tab/file-stem tier
+        // links them. The old 2-tier restore predicate missed this and left
+        // the dependency disabled while the UI reported it restored.
+        WriteAddinFile("LumionLiveSync.addin", disabled: true);
+
+        var required = new List<RequiredAddin>
+        {
+            new() { TabName = "Lumion", AddinFile = "Lumion.addin" },
+        };
+
+        var manifests = ScanRoot().Select(s => s.Manifest).ToList();
+        var requiredNames = RequiredAddinQa.RequiredManifestFileNames(manifests, required);
+        var result = AddinDisabler.RestoreFiltered(
+            ScanRoot(), m => requiredNames.Contains(m.FileName));
+
+        result.RestoredCount.Should().Be(1);
+        File.Exists(Path.Combine(_root, "LumionLiveSync.addin")).Should().BeTrue();
+        File.Exists(Path.Combine(_root, "LumionLiveSync.addin.RSTdisabled")).Should().BeFalse();
+    }
+
+    [Fact]
     public void Matches_by_AddinId_when_filename_is_unrelated()
     {
         WriteAddinFile("Renamed.addin", disabled: true,
