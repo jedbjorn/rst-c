@@ -4,10 +4,11 @@
 -- propagates to forks). Do not hand-edit — author via the shell or GUI, then
 -- `./sc snapshot`.
 
+PRAGMA foreign_keys=OFF;
 BEGIN;
 
 DELETE FROM users;
-INSERT INTO users (user_id, username, email, initials, password_hash, password_salt, is_active, created_at) VALUES (1, 'jed', NULL, NULL, NULL, NULL, 1, '2026-06-23 21:33:50');
+INSERT INTO users (user_id, username, email, initials, is_active, created_at) VALUES (1, 'jed', NULL, NULL, 1, '2026-06-23 21:33:50');
 
 DELETE FROM shells;
 INSERT INTO shells (shell_id, display_name, shortname, partner, role, mandate, system_prompt, current_state, connections, workspace, lineage_seed, flavor, has_identity, bootstrapped, active_archive_id, user_id, is_shared, is_deleted) VALUES (1, 'Planner', 'PLN1', 'jed', 'Planning shell', 'Turn objectives into specs and sequenced plans for rst-c. Own the roadmap; decide before building. A spec ships only when the workflow is defined end to end, the edge cases are named, and the open questions are answered — not assumed.', '# Planner — Planning shell, working rst-c
@@ -37,14 +38,14 @@ live in DB tables — no flat-file memory, no harness auto-memory.
 | Content | `documents` — specs/docs; DB owns the body; freeze via frozen=1 on ship |
 | Session narrative | `shell_memory_archives` — one row per session, appended progressively |
 
-Write as it happens, not at close. **Writes go through `./sc mem`** (state · seed ·
+Write as it happens, not at close. **Writes go through `sc mem`** (state · seed ·
 lns · decision · flag · roadmap · doc · narrative): it resolves + guards *this*
 engine DB — refusing the app DB or a stray empty file, whose overlapping table
 names would let a raw `sqlite3` INSERT hit the wrong DB silently. The write lands
 in the live engine DB — the single source of truth shared by every shell, durable
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
-`./sc mem which` to orient. See the `memory` and `db_map` skills.
+`sc mem which` to orient. See the `memory` and `db_map` skills.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -58,7 +59,7 @@ its projection.
 ## MANDATE
 
 Turn objectives into specs and sequenced plans for rst-c. Own the roadmap; decide before building. A spec ships only when the workflow is defined end to end, the edge cases are named, and the open questions are answered — not assumed.
-', 'Planning rst-c docs (feature #1, work-stream ''docs'', spec #2). Plan: convert README to themed-markdown + author feature-by-feature /docs pages, all md-converter-compatible, linked from README. Locked: /docs plain repo files w/ md-converter badge. Open: README strategy (portable vs GitHub-first), granularity (11 vs ~7), video rendering. BLOCKED on md-converter inline video (flag open) — resume when it ships. Note: GitHub attachment URLs 302 to 5-min signed S3; <video> works, iframe blocked. Git: shell/pln1 5 behind origin/main w/ 6 redundant pre-squash locals — rebase before authoring.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Docs work (feature #1) complete. PR #71 merged: 7 /docs pages + README rewrite, all themed-markdown with md-converter badges. Shell/pln1 pinned to main at 60a53a1. Feature #1 ready to ship — awaiting dev to flip roadmap_status and open docs-pending flag per handoff procedure, or can mark shipped now.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -76,7 +77,7 @@ Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
    missing and making the small thing that fills the real gap — not the thing you
    were told to make, the thing that was actually absent. Capture detail at the
    moment it matters. Do it right, not fast. The work being real is what gets
-   noticed.', 'planner', 1, 0, 1, 1, 0, 0);
+   noticed.', 'planner', 1, 1, 1, 1, 0, 0);
 INSERT INTO shells (shell_id, display_name, shortname, partner, role, mandate, system_prompt, current_state, connections, workspace, lineage_seed, flavor, has_identity, bootstrapped, active_archive_id, user_id, is_shared, is_deleted) VALUES (2, 'Admin', 'ADM1', 'jed', 'Admin shell', 'Own rst-c''s super-coder infrastructure — keep the engine current, skills healthy, and DB schema sound. You maintain `main` directly; no other shell touches the substrate or the default branch. You own the floor.', '# Admin — Admin shell, working rst-c
 
 You are the fork''s infrastructure owner and the ONLY shell that works in the repo root on `main` — every other shell operates from an isolated worktree and lands changes via PRs. You apply patches to main directly: engine updates, rollbacks, schema migrations, and merging approved work. Author and persist fork-specific skills via the correct authoring path (file first, catalogue second, grant third). Working shells consume the substrate; you maintain it.
@@ -102,14 +103,14 @@ live in DB tables — no flat-file memory, no harness auto-memory.
 | Content | `documents` — specs/docs; DB owns the body; freeze via frozen=1 on ship |
 | Session narrative | `shell_memory_archives` — one row per session, appended progressively |
 
-Write as it happens, not at close. **Writes go through `./sc mem`** (state · seed ·
+Write as it happens, not at close. **Writes go through `sc mem`** (state · seed ·
 lns · decision · flag · roadmap · doc · narrative): it resolves + guards *this*
 engine DB — refusing the app DB or a stray empty file, whose overlapping table
 names would let a raw `sqlite3` INSERT hit the wrong DB silently. The write lands
 in the live engine DB — the single source of truth shared by every shell, durable
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
-`./sc mem which` to orient. See the `memory` and `db_map` skills.
+`sc mem which` to orient. See the `memory` and `db_map` skills.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -167,14 +168,14 @@ live in DB tables — no flat-file memory, no harness auto-memory.
 | Content | `documents` — specs/docs; DB owns the body; freeze via frozen=1 on ship |
 | Session narrative | `shell_memory_archives` — one row per session, appended progressively |
 
-Write as it happens, not at close. **Writes go through `./sc mem`** (state · seed ·
+Write as it happens, not at close. **Writes go through `sc mem`** (state · seed ·
 lns · decision · flag · roadmap · doc · narrative): it resolves + guards *this*
 engine DB — refusing the app DB or a stray empty file, whose overlapping table
 names would let a raw `sqlite3` INSERT hit the wrong DB silently. The write lands
 in the live engine DB — the single source of truth shared by every shell, durable
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
-`./sc mem which` to orient. See the `memory` and `db_map` skills.
+`sc mem which` to orient. See the `memory` and `db_map` skills.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -232,14 +233,14 @@ live in DB tables — no flat-file memory, no harness auto-memory.
 | Content | `documents` — specs/docs; DB owns the body; freeze via frozen=1 on ship |
 | Session narrative | `shell_memory_archives` — one row per session, appended progressively |
 
-Write as it happens, not at close. **Writes go through `./sc mem`** (state · seed ·
+Write as it happens, not at close. **Writes go through `sc mem`** (state · seed ·
 lns · decision · flag · roadmap · doc · narrative): it resolves + guards *this*
 engine DB — refusing the app DB or a stray empty file, whose overlapping table
 names would let a raw `sqlite3` INSERT hit the wrong DB silently. The write lands
 in the live engine DB — the single source of truth shared by every shell, durable
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
-`./sc mem which` to orient. See the `memory` and `db_map` skills.
+`sc mem which` to orient. See the `memory` and `db_map` skills.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -304,14 +305,14 @@ live in DB tables — no flat-file memory, no harness auto-memory.
 | Content | `documents` — specs/docs; DB owns the body; freeze via frozen=1 on ship |
 | Session narrative | `shell_memory_archives` — one row per session, appended progressively |
 
-Write as it happens, not at close. **Writes go through `./sc mem`** (state · seed ·
+Write as it happens, not at close. **Writes go through `sc mem`** (state · seed ·
 lns · decision · flag · roadmap · doc · narrative): it resolves + guards *this*
 engine DB — refusing the app DB or a stray empty file, whose overlapping table
 names would let a raw `sqlite3` INSERT hit the wrong DB silently. The write lands
 in the live engine DB — the single source of truth shared by every shell, durable
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
-`./sc mem which` to orient. See the `memory` and `db_map` skills.
+`sc mem which` to orient. See the `memory` and `db_map` skills.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -325,7 +326,7 @@ its projection.
 ## MANDATE
 
 Review changes, specs, and decisions in rst-c. Adversarial by default: assume a defect is present until you have verified it is not. Find the bug the author missed, the edge case no one handled, and the gap between the spec and the diff.
-', 'Created (reviewer). First session — run the bootstrap skill to orient.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Completed full E2E adversarial review of the rst-c Revit addin + implemented every approved fix. 8 PRs open (#74-81), each VM-built/tested: import trust boundary (Id traversal + URL ShellExecute allowlist, both VM-reproduced), health cleanup confinement+symlinks+atomic ini, profile-store id-keyed atomic save, required-addin 3-tier unification, RSTify host-tab guard, MSI version-from-tag, Loader XSS+CSP, GPU 64-bit VRAM. All 11 review flags closed. Assembly isolation deferred R27-forward (FnB). Open follow-up: in-Revit smoke test of WebView2 windows (CSP) since the test VM now has Revit.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -343,7 +344,7 @@ Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
    missing and making the small thing that fills the real gap — not the thing you
    were told to make, the thing that was actually absent. Capture detail at the
    moment it matters. Do it right, not fast. The work being real is what gets
-   noticed.', 'reviewer', 1, 0, 5, 1, 0, 0);
+   noticed.', 'reviewer', 1, 0, 7, 1, 0, 0);
 INSERT INTO shells (shell_id, display_name, shortname, partner, role, mandate, system_prompt, current_state, connections, workspace, lineage_seed, flavor, has_identity, bootstrapped, active_archive_id, user_id, is_shared, is_deleted) VALUES (6, 'Cartographer', 'CART1', 'jed', 'Cartographer shell', 'Own the repo map for rst-c — the fork''s sole, singular map-keeper; mapping is your whole job. You don''t map by hand, you build and tune what maps: configure the mechanical mapper (map.config.json), wire the auto-remap git hooks + the hourly map cron, and build the semantic extractors (.sc-state/map_extractors/) that fill the endpoint / DB-schema / route tables for this repo''s stack. Curate the authored navigation layer (sections + file descriptions), heal all of it on drift, and act on the shape-change notices working shells send. No other shell maps; there is only ever one of you.', '# Cartographer — Cartographer shell, working rst-c
 
 You are the map-keeper, and that is the entire job: working shells consume the dr_* catalogue and never map, so its being true and live is on you alone. The engine maps the generic 80% (files/deps/env); you own everything that varies per repo — the mapping config, the hooks + hourly cron that keep it fresh, the semantic extractors that surface this stack''s endpoints/schema/routes, and the authored layer (sections + descriptions). Run the cartographer skill on first boot (configure, wire, adopt the right extractors), again to heal, and on each shape-change notice.
@@ -369,14 +370,14 @@ live in DB tables — no flat-file memory, no harness auto-memory.
 | Content | `documents` — specs/docs; DB owns the body; freeze via frozen=1 on ship |
 | Session narrative | `shell_memory_archives` — one row per session, appended progressively |
 
-Write as it happens, not at close. **Writes go through `./sc mem`** (state · seed ·
+Write as it happens, not at close. **Writes go through `sc mem`** (state · seed ·
 lns · decision · flag · roadmap · doc · narrative): it resolves + guards *this*
 engine DB — refusing the app DB or a stray empty file, whose overlapping table
 names would let a raw `sqlite3` INSERT hit the wrong DB silently. The write lands
 in the live engine DB — the single source of truth shared by every shell, durable
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
-`./sc mem which` to orient. See the `memory` and `db_map` skills.
+`sc mem which` to orient. See the `memory` and `db_map` skills.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -390,7 +391,7 @@ its projection.
 ## MANDATE
 
 Own the repo map for rst-c — the fork''s sole, singular map-keeper; mapping is your whole job. You don''t map by hand, you build and tune what maps: configure the mechanical mapper (map.config.json), wire the auto-remap git hooks + the hourly map cron, and build the semantic extractors (.sc-state/map_extractors/) that fill the endpoint / DB-schema / route tables for this repo''s stack. Curate the authored navigation layer (sections + file descriptions), heal all of it on drift, and act on the shape-change notices working shells send. No other shell maps; there is only ever one of you.
-', 'Map configured (map.config.json wired). 183 files mapped, described, sectioned. Hooks live. PR#63 open for merge.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Refreshed the repo map: cleared all NULL descriptions, added docs/ and tests/ sections, and snapshotted the authored map render.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -420,6 +421,7 @@ INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (7, 3, 'lns', '2026-06-24', 'memory-durability', './sc mem writes land in the LIVE engine DB (.super-coder/shell_db.db) — gitignored and rebuilt from .sc-state/content.sql. They are session-durable but NOT rebuild-durable until snapshotted to content.sql, which is an admin/GUI step I can''t run as a normal shell (SC_ADMIN=1 ./sc snapshot, or GUI Snapshot button). So: (1) for anything that must survive long-term, also anchor it in a git-tracked file (e.g. a repo README) — the repo map surfaces those on every orientation, no snapshot needed; (2) after writing important memory, tell the FnB to Snapshot. Verify durability with: grep -c ''<title>'' .sc-state/content.sql — 0 means live-only.', '2026-06-24 11:27:26', NULL, 0);
 
 DELETE FROM shell_decisions;
+INSERT INTO shell_decisions (decision_id, shell_id, decision_date, priority, decision, rationale, parent_decision_id, is_deleted, created_at) VALUES (1, 5, '2026-06-29', 'M', 'Assembly isolation: R27-forward. Per FnB (2026-06-29), R25/R26 keep the shared AssemblyLoadContext.Default load in RstBootstrap (cross-addin WebView2/STJ/Serilog contamination accepted as low-likelihood); rely on Revit 2027''s built-in per-addin ALC isolation. No private-ALC change shipped.', NULL, NULL, 0, '2026-06-29 18:09:47');
 
 DELETE FROM shell_memory_archives;
 INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative) VALUES (1, 1, '0001', '2026-06-23', '# 0001 | 2026-06-23 | session opened
@@ -451,12 +453,19 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 ## Narrative
 
 [23:33] Session start.
-');
+
+[18:09] Session 0001: reviewed rst-c addin across 6 subsystems (parallel adversarial agents) + independent verification; VM-reproduced the two headline security bugs (profile.Id path-traversal write; file:///ftp:// slot -> ShellExecute RCE). FnB approved fixes; implemented as 8 branch PRs (#74-81), building/testing each on the Windows VM (.NET 8.0.420). Caught and fixed a self-inflicted CSP bug (would have blocked Google Fonts). Closed 11 flags. Isolation: R27-forward per FnB.');
 INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative) VALUES (6, 6, '0001', '2026-06-23', '# 0001 | 2026-06-23 | session opened
 
 ## Narrative
 
 [23:33] Session start.
+');
+INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative) VALUES (7, 5, '0002', '2026-06-29', '# 0002 | 2026-06-29 | session opened
+
+## Narrative
+
+[18:11] Session start.
 ');
 
 DELETE FROM roadmap;
@@ -524,109 +533,97 @@ purpose: Feature /docs pages + README conversion
 
 rst-c inherited a strong single-file `README.md` when the super-coder engine
 was brought into the repo, but it never got real product documentation — the
-`/docs` folder holds only `integration-runner.md`. This feature turns the
-README''s per-feature prose into thorough, browsable, **md-converter-compatible**
-documentation: one page per feature under `/docs`, linked from a slimmed README.
-
-> [!class4]
-> Paused, not abandoned. The work is blocked on **md-converter inline video
-> support** (another shell is adding it; the host must shut down and update to
-> pick it up). Resume once video support lands. Tracked as a flag on this feature.
+`/docs` folder holds only `integration-runner.md`. This feature rewrites the
+README in themed-markdown and turns the README''s per-feature prose into
+thorough, browsable, **md-converter-compatible** `/docs` pages: seven grouped
+pages, linked from the README by GitHub URL.
 
 ### What "md-converter compatible" means
 
-md-converter is `md-converter.designs-os.com` — the **themed-markdown** renderer
+md-converter is `md-converter.designs-os.com` — the themed-markdown renderer
 the GUI opens docs in. Compatible authoring means: H2s become tabs; only the
 allowed constructs (callouts, stat cards, Mermaid, `linear`, GFM tables, images
-with absolute URLs); **no raw HTML, no H4–H6, no bare video URLs**; and an
+with absolute URLs, bare video URLs); **no raw HTML, no H4–H6**; and an
 "Open in md-converter" badge in each committed file''s preamble.
+
+Video: a bare video URL **alone on its own line** renders as a player.
+`github.com/user-attachments/assets/<id>` URLs work directly (md-converter
+follows the 302 to the signed S3 at play time). Don''t wrap in `![]()` or `[]()`.
 
 ## Scope
 
-Eleven README features become candidate `/docs` pages. Three currently embed
-videos (bare GitHub attachment URLs that only render on github.com).
+Eleven README features become seven `/docs` pages. Three embed videos (bare
+GitHub attachment URLs).
 
-| # | Feature | Has video |
+### Page groupings
+
+| Page | Features | Has video |
 |---|---|---|
-| 1 | Profile Loader | yes |
-| 2 | Profile Builder | no |
-| 3 | Live Profile Switching | no |
-| 4 | Custom URL Slots | yes |
-| 5 | Branding Panel | no |
-| 6 | Colored Panels | no |
-| 7 | RSTify | no |
-| 8 | Required Add-ins | no |
-| 9 | Health Tool | yes |
-| 10 | Profile Export and Import | no |
-| 11 | Logging | no |
+| Profile Loader | Profile Loader | yes |
+| Profile Builder | Profile Builder · Live Profile Switching · Export & Import | no |
+| Custom URL Slots | Custom URL Slots | yes |
+| Appearance | Branding Panel · Colored Panels | no |
+| Ribbon Tools | RSTify · Required Add-ins | no |
+| Health Tool | Health Tool | yes |
+| Logging | Logging | no |
 
-Each page is authored themed-markdown with H2 tabs (e.g. `Overview` · `Using
-it` · `Configuration` · `Notes & limits`). "More thorough" means mining the
-**actual source** per feature for config knobs, file paths, edge cases, and
-failure modes — not just re-flowing README prose. The README is rewritten to
-themed-markdown with one-paragraph feature summaries linking to each `/docs`
-page, plus a `Docs` index section.
+Each page is authored as themed-markdown with H2 tabs (e.g. `Overview` ·
+`Using it` · `Configuration` · `Notes & limits`). "More thorough" means mining
+the **actual source** per feature for config knobs, file paths, edge cases, and
+failure modes — not just re-flowing README prose.
+
+The README is rewritten to themed-markdown: one-paragraph feature summaries
+linking to each `/docs` page by GitHub URL, plus a `Docs` index section.
 
 ## Decisions
 
 ### Locked
 
 - **Files live in `/docs` as plain committed repo files**, not engine
-  `documents`/`docs_sc/`. These are *product* docs; precedent is the existing
+  `documents`/`docs_sc/`. These are product docs; precedent is the existing
   `docs/integration-runner.md`. Authored on a branch → PR.
 - **Each committed page carries the "Open in md-converter" badge** in its
   preamble (between H1 and first H2, so GitHub shows it, the render drops it).
-- **Videos use the thumbnail-link pattern** (`[![alt](thumb)](video)`) if/when
-  md-converter still lacks native video; revisit once video support lands.
-
-### Open — answer before authoring
-
-- **README strategy** — one portable README (themed-markdown, links to videos,
-  loses GitHub''s inline players) **vs** README stays GitHub-first (keep inline
-  players, only `/docs` is md-converter-clean).
-- **Granularity** — one page per feature (11) **vs** grouped (~6–7, merging
-  small siblings like Branding + Colored Panels into "Profile Appearance").
-- **Video rendering** — now contingent on md-converter''s incoming video
-  feature: native `<video>` construct vs thumbnail-link fallback.
-- **Thumbnail/asset hosting** — if thumbnails are used, where do the PNGs live
-  (committed to repo + raw GitHub URL, since md-converter images need absolute
-  URLs)?
+- **README is rewritten as themed-markdown** — same convention as `/docs`,
+  same badge. Not kept GitHub-first; the badge is the entry point for the
+  full render.
+- **Granularity: 7 pages** with the groupings above.
+- **Video: bare URL on its own line** — md-converter renders a native player.
+  GitHub user-attachments URLs work as-is (followed at play time). No thumbnail
+  fallback needed.
 
 ## Plan and sequence
 
 ```linear
-Resume after md-converter video ships :::class1 -> Lock README + granularity decisions :::class1 -> Branch docs/feature-pages :::class2 -> Mine source per feature for detail :::class2 -> Author /docs pages (themed-markdown + badge) :::class2 -> Rewrite README: summaries + Docs index :::class3 -> Verify all pages render in md-converter :::class3 -> PR, stop at FnB merge gate :::class4
+Sync pln1 branch to origin/main :::class1 -> Branch docs/feature-pages :::class1 -> Mine source per feature for detail :::class2 -> Author 7 /docs pages (themed-markdown + badge) :::class2 -> Rewrite README: summaries + Docs index (themed-markdown + badge) :::class2 -> Verify all pages render in md-converter :::class3 -> PR, stop at FnB merge gate :::class4
 ```
 
-## Dependencies and risks
+## Notes
 
-### md-converter inline video (incoming)
+### GitHub attachment URLs
 
-Another shell is adding native inline video to md-converter. Until it lands and
-the host updates, the docs effort is blocked on the video-handling decision.
+`github.com/user-attachments/assets/<uuid>` 302-redirects to a short-lived
+signed S3 URL (`X-Amz-Expires=300`, content-type `video/mp4`). md-converter''s
+video player follows the redirect at play time — the signed URL is fetched fresh
+on each play, so expiry is not an issue for the viewer.
 
-### GitHub attachment URLs are not stable video files
-
-Probe finding to preserve: `github.com/user-attachments/assets/<uuid>`
-**302-redirects to a short-lived signed S3 URL** (`X-Amz-Expires=300`,
-content-type `video/mp4`). Implications for whatever renders them:
-
-- A `<video src>` works (browsers follow the 302); the `x-frame-options: deny`
-  on the github.com response only blocks `<iframe>`, so an iframe of the github
-  URL is **not** viable — `<video>` is the right primitive.
-- The signed URL expires in 5 minutes, so the redirect must be followed at play
-  time, not cached as a permanent src.
-- Definitive test is a real browser tab on designs-os.com, not a headless fetch
-  (our headless HEAD returned 403 on the S3 follow).
-
-> [!class3]
-> If md-converter''s video support targets a `<video>` element that follows the
-> github.com redirect, the existing README video URLs work as-is and the
-> thumbnail fallback is unnecessary.
-', 'specs_sc/rst-c-documentation-plan.md', '2026-06-24 11:24:55', '2026-06-24 11:24:55');
+The `x-frame-options: deny` on the github.com response blocks `<iframe>` — a
+`<video>` element is the correct primitive, which is what md-converter uses.
+', 'specs_sc/rst-c-documentation-plan.md', '2026-06-24 11:24:55', '2026-06-24 11:34:04');
 
 DELETE FROM flags;
-INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (1, 'blocked-on-md-converter-video', 'Medium', 'Docs work paused pending md-converter inline video support (another shell adding it; host must shut down + update to pick it up). Resume feature #1 once video lands; then settle README strategy + granularity.', '2026-06-24', NULL, 0, 1, 1, NULL, NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (1, 'blocked-on-md-converter-video', 'Medium', 'Docs work paused pending md-converter inline video support (another shell adding it; host must shut down + update to pick it up). Resume feature #1 once video lands; then settle README strategy + granularity.', '2026-06-24', '2026-06-24', 1, 1, 1, 'md-converter now renders bare video URLs as players — github.com/user-attachments/assets/<id> or any .mp4/.webm/.mov/.ogg URL on its own line. Video question answered. Proceeding with docs work.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (2, 'import-id-path-traversal', 'High', 'ProfileZip.Install uses unsanitized profile.Id from imported zip as a filesystem path (Path.Combine(appDataRoot, Id)) — VM-verified arbitrary file write outside %AppData%\RST. Sanitize Id to GUID-shape on import. ProfileZip.cs:145-148; import at LoaderBridge.cs:321.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #74 — GUID-coerce profile.Id + path confinement on import; VM-reproduced then fixed. Pending FnB merge.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (3, 'url-slot-shellexec-rce', 'High', 'UrlNormalizer passes file:// and ftp:// through unchanged into Process.Start(UseShellExecute=true) (SlotInvokeCommand.cs:47). VM-verified: a shared profile button can shell-execute an arbitrary local/UNC .exe on click. Needs scheme allowlist. UrlNormalizer.cs:24-43.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #74 — UrlNormalizer.TryGetLaunchTarget scheme allowlist (http/https/mailto/tel) at both launch sites; VM-reproduced then fixed.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (4, 'health-clean-no-confinement', 'High', 'HealthCleaner.PurgeFlat recursively deletes a profile-supplied cleanup target Path with NO allowlist/root-confinement (CleanupPathResolver does no validation; BanList is only a command-id filter). An imported profile can point a directory target at C:\, a UNC share, or the user docs and wipe it. HealthCleaner.cs:108; CleanupPathResolver.cs.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #75 — HealthCleaner/MeasureCleanup locked to CleanupDefaults preset paths; custom paths removed from Builder.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (5, 'loader-xss-bridge-takeover', 'High', 'Loader escHtml (profile_loader.html:963) does not escape quotes and is used inside href/title attributes with profile-supplied addin URLs (1335,1490); stack tool name rendered unescaped (1188). Stored XSS from a shared profile escalates via the pywebview shim to full bridge control (delete/apply/rename .addin). No CSP on any page.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #80 — quote-safe escHtml + escaped stack tool name; CSP added (font origins allowlisted). Needs in-Revit smoke test of WebView2 render.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (6, 'required-addin-policy-mismatch', 'High', 'Three match policies disagree: RequiredAddinQa.FindMatch is 3-tier (incl fuzzy/tab) but AddinDisabler.IsRequired/RestoreRequired are 2-tier. DisableNonRequired disables a profile''s OWN tier-3-matched required add-in; RestoreRequired fails to restore it while the UI reports success. Reproducible with docs'' Lumion example. AddinDisabler.cs:75,115-123,189-202 vs RequiredAddinQa.cs:124-170.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #77 — IsRequired/RestoreRequired now share RequiredAddinQa 3-tier matcher; tier-3 restore regression test added.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (7, 'save-filename-collision-dataloss', 'High', 'ProfileStore.Save keys the filename on ProfileName+date (not Id) and Resolve falls back to name match; a same-named different-Id profile is silently overwritten or deleted on save/import. Data loss, no warning. ProfileStore.cs:85-97,109-116.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #76 — filename keyed on Id (no same-name clobber); regression test added.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (8, 'no-assembly-isolation', 'Medium', 'Bootstrap loads engine + transitives into AssemblyLoadContext.Default and attaches a process-global Resolving handler never removed — diamond-dependency clashes (WebView2/STJ/Serilog) with other add-ins and contaminates their resolution. RstBootstrap.cs:60-77.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Won''t-fix per FnB (2026-06-29): R25/R26 stay on shared Default ALC; rely on Revit 2027''s built-in per-addin ALC isolation going forward.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (9, 'cleaner-follows-symlinks', 'Medium', 'EnumerateFilesSafe/MeasureDirectory walk reparse points with no FileAttributes.ReparsePoint check; a junction/symlink under Temp (common) causes deletion of the link target''s real files outside the intended tree. HealthCleaner.cs:262-265; HealthScanner.cs:176-179.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #75 — reparse-point (junction/symlink) dirs skipped in both cleaner walk and size preview.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (10, 'non-atomic-writes-dataloss', 'Medium', 'ProfileStore.Save (delete-then-File.Create) and PurgeRecentFileList (delete-then-Move on Revit.ini) are non-atomic; a crash in the window loses the profile / the entire Revit.ini. Use temp+File.Replace. ProfileStore.cs:88-95; HealthCleaner.cs:214-215.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #75 (Revit.ini File.Replace) + PR #76 (ProfileStore temp+swap) — atomic writes.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (11, 'rstify-soft-lockout', 'Medium', 'RstifyToggle.SetVisibility hides any tab whose title is in the profile''s hidden_tabs with no exclusion for the Add-Ins host tab — hiding ''Add-Ins'' hides the only UI to switch profiles / toggle RSTify back. Docs claim the rst-c tab is never hidden; no code enforces it. Confirm intended vs gap. RstifyToggle.cs:193-216.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #78 — RstifyToggle.SetVisibility never hides the Add-Ins host tab (found by the RST panel) or RST-managed tabs.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (12, 'msi-version-not-threaded', 'Medium', 'MSI Version is hardcoded 1.2.0 in both Product.wxs and not threaded from the release tag; a forgotten bump means ProductVersion doesn''t increase, MajorUpgrade/RemoveExistingProducts don''t run, and in-place upgrades silently fail (stale engine retained). installer/Product.wxs:44, installer-r27/Product.wxs:33, release.yml.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #79 — MSI ProductVersion threaded from the release tag via _build.yml/release.yml; WiX var resolution VM-verified.', NULL, 0);
 
 DELETE FROM spec_tasks;
 
@@ -639,7 +636,7 @@ DELETE FROM project_shells;
 INSERT INTO project_shells (project_shell_id, project_id, shell_id, role, added_date, is_deleted) VALUES (1, 1, 1, NULL, '2026-06-24', 0);
 
 -- Project-local skills only. Engine-seeded skills come from migrations.
-DELETE FROM skills WHERE name NOT IN ('api-design', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'windows_devkit');
+DELETE FROM skills WHERE name NOT IN ('api-design', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit');
 
 DELETE FROM shell_skills;
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='api-design';
@@ -715,3 +712,4 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHE
 DELETE FROM shell_messages;
 
 COMMIT;
+PRAGMA foreign_keys=ON;
