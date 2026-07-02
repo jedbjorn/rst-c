@@ -55,6 +55,37 @@ public static class AddinDisabler
     /// list are kept; manifests in read-only search paths
     /// (Revit install) are kept.
     /// </summary>
+    /// <summary>
+    /// RST's own manifest file name as shipped by the installer.
+    /// </summary>
+    internal const string RstManifestFileName = "RST.addin";
+
+    /// <summary>
+    /// RST's canonical ClientId (RST.addin — never changes across
+    /// upgrades; Revit identifies the add-in by it).
+    /// </summary>
+    internal const string RstClientId = "4f8ef7a0-0001-4000-8000-525354000001";
+
+    /// <summary>
+    /// RST's own manifest must never be disabled: renaming it removes
+    /// the Loader, the Restore path, and every other in-product way
+    /// back — a full self-lockout until someone hand-renames the file.
+    /// Matched by file name or by canonical ClientId (covers a renamed
+    /// manifest).
+    /// </summary>
+    internal static bool IsSelf(AddinManifest manifest)
+    {
+        if (string.Equals(manifest.FileName, RstManifestFileName, StringComparison.OrdinalIgnoreCase))
+            return true;
+        foreach (var entry in manifest.Entries)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.AddinId)
+                && string.Equals(entry.AddinId!.Trim(), RstClientId, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     public static DisableResult DisableNonRequired(
         string revitVersion,
         IReadOnlyList<RequiredAddin> required,
@@ -66,7 +97,19 @@ public static class AddinDisabler
         var scan = AddinDirectoryScanner.ScanWithSource(revitVersion).ToList();
         var requiredNames = RequiredAddinQa.RequiredManifestFileNames(
             scan.Select(s => s.Manifest).ToList(), required);
+        return DisableFiltered(scan, requiredNames, onError);
+    }
 
+    /// <summary>
+    /// Test seam — accepts a pre-built scan and the resolved required
+    /// set. Public callers go through <see cref="DisableNonRequired"/>
+    /// which scans the live filesystem.
+    /// </summary>
+    internal static DisableResult DisableFiltered(
+        IEnumerable<(AddinManifest Manifest, AddinSearchPath Source)> scan,
+        HashSet<string> requiredNames,
+        Action<string, Exception>? onError = null)
+    {
         int disabled = 0, skipReadOnly = 0, skipAlready = 0, failed = 0;
         var disabledFiles = new List<string>();
         var failedFiles = new List<string>();
@@ -76,6 +119,7 @@ public static class AddinDisabler
             if (manifest.IsDisabled) { skipAlready++; continue; }
             if (source.ReadOnly)     { skipReadOnly++; continue; }
 
+            if (IsSelf(manifest)) continue;
             if (requiredNames.Contains(manifest.FileName)) continue;
 
             var dest = manifest.FilePath + DisabledSuffix;

@@ -63,7 +63,10 @@ public static class AddinManifestParser
             entries.Add(new AddinEntry(
                 Type: (string?)addin.Attribute("Type") ?? "Application",
                 AssemblyPath: TrimQuotes((string?)addin.Element("Assembly")),
-                AddinId: ((string?)addin.Element("AddInId"))?.Trim(),
+                // Revit accepts either <AddInId> (legacy) or <ClientId>
+                // (current manifests, incl. RST's own) for the add-in GUID.
+                AddinId: ((string?)addin.Element("AddInId"))?.Trim()
+                         ?? ((string?)addin.Element("ClientId"))?.Trim(),
                 Name: ((string?)addin.Element("Name"))?.Trim(),
                 VendorId: ((string?)addin.Element("VendorId"))?.Trim(),
                 VendorDescription: ((string?)addin.Element("VendorDescription"))?.Trim()));
