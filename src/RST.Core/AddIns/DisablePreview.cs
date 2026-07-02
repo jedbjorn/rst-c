@@ -35,6 +35,15 @@ public static class DisablePreviewBuilder
 {
     public static DisablePreview Build(
         string revitVersion,
+        IReadOnlyList<RequiredAddin> required) =>
+        BuildFromScan(AddinDirectoryScanner.ScanWithSource(revitVersion), required);
+
+    /// <summary>
+    /// Test seam — accepts a pre-built scan. Public callers go through
+    /// <see cref="Build"/> which scans the live filesystem.
+    /// </summary>
+    internal static DisablePreview BuildFromScan(
+        IEnumerable<(AddinManifest Manifest, AddinSearchPath Source)> scan,
         IReadOnlyList<RequiredAddin> required)
     {
         var requiredFiles = AddinDisabler.BuildRequiredFileSet(required);
@@ -45,13 +54,16 @@ public static class DisablePreviewBuilder
         var tryDisable = new List<AddinPreviewEntry>();
         var skipped = new List<AddinPreviewEntry>();
 
-        foreach (var (manifest, source) in AddinDirectoryScanner.ScanWithSource(revitVersion))
+        foreach (var (manifest, source) in scan)
         {
             var entry = ToPreview(manifest, source);
 
             if (manifest.IsDisabled) { skipped.Add(entry); continue; }
 
-            var isRequired = AddinDisabler.IsRequired(manifest, requiredFiles, requiredIds);
+            // RST itself is never disabled (see AddinDisabler.IsSelf) —
+            // show it as staying so preview matches the commit.
+            var isRequired = AddinDisabler.IsSelf(manifest)
+                || AddinDisabler.IsRequired(manifest, requiredFiles, requiredIds);
             if (isRequired)         { staying.Add(entry); continue; }
 
             if (source.ReadOnly)    { tryDisable.Add(entry); continue; }
