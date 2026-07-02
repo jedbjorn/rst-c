@@ -1448,11 +1448,23 @@
   function addProfile() {
     window.pywebview.api.add_profile().then(function(result) {
       if (result && result.ok) {
-        profiles.push(result.profile);
+        // Re-import of an existing profile overwrites the same file on
+        // disk — replace its card instead of pushing a stale duplicate.
+        var existing = profiles.findIndex(function(p) {
+          return (p._filename && p._filename === result.profile._filename)
+              || (p.id && p.id === result.profile.id);
+        });
+        if (existing >= 0) profiles[existing] = result.profile;
+        else profiles.push(result.profile);
         renderCards();
+      } else if (result && result.error && result.error !== 'cancelled') {
+        rstLog('error', 'loader: import failed', { error: result.error });
+        RSTmsgInform('Import Failed', result.error);
       }
     }).catch(function(err) {
       if (err) console.error('addProfile error:', err);
+      rstLog('error', 'loader: import threw', { error: String(err && (err.message || err)) });
+      RSTmsgInform('Import Failed', 'Error importing profile: ' + ((err && err.message) || err));
     });
   }
 

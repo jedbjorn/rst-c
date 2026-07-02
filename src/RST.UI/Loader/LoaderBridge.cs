@@ -73,7 +73,8 @@ public class LoaderBridge
     public string GetProfiles()
     {
         LogEntry(nameof(GetProfiles));
-        var entries = ProfileStore.List();
+        var entries = ProfileStore.List(onSkip: (path, ex) =>
+            Log.Warning(ex, "Bridge.get_profiles: skipped unreadable profile {Path}", path));
         var dtos = entries.Select(e => ToProfileDto(e.FileName, e.Profile)).ToArray();
         Log.Information("Bridge.get_profiles → {Count} profiles from {Dir}",
                         dtos.Length, AppDataPaths.ProfilesDir);
@@ -315,6 +316,11 @@ public class LoaderBridge
             Log.Error(ex, "Bridge.add_profile: read failed for {Path}", path);
             return Serialize(new { ok = false, error = "Read failed: " + ex.Message });
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.Error(ex, "Bridge.add_profile: access denied reading {Path}", path);
+            return Serialize(new { ok = false, error = "Access denied: " + ex.Message });
+        }
 
         try
         {
@@ -327,6 +333,11 @@ public class LoaderBridge
         {
             Log.Error(ex, "Bridge.add_profile: install failed for {Path}", path);
             return Serialize(new { ok = false, error = "Install failed: " + ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.Error(ex, "Bridge.add_profile: access denied installing {Path}", path);
+            return Serialize(new { ok = false, error = "Install failed (access denied): " + ex.Message });
         }
     }
 
@@ -506,6 +517,17 @@ public class LoaderBridge
         if (string.IsNullOrEmpty(profile.Id)) profile.Id = Guid.NewGuid().ToString();
         if (string.IsNullOrEmpty(profile.ExportDate))
             profile.ExportDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+        // Full validation BEFORE the write — the read path (ProfileStore.List)
+        // enforces these rules and silently drops violators, so a profile
+        // saved without them would vanish from every picker on next load.
+        var validationErrors = ProfileSerializer.Validate(profile);
+        if (validationErrors.Count > 0)
+        {
+            Log.Warning("Bridge.save_profile: validation failed for {Name}: {Errors}",
+                        profile.ProfileName, string.Join("; ", validationErrors));
+            return Serialize(new { ok = false, error = "Profile validation failed: " + string.Join("; ", validationErrors) });
+        }
 
         try
         {

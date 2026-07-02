@@ -114,6 +114,25 @@ public sealed class ProfileStoreTests
         p.Id.Should().NotBeNullOrEmpty();
     }
 
+    [Fact]
+    public void List_surfaces_skipped_files_via_onSkip()
+    {
+        // A dropped file must be reportable — silent skips made saved-but-
+        // invalid profiles vanish from every picker with nothing in the log.
+        using var dir = new TempDir();
+        ProfileStore.Save(MakeProfile("Good", "id-good"), dir.Path);
+        var corrupt = Path.Combine(dir.Path, "corrupt.json");
+        File.WriteAllText(corrupt, "{ not json ");
+
+        var skipped = new System.Collections.Generic.List<string>();
+        var listed = ProfileStore.List(dir.Path, onSkip: (path, _ex) => skipped.Add(path));
+
+        listed.Should().ContainSingle()
+            .Which.Profile.ProfileName.Should().Be("Good");
+        skipped.Should().ContainSingle()
+            .Which.Should().Be(corrupt);
+    }
+
     private sealed class TempDir : System.IDisposable
     {
         public string Path { get; }
