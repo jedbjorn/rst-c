@@ -18,7 +18,7 @@ A profile tab carries two layers of visual identity: a **branding panel** at the
 
 ### What it is
 
-Every profile tab can display an 85×85 pixel square branding image with rounded corners at the far left of the tab. It is typically a company or team logo. The panel is non-interactive by default; a URL can optionally be attached so clicking the logo opens a link (see [Custom URL Slots](custom-url-slots.md)).
+Every profile tab can display an 85×85 pixel square branding image with rounded corners at the far left of the tab. It is typically a company or team logo. The panel is non-interactive — it displays the logo and nothing else.
 
 The branding panel sits at the leading edge of the tab so the curated ribbon is visibly associated with the organisation that built it. This is intentional — a shared ribbon that carries no identity makes it harder for users to know they are working from a curated environment.
 

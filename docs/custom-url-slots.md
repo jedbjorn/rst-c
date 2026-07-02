@@ -12,7 +12,7 @@ purpose: Guide to adding URL, email, and file-path buttons to a profile
 
 ## Overview
 
-A profile button does not have to wrap a Revit command. It can point at a URL, a `mailto:` address, a local file path, or a UNC share. This lets admins fold company resources — the BIM standards wiki, the SharePoint library, the helpdesk inbox, a shared drive — into the same ribbon people already use, without asking anyone to remember a separate set of bookmarks.
+A profile button does not have to wrap a Revit command. It can point at a URL, a `mailto:` address, or a local file path. This lets admins fold company resources — the BIM standards wiki, the SharePoint library, the helpdesk inbox — into the same ribbon people already use, without asking anyone to remember a separate set of bookmarks.
 
 https://github.com/user-attachments/assets/3e216ab3-2597-400e-9010-cbb45df10b89
 
@@ -26,7 +26,6 @@ https://github.com/user-attachments/assets/3e216ab3-2597-400e-9010-cbb45df10b89
 | Email address | `support@example.com` | Default mail client (normalised to `mailto:`) |
 | `mailto:` link | `mailto:bim@example.com` | Default mail client |
 | File path | `file://C:/Shared/Standards.pdf` | Default handler for that file type |
-| UNC path | `\\server\share\Standards.pdf` | Windows Explorer / default handler |
 | `ftp://` URL | `ftp://files.example.com` | Default FTP handler |
 | `tel:` link | `tel:+441234567890` | Default phone/dialler app |
 
@@ -58,6 +57,4 @@ A bare email like `support@example.com` becomes `mailto:support@example.com`. A 
 
 - URL slots use the same button shape as command slots — they get a name, an icon, and a panel assignment in the Builder like any other tool.
 - There is no live preview of URL slots in the Builder; the link is tested by applying the profile and clicking the button.
-- UNC paths require the user's machine to have network access to the share. rst-c does not check reachability before opening.
-- File paths in `file://` format must be absolute. Relative paths are not supported.
-- The branding panel also supports an optional URL (set in the Builder). Clicking the branding image opens that URL via the same normalisation rules.
+- File paths in `file://` format must be absolute. Relative paths are not supported. UNC network paths (`\\server\share\…`) are not supported.
