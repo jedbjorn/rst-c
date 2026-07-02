@@ -22,6 +22,7 @@ _root="$(cd "$here" 2>/dev/null && cd "$(git rev-parse --git-common-dir 2>/dev/n
 ENGINE="$ROOT/.super-coder"
 PY="${SC_PYTHON:-python3}"
 DB="$ENGINE/shell_db.db"
+MAPDB="$ROOT/.sc-state/map.db"
 S="$ENGINE/scripts"
 
 port() { "$PY" "$S/ports.py" port; }
@@ -38,6 +39,12 @@ CNAME="sc-$(basename "$here")"   # unique per fork, like the pm2 name
 # can reach another fork's API by container name (http://sc-<repo>:<port>) — see
 # dnet(). Override with SC_NET to isolate a fork onto its own network.
 SC_NET="${SC_NET:-sc-net}"
+# Optional Postgres sidecar (per-fork, app-only). Named container + data volume
+# tied to this fork. The engine DB is SQLite always (db_driver is SQLite-only);
+# this sidecar exists purely so a shell can develop + test the fork's *app*
+# against real Postgres inside the sandbox, isolated from any host PG.
+PGNAME="sc-pg-$(basename "$here")"
+PGVOL="sc-pg-$(basename "$here")-data"
 
 # Fail fast with the fix if the docker daemon isn't reachable, instead of a
 # cryptic build/run error. Host setup is one-time and lives in `./sc doctor` /
@@ -104,12 +111,41 @@ dbuild() {
 # does: a vendored/submodule package.json (e.g. ui/vendor/md-converter) is built by
 # its parent, and a stray `npm ci`/`pip install` there runs third-party lifecycle
 # scripts we don't own. We install only the manifests the fork itself authors.
+# `.sc-worktrees/` is pruned too — each shell worktree is a sibling checkout of
+# the SAME repo, so descending it would install/test every manifest N× (QAQC-02).
 _sc_find_manifests() {  # $1 = filename glob, e.g. 'requirements*.txt'
   find "$here" \
     \( -name node_modules -o -name .venv -o -name venv -o -name .super-coder \
-       -o -name .sc-state -o -name .git -o -name __pycache__ \
+       -o -name .sc-state -o -name .sc-worktrees -o -name .git -o -name __pycache__ \
        -o -name dist -o -name build -o -name vendor \) -prune -o \
     -name "$1" -type f -print
+}
+
+# Resolve a dev-kit tool (ruff / mypy): the fork's .venv copy wins (its pins +
+# config), else the image/PATH copy (baked into the sandbox for exactly this
+# case), else fail with the honest fix. A host-managed .venv (pinned out-of-tree
+# interpreter mounted by launch) is pip-skipped in the sandbox BY DESIGN, so
+# "run ./sc deps first" was a closed loop there — the tool was unobtainable from
+# inside the box (dos-arch QAQC-02). Say what is actually wrong and where the
+# fix runs instead.
+_sc_devtool() {  # $1 = tool name → prints the executable path, or fails
+  venv="$here/.venv"
+  if [ -x "$venv/bin/$1" ]; then printf '%s\n' "$venv/bin/$1"; return 0; fi
+  if command -v "$1" >/dev/null 2>&1; then command -v "$1"; return 0; fi
+  hostmanaged=""
+  if [ -n "${SC_SANDBOX:-}" ] && [ -e "$venv/bin/python" ]; then
+    case "$(readlink -f "$venv/bin/python" 2>/dev/null || true)" in
+      "$here"/*) : ;;                       # sandbox-built venv — deps can provision it
+      *) hostmanaged=1 ;;                   # pinned host interpreter — pip skipped here
+    esac
+  fi
+  if [ -n "$hostmanaged" ]; then
+    echo "✗ $1: unavailable, and this .venv is host-managed (pinned out-of-tree interpreter) — in-sandbox pip is skipped by design, so \`./sc deps\` cannot provision it here." >&2
+    echo "  Fix on the HOST: install $1 into the pinned venv (e.g. uv pip install $1) — or \`./sc build\` to refresh the sandbox image, which bakes $1 as the PATH fallback." >&2
+  else
+    echo "✗ $1: not provisioned — run ./sc deps first" >&2
+  fi
+  return 1
 }
 
 # Install the fork's deps into the bind-mounted repo: always a repo-root .venv with
@@ -121,8 +157,23 @@ _sc_find_manifests() {  # $1 = filename glob, e.g. 'requirements*.txt'
 sc_deps() {
   rc=0
   venv="$here/.venv"
+  # In the sandbox, a .venv whose interpreter lives OUTSIDE the repo is host-built
+  # and host-managed — a pinned out-of-tree CPython (uv standalone) that `./sc
+  # launch` mounts in, with deps already installed against it. Recreating it with
+  # the image's python or pip-ing into it here would clobber that shared tree, so
+  # leave python deps to the host (`make install` / `uv`). Node deps still install.
+  skip_py=""
+  if [ -n "${SC_SANDBOX:-}" ] && [ -e "$venv/bin/python" ]; then
+    case "$(readlink -f "$venv/bin/python" 2>/dev/null || true)" in
+      "$here"/*) : ;;       # sandbox-built venv inside the repo — manage normally
+      *) skip_py=1 ;;       # host-managed pinned interpreter — don't touch it
+    esac
+  fi
   reqs="$(_sc_find_manifests 'requirements*.txt')"
   base_reqs="$(printf '%s\n' "$reqs" | grep -v 'requirements-dev\.txt' || true)"
+  if [ -n "$skip_py" ]; then
+    echo "→ deps: python deps are host-managed (pinned interpreter mounted by launch) — skipping venv/pip in the sandbox"
+  else
   # The engine dev kit lives in this .venv, so create it unconditionally — a fork
   # that declares no requirements*.txt still needs pytest on hand for `./sc test`
   # and for shells writing tests. (Previously the venv + kit were gated on $base_reqs,
@@ -149,6 +200,7 @@ sc_deps() {
   # fork's pin or its [tool.ruff]/[tool.mypy] config — available, not enforced.
   echo "→ deps: engine dev kit (pytest httpx coverage ruff mypy datasette, only-if-needed)"
   "$venv/bin/pip" install -q --upgrade-strategy only-if-needed pytest httpx coverage ruff mypy datasette || rc=1
+  fi
   pkgs="$(_sc_find_manifests 'package.json')"
   if [ -n "$pkgs" ]; then
     printf '%s\n' "$pkgs" | while IFS= read -r pkg; do
@@ -168,18 +220,49 @@ sc_deps() {
   echo "✓ deps: done"
 }
 
+# True if the fork declares a pytest config — pytest.ini, a [tool.pytest…] table in
+# pyproject.toml, or [tool:pytest] in setup.cfg. The discriminator between "this
+# fork opted out of pytest" (→ stdlib unittest fallback) and "this fork needs
+# pytest but the .venv is unprovisioned" (→ hard error, never a silent downgrade).
+_sc_wants_pytest() {
+  [ -f "$here/pytest.ini" ] && return 0
+  [ -f "$here/pyproject.toml" ] && grep -q '\[tool\.pytest' "$here/pyproject.toml" 2>/dev/null && return 0
+  [ -f "$here/setup.cfg" ] && grep -q '\[tool:pytest\]' "$here/setup.cfg" 2>/dev/null && return 0
+  return 1
+}
+
 # Run the fork's test suites: backend (the .venv's pytest, honoring the fork's
 # pytest.ini; else the engine's own stdlib-unittest suite) + UI (npm run test /
 # vitest in any package.json dir that declares a test script). Non-zero if any fail.
 sc_test() {
-  rc=0
   venv="$here/.venv"
+  # Self-heal: a fork with python tests but no .venv/bin/pytest is an unprovisioned
+  # worktree (the .venv is only populated by the first `./sc deps`), NOT a fork that
+  # opted out of pytest. Provision the dev kit + fork deps rather than silently
+  # downgrading to stdlib unittest — under which a pytest-based suite fails with
+  # ModuleNotFoundError (pytest / the fork's own libs) that reads as a real test
+  # failure. We gate on the pytest binary, not sc_deps' exit code, so a partial
+  # provision (e.g. npm leg fails) still runs pytest if it landed.
+  if [ ! -x "$venv/bin/pytest" ] && ls "$here"/tests/test_*.py >/dev/null 2>&1; then
+    echo "→ test: $venv/bin/pytest missing — provisioning first (./sc deps)"
+    sc_deps || echo "→ test: provisioning incomplete — continuing" >&2
+  fi
+  rc=0
   if [ -x "$venv/bin/pytest" ]; then
     echo "→ test: $venv/bin/pytest"
     ( cd "$here" && "$venv/bin/pytest" "$@" ) || rc=1
   elif ls "$here"/tests/test_*.py >/dev/null 2>&1; then
-    echo "→ test: python3 -m unittest discover (stdlib)"
-    ( cd "$here" && "$PY" -m unittest discover -s tests -p 'test_*.py' ) || rc=1
+    # pytest still unavailable after provisioning (venv create failed, or a
+    # host-managed sandbox interpreter that skips pip). A fork that *declares*
+    # pytest must not be green-washed through stdlib unittest — fail loud with the
+    # fix. Only a fork with no pytest config keeps the legacy stdlib fallback.
+    if _sc_wants_pytest; then
+      echo "✗ test: pytest required (pytest config present) but unavailable in $venv — run ./sc deps to provision it" >&2
+      rc=1
+    else
+      echo "→ test: python3 -m unittest discover (stdlib)"
+      ( cd "$here" && "$PY" -m unittest discover -s tests -p 'test_*.py' ) || rc=1
+    fi
   else
     echo "→ test: no python tests found"
   fi
@@ -198,24 +281,24 @@ sc_test() {
   echo "✓ test: all suites passed"
 }
 
-# Lint + format-check the fork's python with the .venv's ruff (honors the fork's
-# [tool.ruff] config). Defaults to the repo root; pass paths/flags through. The
-# tool is available, not enforced — a fork opts in by running this. Needs `./sc deps`.
+# Lint + format-check the fork's python with ruff (the .venv copy when present —
+# honors the fork's [tool.ruff] config — else the image's baked fallback).
+# Defaults to the repo root; pass paths/flags through. The tool is available,
+# not enforced — a fork opts in by running this.
 sc_lint() {
-  venv="$here/.venv"
-  [ -x "$venv/bin/ruff" ] || { echo "✗ lint: no .venv/bin/ruff — run ./sc deps first" >&2; return 1; }
-  echo "→ lint: $venv/bin/ruff check"
-  ( cd "$here" && "$venv/bin/ruff" check "$@" )
+  tool="$(_sc_devtool ruff)" || return 1
+  echo "→ lint: $tool check"
+  ( cd "$here" && "$tool" check "$@" )
 }
 
-# Type-check the fork's python with the .venv's mypy (honors the fork's
-# [tool.mypy] config). Same available-not-enforced stance as lint. Needs `./sc deps`.
+# Type-check the fork's python with mypy (.venv copy → image fallback, same
+# resolution as lint; honors the fork's [tool.mypy] config when the .venv copy
+# runs). Same available-not-enforced stance as lint.
 sc_typecheck() {
-  venv="$here/.venv"
-  [ -x "$venv/bin/mypy" ] || { echo "✗ typecheck: no .venv/bin/mypy — run ./sc deps first" >&2; return 1; }
-  echo "→ typecheck: $venv/bin/mypy"
-  if [ $# -gt 0 ]; then ( cd "$here" && "$venv/bin/mypy" "$@" )
-  else ( cd "$here" && "$venv/bin/mypy" . ); fi
+  tool="$(_sc_devtool mypy)" || return 1
+  echo "→ typecheck: $tool"
+  if [ $# -gt 0 ]; then ( cd "$here" && "$tool" "$@" )
+  else ( cd "$here" && "$tool" . ); fi
 }
 
 # ── Windows VM broker (HOST-side; drives the test VM for sandboxed forks) ──────
@@ -367,6 +450,65 @@ sc_ts_broker_uninstall() {
   echo "→ ts-broker systemd unit removed ($TS_BROKER_UNIT)"
 }
 
+# ── Postgres sidecar (HOST-side Docker container on $SC_NET — APP-ONLY) ───────
+# A named postgres:17 container alongside the sandbox on SC_NET. The sandbox
+# reaches it by hostname ($PGNAME) with DATABASE_URL forwarded in, so the fork's
+# *app* (its own db layer) can run + be tested against real Postgres. The engine
+# never reads DATABASE_URL — its DB is SQLite, full stop — so this cannot affect
+# the review GUI (that was the #207 regression; it stays fixed). Data persists in
+# a named Docker volume ($PGVOL) across restarts + image rebuilds. Enabled
+# per-fork by a "pg" key in .super-coder/instance.json (./sc pg-init adds it).
+# Creds are local-sandbox-only (sc/sc/sc) — never published to the host.
+sc_pg_configured() {
+  test -f "$ENGINE/instance.json" || return 1
+  "$PY" -c "import json,sys; d=json.load(open('$ENGINE/instance.json')); sys.exit(0 if 'pg' in d else 1)" 2>/dev/null
+}
+sc_pg_alive() {
+  docker inspect --format '{{.State.Running}}' "$PGNAME" 2>/dev/null | grep -q true
+}
+sc_pg_up() {
+  if ! sc_pg_configured; then
+    echo "→ pg: no \`pg\` key in instance.json — skipping (run: ./sc pg-init)"; return 0
+  fi
+  if sc_pg_alive; then echo "→ pg already running ($PGNAME)"; return 0; fi
+  dnet
+  docker volume create "$PGVOL" >/dev/null
+  docker run -d --name "$PGNAME" --restart unless-stopped \
+    --network "$SC_NET" \
+    -e POSTGRES_USER=sc \
+    -e POSTGRES_PASSWORD=sc \
+    -e POSTGRES_DB=sc \
+    -v "$PGVOL:/var/lib/postgresql/data" \
+    postgres:17 >/dev/null
+  echo "→ pg 17 up ($PGNAME on $SC_NET) · DATABASE_URL=postgresql://sc:sc@$PGNAME:5432/sc"
+}
+sc_pg_down() {
+  if docker inspect "$PGNAME" >/dev/null 2>&1; then
+    docker rm -f "$PGNAME" >/dev/null 2>&1 && echo "→ pg stopped (volume $PGVOL retained)" || true
+  fi
+}
+sc_pg_init() {
+  f="$ENGINE/instance.json"
+  if [ -f "$f" ]; then
+    if "$PY" -c "import json,sys; d=json.load(open('$f')); sys.exit(0 if 'pg' in d else 1)" 2>/dev/null; then
+      echo "→ pg: already configured in $f"; return 0
+    fi
+    "$PY" -c "
+import json,pathlib
+p=pathlib.Path('$f')
+d=json.loads(p.read_text())
+d['pg']={}
+p.write_text(json.dumps(d,indent=2)+'\n')
+print('-> pg: added to $f')
+"
+  else
+    printf '{\"pg\":{}}\n' > "$f"
+    echo "→ pg: created $f with pg block"
+  fi
+  echo "  next: ./sc pg-up   (or ./sc launch — pg starts automatically)"
+}
+
+
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 
 case "$cmd" in
@@ -376,11 +518,19 @@ case "$cmd" in
   update)            exec "$PY" "$S/update.py" "$@" ;;
   update-harnesses) exec "$PY" "$S/install.py" --update-harnesses ;;
   rollback)     exec "$PY" "$S/rollback.py" "$@" ;;
+  feature)      exec "$PY" "$S/feature.py" "$@" ;;
+  eject)        exec "$PY" "$S/eject.py" "$@" ;;
   init)         exec "$PY" "$S/init_fork.py" "$@" ;;
   rebuild)      exec "$PY" "$S/rebuild.py" "$@" ;;
   migrate)      exec "$PY" "$S/migrate.py" "$DB" ;;
   snapshot)     exec "$PY" "$S/snapshot.py" ;;
   mem)          exec "$PY" "$S/mem.py" "$@" ;;
+  # Raw read passthrough to the engine + map DBs, resolved by absolute path so no
+  # skill example ever needs a cwd-relative `sqlite3 .super-coder/…` (which pulls a
+  # shell into `cd`-ing to the root — the cwd trap). Writes still go via `sc mem`
+  # (triggers/caps); this is the read convenience for schema/catalogue queries.
+  sql)          exec sqlite3 "$DB" "$@" ;;
+  map-sql)      exec sqlite3 "$MAPDB" "$@" ;;
   render)       [ $# -gt 0 ] && exec "$PY" "$S/render.py" "$@" || exec "$PY" "$S/render.py" flat ;;
   render-check) exec "$PY" "$S/render_check.py" ;;
   map)          exec "$PY" "$S/map_repo.py" ;;
@@ -392,6 +542,10 @@ case "$cmd" in
   serve)        exec "$PY" "$ENGINE/api/server.py" "$@" ;;
   # ── Windows VM broker (HOST-side primitive — runs where virsh + the key live) ──
   vm-broker)         exec "$PY" "$ENGINE/api/vm_broker.py" "$@" ;;
+  # Bake/re-bake the clean snapshot — HOST-side, deliberately NOT a broker verb:
+  # the snapshot is the trust anchor every test reverts to; a sandboxed shell may
+  # run against it but must never redefine it. vm.py bake self-guards on SC_SANDBOX.
+  vm-bake)           exec "$PY" "$S/vm.py" bake ;;
   vm-broker-up)      sc_vm_broker_up ;;
   vm-broker-down)    sc_vm_broker_down ;;
   vm-broker-sock)    exec "$PY" "$S/vm.py" sock ;;
@@ -404,6 +558,10 @@ case "$cmd" in
   ts-broker-sock)    exec "$PY" "$S/ts.py" sock ;;
   ts-broker-install)   sc_ts_broker_install ;;
   ts-broker-uninstall) sc_ts_broker_uninstall ;;
+  # ── Postgres sidecar (app-only) ──
+  pg-init)      sc_pg_init ;;
+  pg-up)        sc_pg_up ;;
+  pg-down)      sc_pg_down ;;
   boot)         exec "$PY" "$S/run.py" "$@" ;;
   boot-*)       exec "$PY" "$S/run.py" "${cmd#boot-}" "$@" ;;
   deps)         sc_deps "$@" ;;
@@ -430,19 +588,67 @@ case "$cmd" in
     # key + .env there; the mount below carries them in like every other harness).
     mistral_env=""
     [ -n "${MISTRAL_API_KEY:-}" ] && mistral_env="-e MISTRAL_API_KEY=${MISTRAL_API_KEY}"
+    # Forward DATABASE_URL into the sandbox when a pg sidecar is configured, so
+    # the fork's APP can connect to it. Default tracks the sidecar's container
+    # name + baked sc/sc/sc creds (one source of truth); SC_DATABASE_URL overrides
+    # for a fork whose sidecar differs. The hostname is the CONTAINER name (DNS on
+    # SC_NET) — NOT 127.0.0.1, which inside the sandbox is its own loopback. The
+    # engine ignores this var (SQLite-only); only the app reads it. Sidecar is
+    # started after the sandbox (sc_pg_up below); the app connects lazily, so order
+    # doesn't matter.
+    pg_env=""
+    sc_pg_configured && pg_env="-e DATABASE_URL=${SC_DATABASE_URL:-postgresql://sc:sc@$PGNAME:5432/sc}"
     git_name="$(git -C "$here" config user.name 2>/dev/null || true)"
     git_email="$(git -C "$here" config user.email 2>/dev/null || true)"
+    # Pinned-interpreter passthrough. When the fork's .venv was built from an
+    # out-of-tree interpreter — a uv-managed standalone CPython under $HOME, used
+    # to pin the app's Python independent of the host's rolling system python —
+    # the bind-mounted .venv's bin/python + script shebangs point at that
+    # interpreter by absolute path. Mount it read-only at the SAME path so the
+    # shared .venv runs end-to-end inside the sandbox on the *identical* binary:
+    # same ABI as the wheels the host installed (psycopg etc. import with zero
+    # rebuild), and .venv/bin/{python,pytest,ruff,mypy} all resolve. Engine
+    # python (the image's own python3, SQLite-only) is untouched — this is the
+    # product app's interpreter, a separate concern. Skipped when the venv's
+    # interpreter is a system path (don't shadow /usr) or already inside the repo
+    # mount; a fork with a plain `python3 -m venv` host venv gets nothing here.
+    py_mount=""
+    if [ -e "$here/.venv/bin/python" ]; then
+      pybin="$(readlink -f "$here/.venv/bin/python" 2>/dev/null || true)"
+      case "$pybin" in
+        "$here"/*) : ;;                         # already under the repo bind-mount
+        "$HOME"/*)
+          # The venv's bin/python is symlinked to its interpreter by absolute
+          # path, but that path is usually a minor-version ALIAS dir that
+          # readlink -f collapses away (uv: cpython-3.14-… → cpython-3.14.5-…;
+          # the venv pins the alias so it floats across patch bumps). Mounting
+          # just the resolved dir leaves the alias path missing in the container
+          # and .venv/bin/python dangles. So mount the interpreter REGISTRY — the
+          # parent of the version dir, e.g. ~/.local/share/uv/python — so both the
+          # alias symlink and the real dir are present and every venv symlink
+          # resolves. A flat standalone (no version dir under $HOME) has no usable
+          # registry, so fall back to mounting its root directly.
+          pyver_dir="$(dirname "$(dirname "$pybin")")"   # <registry>/<versiondir>/bin/python → <versiondir>
+          pyreg="$(dirname "$pyver_dir")"                # <registry> (holds the alias + the real dir)
+          if [ -d "$pyreg" ] && [ "$pyreg" != "$HOME" ]; then
+            py_mount="-v $pyreg:$pyreg:ro"
+          elif [ -d "$pyver_dir" ]; then
+            py_mount="-v $pyver_dir:$pyver_dir:ro"
+          fi ;;
+      esac
+    fi
     docker rm -f "$CNAME" >/dev/null 2>&1 || true
     docker run -d --name "$CNAME" --restart unless-stopped \
       --network "$SC_NET" \
       --user "$(duser)" \
       -e HOME="$HOME" -e SC_BIND=0.0.0.0 -e SC_PYTHON=python3 -e PYTHONUNBUFFERED=1 \
       -e SC_SANDBOX=1 -e SC_DEV_PORT="$dp" \
-      -e GH_TOKEN="$gh_token" $mistral_env \
+      -e GH_TOKEN="$gh_token" $mistral_env $pg_env \
       -e GIT_AUTHOR_NAME="$git_name" -e GIT_AUTHOR_EMAIL="$git_email" \
       -e GIT_COMMITTER_NAME="$git_name" -e GIT_COMMITTER_EMAIL="$git_email" \
       -w "$here" \
       -v "$here:$here" \
+      $py_mount \
       -v "$HOME/.claude:$HOME/.claude" \
       -v "$HOME/.claude.json:$HOME/.claude.json" \
       -v "$HOME/.config/opencode:$HOME/.config/opencode" \
@@ -460,18 +666,21 @@ case "$cmd" in
     # drive the VM; this keeps it from being a forgotten manual step.
     sc_vm_broker_up || true
     # Same for the tailnet broker — self-skips when no `ts` block is linked.
-    sc_ts_broker_up || true ;;
+    sc_ts_broker_up || true
+    # Start the PG sidecar when configured — self-skips otherwise.
+    sc_pg_up || true ;;
   enter)        exec docker exec -it "$CNAME" ./sc boot "$@" ;;
   enter-*)      exec docker exec -it "$CNAME" ./sc boot "${cmd#enter-}" "$@" ;;
   down)         docker rm -f "$CNAME" >/dev/null 2>&1 && echo "→ sandbox stopped" || echo "→ not running"
                 sc_vm_broker_down
-                sc_ts_broker_down ;;
+                sc_ts_broker_down
+                sc_pg_down ;;
   restart)      "$0" down; exec "$0" launch "$@" ;;
   build)        dcheck; dbuild ;;
   logs)         exec docker logs -f "$CNAME" ;;
   verify)
     "$PY" "$S/rebuild.py"
-    "$PY" "$S/render.py" flat
+    SC_ADMIN=1 "$PY" "$S/render.py" flat
     RENDER_ONLY=1 exec "$PY" "$S/run.py" --first ;;
   health)       curl -s "http://127.0.0.1:$(port)/api/health" && echo "" ;;
   clean-db)     rm -f "$DB" "$DB-wal" "$DB-shm" && echo "removed $DB (rebuild with: ./sc rebuild)" ;;
@@ -482,14 +691,20 @@ super-coder — forkable shell substrate
   ./sc install             first-launch bootstrap for a fork (requirements, harness, first shell)
   ./sc ensure-harness      install claude + opencode + codex if missing (official native installers, no npm)
   ./sc doctor              sandbox readiness: docker (rootless/rootful) + harness login
-  ./sc update              fetch + materialize the engine (gitignored dep) + reconcile IN PLACE (migrate, sync skills, map); --no-fetch to skip fetch
+  ./sc update              fetch + materialize the engine (gitignored dep) + reconcile IN PLACE (migrate, sync skills, map);
+                             --no-fetch skips the fetch · --ref <tag|sha> pins a version · blocks on local engine edits (--force discards them)
   ./sc update-harnesses    update claude + opencode + codex + vibe to latest (force-reruns official installers)
   ./sc rollback            sound undo of a bad update — restore the DB + engine (engine.ref.prev) together
+  ./sc feature             list the opt-in features (pg · windows · tailnet) and the state of both halves (config block + skill grants)
+  ./sc feature enable <f>  enable one: grant its skills to the owning flavors + create/point-at its instance.json block (disable reverses)
+  ./sc eject               ONE-WAY: stop tracking upstream and own the engine — un-gitignore + stage .super-coder/ as fork source (confirm-gated)
   ./sc rebuild             build the .db from schema + migrations + snapshot
   ./sc migrate             apply pending migrations to an existing .db
   ./sc snapshot            dump per-instance tables -> .sc-state/content.sql
-  ./sc mem <cmd> [args]    safe engine-DB writes for a shell's own memory (state/seed/lns/decision/flag/roadmap/doc/narrative);
-                             resolves + guards the engine DB (refuses product DBs & 0-byte stubs), then snapshots+renders. `./sc mem which` to orient
+  ./sc mem <cmd> [args]    a shell's own memory, over the engine API (get/state/seed/lns/decision/flag/roadmap/doc/narrative);
+                             identity is the shell's token, server-resolved — no DB path, no direct-DB fallback. `./sc mem which` to orient
+  sc sql "<query>"         read passthrough to the engine DB (schema/skills/flags) — absolute path, cwd-independent (no `cd` to root)
+  sc map-sql "<query>"     read passthrough to the repo-map DB (dr_* catalogue) — absolute path, cwd-independent
   ./sc render              render tracked flat _sc files (specs/docs/skills/roadmap)
   ./sc render-check        fail if committed flat _sc files drift from the DB render (CI guard; rebuild first for a hermetic check)
   ./sc map                 scan the host repo into the dr_* catalogue (re-runnable)
@@ -522,6 +737,8 @@ super-coder — forkable shell substrate
   holds the ssh key + virsh so the fork never does. See docs/windows-vm-broker.md).
   `launch` brings it up automatically when a VM is linked; `down` stops it:
   ./sc vm-broker           run the broker in the foreground (unix socket)
+  ./sc vm-bake             HOST-side: graceful shutdown + (re)bake the clean snapshot after provisioning
+                             (deliberately NOT a broker verb — the sandbox must never redefine 'clean')
   ./sc vm-broker-up        start it in the background (nohup + pidfile); self-skips if unlinked/already up
   ./sc vm-broker-down      stop the backgrounded broker
   ./sc vm-broker-sock      print the broker's socket path
@@ -537,6 +754,14 @@ super-coder — forkable shell substrate
   ./sc ts-broker-sock      print the broker's socket path
   ./sc ts-broker-install   supervise via a systemd --user unit (survives logout/reboot)
   ./sc ts-broker-uninstall remove the systemd unit
+
+  Postgres sidecar (app-only; docker container on SC_NET, data in a named volume).
+  For developing/testing the fork's APP against real Postgres in the sandbox — the
+  engine DB stays SQLite. One-time: ./sc pg-init (adds "pg" to instance.json).
+  `launch` starts it + forwards DATABASE_URL (override with SC_DATABASE_URL); `down` stops it:
+  ./sc pg-init             add the "pg" key to instance.json (enables the sidecar)
+  ./sc pg-up               start the postgres:17 container; self-skips if unconfigured/already up
+  ./sc pg-down             stop + remove the container (data volume retained)
 
   ./sc verify              rebuild + flat render + render-only boot (headless proof)
   ./sc health              curl the review layer's /api/health
