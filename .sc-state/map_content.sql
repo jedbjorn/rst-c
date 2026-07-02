@@ -13,5 +13,7 @@ INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) 
 INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (4, 'shared', 'shared/', 'Shared code and utilities', 3);
 INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (5, 'spike', 'spike/', 'Spike/experimental code', 4);
 INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (6, 'src', 'src/', 'Core .NET source code — bootstrap, core, engine, UI, tests', 5);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (7, 'docs', 'docs/', 'Project documentation and guides', 6);
+INSERT INTO dr_section (section_id, name, path_prefix, description, sort_order) VALUES (8, 'tests', 'tests/', 'Headless UI regression tests and harnesses', 7);
 
 COMMIT;
