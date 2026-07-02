@@ -20,7 +20,7 @@ public sealed record ProfileEntry(string FileName, Profile Profile);
 
 public static class ProfileStore
 {
-    public static IReadOnlyList<ProfileEntry> List(string? dir = null)
+    public static IReadOnlyList<ProfileEntry> List(string? dir = null, Action<string, Exception>? onSkip = null)
     {
         dir ??= AppDataPaths.ProfilesDir;
         if (!Directory.Exists(dir)) return Array.Empty<ProfileEntry>();
@@ -34,13 +34,15 @@ public static class ProfileStore
                 var profile = ProfileSerializer.Read(fs);
                 entries.Add(new ProfileEntry(Path.GetFileName(path), profile));
             }
-            catch (ProfileLoadException)
+            catch (ProfileLoadException ex)
             {
                 // Skip unreadable files; a corrupt entry shouldn't hide the rest.
+                onSkip?.Invoke(path, ex);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // Another process holds the file; ignore on this pass.
+                onSkip?.Invoke(path, ex);
             }
         }
         return entries;
