@@ -1570,6 +1570,24 @@
   // ── LOAD PROFILE ──────────────────────────────────────────────────────────────
   var pendingNotFoundWarnings = [];
 
+  // Message for add-ins the disable pass could not rename, or null when
+  // there is nothing to report. The bridge sends entries as
+  // { fileName: ... } (older shape: { name: ... }); flag #15 was this
+  // mapping reading only .name, so the list always filtered to empty and
+  // the failure never reached the user. Pure — covered by
+  // tests/ui/failed-disables.test.mjs.
+  function failedDisableMessage(failed) {
+    failed = failed || [];
+    if (failed.length === 0) return null;
+    var names = failed.map(function(f) { return f.fileName || f.name || ''; }).filter(Boolean);
+    if (names.length === 0) {
+      return 'Some add-ins could not be disabled. Administrator permissions are required to disable add-ins installed for all users.';
+    }
+    return (names.length === 1)
+      ? names[0] + ' was not disabled. Administrator permissions are required to disable add-ins installed for all users.'
+      : 'The following add-ins were not disabled (administrator permissions required): ' + names.join(', ');
+  }
+
   function doLoadProfile() {
     var hiddenTabs = getSelectedHiddenTabs();
     var disableToggle = document.getElementById('disableToggle');
@@ -1593,7 +1611,7 @@
       if (result.restart_needed) {
         lines.push('Add-ins modified — restart Revit for changes.');
       }
-      lines.push('Tab "' + selectedProfile.tab + '" will build on next pyRevit reload.');
+      lines.push('Tab "' + selectedProfile.tab + '" will be built.');
       if (pendingNotFoundWarnings.length > 0) {
         pendingNotFoundWarnings.forEach(function(w) { lines.push(w); });
         pendingNotFoundWarnings = [];
@@ -1612,14 +1630,15 @@
       // positive confirmation. Awaited before any close-the-window
       // path runs.
       var afterQa = function() {
-        var failed = (result.failed_disables || []);
-        if (failed.length > 0) {
-          var names = failed.map(function(f) { return f.name; }).filter(Boolean);
-          var body = (names.length === 1)
-            ? names[0] + ' was not disabled. You do not have admin permissions.'
-            : 'The following add-ins were not disabled (admin permissions required): ' + names.join(', ');
-          RSTmsgInform('Some add-ins skipped', body);
-          setTimeout(proceed, 3000);
+        var failedMsg = failedDisableMessage(result.failed_disables);
+        if (failedMsg) {
+          rstLog('warn', 'selector: disables failed — surfacing to user', {
+            failed: (result.failed_disables || []).length,
+          });
+          // Acknowledge-gated (not the 3s auto-dismiss toast): the loader
+          // auto-closes right after, and a toast racing that close is how
+          // 5 failed disables shipped as "all clear" (flag #15).
+          RSTmsgAck('Some Add-ins Were Not Disabled', failedMsg).then(proceed);
         } else {
           proceed();
         }
