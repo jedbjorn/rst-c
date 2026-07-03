@@ -34,6 +34,8 @@ public sealed class RstApplication : IExternalApplication
 
     private ControlledApplication? _controlledApp;
     private EventHandler<ApplicationInitializedEventArgs>? _initializedHandler;
+    private UIControlledApplication? _uiControlledApp;
+    private bool _reassertQueued;
     private static ProfileSwitchScheduler? _switchScheduler;
 
     /// <summary>
@@ -76,6 +78,15 @@ public sealed class RstApplication : IExternalApplication
             _controlledApp = application.ControlledApplication;
             _initializedHandler = OnApplicationInitialized;
             _controlledApp.ApplicationInitialized += _initializedHandler;
+
+            // Revit rebuilds the ribbon tab set when the first document of
+            // the session opens, silently un-hiding the tabs RSTify hid at
+            // ApplicationInitialized (doc #4 addendum). Every view
+            // activation queues a one-shot Idling re-assert — Idling runs
+            // after the rebuild settles, and the re-assert is a no-op
+            // unless a hide rule is in force and actually drifted.
+            _uiControlledApp = application;
+            application.ViewActivated += OnViewActivated;
 
             Log.Information("=== RST.OnStartup OK ===");
             return Result.Succeeded;
@@ -139,6 +150,37 @@ public sealed class RstApplication : IExternalApplication
         }
     }
 
+    private void OnViewActivated(object? sender, Autodesk.Revit.UI.Events.ViewActivatedEventArgs e)
+    {
+        // Cheap gate on the UI thread: nothing to protect, nothing to do.
+        if (_reassertQueued || !RstifyToggle.HasActiveHideRule) return;
+        if (_uiControlledApp is null) return;
+        try
+        {
+            // Defer to Idling — ViewActivated can fire before Revit
+            // finishes rebuilding the tab set, and a re-hide applied
+            // mid-rebuild would itself be reset.
+            _uiControlledApp.Idling += OnIdlingReassert;
+            _reassertQueued = true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "ViewActivated: failed to queue RSTify re-assert");
+        }
+    }
+
+    private void OnIdlingReassert(object? sender, Autodesk.Revit.UI.Events.IdlingEventArgs e)
+    {
+        _reassertQueued = false;
+        if (_uiControlledApp is not null)
+        {
+            try { _uiControlledApp.Idling -= OnIdlingReassert; }
+            catch (Exception ex) { Log.Debug(ex, "Idling unsubscribe failed (non-fatal)"); }
+        }
+        try { RstifyToggle.ReassertIfDrifted(); }
+        catch (Exception ex) { Log.Warning(ex, "Idling: RSTify re-assert failed"); }
+    }
+
     /// <summary>
     /// Lazily build (and cache) the command catalog for the running Revit
     /// session. Built on first Loader open rather than at OnStartup so
@@ -182,6 +224,17 @@ public sealed class RstApplication : IExternalApplication
         {
             try { _controlledApp.ApplicationInitialized -= _initializedHandler; }
             catch { /* fine — may have already unsubscribed */ }
+        }
+        if (_uiControlledApp is not null)
+        {
+            try { _uiControlledApp.ViewActivated -= OnViewActivated; }
+            catch { /* fine */ }
+            if (_reassertQueued)
+            {
+                try { _uiControlledApp.Idling -= OnIdlingReassert; }
+                catch { /* fine */ }
+            }
+            _uiControlledApp = null;
         }
         try { _switchScheduler?.Dispose(); }
         catch (Exception ex) { Log.Debug(ex, "Switch scheduler dispose failed (non-fatal)"); }

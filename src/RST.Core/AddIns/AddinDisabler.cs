@@ -8,8 +8,9 @@
 // Policy:
 //   - Disable: rename .addin → .addin.RSTdisabled for any manifest NOT
 //     in the required-addins list. Skip manifests in read-only search
-//     paths (Revit install dir) — renaming there would fail and is
-//     also a bad idea for shipped add-ins.
+//     paths — the Revit install dir (policy: shipped add-ins are not
+//     ours to rename) and any path the running token can't write to
+//     (probed live at scan time; see DirectoryWritability).
 //   - Restore: walk every search path, rename every .addin.RSTdisabled
 //     back to .addin. No-op if none found.
 //

@@ -1,8 +1,9 @@
 /**
  * rst_messages.js — Reusable message overlays for RST UI.
  *
- * Three message types:
+ * Four message types:
  *   RSTmsgConfirm(title, body)  — modal with Continue / Cancel. Returns a Promise (true/false).
+ *   RSTmsgAck(title, body)      — modal with a single OK button; blocks until acknowledged. Returns a Promise.
  *   RSTmsgInform(title, body)   — auto-dismiss after 3 seconds.
  *   RSTmsgWait(title, body)     — loading overlay with ticking dots. Call RSTmsgWaitClose() to dismiss.
  */
@@ -126,6 +127,35 @@
       document.getElementById('rstConfirmContinue').onclick = function () {
         _hide(el.overlay);
         resolve(true);
+      };
+
+      _show(el.overlay);
+    });
+  };
+
+  // ── RSTmsgAck ─────────────────────────────────────────────────────────────
+  // Modal with a single OK button. Unlike RSTmsgInform it does NOT
+  // auto-dismiss — use it when the user must actually see the message
+  // (e.g. failed disables) and the window may close right after.
+  // Returns a Promise that resolves when OK is clicked.
+
+  window.RSTmsgAck = function (title, body) {
+    return new Promise(function (resolve) {
+      var el = _createOverlay('rst-msg-ack');
+
+      el.card.innerHTML =
+        '<div class="rst-msg-title"></div>' +
+        '<div class="rst-msg-body"></div>' +
+        '<div class="rst-msg-actions">' +
+        '  <button class="rst-msg-btn rst-msg-btn-continue" id="rstAckOk">OK</button>' +
+        '</div>';
+
+      el.card.querySelector('.rst-msg-title').textContent = title;
+      el.card.querySelector('.rst-msg-body').textContent = body;
+
+      document.getElementById('rstAckOk').onclick = function () {
+        _hide(el.overlay);
+        resolve();
       };
 
       _show(el.overlay);

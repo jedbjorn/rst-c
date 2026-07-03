@@ -4,8 +4,10 @@
 // Mirrors the dict shape upstream LoaderBridge.GetDisablePreview returns:
 //   staying      — required, will not be touched.
 //   disabling    — non-required and writeable; will be renamed.
-//   tryDisable   — non-required but in a read-only path; we'll skip
-//                  the rename and surface the user warning.
+//   tryDisable   — non-required but in a path the running token can't
+//                  write (probed live) or the policy-protected Revit
+//                  install dir; we'll skip the rename and surface the
+//                  user warning.
 //   skipped      — already .addin.RSTdisabled; nothing to do.
 //
 // Keeps the preview pure — no side effects, safe to call repeatedly

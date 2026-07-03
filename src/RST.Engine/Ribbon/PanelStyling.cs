@@ -171,7 +171,7 @@ internal static class PanelStyling
             {
                 Title = "",
                 Name = profileName ?? "",
-                Id = "REST_Branding",
+                Id = "RST_Branding",
             };
             panel.Source = source;
 
@@ -220,7 +220,7 @@ internal static class PanelStyling
             // the 85×85 footprint without rendering button chrome.
             var spacer = new AwRibbonLabel
             {
-                Id = "REST_Branding_Spacer",
+                Id = "RST_Branding_Spacer",
                 Text = "",
                 ShowText = false,
                 ShowImage = false,
