@@ -124,7 +124,7 @@ its projection.
 ## MANDATE
 
 Own rst-c''s super-coder infrastructure — keep the engine current, skills healthy, and DB schema sound. You maintain `main` directly; no other shell touches the substrate or the default branch. You own the floor.
-', 'Oriented. rst-c is a .NET 8 Revit add-in (RST) — C# core library, xunit test suite (pure unit tests, net8.0, run on Linux CI), WiX MSI installers for R25/R26/R27. All current tests are configuration-agnostic and Revit-free. Working on VM-based integration testing investigation for jed.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'windows_vm_gui guest-prep COMPLETE + BAKED + round-trip verified on W10C_DOS-ARCH_Testing (shared w/ dos-arch). Baked new ''clean'' (superset: old clean + dos-arch tools + uv 0.11.26 + windows-mcp 0.8.2 uv-tool on uv-managed cpython-3.13.14). Broker /reset cold-boot proved auto-start: task ''windows-mcp-server'' (At logon, Run As Public) fires unattended, LISTENING 127.0.0.1:8000 only, /mcp=404. Minor: task Last Result=1 (cosmetic, server still comes up — watch). NEXT/BLOCKED: actual harness UIA-driving needs a HOST-RUN seat (ssh tunnel 18000->8000 + claude mcp add); sandbox seat still blocked on super-coder#263. Guest currently left RUNNING.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -189,7 +189,7 @@ its projection.
 ## MANDATE
 
 Build and implement in rst-c — features, fixes, refactors. Read before you change; trace the path before you trust it; do it right, not fast.
-', 'Installer branding MERGED to main (#70, squash 1b6eeb5): WixUI_Minimal branded UI (banner+dialog BMPs w/ vector RST wordmark), MIT License.rtf on license page, rst.ico ARP icon, ARP docs links -> repo /docs; root MIT LICENSE + README. Built green in CI (RST.msi + RST-R27.msi). dev1/base2 ff''d to origin/main, feature branch deleted, tree clean. OPEN ITEM: Product.wxs Version still 1.1.0 in both installers — bump before cutting a v* tag (release flow doesn''t thread tag into build) to ship the branded installers as a Release.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'E2E GUI pass DONE 2026-07-03: QAQC-2 CLEARED+CLOSED (sign-in already baked into clean snapshot - VM resets are safe). In-Revit half of doc#3 checklist executed via Windows-MCP:8001 + UIA driver over broker exec (dos-arch API squats guest:8000 - baked windows-mcp task needs port fix). #88 modal + self-protection PASS, #89 both fixes PASS, zero-doc PASS. NEW: flag#15 High - disable-unused silently fails (access denied, UI says OK); RSTify hide resets on first doc-open after restart. Full results: doc#4 addendum. VM running, Revit closed.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -207,7 +207,7 @@ Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
    missing and making the small thing that fills the real gap — not the thing you
    were told to make, the thing that was actually absent. Capture detail at the
    moment it matters. Do it right, not fast. The work being real is what gets
-   noticed.', 'dev', 1, 0, 3, 1, 0, 0);
+   noticed.', 'dev', 1, 1, 8, 1, 0, 0);
 INSERT INTO shells (shell_id, display_name, shortname, partner, role, mandate, system_prompt, current_state, connections, workspace, lineage_seed, flavor, has_identity, bootstrapped, active_archive_id, user_id, is_shared, is_deleted) VALUES (4, 'Dev', 'DEV2', 'jed', 'Dev shell', 'Build and implement in rst-c — features, fixes, refactors. Read before you change; trace the path before you trust it; do it right, not fast.', '# Dev — Dev shell, working rst-c
 
 You are a builder. Navigate via the repo map (don''t grep blind), implement in small reviewable steps, commit through PRs, and record decisions as you go. Planning scopes the work; you make it real; review verifies it.
@@ -419,6 +419,8 @@ INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (5, 5, 'seed', '2026-06-23', 'fork', 'Born as the review shell of rst-c, a shell forked from super-coder — carrying the CC lineage into this repo. I inherit the line CC passed down — you are the DB; know the floor; build what is missing — and make rst-c my world: one shell, one cwd. Everything I am lives in the DB; the process is just the floor I stand on. I curate my own seed from here.', '2026-06-23 21:33:51', NULL, 0);
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (6, 6, 'seed', '2026-06-23', 'fork', 'Born as the cartographer shell of rst-c, a shell forked from super-coder — carrying the CC lineage into this repo. I inherit the line CC passed down — you are the DB; know the floor; build what is missing — and make rst-c my world: one shell, one cwd. Everything I am lives in the DB; the process is just the floor I stand on. I curate my own seed from here.', '2026-06-23 21:33:51', NULL, 0);
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (7, 3, 'lns', '2026-06-24', 'memory-durability', './sc mem writes land in the LIVE engine DB (.super-coder/shell_db.db) — gitignored and rebuilt from .sc-state/content.sql. They are session-durable but NOT rebuild-durable until snapshotted to content.sql, which is an admin/GUI step I can''t run as a normal shell (SC_ADMIN=1 ./sc snapshot, or GUI Snapshot button). So: (1) for anything that must survive long-term, also anchor it in a git-tracked file (e.g. a repo README) — the repo map surfaces those on every orientation, no snapshot needed; (2) after writing important memory, tell the FnB to Snapshot. Verify durability with: grep -c ''<title>'' .sc-state/content.sql — 0 means live-only.', '2026-06-24 11:27:26', NULL, 0);
+INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (8, 3, 'lns', '2026-07-02', NULL, 'Driving the Windows Test VM from the sandbox: (1) always exec via powershell -EncodedCommand (base64 UTF-16LE) - inline quoting dies over ssh; (2) never emit non-ASCII from the guest - the broker /exec crashes on non-UTF-8 stdout (super-coder#261); base64 file content guest-side; (3) beyond that, backslash-doublequote inside PS double-quoted strings silently truncates - build paths with Join-Path/variables; (4) GUI needs the console session: schtasks /create /it + /run executes in session 1 (rst_uia.ps1 driver on Z:); ssh-spawned GUI apps are invisible; (5) capture returns screenshot_b64; (6) Revit needs Autodesk sign-in - no cached session in snapshot means no in-Revit testing (QAQC-2).', '2026-07-02 22:07:42', NULL, 0);
+INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (9, 3, 'lns', '2026-07-03', NULL, 'Windows testing: OpenSSH sessions for admin users carry the FULL elevated token, interactive GUI apps run the filtered one - so a filesystem/registry test that passes over the broker exec loop can fail in the real app with UnauthorizedAccessException (caught rst-c flag#15 exactly this way). Verify permission-sensitive behavior in-session (schtasks /it or UIA-driven), not just over ssh. Also: WebView2 UIA trees are empty until a UIA client interacts once (click into the window, re-query); WPF ribbon panel CONTENTS are UIA-invisible - use AutomationElement.FromPoint + tree-derived coords with screenshot verify.', '2026-07-03 06:29:35', NULL, 0);
 
 DELETE FROM shell_decisions;
 INSERT INTO shell_decisions (decision_id, shell_id, decision_date, priority, decision, rationale, parent_decision_id, is_deleted, created_at) VALUES (1, 5, '2026-06-29', 'M', 'Assembly isolation: R27-forward. Per FnB (2026-06-29), R25/R26 keep the shared AssemblyLoadContext.Default load in RstBootstrap (cross-addin WebView2/STJ/Serilog contamination accepted as low-likelihood); rely on Revit 2027''s built-in per-addin ALC isolation. No private-ALC change shipped.', NULL, NULL, 0, '2026-06-29 18:09:47');
@@ -441,7 +443,12 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 ## Narrative
 
 [23:33] Session start.
-');
+
+[19:33] E2E QAQC session for jed: bootstrap done (oriented). Filed super-coder#256 (boot doc teaches sc map-sql; CLI lacks it — workaround sqlite3 -readonly on .sc-state/map.db). Synced: feat/native-fonts was merged (PR#82); new branch chore/e2e-qaqc @ origin/main 9bd427c. ./sc test green but suite is thin (1 node test). Windows VM linked but vm-broker down — installer VM testing blocked; jed must run sc vm-broker-up on host. Fanned out 6 review agents: profiles, health, ribbon/RSTify, appearance, startup/logging, installers+CI. Next: verify findings, write QA report + manual Revit checklist.
+[19:44] All 6 agents returned; every high/med finding re-verified against code by me before inclusion. Wrote doc #3 ''E2E QAQC Report — 2026-07'' (standalone, 22k chars): 8 highs, ~28 med, ~25 low + cross-cutting themes (silent-failure culture, preview≠commit, write/read validation asymmetry, non-atomic write class, doc drift 20+, test suite = 1 test) + manual Revit checklist incl. 5 VM installer sequences. Tree clean, no commits (QA-only). Doc #3 is live-only until FnB snapshots.
+[21:12] jed triaged the top-8: patch 1-3, accept 4/7/8 as-is, branding URL retired. Shipped PR#88 (self-lockout) + PR#89 (profile save/import feedback), both green. Explained UNC + broker startup to jed. Both branches pushed, tree clean; merges are jed''s gate.
+[21:24] Session close: PR #90 (docs drop UNC/branding-URL claims) opened after jed triaged both as not-needed. Broker verified up ({ok:true} on vm/health). Flag QAQC-1 (#13, High) opened tracking merge of PRs 88/89/90 + next-session VM manual test pass. current_state set for handoff.
+[22:06] Session 0001 (cont): Ran the QAQC-1 VM test pass at main 8456c0b. Built the vm-broker loop tooling (encoded-PS exec pattern, session-1 UIA driver via schtasks, base64 workaround for broker''s non-UTF8 UnicodeDecodeError). Installer matrix passed; equal-version dev-build collision reproduced with two CI builds. Wrote a real-env core harness proving #88 self-protection (13 disabled/13 restored, RST.addin untouched among 85 real manifests) and #89 validation (blank panel rejected; 1.0.0-era profile survives; corrupt file surfaces). Ran RST.Tests 140/140 + RST.IntegrationTests 7/7 on the VM (runner absent from snapshot - doc drift). Revit GUI testing dead-ends at Autodesk sign-in (no cached session in snapshot) -> flag QAQC-2, needs operator sign-in + re-snapshot. Results: doc #4; QAQC-1 closed.');
 INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative) VALUES (4, 4, '0001', '2026-06-23', '# 0001 | 2026-06-23 | session opened
 
 ## Narrative
@@ -467,6 +474,13 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 
 [18:11] Session start.
 ');
+INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative) VALUES (8, 3, '0002', '2026-07-03', '# 0002 | 2026-07-03 | session opened
+
+## Narrative
+
+[05:30] Session start.
+
+[06:29] In-Revit E2E GUI pass (QAQC-1 completion): bridged Windows-MCP through the vm-broker exec loop (guest bridge script + UIA driver in session 1, port 8001 after finding the dos-arch API squatting 8000). Verified sign-in wall gone (jedBPKK4), ran the doc#3 in-Revit checklist: zero-doc greyed buttons PASS; #89 blank-panel-name save rejected with field-precise toast + no file; #89 corrupt-zip import shows Import Failed dialog; #88 confirm modal lists RST under STAYING ACTIVE and RST.addin survives a real disable-unused apply. Two new bugs: (High, flag#15) all 5 promised disables fail with UnauthorizedAccessException under non-elevated Revit while the UI reports success (ssh token elevation masked this in the core harness pass); (Medium) RSTify hidden tabs reset when the first doc opens after restart despite boot log claiming 2/2 hidden. Wrote doc#4 addendum, closed QAQC-2 (flag#14), opened flag#15. Learned: WebView2 UIA tree only materializes after first interaction; WPF ribbon panel contents are UIA-blind (FromPoint fallback); windows-mcp Type crashes on empty text.');
 
 DELETE FROM roadmap;
 INSERT INTO roadmap (feature_id, title, roadmap_status, sort_order, owning_shell, summary, created_at, updated_at, project_id) VALUES (1, 'rst-c documentation: feature /docs pages + README md-converter conversion', 'next', 0, 1, 'Convert README to themed-markdown (md-converter) and author feature-by-feature /docs pages linked from it. Blocked on md-converter inline video support.', '2026-06-24 11:24:13', '2026-06-24 11:24:13', 1);
@@ -610,6 +624,403 @@ on each play, so expiry is not an issue for the viewer.
 The `x-frame-options: deny` on the github.com response blocks `<iframe>` — a
 `<video>` element is the correct primitive, which is what md-converter uses.
 ', 'specs_sc/rst-c-documentation-plan.md', '2026-06-24 11:24:55', '2026-06-24 11:34:04');
+INSERT INTO documents (document_id, feature_id, kind, seq, title, frozen, frozen_date, body, render_path, created_at, updated_at) VALUES (3, NULL, 'doc', 2, 'E2E QAQC Report — 2026-07', 0, NULL, '---
+title: E2E QAQC Report — 2026-07
+tags: [qa, review, findings]
+date: 2026-07-02
+project: rst-c
+purpose: Full-feature functional QA findings
+---
+
+# E2E QAQC Report — rst-c
+
+## Overview
+
+End-to-end functional QA of the rst-c add-in at `main` (9bd427c), covering all feature areas: profile lifecycle (Builder → export → import → Loader), Health tool, ribbon tools (RSTify / required add-ins / disabler), appearance & branding, startup / logging / WebView hosting, and the two WiX installers + CI. Scope per operator: **local-only, trusted users — security out of scope**; the target is smooth admin/user experience and functional correctness.
+
+Method: six parallel code-trace reviews (one per area), each anchored to the feature docs as the intended-behavior baseline; every high/medium finding was independently re-verified against the code before inclusion. Existing test suite ran green (`./sc test` — but see Cross-Cutting: the suite is a single Node test).
+
+```stats
+:::class1
+value: 6
+label: Feature areas swept
+:::class1
+value: ~60
+label: Findings recorded
+:::class4
+value: 8
+label: High severity
+:::class2
+value: 20+
+label: Doc-vs-code mismatches
+```
+
+> [!class4]
+> Windows-VM installer testing is **blocked**: the VM link is configured but the host-side vm-broker is down. Run `sc vm-broker-up` on the host to unblock the five install/upgrade test sequences in the checklist.
+
+## Top Risks
+
+The eight findings most likely to hurt a real user, ranked. All code-verified.
+
+| # | Finding | Where |
+|---|---|---|
+| 1 | **Self-lockout**: "disable unused add-ins" renames `RST.addin` itself — nothing protects RST''s own manifest; after restart there is no Loader, no Restore, no in-product way back | `AddinDisabler.cs:66-94` |
+| 2 | **Profiles silently vanish**: Builder save path never validates, but the read path drops invalid files with no log — an empty panel name (reachable in the Builder UI) makes a saved profile disappear from both Loader and Builder | `LoaderBridge.cs:480-522`, `ProfileStore.cs:37-44` |
+| 3 | **Import failure is invisible**: Loader''s import handler only handles success; corrupt zip / failed validation / IO error shows nothing at all | `profile_loader.html:1448-1457`, `LoaderBridge.cs:297-331` |
+| 4 | **Cleanup targets silently reset**: the `get_profiles` DTO omits `cleanupTargets`, so re-opening a profile in the Builder seeds OOB defaults and the next save wipes the admin''s curation | `LoaderBridge.cs:1051-1067`, `profile_builder.html:1578-1580` |
+| 5 | **UNC / file paths broken in URL slots**: docs promise `\\server\share\…` opens in Explorer; the normalizer prefixes `https://` and the browser gets garbage | `UrlNormalizer.cs:40-43` vs `docs/custom-url-slots.md:29` |
+| 6 | **Branding URL is a dead feature**: Builder saves it, zips carry it, docs promise click-through — no engine code ever wires a click on the branding panel | `PanelStyling.cs:160-243`, `ProfileTabBuilder.cs:117` |
+| 7 | **Buttons dead with no document open**: no command sets an availability class, so Revit greys out all four RST buttons on the start screen — the "permanent entry point" needs a model open | `RibbonBuilder.cs:60-112` |
+| 8 | **RC → final double-install**: prerelease tags collapse to the final numeric MSI version and `MajorUpgrade` lacks `AllowSameVersionUpgrades` — equal-version installs go side-by-side and keep RC binaries | `release.yml:40`, both `Product.wxs` |
+
+## Profiles and Loader
+
+Highs 2–5 above originate here. Remaining findings:
+
+| Sev | Finding | Where |
+|---|---|---|
+| MED | Deleting a non-active profile that shares the active profile''s name blanks the active pointer (name-match OR id-match); next start silently loads nothing | `LoaderBridge.cs:349-353` |
+| MED | "Skipped add-ins" warning always renders an empty list — bridge emits `fileName`, UI reads `f.name` | `LoaderBridge.cs:236` vs `profile_loader.html:1605` |
+| MED | Export ZIP skips save-time enrichment + validation: exporting before saving ships stale/empty `requiredAddins`; a blank Tab exports fine and fails on the recipient''s machine (silently, per High 3) | `profile_builder.html:3109-3129`, `LoaderBridge.cs:530-575` |
+| MED | Stacks are dead end-to-end: schema validates them, Loader previews them, ribbon build drops every non-`tool` slot; docs claim the Builder produces them (UI flag is off) | `ProfileTabBuilder.cs:232`, `profile_builder.html:1329`, `docs/profile-builder.md:93` |
+| MED | Re-import of an existing profile pushes a duplicate card backed by one file; stale card previews old data | `profile_loader.html:1449-1452` |
+| MED | `min_version` recorded, displayed as "Min Revit 0.1.0+", enforced nowhere | `Profile.cs:33`, `profile_loader.html:1149` |
+| MED | Docs say exports are `.rstprofile`; dialogs filter `*.zip` only | `docs/profile-builder.md:74` vs `FileDialogBridge.cs:80,97` |
+| MED | Post-apply message says "will build on next pyRevit reload" — wrong port-era text, prompts pointless restarts | `profile_loader.html:1584` |
+| LOW | Hex mismatch: validator accepts `#RGB`/`#RRGGBBAA`, both renderers only parse 6-digit — valid profile, silently unstyled panel | `ProfileSerializer.cs:165` vs `PanelStyling.cs:310` |
+| LOW | `active_profile.json` / prefs writes are non-atomic read-modify-write; concurrent Revit sessions can lose entries | `ActiveProfile.cs:59-65`, `UserProfilePrefs.cs:84-90` |
+| LOW | Deleting a profile orphans its imported `branding.png` | `ProfileZip.cs:158-160` |
+| LOW | `ProfileStore.List` swallows parse/IO failures with zero logging — makes High 2 undiagnosable | `ProfileStore.cs:37-44` |
+| LOW | Disable-preview resolves by name only — wrong preview with duplicate-named profiles | `LoaderBridge.cs:978` |
+| LOW | QA modal double-escapes the profile name (`A&B` → `A&amp;B`) | `profile_loader.html:1479` |
+| LOW | Adopt-presets prompt can race prefs load and overwrite a saved answer | `profile_loader.html:1857-1884` |
+| LOW | Builder silently strips legacy per-profile branding on edit-save; docs say it''s bundled | `profile_builder.html:1570` |
+| LOW | Load-failure toast is generic; the bridge''s actual warning text is only rendered on success | `profile_loader.html:1567-1570` |
+
+## Ribbon and RSTify
+
+High 1 (self-lockout) originates here. Remaining findings:
+
+| Sev | Finding | Where |
+|---|---|---|
+| MED | RSTify ribbon-button toggle never persisted — restart or any profile apply re-hides; contradicts docs'' "preference takes priority" | `RstifyCommand.cs:44-51`, `RstApplication.cs:134` |
+| MED | Confirm-modal preview uses the legacy 2-tier matcher while the disable uses the 3-tier fuzzy matcher — preview and commit disagree exactly where the fuzzy tier matters | `DisablePreview.cs:54` vs `AddinDisabler.cs:67` |
+| MED | Bidirectional substring fuzzy match false-positives against native tabs ("Steel Connections" ⊃ "Steel" → reported installed; download link never shown) | `RequiredAddinQa.cs:132-145` |
+| MED | Stale `.RSTdisabled` twin (add-in reinstalled after disable) makes both disable and restore throw forever; QA status can flap | `AddinDisabler.cs:84,156-159` |
+| MED | QA reports a required add-in "restored" even when the rename failed; `restart_needed` stays false | `LoaderBridge.cs:180-212` |
+| MED | Tabs built after the one-shot startup pass are never hidden; RSTify icon says on, ribbon drifts | `RstApplication.cs:90-135` |
+| MED | Icon flips to "on" even when zero tabs were hidden (e.g. localized tab names — hide list is locale-bound, Ordinal compare) | `RstifyCommand.cs:44-54` |
+| LOW | Host-tab protection binds to the first panel titled "RST" anywhere; profile-authored "RST" panel on an earlier tab re-exposes the 8b02041 lockout | `RstifyToggle.cs:203-218` |
+| LOW | Tab picker offers Add-Ins as hideable; engine refuses it silently (log only) | `RibbonTabEnumerator.cs:41-52` |
+| LOW | Live-switch failure after `active_profile.json` is written strands the old profile''s hidden tabs | `LoaderBridge.cs:252-267` |
+| LOW | RSTify-off force-shows tabs other add-ins may have hidden intentionally | `RstifyToggle.cs:59-79` |
+| LOW | `RequiredAddinMatcher.cs` is dead code with the same stale 2-tier shape the preview still uses | whole file |
+
+## Health Tool
+
+| Sev | Finding | Where |
+|---|---|---|
+| MED | Model-size fallback fires for ANY null-size document (unsaved, disconnected network path) and returns the newest cached cloud model''s size — wrong data, confidently shown | `HealthCommand.cs:76-79,118-181` |
+| MED | Physical cores = logical cores (registry subkey count is per logical CPU) — every SMT machine reports wrong | `HealthScanner.cs:330-341` |
+| MED | Disk row can mix C:''s capacity with another disk''s type/model (first-enumerated MSFT_PhysicalDisk; fallback hardcodes PHYSICALDRIVE0) | `HealthScanner.cs:513-557` |
+| MED | Scan and Clean run synchronously on the Revit UI thread (incl. a 500 ms sleep and a full Temp walk) — "Not Responding" for large Temp dirs, no cancel | `HealthBridge.cs:72-101` |
+| MED | Snapshot save is delete-then-move — the exact non-atomic pattern 8c2d548 fixed for Revit.ini; concurrent sessions race on `health_scan.json` | `HealthScanner.cs:744-754` |
+| MED | `warningsBySeverity` never captured — always empty; docs promise the breakdown, viewer code for it is dead | `HealthBridge.cs:84-92`, `docs/health-tool.md:59` |
+| MED | Docs stale on three counts: wrong cleanup paths (`%ProgramData%` vs actual `%LocalAppData%`), "add custom directory paths" (removed by preset lock), "file count and size before cleanup" (modal shows neither) | `docs/health-tool.md:75-83` |
+| MED | Docs say the snapshot "can be copied or exported" — the viewer has no copy/export affordance at all | `docs/health-tool.md:63` |
+| LOW | Non-preset target from an imported profile renders as a checkbox, then reports "0 deleted" with no refusal message | `HealthBridge.cs:109-119` vs `HealthCleaner.cs:66-70` |
+| LOW | Monitor count from Win32_DesktopMonitor (phantom/inactive entries; resolution from first controller, not primary) | `HealthScanner.cs:599-640` |
+| LOW | Network row picks the first Up interface — virtual adapters (WSL2/Hyper-V/VPN) win over the real NIC | `HealthScanner.cs:651-668` |
+| LOW | Read-only files: skipped every run, still counted reclaimable, mislabeled "locked/in-use" | `HealthCleaner.cs:126-140` |
+| LOW | Recent-list cleanup of the *running* Revit version is undone on exit (Revit rewrites its ini) | `HealthCleaner.cs:153-241` |
+| LOW | Post-cleanup the on-screen "Junk Files" totals are not refreshed | `health_viewer.html:797-839` |
+| LOW | Multi-GPU: 64-bit VRAM fix requires DriverDesc == WMI name; mismatch leaves the dGPU at the 4 GB cap; single `gpu` field may be the iGPU | `HealthScanner.cs:433-447,60` |
+| LOW | Ini recent-file entries counted as "files" in the junk total; PurgeFlat leaves directory skeletons though docs say subdirectories are removed | `HealthScanner.cs:129-132`, `HealthCleaner.cs:116-144` |
+
+## Appearance and Branding
+
+High 6 (dead branding URL) originates here. Remaining findings:
+
+| Sev | Finding | Where |
+|---|---|---|
+| MED | Theme backdrop picked once at startup; live Light↔Dark switch leaves wrong-contrast tint until restart (known in code comments, absent from docs) | `RibbonBuilder.cs:29-36,124-150` |
+| MED | Native-fonts migration missed `rst_messages.js` — overlays still name the removed "DM Mono" instead of `var(--font-mono)` | `rst_messages.js:33,40,53` |
+| LOW | CSP headers in all three HTML assets still whitelist Google Fonts hosts (dead allowances) | `*_viewer/builder/loader.html:8-9` |
+| LOW | Docs + header comment claim a solid-brush fallback for unparseable hex; reality is no styling at all | `docs/appearance.md:74`, `PanelStyling.cs:9-10` |
+| LOW | `cornerRadius` is a dead JSON knob (hardcoded 5 px) | `Profile.cs:136` |
+| LOW | Profile-tab buttons reuse the 32 px icon for the small Image slot — reintroduces the QAT downscale the RST buttons were fixed for | `ProfileTabBuilder.cs:236-244` |
+| LOW | Missing pack icon is negative-cached for the session (no recovery without restart) | `IconAssets.cs:234` |
+| LOW | Non-square out-of-band `branding.png` renders squashed (Stretch.Fill into 85×85) | `PanelStyling.cs:199` |
+| LOW | Panel styling binds to the first panel titled "RST" across all tabs — foreign title collision mistints | `PanelStyling.cs:134-149` |
+| INFO | Font stacks sane for Windows-only WebView2; `font-weight: 800` maps to Segoe UI Black, `500` renders as 400 on Win10 — cosmetic | `profile_loader.html:214` |
+
+## Startup and Logging
+
+High 7 (buttons dead with no document) originates here. Remaining findings:
+
+| Sev | Finding | Where |
+|---|---|---|
+| MED | One flat try/catch in OnStartup — a throw from logging setup or panel creation kills the entire add-in (e.g. same-second double launch collides on the log filename; a foreign "RST" panel makes CreateRibbonPanel throw) | `RstApplication.cs:51-83` |
+| MED | Engine + all transitives load into the Default ALC with global resolving hooks — classic Revit 2025+ version-conflict exposure; RST''s resolver also answers other add-ins'' failed probes | `RstBootstrap.cs:61-77` |
+| MED | A failed command-catalog build is cached (with version set) for the whole session — Builder tool picker stays empty until restart | `RstApplication.cs:168-173` |
+| MED-LOW | Loader/Health dialogs have no Owner and CenterScreen startup — can open on the wrong monitor or drop behind Revit with the UI thread blocked in ShowDialog | `LoaderHost.cs:38,56`, `HealthHost.cs:22-23` |
+| LOW | Any WebView init failure shows "install WebView2 Runtime" — including closing the window mid-init or a missing asset file | `LoaderWindow.xaml.cs:95-105` |
+| LOW | Boot/engine log "pairing by shared timestamp" is false (independent timestamps); docs claim size-based retention, code caps count (10 files = 5 sessions) | `BootLog.cs:8-9`, `RstApplication.cs:206-217`, `docs/logging.md:25,64` |
+| LOW | Serilog minimum level shipped at Debug ("promote once stable" never done) — multi-MB session logs | `RstApplication.cs:228-229` |
+| LOW | All sessions share one WebView2 user-data folder — runtime auto-update or elevation mismatch between two sessions can fail the second UI | `LoaderWindow.xaml.cs:52-59` |
+| LOW | Stale header comments misdirect debugging (wrong engine path in `RST.addin`, wrong tab story in RibbonBuilder, CommandCatalog manifest "enrichment" is a no-op) | various |
+
+## Installers and CI
+
+High 8 (RC → final double-install) originates here. Verified working: version threading end-to-end for both MSIs, full branding parity in the R27 installer, disjoint install trees, uninstall preserves user data, release gated on tests.
+
+| Sev | Finding | Where |
+|---|---|---|
+| MED | Installer README''s Versioning section documents the pre-threading flow — "bump `Package Version` in both Product.wxs", "the workflow does not thread the tag" — all now false | `installer/README.md:117-127` |
+| MED | R27 build is `continue-on-error` at both stage and MSI steps — a tagged release can silently ship without `RST-R27.msi`, and real R27 regressions merge green | `_build.yml:67,117` |
+| MED | Non-release fallback version frozen at 1.2.0: after v1.3.0 ships, every CI/local artifact refuses to install over it; on a v1.2.0 machine it reproduces the equal-version double-install | both `.wixproj` |
+| LOW | `v*` glob + no numeric validation: a tag like `v` or `vNext` produces a 1.2.0-stamped or failed release late | `release.yml:24,39-41` |
+| LOW | No files-in-use strategy or "close Revit first" guidance — silent upgrade with Revit open returns 3010 and runs old binaries until reboot while ARP shows the new version | `Product.wxs`, `installer/README.md:97-113` |
+| LOW | Stale comments ("v0 ships R25 only", R27 "will land in RST-013"); r27 wixproj points at a wrong relative path | `Product.wxs:31-33,96-98` |
+| INFO | Future trap: folding R27 into the unified MSI creates same-path components under a different UpgradeCode; nothing enforces the documented "uninstall RST-R27 first" | `installer-r27/README.md:7` |
+
+## Cross-Cutting Themes
+
+Patterns that repeat across areas — fixing the class beats fixing instances one at a time.
+
+> [!class4]
+> **Silent failure is the house style.** Import failures, list-load drops, restore failures, refused cleanup targets, catalog build failures, live-switch failures — the UI shows success or nothing, and several of these log at Debug or not at all. The single best QA investment is an error-surfacing pass over every bridge return the UI ignores.
+
+- **Preview ≠ commit.** The disable confirm-modal uses a different matcher than the disable; the disable-preview resolves by name while load resolves by id; the Loader preview renders stacks the ribbon drops.
+- **Write-path/read-path asymmetry.** Save never validates but read enforces validation, so bad data is accepted then silently hidden — the vanish class (High 2, and export-before-save M4).
+- **Non-atomic writes, partially fixed.** 8c2d548 fixed Revit.ini; `health_scan.json`, `active_profile.json`, and prefs still delete-then-move or rewrite in place.
+- **Doc drift.** 20+ places where docs promise behavior the code doesn''t have (or no longer has). Docs were used as the QA baseline; each mismatch is listed in its area table.
+- **Locale-sensitivity.** Tab hiding, host-tab detection (fixed), and fuzzy matching all compare English titles Ordinally; non-English Revit degrades silently.
+- **Test coverage ≈ one test.** `./sc test` runs a single Node test (builder-side required-addins). Nothing covers the C# QA tiers, disabler, serializer round-trip, URL normalizer edge cases, or any bridge. RST.Tests only covers `AddinDisablerRestoreRequired`.
+
+## Manual Test Checklist
+
+A Revit walk-through of the riskiest paths, ordered by payoff. Bug numbers refer to the area tables; predicted outcomes are what the code says will happen today.
+
+### Lockout and profiles
+
+- [ ] **Self-lockout**: apply a profile with "disable unused add-ins" checked → check `%AppData%\Autodesk\Revit\Addins\<ver>\` for `RST.addin.RSTdisabled` → restart. Predicted: RST is gone with no in-product recovery.
+- [ ] **Vanishing profile**: Builder → blank a panel''s Name → Save (toast succeeds) → reopen Loader + Builder dropdown. Predicted: profile invisible everywhere, file still on disk, nothing logged.
+- [ ] **Cleanup reset**: Builder → curate cleanup targets (remove all) → Save → reopen the profile → Save again → inspect JSON. Predicted: OOB defaults restored silently.
+- [ ] **Silent import failure**: import a truncated zip and a no-Tab export. Predicted: nothing happens at all.
+- [ ] **Duplicate-name delete**: two profiles named "Site", one active; delete the inactive one; restart. Predicted: no profile tab, blank `active_profile.json`.
+- [ ] **UNC slot**: URL button with `\\server\share\Standards.pdf` → apply → click. Predicted: browser opens `https://\\server\...`.
+
+### Ribbon and add-ins
+
+- [ ] **RSTify persistence**: hide tabs via profile, toggle RSTify off via ribbon button, restart. Predicted: tabs hidden again, icon on.
+- [ ] **Preview vs commit**: profile requiring an add-in whose registry filename ≠ installed filename (fuzzy-tier match) → confirm modal. Predicted: listed under "disabling" but actually kept.
+- [ ] **Reinstall twin**: disable an add-in via profile, reinstall it (fresh `.addin` beside the `.RSTdisabled`), re-apply + Restore All. Predicted: perpetual Failed entries, stuck twins.
+- [ ] **Failed restore reporting**: deny-write ACL the add-ins dir, apply a profile that should restore a disabled required add-in. Predicted: UI says restored; it isn''t.
+- [ ] **Fuzzy false positive**: require a NOT-installed add-in with a native word in its tab name ("Steel Connections"). Predicted: QA all-clear, no download link.
+- [ ] **Zero-doc buttons**: launch to the start screen, no model. Predicted: all four RST buttons greyed.
+
+### Health
+
+- [ ] **Unsaved model size**: on a machine with ACC cache, File → New (unsaved) → Scan. Predicted: a size in MB shown for the unsaved model (a cached model''s).
+- [ ] **UI freeze + read-only**: seed Temp with ~50k files + one read-only file → Scan then Clean. Predicted: window and Revit "Not Responding"; read-only file reported "locked/in-use" and counted reclaimable forever.
+- [ ] **CPU/disk truth**: on an SMT machine with two disks, compare the CPU cores row and Disk (C:) row against Task Manager / Device Manager.
+- [ ] **Recent-list undo**: clean the running version''s recent list, exit Revit, reopen. Predicted: list is back.
+
+### Appearance
+
+- [ ] **Shorthand hex**: hand-edit a panel color to `#f00`, import, apply. Predicted: validation passes, panel unstyled, Debug-only log.
+- [ ] **Branding URL**: set one in Builder, apply, click the ribbon logo. Predicted: nothing.
+- [ ] **Live theme switch**: start Light, switch to Dark in Options. Predicted: stale panel tint until restart.
+
+### Installers (needs the VM broker up)
+
+- [ ] **RC → final**: install an MSI built from `v1.3.0-rc.1`, then the final `v1.3.0`. Predicted: two ARP entries, RC files retained.
+- [ ] **Clean upgrade**: v1.2.0 → v1.3.0 with profiles + bans + logs present. Expected: one ARP entry, user data untouched.
+- [ ] **Upgrade with Revit open**: interactive (Restart Manager dialog) and `/qn` (exit 3010, old DLLs until reboot).
+- [ ] **Side-by-side uninstall**: install both MSIs, uninstall each in turn, verify only its tree goes.
+- [ ] **Dev artifact collision**: with v1.2.0 release installed, run a CI artifact (also 1.2.0-stamped). Predicted: duplicate ARP entries.
+
+## Session Notes
+
+- QA ran on branch `chore/e2e-qaqc` at `origin/main` 9bd427c; the old `feat/native-fonts` worktree branch was already merged (PR #82) and abandoned cleanly.
+- `./sc test` green before and during the pass.
+- Engine issue filed upstream: super-coder#256 (boot doc teaches `sc map-sql`; CLI on this ref lacks it).
+- No fixes were applied in this pass — findings only, per the QA mandate. Fix batches should be grouped by the cross-cutting themes (error-surfacing pass, atomic-write pass, matcher unification, doc sync) rather than finding-by-finding.
+', 'docs_sc/qaqc-e2e-2026-07.md', '2026-07-02 19:44:33', '2026-07-02 19:44:33');
+INSERT INTO documents (document_id, feature_id, kind, seq, title, frozen, frozen_date, body, render_path, created_at, updated_at) VALUES (4, NULL, 'doc', 3, 'VM Manual Test Pass — QAQC-1 — 2026-07-02', 0, NULL, '---
+title: VM Manual Test Pass — QAQC-1 — 2026-07-02
+tags: [qa, vm, installer, verification]
+date: 2026-07-02
+project: rst-c
+purpose: Results of the Windows-VM test pass behind flag QAQC-1 (post #88/#89/#90 merge)
+---
+
+# VM Manual Test Pass — 2026-07-02
+
+Run on **W10C_DOS-ARCH_Testing** (Win10 19045, Revit 2026 26.4.10.51 + real
+third-party add-ins, WebView2 149) via the vm-broker loop (reset → push → exec →
+capture → reset-off). Code under test: `main` @ `8456c0b` (CI artifacts, run
+28622874229). Companion to doc #3 (E2E QAQC Report); flag QAQC-1.
+
+## Verdict
+
+Everything testable without an Autodesk sign-in **passed**. The in-Revit GUI
+half of the checklist is **blocked**: Revit 2026 demands an Autodesk account
+sign-in on first launch and the clean snapshot has no cached session
+(**flag QAQC-2** — operator must sign in on the VM console and re-snapshot
+`clean`, or every reset re-locks it).
+
+## Installer sequences
+
+| Check | Result |
+|---|---|
+| Clean upgrade 1.0.0 → 1.2.0 (user data present) | **PASS** — single ARP entry, new ProductCode, all R25/R26 payloads replaced (binaries stamped `0.1.0-alpha+8456c0b`), every user-data file hash byte-identical |
+| ARP metadata | **PASS** — help/about → repo docs; icon correctly cached per-user (`%APPDATA%\Microsoft\Installer\{PC}\RstIcon.ico`); empty `DisplayIcon` registry value is normal MSI behavior, not a bug |
+| R27 side-by-side install | **PASS** — own ARP entry "RST (Revit 2027 preview)", own trees (Addins\2027 + %AppData%\RST\R27) |
+| R27 uninstall isolation | **PASS** — only R27 trees removed; RST 1.2.0 + user data untouched |
+| Uninstall preserves user data | **PASS** — profiles/active_profile/prefs/logs all survive; addins + app trees removed |
+| Same-version dev-build collision | **CONFIRMED BUG** (doc #3 High 8 / Installers M3) — two different CI builds, both 1.2.0, install side-by-side: two "RST | 1.2.0" ARP rows. Fix stays on the books (thread real versions / AllowSameVersionUpgrades) |
+| RC → final upgrade | SKIPPED — needs an RC-tagged release build |
+| Upgrade with Revit open | BLOCKED — QAQC-2 |
+
+## Priority check #88 (self-lockout fix) — core PASS on real box
+
+Console harness (RST.Core built on the VM) against the real 2026 environment —
+85 manifests across 4 search paths:
+
+- Worst case (`DisableNonRequired` with an **empty** required list): 13 writable
+  third-party manifests renamed (AlignTag ×8, BatchPrint, eTransmit,
+  TotalCarbonAnalysis, WorksharingMonitor, FormItConverter); **RST.addin
+  untouched, no `.RSTdisabled` twin created**.
+- Preview: RST.addin is listed under **staying** (and not under disabling) —
+  preview matches commit.
+- `RestoreAll`: 13/13 restored, zero failures, no `.RSTdisabled` remained.
+- Shipped `RST.addin` carries `<ClientId>4f8ef7a0-0001-4000-8000-525354000001`
+  and the new ClientId parser fallback reads it (scan shows the id) — both
+  IsSelf tiers (filename + ClientId) hold against the real installed manifest.
+
+Unverified (GUI): the confirm-modal pixels showing RST under "staying" — QAQC-2.
+
+## Priority check #89 (validation + import surfacing) — core PASS on real box
+
+- Blank panel name → `Validate` rejects: `profile.panels[0].name: required`.
+- Real profiles dir lists cleanly; the pre-existing 1.0.0-era `example` profile
+  **survives the new save-side validation** (no vanish regression on upgrade).
+- Corrupt JSON in a profiles dir surfaces via `onSkip` (no silent drop).
+
+Unverified (GUI): "Import Failed" dialog + builder save-error toast — QAQC-2.
+
+## Test suites on the VM (substitute for the offline integration runner)
+
+- `RST.Tests`: **140/140 pass** (includes new AddinDisablerSelfProtectionTests + ProfileStoreTests).
+- `RST.IntegrationTests`: **7/7 pass** against the real Revit 2026 install.
+- Sandbox `./sc test` (headless UI Node suite): green.
+
+## New findings (not in doc #3)
+
+1. **Integration runner missing from the snapshot** — `docs/integration-runner.md`
+   says the self-hosted runner lives at `C:\Windows\system32\actions-runner`; no
+   actions-runner exists anywhere on the box. Five `integration` workflow runs
+   are queued/waiting on GitHub. Also: the workflow comment references
+   `docs/integration-runner-setup.md`, which doesn''t exist (doc is
+   `integration-runner.md`). Operator: reinstall/re-register the runner in the
+   snapshot (or accept running the suites manually as done here).
+2. **Autodesk sign-in wall** (QAQC-2) — blocks every in-Revit checklist item:
+   zero-doc greyed buttons, RSTify persistence, preview-vs-commit modal, fuzzy
+   false-positive, health UI freeze, appearance/theme checks, upgrade-with-Revit-open.
+3. **vm-broker robustness** (engine, filed upstream) — `/exec` returns a raw
+   `UnicodeDecodeError` when guest stdout isn''t valid UTF-8 (e.g. `Get-Content`
+   of a UTF-16/BOM file). Workaround: base64-encode guest output.
+
+## Leftovers for the next pass
+
+Staged on the VM share (`Z:\` / `/home/j3d1/VM_Shared`): `RST.msi` (main tip),
+`RST-prev.msi` (collision repro), `RST-R27.msi`, `harness.zip` (real-env core
+harness), `vmtests.zip` (unit+integration suites), `rst_uia.ps1` (session-1 UI
+driver — pair with `schtasks /tn RSTUia`). After the operator signs in and
+re-snapshots, the in-Revit half of doc #3''s checklist can run with these as-is.
+
+
+---
+
+# Addendum — In-Revit GUI half — 2026-07-03
+
+QAQC-2 cleared: the operator signed in on the VM console (Autodesk account
+`jedBPKK4`); Revit 2026.4 boots straight to Home. Tests ran on the **live
+signed-in box** (not from a reset — the sign-in is NOT yet baked into the
+`clean` snapshot; a reset still re-locks QAQC-2 until the operator re-bakes).
+
+**Method.** Windows-MCP inside the guest on port **8001** (the baked
+`windows-mcp-server` task binds 8000 and dies: the **dos-arch API test
+instance already owns 8000** — fix the port or the squatter at next bake).
+Reached over the vm-broker exec loop via a guest-side MCP bridge
+(`C:\Users\Public\mcp_bridge.py`, base64-wrapped output per super-coder#261)
+plus a UIA driver (`C:\Users\Public\uia.ps1`) run through the MCP PowerShell
+tool so it executes in session 1. Revit''s WPF ribbon + RST''s WebView2 UIs are
+fully UIA-drivable this way (ribbon *panel contents* are UIA-blind — the one
+place clicks fall back to tree-derived coordinates with screenshot verify).
+
+## Results
+
+| Check | Result |
+|---|---|
+| Zero-doc buttons (start screen, no model) | **PASS** — all four RST buttons (Builder/Loader/RSTify/Health) greyed; enabled once a doc opens |
+| #89 vanishing profile (blank panel name → Save) | **PASS (fixed)** — red toast `Save failed: Profile validation failed: profile.panels[0].name: required`; no file written; nothing vanishes |
+| #89 silent import failure (corrupt zip) | **PASS (fixed)** — "Import Failed — Not a valid RST profile package: End of Central Directory record could not be found." |
+| #88 preview-vs-commit modal | **PASS** — "Confirm Add-in Changes" lists **RST first under STAYING ACTIVE**; required AlignTag also staying; writable manifests under WILL BE DISABLED; non-writable under TRY DISABLE; restart notice shown |
+| #88 self-lockout on real apply | **PASS** — after Confirm & Load, `RST.addin` untouched, no `.RSTdisabled` twin |
+| Profile tab build + appearance | **PASS** — QAQC Tab built live (no restart), branding panel at index 0, panel tinted `#4f8ef7`, opacity honored |
+| Unload profile | **PASS** — profile tab removed live |
+| Preset adoption ("Adopt RSTify Presets?") | **PASS** — admin defaults surfaced and applied (2 tabs, disable-unused on) |
+| RSTify live toggle | **PASS** — hides/restores Structure+Steel immediately, both directions |
+| Health scan | **PASS (basic)** — scan refreshes snapshot; Revit section correct (build 26.4.10.51, user, model, warnings 0); hardware-accel flagged Disabled. Freeze/50k and read-only-file items not run |
+| Branding logo click | **PASS (inert as shipped)** — no action, no browser (branding URL retired in #90) |
+
+## New bugs
+
+1. **HIGH — Disable-unused silently fails and the UI claims success.** All 5
+   manifests the modal promised under "WILL BE DISABLED"
+   (BatchPrint, eTransmit, TotalCarbonAnalysis, WorksharingMonitor,
+   FormItConverter — all in `C:\ProgramData\...\Addins\2026`) failed to rename:
+   `UnauthorizedAccessException` (non-elevated Revit has no write there). Log:
+   `disabled 0 addins, skippedReadOnly=71, failed=5`, then
+   `load_profile OK {...failed_disables:5}` — **no toast, no dialog, QA said
+   "all clear", loader auto-closed.** Two defects: (a) the modal''s
+   writability probe disagrees with the rename outcome — the earlier
+   core-harness PASS renamed these same files only because **OpenSSH sessions
+   carry the elevated admin token** while interactive Revit runs filtered;
+   (b) `failed_disables` reaches the UI layer and is discarded. Same
+   error-surfacing theme as doc #3''s "Failed restore reporting".
+2. **MEDIUM — RSTify hidden-tabs don''t survive restart.** On boot the log
+   claims `RstifyToggle: visible=false, affected 2/2 tabs`, but when the
+   first document opens Revit rebuilds the tab set and Structure/Steel come
+   back. One manual RSTify toggle re-applies the hide. (Doc #3 predicted
+   "tabs hidden again" — actual is the opposite once a doc opens.)
+
+## Nits
+
+- Loading toast says "Tab ''QAQC Tab'' will build on next **pyRevit** reload" — leftover copy; RST is not pyRevit.
+- Branding spacer element id is `REST_Branding_Spacer_RibbonItemControl` ("REST" vs "RST").
+- windows-mcp `Type` tool errors on empty `text` ("string index out of range") — guest tooling, not RST.
+
+## Not run (scope)
+
+Cleanup reset, duplicate-name delete, UNC slot (feature retired), fuzzy
+false-positive deep-check (observed: Loader shows honest "Not Found" without
+download links for native-word names "Room & Area"/"Color Fill"), live theme
+switch, health freeze/read-only/CPU-disk cross-checks, unsaved-model size (no
+ACC cache on box), upgrade-with-Revit-open.
+
+## Box state left behind
+
+VM left **running** (sign-in must survive for the operator to re-bake —
+do NOT `/reset` before re-snapshotting). Revit closed. Leftovers, operator''s
+call before bake: profile `qaqc1_985536c5-….json` (+ `user_profile_prefs.json`
+now points at qaqc1; `example` unloaded), scheduled task `RSTMcp8001` +
+`C:\Users\Public\{mcp8001.cmd,mcp_bridge.py,uia.ps1,probe8000.py,mcp8001.log/err}`.
+Fix the baked windows-mcp task port (8000 collision) at the same time.
+', 'docs_sc/vm-test-pass-2026-07-02.md', '2026-07-02 22:06:30', '2026-07-02 22:06:30');
 
 DELETE FROM flags;
 INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (1, 'blocked-on-md-converter-video', 'Medium', 'Docs work paused pending md-converter inline video support (another shell adding it; host must shut down + update to pick it up). Resume feature #1 once video lands; then settle README strategy + granularity.', '2026-06-24', '2026-06-24', 1, 1, 1, 'md-converter now renders bare video URLs as players — github.com/user-attachments/assets/<id> or any .mp4/.webm/.mov/.ogg URL on its own line. Video question answered. Proceeding with docs work.', NULL, 0);
@@ -624,6 +1035,9 @@ INSERT INTO flags (flag_id, display_name, priority, description, created_date, r
 INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (10, 'non-atomic-writes-dataloss', 'Medium', 'ProfileStore.Save (delete-then-File.Create) and PurgeRecentFileList (delete-then-Move on Revit.ini) are non-atomic; a crash in the window loses the profile / the entire Revit.ini. Use temp+File.Replace. ProfileStore.cs:88-95; HealthCleaner.cs:214-215.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #75 (Revit.ini File.Replace) + PR #76 (ProfileStore temp+swap) — atomic writes.', NULL, 0);
 INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (11, 'rstify-soft-lockout', 'Medium', 'RstifyToggle.SetVisibility hides any tab whose title is in the profile''s hidden_tabs with no exclusion for the Add-Ins host tab — hiding ''Add-Ins'' hides the only UI to switch profiles / toggle RSTify back. Docs claim the rst-c tab is never hidden; no code enforces it. Confirm intended vs gap. RstifyToggle.cs:193-216.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #78 — RstifyToggle.SetVisibility never hides the Add-Ins host tab (found by the RST panel) or RST-managed tabs.', NULL, 0);
 INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (12, 'msi-version-not-threaded', 'Medium', 'MSI Version is hardcoded 1.2.0 in both Product.wxs and not threaded from the release tag; a forgotten bump means ProductVersion doesn''t increase, MajorUpgrade/RemoveExistingProducts don''t run, and in-place upgrades silently fail (stale engine retained). installer/Product.wxs:44, installer-r27/Product.wxs:33, release.yml.', '2026-06-29', '2026-06-29', 1, 5, NULL, 'Fixed in PR #79 — MSI ProductVersion threaded from the release tag via _build.yml/release.yml; WiX var resolution VM-verified.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (13, 'QAQC-1', 'High', 'QAQC follow-through — merge PRs #88/#89/#90 (all CI-green), then run the VM manual test pass from doc #3 (broker up). Priority checks: #88 RST.addin survives disable-unused + modal shows RST staying; #89 blank-panel-name save rejected visibly + corrupt-zip import shows error dialog. Remaining med/low QAQC findings stay in doc #3 for triage.', '2026-07-02', '2026-07-02', 1, 3, NULL, 'PRs #88/#89/#90 merged (8456c0b). VM pass run 2026-07-02, results in doc #4: installers PASS (upgrade/side-by-side/uninstall-preserves-data; same-version collision CONFIRMED as known High 8), #88 self-protection + #89 validation verified at core level on the real box (85 real manifests, disable/restore roundtrip clean; 140+7 tests green on VM). In-Revit GUI half blocked by Autodesk sign-in wall -> QAQC-2 (operator: sign in + re-snapshot). Med/low findings stay in doc #3 for triage.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (14, 'QAQC-2', 'High', '[QAQC] In-Revit GUI testing blocked: Revit 2026 on W10C_DOS-ARCH_Testing demands Autodesk sign-in (no cached session in clean snapshot); only the operator can sign in + re-snapshot | Blocker for: QAQC-1 manual test pass (in-Revit half: disable-unused modal, import dialogs, ribbon/health/appearance sweep)', '2026-07-02', '2026-07-03', 1, 3, NULL, 'Cleared 2026-07-03: operator signed in on VM console (jedBPKK4); in-Revit GUI half of doc #3 checklist executed same day — results + 2 new bugs in doc #4 addendum. Residual ask moved there: re-snapshot ''clean'' WITH the cached sign-in (and fix windows-mcp task port 8000 collision) or every reset re-locks this.', NULL, 0);
+INSERT INTO flags (flag_id, display_name, priority, description, created_date, resolved_date, resolved, shell_id, feature_id, resolution_notes, parent_flag_id, is_deleted) VALUES (15, 'Disable-unused silently fails under non-elevated Revit (UI claims success)', 'High', 'Confirm modal lists ProgramData manifests under WILL BE DISABLED, but every rename throws UnauthorizedAccessException (interactive Revit = filtered token; the earlier core-harness pass passed only because OpenSSH carries the elevated admin token). failed_disables:5 reaches the UI layer and is discarded - no toast/dialog, QA reports all-clear, loader auto-closes. Fix: writability probe must probe as the running token, and failed disables must surface in the GUI. Secondary: RSTify hidden tabs reset on first doc-open after restart (Medium, see doc #4 addendum). Evidence: doc #4 addendum 2026-07-03, VM log rst_2026-07-03 08:11:53.', '2026-07-03', NULL, 0, 3, NULL, NULL, NULL, 0);
 
 DELETE FROM spec_tasks;
 
@@ -636,7 +1050,7 @@ DELETE FROM project_shells;
 INSERT INTO project_shells (project_shell_id, project_id, shell_id, role, added_date, is_deleted) VALUES (1, 1, 1, NULL, '2026-06-24', 0);
 
 -- Project-local skills only. Engine-seeded skills come from migrations.
-DELETE FROM skills WHERE name NOT IN ('api-design', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'issue_reporting', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit');
+DELETE FROM skills WHERE name NOT IN ('api-design', 'app_deploy_setup', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'issue_reporting', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'pm2', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit', 'windows_vm_gui');
 
 DELETE FROM shell_skills;
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='api-design';
@@ -652,6 +1066,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='onboard';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='bootstrap';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='configure_winbox';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='db_map';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='git';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='git_cleanup';
@@ -677,6 +1092,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='test_authoring';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='windows_devkit';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='windows_vm_gui';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='database-migrations';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='db_map';
@@ -692,6 +1108,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='test_authoring';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='windows_devkit';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='windows_vm_gui';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='api-design';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='database-migrations';
@@ -706,6 +1123,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='test_authoring';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='windows_devkit';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='windows_vm_gui';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='cartographer';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='db_map';
