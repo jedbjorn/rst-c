@@ -110,6 +110,44 @@ internal static class RstifyToggle
         RefreshIcon(active: hasNew);
     }
 
+    /// <summary>
+    /// True while a hide rule is in force this session (tabs were hidden
+    /// and not toggled back). Lets callers skip queueing a re-assert when
+    /// there is nothing to protect.
+    /// </summary>
+    public static bool HasActiveHideRule => _lastAppliedHidden.Count > 0;
+
+    /// <summary>
+    /// Re-apply the hide rule if Revit un-hid any of our tabs behind our
+    /// back. Revit rebuilds the ribbon tab set when the first document
+    /// of the session opens, resetting IsVisible on the tabs we hid at
+    /// ApplicationInitialized (doc #4 addendum, flag #15 secondary).
+    ///
+    /// Only acts while a hide rule is in force (_lastAppliedHidden
+    /// non-empty) AND at least one of its tabs is visible again — so a
+    /// user who toggled RSTify off (Show clears the tracking) is never
+    /// fought. Returns the number of tabs re-hidden, 0 for no drift.
+    /// </summary>
+    public static int ReassertIfDrifted()
+    {
+        if (_lastAppliedHidden.Count == 0) return 0;
+        var ribbon = AwComponentManager.Ribbon;
+        if (ribbon is null) return 0;
+
+        var titles = new HashSet<string>(_lastAppliedHidden, StringComparer.Ordinal);
+        bool drifted = false;
+        foreach (var tab in ribbon.Tabs)
+        {
+            if (tab is null) continue;
+            if (titles.Contains(tab.Title ?? "") && tab.IsVisible) { drifted = true; break; }
+        }
+        if (!drifted) return 0;
+
+        var count = SetVisibility(_lastAppliedHidden, visible: false);
+        Log.Information("RstifyToggle: re-asserted hide rule after ribbon rebuild ({Count} tabs)", count);
+        return count;
+    }
+
     private static IReadOnlyCollection<string> SnapshotCopy(IReadOnlyCollection<string> source)
     {
         var copy = new string[source.Count];
