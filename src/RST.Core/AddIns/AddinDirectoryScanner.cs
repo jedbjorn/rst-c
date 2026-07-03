@@ -43,41 +43,64 @@ public static class AddinDirectoryScanner
     /// Resolve every search path that could contain .addin files for
     /// <paramref name="revitVersion"/>. Caller can use the kind/readonly
     /// flags to drive the disable-skip protection.
+    ///
+    /// ReadOnly is decided by a live write probe as the RUNNING process
+    /// token — not by path kind. ProgramData is writable to an elevated
+    /// console session but not to interactive (non-elevated) Revit, and
+    /// classifying it as writable made the confirm modal promise disables
+    /// that every rename then failed (flag #15). The Revit install dir is
+    /// the one policy exception: always ReadOnly, never even probed —
+    /// shipped add-ins are not ours to rename regardless of token.
     /// </summary>
     public static IReadOnlyList<AddinSearchPath> GetSearchPaths(string revitVersion)
+    {
+        var programData = Environment.GetEnvironmentVariable("PROGRAMDATA")
+            ?? Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var programFiles = Environment.GetEnvironmentVariable("PROGRAMFILES")
+            ?? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        return BuildSearchPaths(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            programData,
+            programFiles,
+            revitVersion,
+            DirectoryWritability.CanWrite);
+    }
+
+    /// <summary>
+    /// Test seam — <see cref="GetSearchPaths(string)"/> minus the
+    /// environment lookups and the real filesystem probe.
+    /// </summary>
+    internal static IReadOnlyList<AddinSearchPath> BuildSearchPaths(
+        string? appData,
+        string? programData,
+        string? programFiles,
+        string revitVersion,
+        Func<string, bool> canWrite)
     {
         var ver = (revitVersion ?? "").Trim();
         var roots = new List<AddinSearchPath>();
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        void AddIfExists(string path, AddinPathKind kind)
+        {
+            if (Directory.Exists(path))
+                roots.Add(new AddinSearchPath(path, kind, ReadOnly: !canWrite(path)));
+        }
+
         if (!string.IsNullOrEmpty(appData))
         {
-            var userAddins = Path.Combine(appData, "Autodesk", "Revit", "Addins", ver);
-            if (Directory.Exists(userAddins))
-                roots.Add(new AddinSearchPath(userAddins, AddinPathKind.UserAddins, ReadOnly: false));
-
-            var userPlugins = Path.Combine(appData, "Autodesk", "ApplicationPlugins");
-            if (Directory.Exists(userPlugins))
-                roots.Add(new AddinSearchPath(userPlugins, AddinPathKind.UserApplicationPlugins, ReadOnly: false));
+            AddIfExists(Path.Combine(appData, "Autodesk", "Revit", "Addins", ver), AddinPathKind.UserAddins);
+            AddIfExists(Path.Combine(appData, "Autodesk", "ApplicationPlugins"), AddinPathKind.UserApplicationPlugins);
         }
 
-        var programData = Environment.GetEnvironmentVariable("PROGRAMDATA")
-            ?? Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         if (!string.IsNullOrEmpty(programData))
         {
-            var machineAddins = Path.Combine(programData, "Autodesk", "Revit", "Addins", ver);
-            if (Directory.Exists(machineAddins))
-                roots.Add(new AddinSearchPath(machineAddins, AddinPathKind.MachineAddins, ReadOnly: false));
-
-            var machinePlugins = Path.Combine(programData, "Autodesk", "ApplicationPlugins");
-            if (Directory.Exists(machinePlugins))
-                roots.Add(new AddinSearchPath(machinePlugins, AddinPathKind.MachineApplicationPlugins, ReadOnly: false));
+            AddIfExists(Path.Combine(programData, "Autodesk", "Revit", "Addins", ver), AddinPathKind.MachineAddins);
+            AddIfExists(Path.Combine(programData, "Autodesk", "ApplicationPlugins"), AddinPathKind.MachineApplicationPlugins);
         }
 
-        // Revit install dir — read-only / protected. We never rename
-        // anything here; the disable step skips ReadOnly=true paths.
-        var programFiles = Environment.GetEnvironmentVariable("PROGRAMFILES")
-            ?? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        // Revit install dir — policy-protected. We never rename anything
+        // here (and never probe it — no writes in the install tree); the
+        // disable step skips ReadOnly=true paths.
         if (!string.IsNullOrEmpty(programFiles) && !string.IsNullOrEmpty(ver))
         {
             var revitInstall = Path.Combine(programFiles, "Autodesk", $"Revit {ver}");
