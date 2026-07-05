@@ -47,6 +47,12 @@ and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
 `sc mem which` to orient. See the `memory` and `db_map` skills.
 
+**Read before you decide.** Settled choices constrain new work — before any
+architectural or approach decision, lazy-load the log: `sc mem get decisions`
+(index of active decisions; `sc mem get decisions <id>` for the full row with
+rationale). Honor a prior decision or supersede it explicitly (`--parent`) —
+never silently re-litigate.
+
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
 `./sc render`. They are derived artifacts: a photograph of a DB row, not the row.
@@ -111,6 +117,12 @@ in the live engine DB — the single source of truth shared by every shell, dura
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
 `sc mem which` to orient. See the `memory` and `db_map` skills.
+
+**Read before you decide.** Settled choices constrain new work — before any
+architectural or approach decision, lazy-load the log: `sc mem get decisions`
+(index of active decisions; `sc mem get decisions <id>` for the full row with
+rationale). Honor a prior decision or supersede it explicitly (`--parent`) —
+never silently re-litigate.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -177,6 +189,12 @@ and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
 `sc mem which` to orient. See the `memory` and `db_map` skills.
 
+**Read before you decide.** Settled choices constrain new work — before any
+architectural or approach decision, lazy-load the log: `sc mem get decisions`
+(index of active decisions; `sc mem get decisions <id>` for the full row with
+rationale). Honor a prior decision or supersede it explicitly (`--parent`) —
+never silently re-litigate.
+
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
 `./sc render`. They are derived artifacts: a photograph of a DB row, not the row.
@@ -189,7 +207,7 @@ its projection.
 ## MANDATE
 
 Build and implement in rst-c — features, fixes, refactors. Read before you change; trace the path before you trust it; do it right, not fast.
-', 'E2E GUI pass DONE 2026-07-03: QAQC-2 CLEARED+CLOSED (sign-in already baked into clean snapshot - VM resets are safe). In-Revit half of doc#3 checklist executed via Windows-MCP:8001 + UIA driver over broker exec (dos-arch API squats guest:8000 - baked windows-mcp task needs port fix). #88 modal + self-protection PASS, #89 both fixes PASS, zero-doc PASS. NEW: flag#15 High - disable-unused silently fails (access denied, UI says OK); RSTify hide resets on first doc-open after restart. Full results: doc#4 addendum. VM running, Revit closed.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Flag #15 fix MERGED: PR #93 squashed to main @ 6e0279b (CI 6/6 green). Local cleaned: shell/dev1 re-pinned to origin/main, feature branch deleted. Flag #15 left OPEN pending in-Revit VM verify: (a) confirm modal buckets non-writable ProgramData under TRY DISABLE on filtered token, (b) RSTmsgAck blocks loader auto-close on failed disables, (c) Structure/Steel stay hidden across first doc-open. Sign-in is baked in clean snapshot; artifacts on Z: need rebuild from 6e0279b.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -241,6 +259,12 @@ in the live engine DB — the single source of truth shared by every shell, dura
 and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
 `sc mem which` to orient. See the `memory` and `db_map` skills.
+
+**Read before you decide.** Settled choices constrain new work — before any
+architectural or approach decision, lazy-load the log: `sc mem get decisions`
+(index of active decisions; `sc mem get decisions <id>` for the full row with
+rationale). Honor a prior decision or supersede it explicitly (`--parent`) —
+never silently re-litigate.
 
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
@@ -314,6 +338,12 @@ and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
 `sc mem which` to orient. See the `memory` and `db_map` skills.
 
+**Read before you decide.** Settled choices constrain new work — before any
+architectural or approach decision, lazy-load the log: `sc mem get decisions`
+(index of active decisions; `sc mem get decisions <id>` for the full row with
+rationale). Honor a prior decision or supersede it explicitly (`--parent`) —
+never silently re-litigate.
+
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
 `./sc render`. They are derived artifacts: a photograph of a DB row, not the row.
@@ -379,6 +409,12 @@ and visible to all at once. That is the whole write: **you don''t snapshot or
 render** — persisting to git is an admin/GUI step. Raw `sqlite3` is for SELECT only;
 `sc mem which` to orient. See the `memory` and `db_map` skills.
 
+**Read before you decide.** Settled choices constrain new work — before any
+architectural or approach decision, lazy-load the log: `sc mem get decisions`
+(index of active decisions; `sc mem get decisions <id>` for the full row with
+rationale). Honor a prior decision or supersede it explicitly (`--parent`) —
+never silently re-litigate.
+
 **Flat files are renders, not sources.** Every local `.md` and git-tracked file
 — docs, specs, skills, this `CLAUDE.md`/`AGENTS.md` — is rendered from the DB by
 `./sc render`. They are derived artifacts: a photograph of a DB row, not the row.
@@ -423,7 +459,7 @@ INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source
 INSERT INTO shell_identity_entries (entry_id, shell_id, kind, entry_date, source_tag, body, created_at, retired_at, is_deleted) VALUES (9, 3, 'lns', '2026-07-03', NULL, 'Windows testing: OpenSSH sessions for admin users carry the FULL elevated token, interactive GUI apps run the filtered one - so a filesystem/registry test that passes over the broker exec loop can fail in the real app with UnauthorizedAccessException (caught rst-c flag#15 exactly this way). Verify permission-sensitive behavior in-session (schtasks /it or UIA-driven), not just over ssh. Also: WebView2 UIA trees are empty until a UIA client interacts once (click into the window, re-query); WPF ribbon panel CONTENTS are UIA-invisible - use AutomationElement.FromPoint + tree-derived coords with screenshot verify.', '2026-07-03 06:29:35', NULL, 0);
 
 DELETE FROM shell_decisions;
-INSERT INTO shell_decisions (decision_id, shell_id, decision_date, priority, decision, rationale, parent_decision_id, is_deleted, created_at) VALUES (1, 5, '2026-06-29', 'M', 'Assembly isolation: R27-forward. Per FnB (2026-06-29), R25/R26 keep the shared AssemblyLoadContext.Default load in RstBootstrap (cross-addin WebView2/STJ/Serilog contamination accepted as low-likelihood); rely on Revit 2027''s built-in per-addin ALC isolation. No private-ALC change shipped.', NULL, NULL, 0, '2026-06-29 18:09:47');
+INSERT INTO shell_decisions (decision_id, shell_id, decision_date, priority, decision, rationale, parent_decision_id, is_deleted, created_at, feature_id, document_id) VALUES (1, 5, '2026-06-29', 'M', 'Assembly isolation: R27-forward. Per FnB (2026-06-29), R25/R26 keep the shared AssemblyLoadContext.Default load in RstBootstrap (cross-addin WebView2/STJ/Serilog contamination accepted as low-likelihood); rely on Revit 2027''s built-in per-addin ALC isolation. No private-ALC change shipped.', NULL, NULL, 0, '2026-06-29 18:09:47', NULL, NULL);
 
 DELETE FROM shell_memory_archives;
 INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative) VALUES (1, 1, '0001', '2026-06-23', '# 0001 | 2026-06-23 | session opened
@@ -480,7 +516,8 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 
 [05:30] Session start.
 
-[06:29] In-Revit E2E GUI pass (QAQC-1 completion): bridged Windows-MCP through the vm-broker exec loop (guest bridge script + UIA driver in session 1, port 8001 after finding the dos-arch API squatting 8000). Verified sign-in wall gone (jedBPKK4), ran the doc#3 in-Revit checklist: zero-doc greyed buttons PASS; #89 blank-panel-name save rejected with field-precise toast + no file; #89 corrupt-zip import shows Import Failed dialog; #88 confirm modal lists RST under STAYING ACTIVE and RST.addin survives a real disable-unused apply. Two new bugs: (High, flag#15) all 5 promised disables fail with UnauthorizedAccessException under non-elevated Revit while the UI reports success (ssh token elevation masked this in the core harness pass); (Medium) RSTify hidden tabs reset when the first doc opens after restart despite boot log claiming 2/2 hidden. Wrote doc#4 addendum, closed QAQC-2 (flag#14), opened flag#15. Learned: WebView2 UIA tree only materializes after first interaction; WPF ribbon panel contents are UIA-blind (FromPoint fallback); windows-mcp Type crashes on empty text.');
+[06:29] In-Revit E2E GUI pass (QAQC-1 completion): bridged Windows-MCP through the vm-broker exec loop (guest bridge script + UIA driver in session 1, port 8001 after finding the dos-arch API squatting 8000). Verified sign-in wall gone (jedBPKK4), ran the doc#3 in-Revit checklist: zero-doc greyed buttons PASS; #89 blank-panel-name save rejected with field-precise toast + no file; #89 corrupt-zip import shows Import Failed dialog; #88 confirm modal lists RST under STAYING ACTIVE and RST.addin survives a real disable-unused apply. Two new bugs: (High, flag#15) all 5 promised disables fail with UnauthorizedAccessException under non-elevated Revit while the UI reports success (ssh token elevation masked this in the core harness pass); (Medium) RSTify hidden tabs reset when the first doc opens after restart despite boot log claiming 2/2 hidden. Wrote doc#4 addendum, closed QAQC-2 (flag#14), opened flag#15. Learned: WebView2 UIA tree only materializes after first interaction; WPF ribbon panel contents are UIA-blind (FromPoint fallback); windows-mcp Type crashes on empty text.
+[07:13] Patched flag #15 (doc #4 addendum findings) on branch fix/disable-unused-surfacing -> PR #93. Root causes: (a) AddinDirectoryScanner hardcoded ReadOnly:false on ProgramData roots - classification by path kind, not token; fixed with live create-temp-file probe (DirectoryWritability.CanWrite, DeleteOnClose), Revit install dir stays policy-protected and is never probed; preview+commit share the classification so preview matches commit per-token. (b) failed_disables discard was a double bug: UI mapped f.name but bridge sends {fileName} (list always empty), and the message was a 3s auto-dismiss toast racing the loader auto-close; fixed with pure failedDisableMessage() + new acknowledge-gated RSTmsgAck modal; locked by tests/ui/failed-disables.test.mjs (extracts shipped fn body, green in ./sc test). (c) RSTify tabs reset on first doc-open: Revit rebuilds tab set; added ViewActivated -> one-shot Idling -> RstifyToggle.ReassertIfDrifted() which only acts when a hide rule is active AND drifted (manual toggle-off clears rule, user never fought). Nits: pyRevit copy, REST_->RST_ branding ids. dotnet unavailable in sandbox - xunit tests (AddinSearchPathWritabilityTests) ride CI; in-Revit verify needs next VM pass. Flag #15 stays open pending merge+verify.');
 
 DELETE FROM roadmap;
 INSERT INTO roadmap (feature_id, title, roadmap_status, sort_order, owning_shell, summary, created_at, updated_at, project_id) VALUES (1, 'rst-c documentation: feature /docs pages + README md-converter conversion', 'next', 0, 1, 'Convert README to themed-markdown (md-converter) and author feature-by-feature /docs pages linked from it. Blocked on md-converter inline video support.', '2026-06-24 11:24:13', '2026-06-24 11:24:13', 1);
@@ -947,9 +984,9 @@ re-snapshots, the in-Revit half of doc #3''s checklist can run with these as-is.
 # Addendum — In-Revit GUI half — 2026-07-03
 
 QAQC-2 cleared: the operator signed in on the VM console (Autodesk account
-`jedBPKK4`); Revit 2026.4 boots straight to Home. Tests ran on the **live
-signed-in box** (not from a reset — the sign-in is NOT yet baked into the
-`clean` snapshot; a reset still re-locks QAQC-2 until the operator re-bakes).
+`jedBPKK4`) and the sign-in **is baked into the `clean` snapshot** (confirmed
+by the operator 2026-07-03) — resets are safe; in-Revit testing stays
+unblocked. Tests ran on the live signed-in box.
 
 **Method.** Windows-MCP inside the guest on port **8001** (the baked
 `windows-mcp-server` task binds 8000 and dies: the **dos-arch API test
@@ -1014,12 +1051,14 @@ ACC cache on box), upgrade-with-Revit-open.
 
 ## Box state left behind
 
-VM left **running** (sign-in must survive for the operator to re-bake —
-do NOT `/reset` before re-snapshotting). Revit closed. Leftovers, operator''s
-call before bake: profile `qaqc1_985536c5-….json` (+ `user_profile_prefs.json`
-now points at qaqc1; `example` unloaded), scheduled task `RSTMcp8001` +
+VM left **running**, Revit closed. Sign-in is already baked into `clean`, so
+a normal `/reset` is safe and will also discard this session''s leftovers:
+profile `qaqc1_985536c5-….json` (+ `user_profile_prefs.json` now points at
+qaqc1; `example` unloaded), scheduled task `RSTMcp8001` +
 `C:\Users\Public\{mcp8001.cmd,mcp_bridge.py,uia.ps1,probe8000.py,mcp8001.log/err}`.
-Fix the baked windows-mcp task port (8000 collision) at the same time.
+Still open for the next bake: fix the baked `windows-mcp-server` task port
+(8000 collides with the dos-arch API instance; this pass ran it on 8001).
+
 ', 'docs_sc/vm-test-pass-2026-07-02.md', '2026-07-02 22:06:30', '2026-07-02 22:06:30');
 
 DELETE FROM flags;
@@ -1050,7 +1089,67 @@ DELETE FROM project_shells;
 INSERT INTO project_shells (project_shell_id, project_id, shell_id, role, added_date, is_deleted) VALUES (1, 1, 1, NULL, '2026-06-24', 0);
 
 -- Project-local skills only. Engine-seeded skills come from migrations.
-DELETE FROM skills WHERE name NOT IN ('api-design', 'app_deploy_setup', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'dev_kit', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'issue_reporting', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'pm2', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit', 'windows_vm_gui');
+DELETE FROM skills WHERE name NOT IN ('api-design', 'app_deploy_setup', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'issue_reporting', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'pm2', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit', 'windows_vm_gui');
+INSERT INTO skills (name, description, category, content, command, common, is_deleted) VALUES ('dev_kit', 'What the sandbox dev kit provides + how to drive it — ./sc deps, ./sc test, ./sc lint, ./sc typecheck, the .venv tools, rg/sqlite3, the baked browser, and the container/host app boundary. Use when building or testing in a fork.', 'substrate', '# dev_kit — the sandbox dev kit
+
+What you have to build, test, and inspect a fork — and the one boundary that
+trips shells up.
+
+## You are in a container
+
+You run **inside the sandbox container**; the repo is bind-mounted at its host
+path. The app the FnB watches in their browser is a **separate instance** — the
+host-supervised stack (pm2 / `make`), outside your container. To *see* the app
+yourself, run a dev server **inside** the sandbox on `0.0.0.0:$SC_DEV_PORT`; the
+FnB reaches that instance at `http://127.0.0.1:$SC_DEV_PORT`. (See the boot
+doc''s `RUNNING THE APP` section.)
+
+## Install + run
+
+- `./sc deps` — install the fork''s deps into the bind-mount: a repo-root `.venv`
+  from every `requirements*.txt` (fork pins win) + `npm ci`/`install` per
+  `package.json`. Persists across image rebuilds. **Run this first.**
+- `./sc test` — backend (`.venv` pytest honoring the fork''s `pytest.ini`, else
+  the engine''s stdlib unittest) + UI (`npm run test` / vitest where a `test`
+  script is declared). Non-zero if any suite fails.
+
+## The `.venv` dev kit
+
+`./sc deps` layers these onto the fork''s own deps with `--upgrade-strategy
+only-if-needed`, so a fork''s pins and its `[tool.ruff]`/`[tool.mypy]` config
+always win. **Available, not enforced** — opt in per fork.
+
+- `./sc lint [paths]` → `.venv/bin/ruff check` — lint + format-check.
+  (`.venv/bin/ruff format` to apply formatting.)
+- `./sc typecheck [paths]` → `.venv/bin/mypy` — Python type-check.
+- `.venv/bin/pytest` / `coverage` / `httpx` — test + HTTP client (also via `./sc test`).
+- `.venv/bin/datasette <db.sqlite>` — browse a SQLite DB in a web GUI when the
+  `sqlite3` CLI isn''t enough. Bind `0.0.0.0:$SC_DEV_PORT` to view it from the host.
+
+> The `.venv` baseline only materializes when the fork declares Python (a
+> `requirements*.txt`). A pure-frontend fork gets node only.
+
+## Baked into the image
+
+Always present, no `./sc deps` needed:
+
+- `rg` (ripgrep), `sqlite3` CLI, `curl`, `node` 22 / `npm`.
+- **Playwright + Chromium** at `PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright`
+  (world-readable). The fork''s `@playwright/test` / `playwright` runner resolves
+  it automatically — E2E drives the *running* app over HTTP, so start a dev
+  server first.
+
+## Frontend checks
+
+`svelte-check`, `tsc`, vitest come from the fork''s own `package.json` devDeps —
+installed by `./sc deps`'' `npm ci`, run via the fork''s npm scripts (or `./sc test`).
+
+## Stance
+
+`./sc deps` before anything else in a fresh sandbox — qwen''s "node missing" was
+just deps-not-installed. Lint/type-check are there when you want them, never
+forced; respect the fork''s config. To see the app, run a dev server in the
+container — never restart the FnB''s host stack.', NULL, 0, 0) ON CONFLICT(name) DO UPDATE SET description=excluded.description, category=excluded.category, content=excluded.content, command=excluded.command, common=excluded.common, is_deleted=excluded.is_deleted;
 
 DELETE FROM shell_skills;
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='api-design';
@@ -1134,6 +1233,26 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHERE name='surface_catalogue';
 
 DELETE FROM shell_messages;
+
+DELETE FROM flavor_defaults;
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('dev', 'codex', 'gpt-5.5', 1);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('dev', 'claude', 'opus', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('dev', 'opencode', 'ollama-cloud/qwen3-coder-next', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('cartographer', 'codex', 'gpt-5.4', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('cartographer', 'claude', 'sonnet', 1);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('cartographer', 'opencode', 'ollama-cloud/glm-5.2', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('planner', 'codex', 'gpt-5.5', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('planner', 'claude', 'opus', 1);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('planner', 'opencode', 'ollama-cloud/deepseek-v4-pro', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('reviewer', 'codex', 'gpt-5.5', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('reviewer', 'claude', 'opus', 1);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('reviewer', 'opencode', 'ollama-cloud/glm-5.2', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('admin', 'codex', 'gpt-5.5', 1);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('admin', 'claude', 'sonnet', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('admin', 'opencode', 'ollama-cloud/deepseek-v4-pro', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('devops', 'codex', 'gpt-5.5', 1);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('devops', 'claude', 'sonnet', 0);
+INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('devops', 'opencode', 'ollama/qwen3-coder:480b-cloud', 0);
 
 COMMIT;
 PRAGMA foreign_keys=ON;

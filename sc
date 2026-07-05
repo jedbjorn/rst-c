@@ -599,15 +599,30 @@ case "$cmd" in
   mem)          exec "$PY" "$S/mem.py" "$@" ;;
   # Raw read passthrough to the engine + map DBs, resolved by absolute path so no
   # skill example ever needs a cwd-relative `sqlite3 .super-coder/…` (which pulls a
-  # shell into `cd`-ing to the root — the cwd trap). Writes still go via `sc mem`
-  # (triggers/caps); this is the read convenience for schema/catalogue queries.
-  sql)          exec sqlite3 "$DB" "$@" ;;
-  map-sql)      exec sqlite3 "$MAPDB" "$@" ;;
+  # shell into `cd`-ing to the root — the cwd trap). Read-only is ENFORCED
+  # (sqlite3 -readonly), matching the label: writes go via `sc mem`
+  # (triggers/caps). The -rw variants are the explicit escape hatch for the few
+  # procedures with no dedicated surface (direct skill INSERTs, cartographer
+  # map authoring) — only use one where a skill names it. Skill grants have
+  # their own surface now: `./sc skill`.
+  sql)          exec sqlite3 -readonly "$DB" "$@" ;;
+  map-sql)      exec sqlite3 -readonly "$MAPDB" "$@" ;;
+  sql-rw)       exec sqlite3 "$DB" "$@" ;;
+  map-sql-rw)   exec sqlite3 "$MAPDB" "$@" ;;
   render)       [ $# -gt 0 ] && exec "$PY" "$S/render.py" "$@" || exec "$PY" "$S/render.py" flat ;;
   render-check) exec "$PY" "$S/render_check.py" ;;
-  map)          exec "$PY" "$S/map_repo.py" ;;
+  map)          case "${1:-}" in
+                  -h|--help) echo "usage: ./sc map — rescan the host repo into the dr_* catalogue (.sc-state/map.db); takes no arguments"
+                             exit 0 ;;
+                  ?*)        echo "sc map: unknown argument '$1' (takes none; -h for usage)" >&2
+                             exit 2 ;;
+                esac
+                exec "$PY" "$S/map_repo.py" ;;
   map-setup)    exec "$PY" "$S/map_setup.py" ;;
   seed-skills)  exec "$PY" "$S/seed_skills.py" ;;
+  # Skill catalogue write surface — grants/retirement by name, loud on a miss
+  # (the raw-SQL grant's silent no-op class). Snapshot is still the persist step.
+  skill)        exec "$PY" "$S/skill.py" "$@" ;;
   ports)        exec "$PY" "$S/ports.py" show ;;
   preview)      exec "$PY" "$S/preview.py" "$@" ;;
   # ── in-container primitives (no docker; also the host escape hatch) ──
@@ -621,6 +636,10 @@ case "$cmd" in
   vm-broker-up)      sc_vm_broker_up ;;
   vm-broker-down)    sc_vm_broker_down ;;
   vm-broker-sock)    exec "$PY" "$S/vm.py" sock ;;
+  # In-sandbox half of the GUI seam (#263): TCP→unix relay so `claude mcp add
+  # --transport http` can reach the broker's vm-mcp.sock tunnel. Runs IN the
+  # container; the broker-side half is `POST /mcp/up` on the vm-broker socket.
+  vm-mcp-relay)      exec "$PY" "$S/vm_mcp_relay.py" "$@" ;;
   vm-broker-install)   sc_vm_broker_install ;;
   vm-broker-uninstall) sc_vm_broker_uninstall ;;
   # ── Tailnet broker (HOST-side primitive — runs where the tailnet node lives) ──
@@ -785,13 +804,18 @@ super-coder — forkable shell substrate
   ./sc snapshot            dump per-instance tables -> .sc-state/content.sql
   ./sc mem <cmd> [args]    a shell's own memory, over the engine API (get/state/seed/lns/decision/flag/roadmap/doc/narrative);
                              identity is the shell's token, server-resolved — no DB path, no direct-DB fallback. `./sc mem which` to orient
-  sc sql "<query>"         read passthrough to the engine DB (schema/skills/flags) — absolute path, cwd-independent (no `cd` to root)
-  sc map-sql "<query>"     read passthrough to the repo-map DB (dr_* catalogue) — absolute path, cwd-independent
+  sc sql "<query>"         read-only passthrough to the engine DB (schema/skills/flags) — absolute path, cwd-independent (no `cd` to root)
+  sc map-sql "<query>"     read-only passthrough to the repo-map DB (dr_* catalogue) — absolute path, cwd-independent
+  sc sql-rw / map-sql-rw   read-WRITE passthroughs — bypass the API's triggers/caps; `sc mem` is the write path.
+                             Only for procedures with no API surface (map authoring) where a skill names it
+  ./sc skill <cmd>         skill catalogue surface: list · grant <name> <shell>... · revoke <name> <shell>... · rm <name> · retire <name> · unretire <name>
+                             shells by id or shortname; rm refuses engine skills — retire/unretire manages the fork retire
+                             list (.sc-state/skills_retired.json, rides updates); snapshot after writes to persist
   ./sc render              render tracked flat _sc files (specs/docs/skills/roadmap)
   ./sc render-check        fail if committed flat _sc files drift from the DB render (CI guard; rebuild first for a hermetic check)
   ./sc map                 scan the host repo into the dr_* catalogue (re-runnable)
   ./sc map-setup           wire the auto-remap git hooks (core.hooksPath) + map — the cartographer's one-shot
-  ./sc seed-skills         regenerate the skills seed migration from assets/skills/
+  ./sc seed-skills         upsert assets/skills/ into the live DB (+ regenerate the seed migration — source repo only)
   ./sc init                seed a fresh fork's first user + shell (run once after install)
 
   Sandbox (docker — the default way to run; allow-everything is safe because the
@@ -826,6 +850,10 @@ super-coder — forkable shell substrate
   ./sc vm-broker-sock      print the broker's socket path
   ./sc vm-broker-install   supervise via a systemd --user unit (survives logout/reboot)
   ./sc vm-broker-uninstall remove the systemd unit
+  ./sc vm-mcp-relay        in-SANDBOX half of the GUI seam: up [port] / down / status —
+                             TCP 127.0.0.1:18000 → the broker's vm-mcp.sock tunnel, so
+                             `claude mcp add --transport http` reaches the guest's Windows-MCP
+                             (broker half: POST /mcp/up on the vm-broker socket)
 
   Tailnet broker (run on the HOST — drives the tailnet for sandboxed forks; holds
   the already-`tailscale up` node so the fork never holds a tailnet credential.
