@@ -45,6 +45,11 @@ SC_NET="${SC_NET:-sc-net}"
 # against real Postgres inside the sandbox, isolated from any host PG.
 PGNAME="sc-pg-$(basename "$here")"
 PGVOL="sc-pg-$(basename "$here")-data"
+# /dev/shm for the sidecar. Docker's 64MB default is too small for postgres's
+# posix DSM (parallel-query segments) — concurrent suites exhaust it and trip a
+# postmaster crash-reinit that kills every connection (#298). tmpfs, allocated
+# on use, so a generous cap is cheap. Override with SC_PG_SHM.
+SC_PG_SHM="${SC_PG_SHM:-1g}"
 
 # Fail fast with the fix if the docker daemon isn't reachable, instead of a
 # cryptic build/run error. Host setup is one-time and lives in `./sc doctor` /
@@ -522,6 +527,109 @@ sc_pm2_broker_uninstall() {
   echo "→ pm2-broker systemd unit removed ($PM2_BROKER_UNIT)"
 }
 
+# ── db broker (HOST-side; read-only diagnostic access to the LIVE app DB) ─────
+# A host-side broker that shells out to `psql` where the live DSN + route
+# resolve, exposing ONE narrow verb (a single allowlisted, capped, read-only
+# SELECT) over a unix socket in the bind-mounted engine dir so the `db_query`
+# skill (in the container) can curl it. The sandbox holds no DSN and no route.
+# Read-only twice: the DSN must point at a read-only PG role AND dbq.py rejects
+# any non-SELECT before psql runs. Refuses to run in the sandbox (db_broker.py
+# guards on SC_SANDBOX). Same lifecycle model as its siblings: `up` no-ops when
+# the socket already answers; `down` only stops what IT started.
+DB_BROKER_PID="$ENGINE/run/db-broker.pid"
+DB_BROKER_UNIT="sc-db-broker-$(basename "$here").service"
+
+sc_db_broker_alive() {
+  sock="$("$PY" "$S/dbq.py" sock)"
+  [ -S "$sock" ] || return 1
+  curl -s --unix-socket "$sock" http://db/health 2>/dev/null | grep -q '"ok": true'
+}
+sc_db_broker_up() {
+  if ! "$PY" "$S/dbq.py" configured; then
+    echo "→ db-broker: no live DB linked (instance.json has no \`db\` block) — nothing to serve"; return 0
+  fi
+  if sc_db_broker_alive; then echo "→ db-broker already serving $("$PY" "$S/dbq.py" sock)"; return 0; fi
+  mkdir -p "$ENGINE/run"
+  nohup "$PY" "$ENGINE/api/db_broker.py" >"$ENGINE/run/db-broker.log" 2>&1 &
+  echo $! > "$DB_BROKER_PID"
+  echo "→ db-broker up (pid $!) · socket $("$PY" "$S/dbq.py" sock) · log $ENGINE/run/db-broker.log"
+}
+sc_db_broker_down() {
+  if [ -f "$DB_BROKER_PID" ] && kill -0 "$(cat "$DB_BROKER_PID" 2>/dev/null)" 2>/dev/null; then
+    kill "$(cat "$DB_BROKER_PID")" && echo "→ db-broker stopped"
+  elif sc_db_broker_alive; then
+    echo "→ db-broker is running but not from \`db-broker-up\` (systemd?) — leaving it; use db-broker-uninstall"
+  else
+    echo "→ db-broker not running"
+  fi
+  rm -f "$DB_BROKER_PID"
+}
+sc_db_broker_install() {
+  command -v systemctl >/dev/null 2>&1 || { echo "✗ db-broker-install: systemd (systemctl) not found on this host" >&2; return 1; }
+  unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  mkdir -p "$unit_dir"
+  # The DSN is read from the host env at query time; a systemd unit has no login
+  # shell, so point it at an EnvironmentFile the operator controls (host-side,
+  # never mounted). SC_RO_ENVFILE overrides the default path.
+  envfile="${SC_RO_ENVFILE:-$HOME/.config/$(basename "$here")/db-broker.env}"
+  cat > "$unit_dir/$DB_BROKER_UNIT" <<UNIT
+[Unit]
+Description=super-coder db-broker ($(basename "$here")) — host-side read-only DB broker
+After=network.target
+
+[Service]
+EnvironmentFile=-$envfile
+ExecStart=$PY $ENGINE/api/db_broker.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+UNIT
+  systemctl --user daemon-reload
+  loginctl enable-linger "$(id -un)" >/dev/null 2>&1 || true
+  sc_db_broker_down >/dev/null 2>&1 || true
+  systemctl --user enable --now "$DB_BROKER_UNIT"
+  echo "→ db-broker installed as systemd --user unit: $DB_BROKER_UNIT (enabled, started, linger on)"
+  echo "  DSN env-file: $envfile (create it host-side with: SC_RO_DSN=postgresql://…)"
+  echo "  status: systemctl --user status $DB_BROKER_UNIT   ·   logs: journalctl --user -u $DB_BROKER_UNIT"
+}
+sc_db_broker_uninstall() {
+  command -v systemctl >/dev/null 2>&1 || { echo "✗ db-broker-uninstall: systemd not found" >&2; return 1; }
+  systemctl --user disable --now "$DB_BROKER_UNIT" 2>/dev/null || true
+  rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$DB_BROKER_UNIT"
+  systemctl --user daemon-reload
+  echo "→ db-broker systemd unit removed ($DB_BROKER_UNIT)"
+}
+sc_db_init() {
+  f="$ENGINE/instance.json"
+  if [ -f "$f" ] && "$PY" -c "import json,sys; d=json.load(open('$f')); sys.exit(0 if 'db' in d else 1)" 2>/dev/null; then
+    echo "→ db: already configured in $f"
+  elif [ -f "$f" ]; then
+    "$PY" -c "
+import json,pathlib
+p=pathlib.Path('$f')
+d=json.loads(p.read_text())
+d['db']={'dsn_env':'SC_RO_DSN','allow_tables':['skill_runs','tool_call_attempts','models'],'row_cap':1000,'statement_timeout_ms':5000}
+p.write_text(json.dumps(d,indent=2)+'\n')
+print('-> db: added to $f')
+"
+  else
+    printf '{\"db\":{\"dsn_env\":\"SC_RO_DSN\",\"allow_tables\":[\"skill_runs\",\"tool_call_attempts\",\"models\"],\"row_cap\":1000,\"statement_timeout_ms\":5000}}\n' > "$f"
+    echo "→ db: created $f with db block"
+  fi
+  echo "  Host-side setup (the sandbox never sees the credential):"
+  echo "    1. Provision a read-only role on the live DB, e.g.:"
+  echo "         CREATE ROLE sc_ro LOGIN PASSWORD '…';"
+  echo "         GRANT CONNECT ON DATABASE <db> TO sc_ro;"
+  echo "         GRANT USAGE ON SCHEMA public TO sc_ro;"
+  echo "         GRANT SELECT ON skill_runs, tool_call_attempts, models TO sc_ro;"
+  echo "    2. Export its DSN for the broker's environment:"
+  echo "         export SC_RO_DSN=postgresql://sc_ro:…@<host>:5432/<db>"
+  echo "    3. Start it host-side: ./sc db-broker-up   (or ./sc db-broker-install)"
+  echo "  Widen allow_tables (+ the role's GRANTs) to expose more; content tables stay gated."
+}
+
 # ── Postgres sidecar (HOST-side Docker container on $SC_NET — APP-ONLY) ───────
 # A named postgres:17 container alongside the sandbox on SC_NET. The sandbox
 # reaches it by hostname ($PGNAME) with DATABASE_URL forwarded in, so the fork's
@@ -547,6 +655,7 @@ sc_pg_up() {
   docker volume create "$PGVOL" >/dev/null
   docker run -d --name "$PGNAME" --restart unless-stopped \
     --network "$SC_NET" \
+    --shm-size "$SC_PG_SHM" \
     -e POSTGRES_USER=sc \
     -e POSTGRES_PASSWORD=sc \
     -e POSTGRES_DB=sc \
@@ -578,6 +687,32 @@ print('-> pg: added to $f')
     echo "→ pg: created $f with pg block"
   fi
   echo "  next: ./sc pg-up   (or ./sc launch — pg starts automatically)"
+}
+
+
+# WAL-safe DB backup via sqlite3's online-backup API — a plain file copy of a
+# live WAL database misses un-checkpointed pages (they live in the -wal
+# sidecar). Same dir + naming + keep-5 pruning as rebuild.py/rollback.py.
+sc_db_backup() {
+  "$PY" - "$DB" "$(basename "$ROOT")" "${1:-manual}" <<'EOF'
+import sqlite3, sys, time
+from pathlib import Path
+db, repo, prefix = sys.argv[1:4]
+if not Path(db).exists():
+    print("→ no DB yet — nothing to back up"); raise SystemExit(0)
+bdir = Path.home() / "db_backups" / repo
+bdir.mkdir(parents=True, exist_ok=True)
+dst = bdir / f"shell_db.{prefix}.{time.strftime('%Y%m%d_%H%M%S')}.db"
+src = sqlite3.connect(db); out = sqlite3.connect(dst)
+try:
+    with out:
+        src.backup(out)
+finally:
+    out.close(); src.close()
+for old in sorted(bdir.glob(f"shell_db.{prefix}.*.db"))[:-5]:
+    old.unlink()
+print(f"→ DB backed up -> {dst}")
+EOF
 }
 
 
@@ -656,6 +791,14 @@ case "$cmd" in
   pm2-broker-sock)    exec "$PY" "$S/pm2.py" sock ;;
   pm2-broker-install)   sc_pm2_broker_install ;;
   pm2-broker-uninstall) sc_pm2_broker_uninstall ;;
+  # ── db broker (HOST-side primitive — runs where the live DSN + route live) ──
+  db-broker)         exec "$PY" "$ENGINE/api/db_broker.py" "$@" ;;
+  db-broker-up)      sc_db_broker_up ;;
+  db-broker-down)    sc_db_broker_down ;;
+  db-broker-sock)    exec "$PY" "$S/dbq.py" sock ;;
+  db-broker-install)   sc_db_broker_install ;;
+  db-broker-uninstall) sc_db_broker_uninstall ;;
+  db-init)      sc_db_init ;;
   # ── Postgres sidecar (app-only) ──
   pg-init)      sc_pg_init ;;
   pg-up)        sc_pg_up ;;
@@ -776,7 +919,26 @@ case "$cmd" in
                 sc_ts_broker_down
                 sc_pm2_broker_down
                 sc_pg_down ;;
-  restart)      "$0" down; exec "$0" launch "$@" ;;
+  # restart is a hard bounce — down runs `docker rm -f`, which SIGKILLs every
+  # live session inside the sandbox along with whatever those sessions had not
+  # yet written to the DB. Too easy to reach by accident (dos-r sits next to
+  # dos-e), so: typed confirmation (only YES / Yes / yes proceed — anything
+  # else, including a closed stdin, aborts) + a WAL-safe DB backup BEFORE
+  # anything is torn down. --yes/-y skips the prompt for scripted callers.
+  restart)
+    case "${1:-}" in
+      -y|--yes) shift ;;
+      *)
+        echo "restart recreates the sandbox — live sessions inside it are killed."
+        printf "ARE YOU SURE YOU WANT TO RESTART? (YES/no): "
+        ans=""; read -r ans || true
+        case "$ans" in
+          YES|Yes|yes) ;;
+          *) echo "→ restart aborted (nothing touched)"; exit 1 ;;
+        esac ;;
+    esac
+    sc_db_backup prerestart
+    "$0" down; exec "$0" launch "$@" ;;
   build)        dcheck; dbuild ;;
   logs)         exec docker logs -f "$CNAME" ;;
   verify)
@@ -826,7 +988,7 @@ super-coder — forkable shell substrate
                              harness: --harness <name> or HARNESS=<name> forces it; else when
                              >1 harness is on PATH you're prompted (per-launch, not persisted)
   ./sc down                stop + remove the sandbox container
-  ./sc restart             down + launch — recreate the sandbox fresh
+  ./sc restart             confirm (YES) + DB backup, then down + launch — recreate fresh (--yes skips the prompt)
   ./sc build               (re)build the sandbox image
   ./sc logs                tail the sandbox server logs
 
@@ -876,6 +1038,18 @@ super-coder — forkable shell substrate
   ./sc pm2-broker-install  supervise via a systemd --user unit (survives logout/reboot)
   ./sc pm2-broker-uninstall remove the systemd unit
 
+  db broker (run on the HOST — read-only diagnostic reads of the fork's LIVE app
+  DB for a sandboxed shell, without handing it a DSN or a route. Shells out to
+  psql host-side; SELECT-only + table allowlist + row cap; the DSN must be a
+  read-only role. One-time: ./sc db-init. See .super-coder/docs/db-broker.md.
+  ./sc db-init             add the "db" block to instance.json + print host setup steps
+  ./sc db-broker           run the broker in the foreground (unix socket)
+  ./sc db-broker-up        start it in the background (nohup + pidfile); self-skips if unlinked/already up
+  ./sc db-broker-down      stop the backgrounded broker
+  ./sc db-broker-sock      print the broker's socket path
+  ./sc db-broker-install   supervise via a systemd --user unit (survives logout/reboot)
+  ./sc db-broker-uninstall remove the systemd unit
+
   Postgres sidecar (app-only; docker container on SC_NET, data in a named volume).
   For developing/testing the fork's APP against real Postgres in the sandbox — the
   engine DB stays SQLite. One-time: ./sc pg-init (adds "pg" to instance.json).
@@ -883,6 +1057,7 @@ super-coder — forkable shell substrate
   ./sc pg-init             add the "pg" key to instance.json (enables the sidecar)
   ./sc pg-up               start the postgres:17 container; self-skips if unconfigured/already up
   ./sc pg-down             stop + remove the container (data volume retained)
+                             (recreate via pg-down→pg-up to change --shm-size / SC_PG_SHM)
 
   ./sc verify              rebuild + flat render + render-only boot (headless proof)
   ./sc health              curl the review layer's /api/health

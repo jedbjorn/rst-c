@@ -1089,7 +1089,7 @@ DELETE FROM project_shells;
 INSERT INTO project_shells (project_shell_id, project_id, shell_id, role, added_date, is_deleted) VALUES (1, 1, 1, NULL, '2026-06-24', 0);
 
 -- Project-local skills only. Engine-seeded skills come from migrations.
-DELETE FROM skills WHERE name NOT IN ('agents', 'api-design', 'app_deploy_setup', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'issue_reporting', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'pm2', 'query_authoring_pg', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit', 'windows_vm_gui');
+DELETE FROM skills WHERE name NOT IN ('agents', 'api-design', 'app_deploy_setup', 'authoring_syntax', 'blueprint', 'bootstrap', 'cartographer', 'configure_winbox', 'database-migrations', 'db_map', 'docs', 'flag_sweep', 'flags', 'git', 'git_cleanup', 'issue_reporting', 'local_skill_management', 'memory', 'messaging', 'migration_management', 'onboard', 'pm2', 'query_authoring_pg', 'redline_review', 'review', 'self_update', 'snapshot', 'spec', 'sprint', 'sprint_orchestration', 'surface_catalogue', 'tailscale', 'test_authoring', 'test_authoring_pg', 'test_authoring_sqlite', 'windows_devkit', 'windows_vm_gui');
 INSERT INTO skills (name, description, category, content, command, common, is_deleted) VALUES ('dev_kit', 'What the sandbox dev kit provides + how to drive it — ./sc deps, ./sc test, ./sc lint, ./sc typecheck, the .venv tools, rg/sqlite3, the baked browser, and the container/host app boundary. Use when building or testing in a fork.', 'substrate', '# dev_kit — the sandbox dev kit
 
 What you have to build, test, and inspect a fork — and the one boundary that
@@ -1163,7 +1163,9 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='memory';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='messaging';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='onboard';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='sprint_orchestration';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 1, skill_id FROM skills WHERE name='surface_catalogue';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='authoring_syntax';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='bootstrap';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='configure_winbox';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 2, skill_id FROM skills WHERE name='db_map';
@@ -1189,6 +1191,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='messaging';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='redline_review';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='spec';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='sprint';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='test_authoring';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 3, skill_id FROM skills WHERE name='windows_devkit';
@@ -1206,6 +1209,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='messaging';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='redline_review';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='spec';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='sprint';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='test_authoring';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 4, skill_id FROM skills WHERE name='windows_devkit';
@@ -1222,6 +1226,7 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHE
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='messaging';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='redline_review';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='review';
+INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='sprint';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='surface_catalogue';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='test_authoring';
 INSERT INTO shell_skills (shell_id, skill_id) SELECT 5, skill_id FROM skills WHERE name='windows_devkit';
