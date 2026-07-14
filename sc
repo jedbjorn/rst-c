@@ -178,6 +178,48 @@ sc_deps() {
   base_reqs="$(printf '%s\n' "$reqs" | grep -v 'requirements-dev\.txt' || true)"
   if [ -n "$skip_py" ]; then
     echo "→ deps: python deps are host-managed (pinned interpreter mounted by launch) — skipping venv/pip in the sandbox"
+    # Never green-lie the skip (#314/#324/#339): the pinned tree carries what
+    # the host installed at launch time, which silently lags the fork's
+    # declared pins (a branch adds requirements → deps says done → 12 mystery
+    # ModuleNotFoundError test failures). Verify every declared pin resolves
+    # in the mounted tree; a missing one is a hard failure with the fix named,
+    # not a ✓. (Installing from in here stays off-limits by design — the tree
+    # is host-managed and shared.)
+    if [ -n "$base_reqs" ]; then
+      missing="$(printf '%s\n' "$base_reqs" | "$venv/bin/python" -c '
+import importlib.metadata as md, re, sys
+missing = []
+for path in (l.strip() for l in sys.stdin):
+    if not path:
+        continue
+    try:
+        lines = open(path).read().splitlines()
+    except OSError:
+        continue
+    for raw in lines:
+        line = raw.split("#", 1)[0].strip()
+        # skip options (-r/-e/--hash), URL/path requirements — only plain pins verify
+        if not line or line.startswith("-") or "://" in line or line.startswith((".", "/")):
+            continue
+        name = re.split(r"[<>=!~\[; ]", line, 1)[0].strip()
+        if not name:
+            continue
+        try:
+            md.version(name)
+        except md.PackageNotFoundError:
+            missing.append(line)
+print("\n".join(missing))
+')"
+      if [ -n "$missing" ]; then
+        echo "✗ deps: host-managed venv is missing declared python deps:" >&2
+        printf '%s\n' "$missing" | sed 's/^/    /' >&2
+        echo "  Fix: install the pins above into the pinned venv — on the host (e.g. uv pip install …)," >&2
+        echo "  or \`$venv/bin/pip install <pins>\` (the mounted tree accepts installs; ownership lands root)." >&2
+        rc=1
+      else
+        echo "→ deps: host-managed tree verified — every declared python pin present"
+      fi
+    fi
   else
   # The engine dev kit lives in this .venv, so create it unconditionally — a fork
   # that declares no requirements*.txt still needs pytest on hand for `./sc test`
@@ -255,7 +297,18 @@ sc_test() {
   rc=0
   if [ -x "$venv/bin/pytest" ]; then
     echo "→ test: $venv/bin/pytest"
-    ( cd "$here" && "$venv/bin/pytest" "$@" ) || rc=1
+    ( cd "$here" && "$venv/bin/pytest" "$@" )
+    prc=$?
+    if [ "$prc" -eq 5 ] && [ $# -eq 0 ]; then
+      # pytest exit 5 = collected nothing. On a bare `./sc test` in a fork with
+      # no python tests (JS-only forks: vitest is the real suite) that is not a
+      # failure — counting it as one left every JS-only fork permanently red
+      # (#310). With explicit args a collection miss stays red: a typo'd path
+      # must not pass green.
+      echo "→ test: pytest collected no python tests — not counted as a failure (JS-only fork)"
+    elif [ "$prc" -ne 0 ]; then
+      rc=1
+    fi
   elif ls "$here"/tests/test_*.py >/dev/null 2>&1; then
     # pytest still unavailable after provisioning (venv create failed, or a
     # host-managed sandbox interpreter that skips pip). A fork that *declares*
@@ -690,6 +743,40 @@ print('-> pg: added to $f')
 }
 
 
+# ── GitHub watcher daemon (HOST-side; the fork's ONE PR poller) ───────────────
+# Sprint eventing (specs_sc/sprint-eventing.md): one poller for the whole fork
+# watches every registered PR (watched_prs) and turns transitions into
+# `pr_event` message rows. Runs HOST-side like the brokers — the host owns the
+# gh login — with the same supervision: `launch` brings it up, `down` stops it.
+# No socket, so aliveness is the pidfile, not a health curl. Self-skips when gh
+# is absent (the fork degrades to task-boundary inbox checks, never breaks).
+WATCH_DAEMON_PID="$ENGINE/run/watch-daemon.pid"
+
+sc_watch_daemon_alive() {
+  [ -f "$WATCH_DAEMON_PID" ] && kill -0 "$(cat "$WATCH_DAEMON_PID" 2>/dev/null)" 2>/dev/null
+}
+sc_watch_daemon_up() {
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "→ watch-daemon: gh CLI not found on the host — PR eventing disabled (install gh + login to enable)"; return 0
+  fi
+  if sc_watch_daemon_alive; then
+    echo "→ watch-daemon already running (pid $(cat "$WATCH_DAEMON_PID"))"; return 0
+  fi
+  mkdir -p "$ENGINE/run"
+  nohup "$PY" "$S/watch.py" daemon >"$ENGINE/run/watch-daemon.log" 2>&1 &
+  echo $! > "$WATCH_DAEMON_PID"
+  echo "→ watch-daemon up (pid $!) · log $ENGINE/run/watch-daemon.log"
+}
+sc_watch_daemon_down() {
+  if sc_watch_daemon_alive; then
+    kill "$(cat "$WATCH_DAEMON_PID")" && echo "→ watch-daemon stopped"
+  else
+    echo "→ watch-daemon not running"
+  fi
+  rm -f "$WATCH_DAEMON_PID"
+}
+
+
 # WAL-safe DB backup via sqlite3's online-backup API — a plain file copy of a
 # live WAL database misses un-checkpointed pages (they live in the -wal
 # sidecar). Same dir + naming + keep-5 pruning as rebuild.py/rollback.py.
@@ -732,6 +819,14 @@ case "$cmd" in
   migrate)      exec "$PY" "$S/migrate.py" "$DB" ;;
   snapshot)     exec "$PY" "$S/snapshot.py" ;;
   mem)          exec "$PY" "$S/mem.py" "$@" ;;
+  # ── sprint eventing: PR watches + inbox watcher (shell-side, API) and the
+  # GitHub watcher daemon (HOST-side foreground; -up/-down supervise it) ──
+  watch)             exec "$PY" "$S/watch.py" "$@" ;;
+  watch-daemon-up)   sc_watch_daemon_up ;;
+  watch-daemon-down) sc_watch_daemon_down ;;
+  # ── session-surviving local jobs: detached supervised one-shots whose
+  # completion posts a result row to the starting shell's inbox ──
+  job)               exec "$PY" "$S/job.py" "$@" ;;
   # Raw read passthrough to the engine + map DBs, resolved by absolute path so no
   # skill example ever needs a cwd-relative `sqlite3 .super-coder/…` (which pulls a
   # shell into `cd`-ing to the root — the cwd trap). Read-only is ENFORCED
@@ -805,6 +900,10 @@ case "$cmd" in
   pg-down)      sc_pg_down ;;
   boot)         exec "$PY" "$S/run.py" "$@" ;;
   boot-*)       exec "$PY" "$S/run.py" "${cmd#boot-}" "$@" ;;
+  # Headless boot (sprint eventing): same render-then-exec path as boot, minus
+  # the picker and the TTY. In-container primitive like boot — the planner
+  # calls it to stand up an ephemeral worker; also the no-docker host path.
+  run)          exec "$PY" "$S/run.py" --headless "$@" ;;
   deps)         sc_deps "$@" ;;
   test)         sc_test "$@" ;;
   lint)         sc_lint "$@" ;;
@@ -910,6 +1009,9 @@ case "$cmd" in
     sc_ts_broker_up || true
     # Same for the pm2 broker — self-skips when no `pm2` block is linked.
     sc_pm2_broker_up || true
+    # GitHub watcher daemon — the fork's one PR poller (sprint eventing).
+    # Self-skips when gh is absent; idles cheaply when no watches are live.
+    sc_watch_daemon_up || true
     # Start the PG sidecar when configured — self-skips otherwise.
     sc_pg_up || true ;;
   enter)        exec docker exec -it "$CNAME" ./sc boot "$@" ;;
@@ -918,6 +1020,7 @@ case "$cmd" in
                 sc_vm_broker_down
                 sc_ts_broker_down
                 sc_pm2_broker_down
+                sc_watch_daemon_down
                 sc_pg_down ;;
   # restart is a hard bounce — down runs `docker rm -f`, which SIGKILLs every
   # live session inside the sandbox along with whatever those sessions had not
@@ -966,6 +1069,16 @@ super-coder — forkable shell substrate
   ./sc snapshot            dump per-instance tables -> .sc-state/content.sql
   ./sc mem <cmd> [args]    a shell's own memory, over the engine API (get/state/seed/lns/decision/flag/roadmap/doc/narrative);
                              identity is the shell's token, server-resolved — no DB path, no direct-DB fallback. `./sc mem which` to orient
+  ./sc watch pr <o/r> <n>  register a PR watch (--shell <name> subscribes another shell, e.g. the planner);
+                             the watcher daemon turns its transitions into pr_event inbox rows
+  ./sc watch list          live PR watches (--all includes retired)
+  ./sc watch inbox         block until this shell has unread messages, then exit — the zero-token
+                             inbox watcher; arm as a background task and its exit is your wake-up
+  ./sc job start -- <cmd>  run a long local command (suite/bench/build) detached + supervised — it
+                             survives your session; completion lands in YOUR inbox as a result row
+                             (--label <slug> names it, --timeout <s> kills the wedged process group)
+  ./sc job wait <id>       bounded foreground wait, ≤550s slice — exit 0 done · 2 still running
+                             (drain your inbox between slices); list/status/tail/kill complete the set
   sc sql "<query>"         read-only passthrough to the engine DB (schema/skills/flags) — absolute path, cwd-independent (no `cd` to root)
   sc map-sql "<query>"     read-only passthrough to the repo-map DB (dr_* catalogue) — absolute path, cwd-independent
   sc sql-rw / map-sql-rw   read-WRITE passthroughs — bypass the API's triggers/caps; `sc mem` is the write path.
@@ -987,6 +1100,10 @@ super-coder — forkable shell substrate
   ./sc enter-<shortname>   attach + boot that shell directly (skip the shell picker)
                              harness: --harness <name> or HARNESS=<name> forces it; else when
                              >1 harness is on PATH you're prompted (per-launch, not persisted)
+  ./sc run <shortname>     headless boot: render + exec the harness NON-interactively (claude · codex ·
+                             opencode) to drain the shell's inbox and act; -p "<prompt>" overrides the
+                             default prompt · --harness <h> · -m <model> (else flavor_defaults);
+                             refuses a shell that already has a live session
   ./sc down                stop + remove the sandbox container
   ./sc restart             confirm (YES) + DB backup, then down + launch — recreate fresh (--yes skips the prompt)
   ./sc build               (re)build the sandbox image
@@ -1049,6 +1166,14 @@ super-coder — forkable shell substrate
   ./sc db-broker-sock      print the broker's socket path
   ./sc db-broker-install   supervise via a systemd --user unit (survives logout/reboot)
   ./sc db-broker-uninstall remove the systemd unit
+
+  GitHub watcher daemon (HOST-side — the fork's ONE PR poller, sprint eventing:
+  diffs every registered watch on one batched GraphQL query and writes pr_event
+  message rows; watches retire themselves on merge/close). `launch` brings it
+  up when gh is present; `down` stops it:
+  ./sc watch daemon        run the daemon in the foreground (--once = single cycle)
+  ./sc watch-daemon-up     start it in the background (nohup + pidfile); self-skips if gh missing/already up
+  ./sc watch-daemon-down   stop the backgrounded daemon
 
   Postgres sidecar (app-only; docker container on SC_NET, data in a named volume).
   For developing/testing the fork's APP against real Postgres in the sandbox — the
