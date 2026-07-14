@@ -1242,6 +1242,8 @@ INSERT INTO shell_skills (shell_id, skill_id) SELECT 6, skill_id FROM skills WHE
 
 DELETE FROM shell_messages;
 
+DELETE FROM watched_prs;
+
 DELETE FROM flavor_defaults;
 INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('dev', 'codex', 'gpt-5.5', 1);
 INSERT INTO flavor_defaults (flavor, harness, model, is_default) VALUES ('dev', 'claude', 'opus', 0);
