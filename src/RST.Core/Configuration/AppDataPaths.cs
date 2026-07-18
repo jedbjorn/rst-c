@@ -42,6 +42,33 @@ public static class AppDataPaths
     /// <summary>%AppData%\RST\profiles\.</summary>
     public static string ProfilesDir => Path.Combine(Root, "profiles");
 
+    private static string? _telemetryRootOverride;
+
+    /// <summary>
+    /// %LOCALAPPDATA%\RST\telemetry\ — deliberately NOT under the roaming
+    /// Root: roaming profiles sync %AppData%, and an outbox that roams
+    /// would merge events from different machines and collide on live
+    /// session files. Machine-scoped state (install_id, outbox) lives
+    /// here; telemetry *preferences* stay roaming (TelemetryPrefs).
+    /// </summary>
+    public static string TelemetryRoot =>
+        _telemetryRootOverride ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RST", "telemetry");
+
+    /// <summary>%LOCALAPPDATA%\RST\telemetry\outbox\ — one .jsonl per session.</summary>
+    public static string TelemetryOutboxDir => Path.Combine(TelemetryRoot, "outbox");
+
+    /// <summary>
+    /// Test hook — same pattern as <see cref="OverrideRootForTests"/>,
+    /// separate override because TelemetryRoot resolves to LocalAppData,
+    /// not the roaming Root. Pass null to restore real resolution.
+    /// </summary>
+    public static void OverrideTelemetryRootForTests(string? root)
+    {
+        _telemetryRootOverride = root;
+    }
+
     /// <summary>%AppData%\RST\active_profile.json — pointer to the loaded profile.</summary>
     public static string ActiveProfileFile => Path.Combine(Root, "active_profile.json");
 
