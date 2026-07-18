@@ -38,7 +38,7 @@ public sealed class RstApplication : IExternalApplication
     private UIControlledApplication? _uiControlledApp;
     private bool _reassertQueued;
     private static ProfileSwitchScheduler? _switchScheduler;
-    private TelemetryCollector? _telemetry;
+    private static TelemetryCollector? _telemetry;
 
     /// <summary>
     /// Single ExternalEvent-backed switch scheduler shared across every
@@ -47,6 +47,16 @@ public sealed class RstApplication : IExternalApplication
     /// invocation would race with Revit's idle pump.
     /// </summary>
     internal static IProfileSwitchScheduler? GetSwitchScheduler() => _switchScheduler;
+
+    /// <summary>
+    /// The session's telemetry collector, for the consent/Activity
+    /// wiring (HealthCommand reads the live session identity and routes
+    /// the collection toggle here). Null when telemetry failed to start
+    /// — callers treat that as "no live session". Static for the same
+    /// reason as the switch scheduler: Revit holds one application
+    /// instance, and command classes have no path to it.
+    /// </summary>
+    internal static TelemetryCollector? GetTelemetry() => _telemetry;
 
     public Result OnStartup(UIControlledApplication application)
     {
@@ -121,6 +131,17 @@ public sealed class RstApplication : IExternalApplication
             _initializedHandler = null;
         }
 
+        BuildProfileTab(sender);
+
+        // One-time consent notice (telemetry spec Consent & Config) —
+        // after the profile tab is up, so the modal never sits between
+        // Revit and the ribbon build. Runs on the paths that skip the
+        // build too (no active profile); its own guard, never throws.
+        ConsentNotice.ShowIfDue(_telemetry, m => Log.Warning("Telemetry: {Message}", m));
+    }
+
+    private static void BuildProfileTab(object? sender)
+    {
         try
         {
             if (sender is not Application app)

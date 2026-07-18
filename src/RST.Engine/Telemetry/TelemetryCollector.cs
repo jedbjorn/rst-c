@@ -50,6 +50,7 @@ public sealed class TelemetryCollector : IDisposable
     private readonly System.Collections.Generic.HashSet<string> _warnedSites = new();
 
     private readonly CollectorLifecycle _lifecycle;
+    private readonly TelemetrySession _session;
     // Per-session constants, read once at construction so session_start
     // enrichment (which runs under the lifecycle gate) touches no Revit
     // API (SC-030).
@@ -68,6 +69,7 @@ public sealed class TelemetryCollector : IDisposable
     {
         _uiApp = uiApp;
         _app = uiApp.ControlledApplication;
+        _session = session;
         _installId = installId;
         _addinVersion = addinVersion;
         _log = log;
@@ -82,6 +84,15 @@ public sealed class TelemetryCollector : IDisposable
 
     /// <summary>True while collection is on. Flip via <see cref="SetEnabled"/>.</summary>
     public bool IsEnabled => _lifecycle.IsEnabled;
+
+    /// <summary>This session's guid — the Activity tab hands it to the
+    /// aggregator so this session's outbox file reads as live.</summary>
+    public string SessionGuid => _session.SessionGuid;
+
+    /// <summary>ts of this session's session_start event, once written;
+    /// null until then (and for the whole session when collection never
+    /// runs). The Activity tab's current-session clock ticks from it.</summary>
+    public DateTimeOffset? SessionStartUtc => _lifecycle.SessionStartUtc;
 
     /// <summary>
     /// Read prefs, resolve the install id, open the session, subscribe,

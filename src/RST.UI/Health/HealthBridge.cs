@@ -44,17 +44,24 @@ public class HealthBridge
     private readonly HealthContext _context;
     private readonly Action _closeRequested;
     private readonly Action<bool>? _telemetryToggled;
+    private readonly Func<DateTimeOffset?>? _liveSessionStartUtc;
 
     /// <param name="telemetryToggled">Invoked after the collection toggle
     /// persists a NEW enabled state — the seam the consent/collector
     /// wiring (telemetry Build Plan step 5) hooks to emit marker events
     /// and stop/start the heartbeat. Null until then.</param>
+    /// <param name="liveSessionStartUtc">Live read of the collector's
+    /// session_start ts, preferred over the context's captured value so
+    /// a mid-window enable (which emits session_start right then) starts
+    /// the session clock on the very next refresh. Null → context only.</param>
     public HealthBridge(HealthContext context, Action closeRequested,
-                        Action<bool>? telemetryToggled = null)
+                        Action<bool>? telemetryToggled = null,
+                        Func<DateTimeOffset?>? liveSessionStartUtc = null)
     {
         _context = context ?? HealthContext.Empty;
         _closeRequested = closeRequested ?? (() => { });
         _telemetryToggled = telemetryToggled;
+        _liveSessionStartUtc = liveSessionStartUtc;
         Log.Information("HealthBridge ready: revit={Revit}, model={Model}",
                         _context.RevitVersion, _context.ModelName);
     }
@@ -203,7 +210,9 @@ public class HealthBridge
                 rangeDays,
                 session = new
                 {
-                    startTs = _context.TelemetrySessionStartUtc,
+                    startTs = _liveSessionStartUtc is null
+                        ? _context.TelemetrySessionStartUtc
+                        : _liveSessionStartUtc(),
                     currentFileOpenTs = series.LiveOpenSinceUtc,
                 },
                 file = currentFile is null ? null : (object)new

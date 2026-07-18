@@ -37,7 +37,16 @@ public sealed class HealthCommand : IExternalCommand
             var context = CaptureContext(commandData);
             Log.Information("=== Health session opened: revit={Version}, model={Model} ===",
                             context.RevitVersion, context.ModelName);
-            HealthHost.ShowModal(context);
+            // The Activity footer toggle routes back to the live
+            // collector (markers + heartbeat); resolved at invoke time
+            // so a collector that failed to start degrades to a no-op —
+            // the preference still persists via the bridge. The session
+            // start is a live read for the same reason: a mid-window
+            // enable emits session_start, and the clock should tick on
+            // the very next refresh.
+            HealthHost.ShowModal(context,
+                telemetryToggled: enabled => RstApplication.GetTelemetry()?.SetEnabled(enabled),
+                liveSessionStartUtc: () => RstApplication.GetTelemetry()?.SessionStartUtc);
             Log.Information("=== Health session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }
@@ -128,6 +137,11 @@ public sealed class HealthCommand : IExternalCommand
             catch (Exception ex) { Log.Debug(ex, "HealthCommand: GetWarnings failed"); }
         }
 
+        // Live telemetry session for the Activity tab's current-session
+        // block. Null collector (failed start) or a session that never
+        // collected → nulls; the tab renders its em-dash state.
+        var telemetry = RstApplication.GetTelemetry();
+
         return new HealthContext
         {
             RevitVersion = version,
@@ -144,6 +158,8 @@ public sealed class HealthCommand : IExternalCommand
             CentralPath = centralPath,
             IsWorkshared = isWorkshared,
             IsCloud = isCloud,
+            TelemetrySessionGuid = telemetry?.SessionGuid,
+            TelemetrySessionStartUtc = telemetry?.SessionStartUtc,
         };
     }
 
