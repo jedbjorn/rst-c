@@ -4,9 +4,11 @@
 //
 // Every field read wraps in its own guard → null: an identity gap is
 // data, never an exception surfaced to Revit. All reads are cheap
-// property reads except BasicFileInfo.Extract, which reads one local
-// file header and therefore only runs for the full block (doc_opened /
-// doc_saved / doc_saved_as) — never on the keys-only hot paths.
+// property reads except BasicFileInfo.Extract, which reads one file
+// header and therefore only runs for the full block (doc_opened /
+// doc_saved / doc_saved_as) — never on the keys-only hot paths — and
+// only against a LocalPathGuard-verified local path, never a UNC share,
+// mapped network drive, or cloud pseudo-path (SC-026).
 
 using System;
 using Autodesk.Revit.DB;
@@ -30,15 +32,17 @@ internal static class IdentityCapture
     }
 
     /// <summary>
-    /// Cheap per-session key for throttle + gate bookkeeping — NOT
-    /// identity (Save As re-keys, which merely costs one extra pulse).
+    /// Stable per-session key for throttle + gate bookkeeping.
+    /// CreationGUID survives Save / Save As, so the per-doc caps keep
+    /// continuity across a re-path and a Save As can't fake an
+    /// active-document change (SC-027); path/title are degraded
+    /// fallbacks only. All cheap property reads — hot-path safe.
     /// </summary>
-    public static string TrackingKey(Document doc)
-    {
-        var path = Get(() => doc.PathName);
-        if (!string.IsNullOrEmpty(path)) return path!;
-        return Get(() => doc.Title) ?? "untitled";
-    }
+    public static string TrackingKey(Document doc) =>
+        DocumentTrackingKey.Derive(
+            Get(() => doc.CreationGUID.ToString()),
+            Get(() => doc.PathName),
+            Get(() => doc.Title));
 
     /// <summary>Join keys only — creation_guid + cloud/central GUIDs;
     /// the block every non-full-block doc event carries.</summary>
@@ -73,9 +77,11 @@ internal static class IdentityCapture
     /// <summary>
     /// The full identity block — doc_opened / doc_saved / doc_saved_as.
     /// Includes the one sanctioned file read: BasicFileInfo on
-    /// doc.PathName (a share-hosted path costs one guarded read that
-    /// fails to nulls; a cloud path simply fails to nulls, the cloud
-    /// GUIDs suffice).
+    /// doc.PathName, but only when the path verifies as local — a UNC
+    /// or mapped-network path would turn the read into synchronous
+    /// network IO inside a Revit event handler (SC-026). Non-local
+    /// paths just lose version_guid/save_count; cloud models are keyed
+    /// by their GUIDs anyway.
     /// </summary>
     public static DocumentIdentity CaptureFull(Document doc)
     {
@@ -93,7 +99,7 @@ internal static class IdentityCapture
                     doc.GetWorksharingCentralModelPath()));
         }
 
-        if (!string.IsNullOrEmpty(identity.LocalPath))
+        if (LocalPathGuard.IsLocalFile(identity.LocalPath))
         {
             var version = Get(() =>
             {

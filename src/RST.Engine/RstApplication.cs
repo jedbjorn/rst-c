@@ -102,6 +102,11 @@ public sealed class RstApplication : IExternalApplication
         catch (Exception ex)
         {
             Log.Error(ex, "RST.OnStartup failed");
+            // Result.Failed means Revit never calls OnShutdown — release
+            // the collector's subscriptions and writer thread here or never.
+            try { _telemetry?.Shutdown(); }
+            catch (Exception tex) { Log.Debug(tex, "Telemetry rollback failed (non-fatal)"); }
+            _telemetry = null;
             return Result.Failed;
         }
     }
