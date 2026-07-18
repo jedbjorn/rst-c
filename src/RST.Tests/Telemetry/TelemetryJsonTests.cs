@@ -102,6 +102,43 @@ public sealed class TelemetryJsonTests
         TelemetryJson.TryParseLine(line).Should().BeNull();
     }
 
+    // A minimal COMPLETE envelope — each rejection case below is this
+    // line with exactly one field removed or damaged, so a rejection
+    // can only come from that field.
+    private const string CompleteLine =
+        "{\"event_id\":\"11111111-1111-1111-1111-111111111111\"," +
+        "\"session_guid\":\"22222222-2222-2222-2222-222222222222\"," +
+        "\"seq\":1,\"ts\":\"2026-07-18T00:00:00.000Z\"," +
+        "\"event_type\":\"session_end\",\"schema_version\":1,\"source\":\"addin\"}";
+
+    [Fact]
+    public void TryParseLine_accepts_a_minimal_complete_envelope()
+    {
+        var e = TelemetryJson.TryParseLine(CompleteLine);
+        e.Should().NotBeNull();
+        e!.EventType.Should().Be("session_end");
+    }
+
+    private static string Without(string key) =>
+        // Drop one "key":value pair (string or scalar), tidying commas.
+        System.Text.RegularExpressions.Regex.Replace(
+            CompleteLine, "\"" + key + "\":(\"[^\"]*\"|[^,}]+),?", "")
+            .Replace(",}", "}");
+
+    [Theory]
+    [InlineData("event_id")]
+    [InlineData("session_guid")]
+    [InlineData("seq")]
+    [InlineData("ts")]
+    [InlineData("event_type")]
+    [InlineData("schema_version")]
+    [InlineData("source")]
+    public void TryParseLine_rejects_a_missing_required_key(string key)
+    {
+        TelemetryJson.TryParseLine(Without(key)).Should().BeNull(
+            $"'{key}' is mandatory envelope — absence must not be papered over by property initializers");
+    }
+
     [Theory]
     [InlineData("{\"event_type\":\"session_end\"}")]                       // bare event_type, no envelope
     [InlineData("{\"session_guid\":\"s\",\"seq\":1,\"ts\":\"2026-07-18T00:00:00.000Z\",\"event_type\":\"session_end\"}")]  // no event_id
@@ -113,6 +150,39 @@ public sealed class TelemetryJsonTests
         TelemetryJson.TryParseLine(line).Should().BeNull(
             "recovery and prune decide closed-ness from parsed events — a forged or damaged " +
             "session_end without the mandatory envelope must not count");
+    }
+
+    [Theory]
+    [InlineData("11111111-1111-1111-1111-111111111111", "not-a-guid")]     // non-GUID session_guid
+    [InlineData("   ", "22222222-2222-2222-2222-222222222222")]            // whitespace event_id
+    [InlineData("", "22222222-2222-2222-2222-222222222222")]               // empty event_id
+    public void TryParseLine_rejects_non_guid_identities(string eventId, string sessionGuid)
+    {
+        var line = CompleteLine
+            .Replace("11111111-1111-1111-1111-111111111111", eventId)
+            .Replace("22222222-2222-2222-2222-222222222222", sessionGuid);
+        TelemetryJson.TryParseLine(line).Should().BeNull(
+            "event_id and session_guid must be actual UUIDs, not any nonblank string");
+    }
+
+    [Theory]
+    [InlineData("\"schema_version\":1", "\"schema_version\":2")]           // future/unknown schema
+    [InlineData("\"schema_version\":1", "\"schema_version\":\"1\"")]       // wrong type
+    [InlineData("\"source\":\"addin\"", "\"source\":\"server\"")]          // outside the vocabulary
+    [InlineData("\"source\":\"addin\"", "\"source\":\"\"")]                // blank source
+    [InlineData("\"ts\":\"2026-07-18T00:00:00.000Z\"", "\"ts\":\"garbage\"")]  // unparseable ts
+    [InlineData("\"event_type\":\"session_end\"", "\"event_type\":\"  \"")]    // blank event_type
+    public void TryParseLine_rejects_invalid_envelope_values(string from, string to)
+    {
+        TelemetryJson.TryParseLine(CompleteLine.Replace(from, to)).Should().BeNull();
+    }
+
+    [Fact]
+    public void TryParseLine_accepts_recovery_source()
+    {
+        TelemetryJson.TryParseLine(
+                CompleteLine.Replace("\"source\":\"addin\"", "\"source\":\"recovery\""))
+            .Should().NotBeNull("recovery-written synthetics are the other valid source");
     }
 
     [Fact]

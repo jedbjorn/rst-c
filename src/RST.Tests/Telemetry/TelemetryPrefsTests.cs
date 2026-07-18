@@ -44,11 +44,34 @@ public sealed class TelemetryPrefsTests : IDisposable
     [InlineData("")]                           // zero-byte (crash during create)
     [InlineData("null")]                       // parseable but not an object
     [InlineData("[]")]                         // parseable but wrong shape
+    [InlineData("{}")]                         // valid JSON, enabled absent
+    [InlineData("{\"retentionDays\":90}")]     // partial object, enabled absent
+    [InlineData("{\"enabled\":null}")]         // enabled present but not a bool
     public void Damaged_existing_file_fails_closed(string content)
     {
         File.WriteAllText(_path, content);
         TelemetryPrefs.Read(_path).Enabled.Should().BeFalse(
             "damaged prefs degrade to telemetry OFF — a torn disable-write must never re-enable capture");
+    }
+
+    [Fact]
+    public void Existing_but_unreadable_path_fails_closed()
+    {
+        // A directory where the prefs file should be: File.Exists() is
+        // false (it is not a *file*) yet the path is occupied and the
+        // read errors — exactly the exists-but-inaccessible shape that
+        // must never read as first run and re-enable capture.
+        Directory.CreateDirectory(_path);
+        TelemetryPrefs.Read(_path).Enabled.Should().BeFalse(
+            "an inaccessible existing prefs state may hold enabled=false — only true not-found is first run");
+    }
+
+    [Fact]
+    public void Truly_missing_file_in_missing_directory_is_first_run()
+    {
+        var never = Path.Combine(_root, "no-such-dir", "telemetry_prefs.json");
+        TelemetryPrefs.Read(never).Enabled.Should().BeTrue(
+            "true not-found — file and directory absent — is first run, on by default");
     }
 
     [Fact]

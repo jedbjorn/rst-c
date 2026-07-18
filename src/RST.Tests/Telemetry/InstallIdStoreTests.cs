@@ -64,6 +64,34 @@ public sealed class InstallIdStoreTests : IDisposable
     }
 
     [Fact]
+    public void Concurrent_corrupt_file_repairs_agree_on_one_install_id()
+    {
+        // Simultaneous Revit instances all finding the same corrupt file
+        // must converge on ONE repaired id — sequential last-writer-wins
+        // repair would let each session report a different install.
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, "install_id");
+        File.WriteAllText(path, "not a guid");
+
+        const int racers = 8;
+        var ids = new string[racers];
+        using var barrier = new Barrier(racers);
+        var threads = Enumerable.Range(0, racers)
+            .Select(i => new Thread(() =>
+            {
+                barrier.SignalAndWait();
+                ids[i] = InstallIdStore.GetOrCreate(_root);
+            }))
+            .ToList();
+        threads.ForEach(t => t.Start());
+        threads.ForEach(t => t.Join());
+
+        ids.Distinct().Should().ContainSingle(
+            "every simultaneous repairer must return the id the file ends up holding");
+        File.ReadAllText(path).Trim().Should().Be(ids[0]);
+    }
+
+    [Fact]
     public void Garbage_file_re_mints_instead_of_failing()
     {
         Directory.CreateDirectory(_root);

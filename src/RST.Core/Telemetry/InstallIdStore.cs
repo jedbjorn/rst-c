@@ -36,7 +36,7 @@ public static class InstallIdStore
             var existing = TryReadExisting(path);
             if (existing is not null) return existing;
             // Fall through: file exists but never parsed — genuinely
-            // corrupt, repaired below by overwrite.
+            // corrupt, repaired below under an exclusive lock.
         }
 
         var minted = Guid.NewGuid().ToString();
@@ -44,12 +44,7 @@ public static class InstallIdStore
         {
             Directory.CreateDirectory(telemetryRoot);
             if (File.Exists(path))
-            {
-                // Corruption repair, not a first-run race: any writer
-                // lands a valid GUID, last one wins.
-                File.WriteAllText(path, minted);
-                return minted;
-            }
+                return RepairCorrupt(path, minted);
             using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
             var bytes = Encoding.UTF8.GetBytes(minted);
             fs.Write(bytes, 0, bytes.Length);
@@ -68,6 +63,40 @@ public static class InstallIdStore
         {
             SafeLog(log, "install_id write failed — using session-scoped id: " + ex.Message);
             return minted;
+        }
+    }
+
+    /// <summary>
+    /// Repair a corrupt id file, serialized across processes: an
+    /// exclusive read-write handle makes exactly one caller the writer;
+    /// every other simultaneous repairer hits the sharing violation,
+    /// retries, then re-reads the repaired id under its own lock — so
+    /// all callers return the id the file ends up holding, never each
+    /// its own mint. Persistent lock-out propagates to the caller's
+    /// IOException fallback (re-read, else session-scoped id).
+    /// </summary>
+    private static string RepairCorrupt(string path, string minted)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var fs = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+                var current = reader.ReadToEnd().Trim();
+                if (Guid.TryParse(current, out var g))
+                    return g.ToString(); // already repaired under the lock
+                fs.SetLength(0);
+                fs.Position = 0;
+                var bytes = Encoding.UTF8.GetBytes(minted);
+                fs.Write(bytes, 0, bytes.Length);
+                fs.Flush(flushToDisk: true);
+                return minted;
+            }
+            catch (IOException) when (attempt < 20)
+            {
+                Thread.Sleep(10); // another repairer holds the lock
+            }
         }
     }
 

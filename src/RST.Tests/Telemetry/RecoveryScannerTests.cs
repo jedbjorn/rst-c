@@ -215,6 +215,29 @@ public sealed class RecoveryScannerTests : IDisposable
     }
 
     [Fact]
+    public void Session_end_missing_schema_version_or_source_does_not_count_as_closed()
+    {
+        // Everything else about the envelope is right — but the property
+        // initializers must not paper over the missing keys and let the
+        // line count as a close.
+        var s = Guid.NewGuid().ToString();
+        var noSchema =
+            "{\"event_id\":\"" + Guid.NewGuid() + "\",\"session_guid\":\"" + s + "\"," +
+            "\"seq\":2,\"ts\":\"2026-07-18T09:30:00.000Z\",\"event_type\":\"session_end\"," +
+            "\"source\":\"addin\"}";
+        var path = WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, T0));
+        File.AppendAllText(path, noSchema + "\n");
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        var events = OutboxFiles.ReadEvents(path);
+        events[^1].EventType.Should().Be("session_end");
+        events[^1].Synthetic.Should().BeTrue(
+            "the schema_version-less line is not a valid close — recovery must close the file for real");
+    }
+
+    [Fact]
     public void Unparseable_file_still_reaches_closed_state_via_filename_identity()
     {
         var s = Guid.NewGuid().ToString();

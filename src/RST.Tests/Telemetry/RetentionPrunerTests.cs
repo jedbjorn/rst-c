@@ -106,6 +106,28 @@ public sealed class RetentionPrunerTests : IDisposable
         File.Exists(path).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("\"schema_version\":9,\"source\":\"addin\"")]   // wrong schema_version
+    [InlineData("\"schema_version\":1,\"source\":\"forged\"")]  // source outside addin|recovery
+    [InlineData("\"source\":\"addin\"")]                        // schema_version absent
+    public void Structurally_invalid_session_end_is_not_closed_and_never_prunes(string envelopeTail)
+    {
+        // Otherwise-valid GUIDs/seq/ts, expired by 200 days — but the
+        // damaged envelope means the file is NOT closed, so it stays.
+        var s = Guid.NewGuid().ToString();
+        var line =
+            "{\"event_id\":\"" + Guid.NewGuid() + "\",\"session_guid\":\"" + s + "\"," +
+            "\"seq\":1,\"ts\":\"2026-01-01T00:00:00.000Z\",\"event_type\":\"session_end\"," +
+            envelopeTail + "}";
+        var path = Path.Combine(_root, OutboxFiles.SessionFileName(InstallId, s));
+        File.WriteAllText(path, line + "\n");
+
+        RetentionPruner.Prune(_root, 180, Now).Should().BeEmpty();
+
+        File.Exists(path).Should().BeTrue(
+            "a session_end that fails envelope validation is recovery's to fix, never prune's to delete");
+    }
+
     [Fact]
     public void Missing_outbox_dir_is_an_empty_prune()
     {

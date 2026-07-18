@@ -9,12 +9,15 @@
 // `retentionDays` feeds the pruner.
 //
 // Failure semantics (spec Threading & Safety: corrupt prefs degrade to
-// telemetry OFF, and a disabled state must persist): a MISSING file is
-// first-run → defaults (enabled); an EXISTING file that is corrupt,
-// truncated, or unreadable fails CLOSED (enabled=false) — damaged state
-// must never resurrect capture the user may have turned off. Writes are
-// atomic (temp + move) so a crash mid-write can't tear the file, and
-// never throw.
+// telemetry OFF, and a disabled state must persist): only a TRUE
+// not-found (file or its directory absent) is first-run → defaults
+// (enabled). Anything else — unreadable, corrupt, truncated, or JSON
+// without an explicit `enabled` — fails CLOSED (enabled=false): damaged
+// or inaccessible state must never resurrect capture the user may have
+// turned off. File.Exists is NOT the first-run signal (it returns false
+// on permission/IO errors too); absence is detected from the open's
+// exception instead. Writes are atomic (temp + move) so a crash
+// mid-write can't tear the file, and never throw.
 
 using System.IO;
 using System.Text.Json;
@@ -44,18 +47,44 @@ public sealed class TelemetryPrefs
     public static string DefaultPath => Path.Combine(AppDataPaths.Root, "telemetry_prefs.json");
 
     /// <summary>
-    /// Read the prefs file. Missing file → first-run defaults (enabled).
-    /// Existing but corrupt/truncated/unreadable file → fail closed
-    /// (enabled=false): damaged state must never turn capture back on.
+    /// Read the prefs file. Truly missing file → first-run defaults
+    /// (enabled). Existing but corrupt/truncated/unreadable — or valid
+    /// JSON missing the `enabled` field — → fail closed (enabled=false):
+    /// damaged state must never turn capture back on.
     /// </summary>
     public static TelemetryPrefs Read(string? path = null)
     {
         path ??= DefaultPath;
-        if (!File.Exists(path)) return new TelemetryPrefs();
+        string text;
         try
         {
-            var text = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<TelemetryPrefs>(text) ?? FailClosed();
+            text = File.ReadAllText(path);
+        }
+        catch (FileNotFoundException)
+        {
+            return new TelemetryPrefs(); // true first run
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return new TelemetryPrefs(); // true first run — dir not created yet
+        }
+        catch
+        {
+            // Access denied, sharing violation, IO error: the file may
+            // exist with enabled=false in it — fail closed.
+            return FailClosed();
+        }
+
+        try
+        {
+            var dto = JsonSerializer.Deserialize<PrefsDto>(text);
+            if (dto?.Enabled is not bool enabled) return FailClosed();
+            return new TelemetryPrefs
+            {
+                Enabled = enabled,
+                NoticeShownUtc = dto.NoticeShownUtc,
+                RetentionDays = dto.RetentionDays ?? RetentionPruner.DefaultRetentionDays,
+            };
         }
         catch
         {
@@ -91,4 +120,19 @@ public sealed class TelemetryPrefs
     }
 
     private static TelemetryPrefs FailClosed() => new() { Enabled = false };
+
+    /// <summary>Read-side shape: `enabled` nullable so its ABSENCE is
+    /// detectable — {} deserialized straight into TelemetryPrefs would
+    /// silently take the enabled=true initializer.</summary>
+    private sealed class PrefsDto
+    {
+        [JsonPropertyName("enabled")]
+        public bool? Enabled { get; set; }
+
+        [JsonPropertyName("noticeShownUtc")]
+        public DateTimeOffset? NoticeShownUtc { get; set; }
+
+        [JsonPropertyName("retentionDays")]
+        public int? RetentionDays { get; set; }
+    }
 }

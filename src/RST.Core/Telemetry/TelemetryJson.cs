@@ -28,30 +28,57 @@ public static class TelemetryJson
     /// Parse one outbox line. Returns null for blank, truncated, or
     /// otherwise unparseable input — readers skip and move on. A line
     /// only counts as an event when the full mandatory envelope is
-    /// present (event_id, session_guid, seq ≥ 1, ts, event_type):
-    /// recovery and prune decide "closed" from parsed events, so a bare
-    /// {"event_type":"session_end"} must never masquerade as a close.
+    /// PRESENT and VALID: event_id + session_guid are GUIDs, seq ≥ 1,
+    /// ts parses, event_type is nonblank, schema_version == 1, source is
+    /// addin|recovery. Presence is checked on the raw JSON — missing
+    /// schema_version/source would otherwise be silently filled by
+    /// TelemetryEvent's property initializers. Recovery and prune decide
+    /// "closed" from parsed events, so a structurally invalid
+    /// session_end must never masquerade as a close.
     /// </summary>
     public static TelemetryEvent? TryParseLine(string? line)
     {
         if (string.IsNullOrWhiteSpace(line)) return null;
         try
         {
+            using (var doc = JsonDocument.Parse(line))
+            {
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object ||
+                    !HasGuid(root, "event_id") ||
+                    !HasGuid(root, "session_guid") ||
+                    !root.TryGetProperty("seq", out var seq) ||
+                    seq.ValueKind != JsonValueKind.Number ||
+                    !seq.TryGetInt64(out var seqValue) || seqValue < 1 ||
+                    !root.TryGetProperty("ts", out var ts) ||
+                    ts.ValueKind != JsonValueKind.String ||
+                    !root.TryGetProperty("event_type", out var eventType) ||
+                    eventType.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(eventType.GetString()) ||
+                    !root.TryGetProperty("schema_version", out var schemaVersion) ||
+                    schemaVersion.ValueKind != JsonValueKind.Number ||
+                    !schemaVersion.TryGetInt32(out var schemaValue) ||
+                    schemaValue != TelemetrySchema.Version ||
+                    !root.TryGetProperty("source", out var source) ||
+                    source.ValueKind != JsonValueKind.String ||
+                    source.GetString() is not (TelemetrySources.Addin or TelemetrySources.Recovery))
+                    return null;
+            }
+
+            // An unparseable ts throws in the converter → caught → null.
             var e = JsonSerializer.Deserialize<TelemetryEvent>(line, Options);
-            if (e is null ||
-                string.IsNullOrEmpty(e.EventId) ||
-                string.IsNullOrEmpty(e.SessionGuid) ||
-                e.Seq < 1 ||
-                e.Ts == default ||
-                string.IsNullOrEmpty(e.EventType))
-                return null;
-            return e;
+            return e is not null && e.Ts != default ? e : null;
         }
         catch
         {
             return null;
         }
     }
+
+    private static bool HasGuid(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var v) &&
+        v.ValueKind == JsonValueKind.String &&
+        Guid.TryParse(v.GetString(), out _);
 
     /// <summary>
     /// "2026-07-18T14:03:07.123Z" — always UTC, always milliseconds. The
