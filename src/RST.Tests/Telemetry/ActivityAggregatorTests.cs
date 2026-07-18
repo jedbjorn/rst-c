@@ -335,6 +335,37 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Matching_model_guid_without_project_guid_cannot_confirm_cloud_match()
+    {
+        // Cloud identity is the project+model pair: a matching model guid
+        // with no project guid is an incomplete pair and must fall
+        // through — where the conflicting creation guid rejects. Deciding
+        // at the cloud level would count the foreign doc's whole session.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+        };
+        var other = new DocumentIdentity
+        {
+            CreationGuid = "doc-b",
+            CloudModelGuid = "model-1",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), other),
+            Closing(s, 2, D(18, 10), other, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var series = Aggregate(current);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.Cloud);
+        HoursOn(series, 18).Should().Be(0);
+    }
+
+    [Fact]
     public void Central_guid_matches_when_no_cloud_keys()
     {
         var current = new DocumentIdentity { CreationGuid = "doc-a", CentralGuid = "central-1" };

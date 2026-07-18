@@ -6,7 +6,9 @@
 // cloud GUID pair → central GUID → creation GUID — decided per event at
 // the highest level the event carries: a present key that differs
 // rejects, an absent key falls through, so an identity-capture gap on
-// one event can't orphan its close or sync endpoint. Presentation-time
+// one event can't orphan its close or sync endpoint. The cloud level
+// confirms only a complete pair — a matching model guid without its
+// project guid falls through like an absent key. Presentation-time
 // filtering only; raw events stay raw.
 //
 // Open-hours replay mirrors RecoveryScanner.TrackOpenDocs: doc_closed
@@ -119,7 +121,9 @@ public static class ActivityAggregator
     /// (cloud pair → central → creation) it actually carries: a present
     /// key that differs rejects, an absent key falls through to the next
     /// level — an identity-capture gap on one event must not orphan its
-    /// close or sync endpoint. Null when the file carries no usable key —
+    /// close or sync endpoint. The cloud level confirms only when both
+    /// halves of the pair are present and match; an incomplete pair
+    /// falls through. Null when the file carries no usable key —
     /// nothing can match.
     /// </summary>
     private static (string Kind, Func<TelemetryEvent, bool> Matches)? BuildMatcher(DocumentIdentity file)
@@ -136,11 +140,15 @@ public static class ActivityAggregator
             {
                 var eModel = e.GetString(TelemetryFields.CloudModelGuid);
                 var eProject = e.GetString(TelemetryFields.CloudProjectGuid);
-                if (eModel is not null)
-                    return KeyEquals(eModel, model) && (eProject is null || KeyEquals(eProject, project));
+                if (eModel is not null && !KeyEquals(eModel, model))
+                    return false; // another model
                 if (eProject is not null && !KeyEquals(eProject, project))
                     return false; // another project — cannot be this model
-                return null; // a project guid alone can't identify a model
+                if (eModel is not null && eProject is not null)
+                    return true;
+                // Cloud identity is the project+model pair: an incomplete
+                // pair can't confirm — lower keys decide.
+                return null;
             });
         }
 
