@@ -8,8 +8,11 @@
 //
 // Two write shapes per the spec's capture points:
 //   full block  — doc_opened, doc_saved, doc_saved_as
-//   keys only   — every other doc event (creation_guid + cloud/central
-//                 keys, enough to join)
+//   keys only   — every other doc event (creation_guid + cloud pair +
+//                 central_guid + central_path, enough to join; the path
+//                 keeps close/sync endpoints matchable for file-share
+//                 centrals, where WorksharingCentralGUID doesn't exist —
+//                 SC-032, decision #3)
 
 namespace RST.Core.Telemetry;
 
@@ -30,6 +33,16 @@ public sealed class DocumentIdentity
     public bool? IsDetached { get; set; }
 
     /// <summary>
+    /// Central-path capture requires KNOWN non-cloud. Revit's
+    /// GetWorksharingCentralModelPath returns a real path for a cloud
+    /// model, so when the IsModelInCloud read failed (null) the model may
+    /// be cloud and a captured path could violate the cloud-null
+    /// invariant — a wrongly-stamped central_path is worse than a null,
+    /// which is itself data (SC-032, decision #3).
+    /// </summary>
+    public static bool AllowsCentralPath(bool? isCloud) => isCloud == false;
+
+    /// <summary>
     /// Best local handle for "same document" bookkeeping (open-doc
     /// tracking in the recovery scanner, throttle keys in the collector).
     /// NOT server resolution — just a stable per-session key.
@@ -43,7 +56,6 @@ public sealed class DocumentIdentity
         WriteKeysTo(e);
         e.SetField(TelemetryFields.VersionGuid, VersionGuid);
         e.SetField(TelemetryFields.SaveCount, SaveCount);
-        e.SetField(TelemetryFields.CentralPath, CentralPath);
         e.SetField(TelemetryFields.LocalPath, LocalPath);
         e.SetField(TelemetryFields.Title, Title);
         e.SetField(TelemetryFields.IsWorkshared, IsWorkshared);
@@ -52,13 +64,16 @@ public sealed class DocumentIdentity
         e.SetField(TelemetryFields.IsDetached, IsDetached);
     }
 
-    /// <summary>Write the join keys only (creation_guid + cloud/central keys).</summary>
+    /// <summary>Write the join keys only (creation_guid + cloud pair +
+    /// central_guid + central_path — the full match hierarchy, so every
+    /// keys-only event stays matchable for file-share centrals too).</summary>
     public void WriteKeysTo(TelemetryEvent e)
     {
         e.SetField(TelemetryFields.CreationGuid, CreationGuid);
         e.SetField(TelemetryFields.CloudProjectGuid, CloudProjectGuid);
         e.SetField(TelemetryFields.CloudModelGuid, CloudModelGuid);
         e.SetField(TelemetryFields.CentralGuid, CentralGuid);
+        e.SetField(TelemetryFields.CentralPath, CentralPath);
     }
 
     public static DocumentIdentity ReadFrom(TelemetryEvent e) => new()
