@@ -93,10 +93,75 @@ public sealed class TelemetryPrefs
     }
 
     /// <summary>
+    /// Atomically read-modify-write ONE change against the freshest
+    /// on-disk state, under a cross-process lock shared by every prefs
+    /// writer (sibling .lock file, opened FileShare.None — verified to
+    /// conflict same- and cross-process on both Windows and the Linux CI
+    /// runner). This is the only safe way to change a field of a file
+    /// another Revit instance may also be writing: a cached
+    /// TelemetryPrefs written back whole reverts the other instance's
+    /// changes (e.g. a first-run notice held open across a toggle-off
+    /// elsewhere would resurrect enabled=true on dismissal). Never
+    /// throws; false = nothing was written.
+    /// </summary>
+    public static bool Update(
+        Action<TelemetryPrefs> mutate, string? path = null, Action<string>? log = null)
+    {
+        path ??= DefaultPath;
+        try
+        {
+            using var prefsLock = AcquireLock(path, log);
+            if (prefsLock is null) return false;
+            var prefs = Read(path);
+            mutate(prefs);
+            return prefs.Write(path, log);
+        }
+        catch (Exception ex)
+        {
+            try { log?.Invoke("telemetry prefs update failed: " + ex.Message); }
+            catch { /* logging must never throw */ }
+            return false;
+        }
+    }
+
+    /// <summary>Writer lock acquisition wait. Writes hold the lock for
+    /// milliseconds, so a timeout means a wedged peer — give up and
+    /// report failure rather than stall Revit. Internal for tests.</summary>
+    internal static int LockTimeoutMs = 5000;
+
+    private static FileStream? AcquireLock(string path, Action<string>? log)
+    {
+        var lockPath = path + ".lock";
+        var dir = Path.GetDirectoryName(lockPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        var deadline = Environment.TickCount64 + LockTimeoutMs;
+        while (true)
+        {
+            try
+            {
+                return new FileStream(
+                    lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                if (Environment.TickCount64 >= deadline)
+                {
+                    try { log?.Invoke("telemetry prefs lock wait timed out: " + lockPath); }
+                    catch { /* logging must never throw */ }
+                    return null;
+                }
+                Thread.Sleep(25);
+            }
+        }
+    }
+
+    /// <summary>
     /// Persist atomically (temp file + move, same directory) so a crash
     /// mid-write leaves the previous state, never a torn file. Returns
     /// false instead of throwing on IO failure — telemetry must never
-    /// take Revit down.
+    /// take Revit down. To change an EXISTING file another instance may
+    /// also write, go through <see cref="Update"/> — writing a cached
+    /// instance whole reverts concurrent changes.
     /// </summary>
     public bool Write(string? path = null, Action<string>? log = null)
     {

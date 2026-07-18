@@ -361,4 +361,51 @@ public sealed class CollectorLifecycleTests : IDisposable
         lifecycle.Shutdown();
         WrittenEventTypes().Should().Equal("session_start", "session_end");
     }
+
+    // ---- live-session anchor (Activity tab wiring, step 5) --------------
+
+    [Fact]
+    public void Session_start_utc_is_null_until_written_then_matches_the_event_ts()
+    {
+        var lifecycle = NewLifecycle(enabled: true);
+        lifecycle.SessionStartUtc.Should().BeNull("no session_start has been written yet");
+
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeTrue();
+        var afterFirst = lifecycle.SessionStartUtc;
+        afterFirst.Should().NotBeNull();
+
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpened).Should().BeTrue();
+        lifecycle.SessionStartUtc.Should().Be(afterFirst, "the anchor is session_start's ts, not the latest event's");
+        lifecycle.Shutdown();
+
+        var sessionStart = OutboxFiles.ReadEvents(_writer.SessionFilePath)
+            .Single(e => e.EventType == TelemetryEventTypes.SessionStart);
+        // The wire format carries milliseconds; the in-memory anchor
+        // keeps full ticks — same instant to within the serialization.
+        lifecycle.SessionStartUtc.Should().BeCloseTo(sessionStart.Ts, TimeSpan.FromMilliseconds(1),
+            "the Activity tab ticks from session_start.ts — the property must be that event's ts");
+    }
+
+    [Fact]
+    public void Disabled_session_never_exposes_a_session_start_utc()
+    {
+        var lifecycle = NewLifecycle(enabled: false);
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeFalse();
+        lifecycle.Shutdown();
+        lifecycle.SessionStartUtc.Should().BeNull("a session that never collected has no live-session anchor");
+    }
+
+    [Fact]
+    public void Mid_session_enable_sets_the_session_start_utc()
+    {
+        var lifecycle = NewLifecycle(enabled: false);
+        lifecycle.SessionStartUtc.Should().BeNull();
+        lifecycle.SetEnabled(true);
+        lifecycle.SessionStartUtc.Should().NotBeNull("enable emits session_start at enable time (unit 2, call #4)");
+        lifecycle.Shutdown();
+
+        var sessionStart = OutboxFiles.ReadEvents(_writer.SessionFilePath)
+            .Single(e => e.EventType == TelemetryEventTypes.SessionStart);
+        lifecycle.SessionStartUtc.Should().BeCloseTo(sessionStart.Ts, TimeSpan.FromMilliseconds(1));
+    }
 }
