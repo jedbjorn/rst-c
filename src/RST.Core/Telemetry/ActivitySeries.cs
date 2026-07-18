@@ -19,10 +19,11 @@ public sealed record DayOpenHoursPoint(DateOnly Date, double Hours);
 public sealed record DurationPoint(DateTimeOffset Ts, double Seconds);
 
 /// <summary>
-/// Which identity key matched events to the current file — the same
-/// priority order the server would use (cloud GUID pair → central GUID →
-/// creation GUID). Null on ActivitySeries.MatchedKeyKind = no usable key
-/// (or no current file).
+/// The current file's best usable identity key — the same priority order
+/// the server would use (cloud GUID pair → central GUID → creation
+/// GUID). Individual events may match at a lower level when a higher key
+/// is absent from the event. Null on ActivitySeries.MatchedKeyKind = no
+/// usable key (or no current file).
 /// </summary>
 public static class ActivityMatchKinds
 {

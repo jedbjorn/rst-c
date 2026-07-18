@@ -1,8 +1,9 @@
 // ActivityAggregatorTests.cs — Activity series over synthetic outboxes:
 // per-day open-hours (multi-session union, midnight spans, crashed
-// sessions, toggle gaps, Save-As siblings), open/sync duration series,
-// current-file match priority, and range windowing (Telemetry v1 spec,
-// Build Plan step 3).
+// sessions, toggle gaps, Save-As siblings and re-identification),
+// open/sync duration series, current-file match priority with
+// identity-capture-gap fallback, and range windowing (Telemetry v1
+// spec, Build Plan step 3).
 
 using System;
 using System.IO;
@@ -91,6 +92,15 @@ public sealed class ActivityAggregatorTests : IDisposable
         var e = Event(s, seq, TelemetryEventTypes.SessionEnd, ts);
         e.Source = TelemetrySources.Recovery;
         e.Synthetic = true;
+        return e;
+    }
+
+    private static TelemetryEvent SavedAs(
+        string s, long seq, DateTimeOffset ts, DocumentIdentity id, string previousLocalPath)
+    {
+        var e = Event(s, seq, TelemetryEventTypes.DocSavedAs, ts);
+        id.WriteTo(e);
+        e.SetField(TelemetryFields.PreviousLocalPath, previousLocalPath);
         return e;
     }
 
@@ -344,6 +354,74 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Close_with_identity_capture_gap_ends_the_interval_via_a_lower_key()
+    {
+        // The doc opened with full cloud identity, but the doc_closing
+        // lost its cloud keys to a capture gap and carries only the
+        // creation guid. The close must still end the interval — locking
+        // matches to the file's highest key would run it to session_end.
+        var cloudDoc = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+        };
+        var gapId = new DocumentIdentity { CreationGuid = "doc-a" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), cloudDoc),
+            Closing(s, 2, D(18, 10), gapId, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        var series = Aggregate(cloudDoc);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.Cloud);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the creation-guid fallback attributes the close; 2.5 means it ran to session_end");
+    }
+
+    [Fact]
+    public void Conflicting_central_guid_rejects_despite_matching_creation_guid()
+    {
+        // Fallback is for absent keys only: a present-but-different
+        // central guid is another central model, whatever the lineage.
+        var current = new DocumentIdentity { CreationGuid = "doc-a", CentralGuid = "central-b" };
+        var other = new DocumentIdentity { CreationGuid = "doc-a", CentralGuid = "central-a" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), other),
+            Closing(s, 2, D(18, 10), other, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        HoursOn(Aggregate(current), 18).Should().Be(0);
+    }
+
+    [Fact]
+    public void Sync_end_with_identity_capture_gap_still_pairs()
+    {
+        var cloudDoc = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+        };
+        var gapId = new DocumentIdentity { CreationGuid = "doc-a" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), cloudDoc),
+            Sync(s, 2, D(18, 9, 30), cloudDoc, TelemetryEventTypes.SyncStart),
+            Sync(s, 3, D(18, 9, 33), gapId, TelemetryEventTypes.SyncEnd),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(cloudDoc).SyncEvents.Should().ContainSingle(
+            "the sole pending sync pairs unambiguously despite the key gap").Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(180, 1e-9);
+    }
+
+    [Fact]
     public void No_usable_key_and_no_current_file_yield_empty_series()
     {
         var s = Guid.NewGuid().ToString();
@@ -401,6 +479,115 @@ public sealed class ActivityAggregatorTests : IDisposable
         var point = series.SyncEvents.Should().ContainSingle("the crashed-mid-sync start has no duration").Subject;
         point.Ts.Should().Be(D(18, 9, 30), "plotted at the sync's start");
         point.Seconds.Should().BeApproximately(180, 1e-9);
+    }
+
+    [Fact]
+    public void Stale_opening_with_conflicting_path_never_invents_a_load_duration()
+    {
+        // A failed open of a.rvt left its doc_opening unconsumed; the
+        // current file then opened without its own doc_opening (lost to
+        // a gap). Recency fallback across two nonblank differing paths
+        // would invent a 5-minute load from the unrelated opening.
+        var docB = ByCreation("doc-b", "C:\\models\\b.rvt");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opening(s, 1, D(18, 9), "C:\\models\\a.rvt"),
+            Opened(s, 2, D(18, 9, 5), docB),
+            Closing(s, 3, D(18, 10, 5), docB, "c1"),
+            Closed(s, 4, D(18, 10, 5), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10, 5)));
+
+        var series = Aggregate(docB);
+
+        series.OpenEvents.Should().BeEmpty("no doc_opening belongs to this open");
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the open interval itself still counts");
+    }
+
+    // ---- save-as re-identification --------------------------------------
+
+    [Fact]
+    public void Save_as_that_changes_identity_starts_the_new_key_at_save_ts()
+    {
+        // Save As turned a local of central-a into a new central-b. For
+        // the new identity, history starts at the save — pre-save time
+        // belongs to central-a and is never inherited.
+        var before = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralGuid = "central-a",
+            LocalPath = "C:\\models\\a.rvt",
+            Title = "a.rvt",
+        };
+        var after = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralGuid = "central-b",
+            LocalPath = "C:\\models\\b.rvt",
+            Title = "b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), before),
+            SavedAs(s, 2, D(18, 10), after, "C:\\models\\a.rvt"),
+            Closing(s, 3, D(18, 11), after, "c1"),
+            Closed(s, 4, D(18, 11), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        var series = Aggregate(after);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.Central);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the new identity was open 10:00–11:00; 0 means doc_saved_as was ignored, " +
+            "2 means pre-save time leaked to the new key");
+    }
+
+    [Fact]
+    public void Save_as_that_changes_identity_ends_the_old_key_at_save_ts()
+    {
+        // The mirror view: once the open model re-identified to
+        // central-b, central-a is no longer open — its interval must end
+        // at the save, not run to session_end.
+        var before = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralGuid = "central-a",
+            LocalPath = "C:\\models\\a.rvt",
+            Title = "a.rvt",
+        };
+        var after = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralGuid = "central-b",
+            LocalPath = "C:\\models\\b.rvt",
+            Title = "b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), before),
+            SavedAs(s, 2, D(18, 10), after, "C:\\models\\a.rvt"),
+            Event(s, 3, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(before), 18).Should().BeApproximately(1.0, 1e-9,
+            "central-a was open 09:00–10:00; 2.5 means it ran to session_end past the save-as");
+    }
+
+    [Fact]
+    public void Save_as_keeping_the_join_key_continues_the_interval()
+    {
+        // A plain save-as sibling keeps the creation guid — same
+        // bookkeeping doc, the interval continues across the save.
+        var original = ByCreation("doc-a", "C:\\models\\a.rvt");
+        var renamed = ByCreation("doc-a", "C:\\models\\a-copy.rvt");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), original),
+            SavedAs(s, 2, D(18, 10), renamed, "C:\\models\\a.rvt"),
+            Closing(s, 3, D(18, 11), renamed, "c1"),
+            Closed(s, 4, D(18, 11), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(original), 18).Should().BeApproximately(2.0, 1e-9);
     }
 
     // ---- range windowing & tolerance ------------------------------------

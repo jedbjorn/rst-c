@@ -3,7 +3,10 @@
 // step 3). Pure, unit-testable, no Revit references.
 //
 // Current-file matching uses the same priority order the server would —
-// cloud GUID pair → central GUID → creation GUID. Presentation-time
+// cloud GUID pair → central GUID → creation GUID — decided per event at
+// the highest level the event carries: a present key that differs
+// rejects, an absent key falls through, so an identity-capture gap on
+// one event can't orphan its close or sync endpoint. Presentation-time
 // filtering only; raw events stay raw.
 //
 // Open-hours replay mirrors RecoveryScanner.TrackOpenDocs: doc_closed
@@ -111,26 +114,55 @@ public static class ActivityAggregator
     }
 
     /// <summary>
-    /// Pick the current file's best identity key and return a predicate
-    /// over an event's join-key fields. Null when the file carries no
-    /// usable key — nothing can match.
+    /// Return the current file's best key kind and a per-event match
+    /// predicate. Each event is decided at the highest priority level
+    /// (cloud pair → central → creation) it actually carries: a present
+    /// key that differs rejects, an absent key falls through to the next
+    /// level — an identity-capture gap on one event must not orphan its
+    /// close or sync endpoint. Null when the file carries no usable key —
+    /// nothing can match.
     /// </summary>
     private static (string Kind, Func<TelemetryEvent, bool> Matches)? BuildMatcher(DocumentIdentity file)
     {
+        // Each level returns true/false when the event carries that key,
+        // null when it is absent and the next level should decide.
+        var levels = new List<Func<TelemetryEvent, bool?>>();
+        string? kind = null;
+
         if (file.CloudProjectGuid is { } project && file.CloudModelGuid is { } model)
-            return (ActivityMatchKinds.Cloud, e =>
-                KeyEquals(e.GetString(TelemetryFields.CloudProjectGuid), project) &&
-                KeyEquals(e.GetString(TelemetryFields.CloudModelGuid), model));
+        {
+            kind = ActivityMatchKinds.Cloud;
+            levels.Add(e =>
+            {
+                var eModel = e.GetString(TelemetryFields.CloudModelGuid);
+                var eProject = e.GetString(TelemetryFields.CloudProjectGuid);
+                if (eModel is not null)
+                    return KeyEquals(eModel, model) && (eProject is null || KeyEquals(eProject, project));
+                if (eProject is not null && !KeyEquals(eProject, project))
+                    return false; // another project — cannot be this model
+                return null; // a project guid alone can't identify a model
+            });
+        }
 
         if (file.CentralGuid is { } central)
-            return (ActivityMatchKinds.Central, e =>
-                KeyEquals(e.GetString(TelemetryFields.CentralGuid), central));
+        {
+            kind ??= ActivityMatchKinds.Central;
+            levels.Add(e => e.GetString(TelemetryFields.CentralGuid) is { } v ? KeyEquals(v, central) : null);
+        }
 
         if (file.CreationGuid is { } creation)
-            return (ActivityMatchKinds.Creation, e =>
-                KeyEquals(e.GetString(TelemetryFields.CreationGuid), creation));
+        {
+            kind ??= ActivityMatchKinds.Creation;
+            levels.Add(e => e.GetString(TelemetryFields.CreationGuid) is { } v ? KeyEquals(v, creation) : null);
+        }
 
-        return null;
+        if (kind is null) return null;
+        return (kind, e =>
+        {
+            foreach (var level in levels)
+                if (level(e) is { } decided) return decided;
+            return false;
+        });
     }
 
     private static bool KeyEquals(string? a, string b) =>
@@ -153,8 +185,10 @@ public static class ActivityAggregator
 
         // Open doc_openings awaiting their doc_opened, in seq order.
         var pendingOpenings = new List<(DateTimeOffset Ts, string? LocalPath)>();
-        // Current file's open docs: per-session join key → opened ts.
-        var openDocs = new Dictionary<string, DateTimeOffset>();
+        // Current file's open docs: per-session join key → (opened ts,
+        // local path). The path is what doc_saved_as re-identification
+        // joins through (previous_local_path).
+        var openDocs = new Dictionary<string, (DateTimeOffset Ts, string? LocalPath)>();
         // closing_id → join key, for docs that matched at doc_closing.
         var closingIdToKey = new Dictionary<string, string>();
         // Current file's in-flight syncs: join key → sync_start ts.
@@ -163,9 +197,23 @@ public static class ActivityAggregator
 
         void CloseAll(DateTimeOffset endTs)
         {
-            foreach (var startTs in openDocs.Values)
-                AddInterval(intervals, startTs, endTs, nowUtc);
+            foreach (var entry in openDocs.Values)
+                AddInterval(intervals, entry.Ts, endTs, nowUtc);
             openDocs.Clear();
+        }
+
+        // Every openDocs entry is the current file (only matched events
+        // create one), and overlapping intervals union before bucketing —
+        // so when an identity-capture gap keys a matched close under a
+        // different level than its open, ending the latest-started entry
+        // yields the same union as ending the "right" one.
+        string? LatestOpenKey()
+        {
+            string? latest = null;
+            var best = DateTimeOffset.MinValue;
+            foreach (var kv in openDocs)
+                if (kv.Value.Ts >= best) { best = kv.Value.Ts; latest = kv.Key; }
+            return latest;
         }
 
         foreach (var e in events)
@@ -179,14 +227,19 @@ public static class ActivityAggregator
                 case TelemetryEventTypes.DocOpened:
                 {
                     // Pair with the latest unconsumed doc_opening — by
-                    // local_path when one matches, else by recency — and
-                    // consume it whether or not the doc is the current
-                    // file, so interleaved opens can't cross-attribute.
+                    // local_path when one matches, else by recency among
+                    // openings that don't carry a conflicting path — and
+                    // consume the pairing, so interleaved opens can't
+                    // cross-attribute. Two nonblank differing paths are
+                    // different documents: pairing across them would let
+                    // a failed or stale opening invent a load duration
+                    // for an unrelated file.
                     var localPath = e.GetString(TelemetryFields.LocalPath);
                     var idx = pendingOpenings.FindLastIndex(p =>
                         p.LocalPath is not null && localPath is not null &&
                         string.Equals(p.LocalPath, localPath, StringComparison.OrdinalIgnoreCase));
-                    if (idx < 0) idx = pendingOpenings.Count - 1;
+                    if (idx < 0)
+                        idx = pendingOpenings.FindLastIndex(p => p.LocalPath is null || localPath is null);
                     (DateTimeOffset Ts, string? LocalPath)? opening = idx >= 0 ? pendingOpenings[idx] : null;
                     if (idx >= 0) pendingOpenings.RemoveAt(idx);
 
@@ -195,7 +248,43 @@ public static class ActivityAggregator
                         openPoints.Add(new DurationPoint(e.Ts, (e.Ts - o.Ts).TotalSeconds));
 
                     var key = DocumentIdentity.ReadFrom(e).JoinKey ?? e.EventId;
-                    if (!openDocs.ContainsKey(key)) openDocs[key] = e.Ts;
+                    if (!openDocs.ContainsKey(key)) openDocs[key] = (e.Ts, localPath);
+                    break;
+                }
+
+                case TelemetryEventTypes.DocSavedAs:
+                {
+                    // Save As re-identifies an open model in place. The
+                    // entry opened under the previous identity (joined by
+                    // previous_local_path) ends here when the join key
+                    // changed — post-save time belongs to the new
+                    // identity, pre-save time to the old; neither ever
+                    // inherits the other's. Same key = same bookkeeping
+                    // doc: the interval continues, only the path moves.
+                    var id = DocumentIdentity.ReadFrom(e);
+                    var newKey = id.JoinKey;
+                    var prevPath = e.GetString(TelemetryFields.PreviousLocalPath);
+                    string? oldKey = null;
+                    if (prevPath is not null)
+                        foreach (var kv in openDocs)
+                            if (kv.Value.LocalPath is not null &&
+                                string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
+                            { oldKey = kv.Key; break; }
+
+                    if (oldKey is not null)
+                    {
+                        if (newKey is not null && KeyEquals(oldKey, newKey))
+                        {
+                            openDocs[oldKey] = (openDocs[oldKey].Ts, id.LocalPath);
+                            break;
+                        }
+                        AddInterval(intervals, openDocs[oldKey].Ts, e.Ts, nowUtc);
+                        openDocs.Remove(oldKey);
+                    }
+
+                    if (!matches(e)) break;
+                    var key = newKey ?? e.EventId;
+                    if (!openDocs.ContainsKey(key)) openDocs[key] = (e.Ts, id.LocalPath);
                     break;
                 }
 
@@ -224,10 +313,16 @@ public static class ActivityAggregator
                         ? k
                         : matches(e) ? DocumentIdentity.ReadFrom(e).JoinKey : null;
                     if (closingId is not null) closingIdToKey.Remove(closingId);
-                    if (key is not null && openDocs.TryGetValue(key, out var startTs))
+                    // key non-null = a matched close. An identity-capture
+                    // gap can key it under a lower level than its open —
+                    // fall back to the latest matched entry (see
+                    // LatestOpenKey for why any matched entry is sound).
+                    if (key is not null && !openDocs.ContainsKey(key))
+                        key = LatestOpenKey();
+                    if (key is not null && openDocs.TryGetValue(key, out var entry))
                     {
                         openDocs.Remove(key);
-                        AddInterval(intervals, startTs, e.Ts, nowUtc);
+                        AddInterval(intervals, entry.Ts, e.Ts, nowUtc);
                     }
                     break;
                 }
@@ -246,6 +341,14 @@ public static class ActivityAggregator
                 {
                     if (!matches(e)) break;
                     var key = DocumentIdentity.ReadFrom(e).JoinKey;
+                    // An identity-capture gap can key a matched sync_end
+                    // under a lower level than its sync_start. Durations
+                    // are per-pair (no union to hide a wrong pairing), so
+                    // fall back only when a single pending sync makes the
+                    // pairing unambiguous; otherwise drop — undercount,
+                    // never invent.
+                    if (key is not null && !pendingSyncs.ContainsKey(key) && pendingSyncs.Count == 1)
+                        key = pendingSyncs.Keys.First();
                     if (key is not null && pendingSyncs.TryGetValue(key, out var startTs))
                     {
                         pendingSyncs.Remove(key);
