@@ -385,6 +385,159 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Central_path_matches_file_share_central_and_outranks_creation_guid()
+    {
+        // File-share central: WorksharingCentralGUID is Revit Server-only,
+        // so the user-visible central path is the only central key
+        // (SC-032). It joins local copies case-insensitively and outranks
+        // a conflicting creation guid — lineage never overrides a present
+        // central identity.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var localCopy = new DocumentIdentity
+        {
+            CreationGuid = "doc-b",
+            CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), localCopy),
+            Event(s, 2, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var series = Aggregate(current);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.CentralPath);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the normalized central path joins file-share local copies despite the differing creation guid");
+    }
+
+    [Fact]
+    public void Keys_only_close_on_file_share_central_ends_the_interval()
+    {
+        // SC-032 residual (decision #3 extension): keys-only events carry
+        // central_path, so a file-share central's production close
+        // endpoint (doc_closing → doc_closed) matches on the path even
+        // when the recorded lineage differs from the current file's —
+        // e.g. a recreated central. Losing the path would reject the
+        // close on the conflicting creation guid and run the interval to
+        // session_end.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var recorded = new DocumentIdentity
+        {
+            CreationGuid = "doc-b",
+            CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), recorded),
+            Closing(s, 2, D(18, 10), recorded, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        var series = Aggregate(current);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.CentralPath);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the keys-only doc_closing carries the central path; 2.5 means it lost the path, rejected on creation guid, and ran to session_end");
+    }
+
+    [Fact]
+    public void Keys_only_sync_endpoints_on_file_share_central_pair()
+    {
+        // Same residual, sync endpoint: sync_start/sync_end are keys-only,
+        // so a file-share central's sync duration survives a lineage
+        // mismatch only because both endpoints carry the central path.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var recorded = new DocumentIdentity
+        {
+            CreationGuid = "doc-b",
+            CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), recorded),
+            Sync(s, 2, D(18, 9, 30), recorded, TelemetryEventTypes.SyncStart),
+            Sync(s, 3, D(18, 9, 33), recorded, TelemetryEventTypes.SyncEnd),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle(
+            "keys-only sync endpoints carry the central path and pair despite the differing creation guid").Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(180, 1e-9);
+    }
+
+    [Fact]
+    public void Sibling_central_with_same_creation_guid_cannot_close_the_current_file()
+    {
+        // SC-032 residual, discrimination side: two file-share centrals
+        // sharing a creation guid (Save-As lineage) differ only by
+        // central path. The sibling's keys-only close now carries its
+        // path, so it is rejected at the path level and can never reach
+        // the creation-guid fallback that would truncate the current
+        // file's open interval.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central_Copy.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Closing(s, 2, D(18, 10), sibling, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "1.0 means the sibling's keys-only close fell through to the shared creation guid and truncated the current file");
+    }
+
+    [Fact]
+    public void Sibling_central_sync_end_cannot_steal_the_current_files_pairing()
+    {
+        // Same sibling pair, sync side: the sibling's keys-only sync_end
+        // is rejected on its central path, so the current file's pending
+        // sync pairs with its own sync_end, not the sibling's.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central_Copy.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Sync(s, 2, D(18, 9, 30), current, TelemetryEventTypes.SyncStart),
+            Sync(s, 3, D(18, 9, 33), sibling, TelemetryEventTypes.SyncEnd),
+            Sync(s, 4, D(18, 9, 40), current, TelemetryEventTypes.SyncEnd),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle().Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(600, 1e-9,
+            "180 means the sibling's sync_end matched via the shared creation guid and stole the pairing");
+    }
+
+    [Fact]
     public void Close_with_identity_capture_gap_ends_the_interval_via_a_lower_key()
     {
         // The doc opened with full cloud identity, but the doc_closing
@@ -674,5 +827,105 @@ public sealed class ActivityAggregatorTests : IDisposable
         series.MatchedKeyKind.Should().Be(ActivityMatchKinds.Creation);
         series.PerDayOpenHours.Should().HaveCount(7);
         series.PerDayOpenHours.Should().OnlyContain(p => p.Hours == 0);
+    }
+
+    // ---- live open-since (Activity tab current-session sub-line) --------
+
+    [Fact]
+    public void Live_session_reports_open_since_and_extends_to_now()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, D(18, 8)),
+            Opened(s, 2, D(18, 9), doc));
+
+        var series = Aggregate(doc, liveSessionGuid: s);
+
+        series.LiveOpenSinceUtc.Should().Be(D(18, 9));
+        HoursOn(series, 18).Should().BeApproximately(3.0, 1e-9,
+            "the live session's open interval extends to now (12:00)");
+    }
+
+    [Fact]
+    public void Unclosed_file_without_live_guid_reports_no_open_since()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), doc),
+            Event(s, 2, TelemetryEventTypes.Heartbeat, D(18, 10)));
+
+        Aggregate(doc).LiveOpenSinceUtc.Should().BeNull(
+            "an unclosed file with no live session named is a crashed session, not a live open");
+    }
+
+    [Fact]
+    public void Doc_closed_in_live_session_reports_no_open_since()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), doc),
+            Closing(s, 2, D(18, 10), doc, "c1"),
+            Closed(s, 3, D(18, 10), "c1"));
+
+        var series = Aggregate(doc, liveSessionGuid: s);
+
+        series.LiveOpenSinceUtc.Should().BeNull("the file is no longer open in the live session");
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9);
+    }
+
+    [Fact]
+    public void Toggle_off_in_live_session_clears_open_since()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), doc),
+            Event(s, 2, TelemetryEventTypes.CollectionDisabled, D(18, 10)));
+
+        Aggregate(doc, liveSessionGuid: s).LiveOpenSinceUtc.Should().BeNull(
+            "open time caps at the toggle; the gap is unobserved");
+    }
+
+    // ---- outbox status (Activity tab footer) ----------------------------
+
+    [Fact]
+    public void ReadStatus_empty_or_missing_dir_is_empty()
+    {
+        ActivityAggregator.ReadStatus(Path.Combine(_root, "missing")).Should().Be(OutboxStatus.Empty);
+        ActivityAggregator.ReadStatus(_root).Should().Be(OutboxStatus.Empty);
+    }
+
+    [Fact]
+    public void ReadStatus_counts_files_bytes_and_oldest_event()
+    {
+        var s1 = Guid.NewGuid().ToString();
+        var s2 = Guid.NewGuid().ToString();
+        var p1 = WriteSessionFile(_root, s1,
+            Event(s1, 1, TelemetryEventTypes.SessionStart, D(15, 8)),
+            Event(s1, 2, TelemetryEventTypes.SessionEnd, D(15, 9)));
+        var p2 = WriteSessionFile(_root, s2,
+            Event(s2, 1, TelemetryEventTypes.SessionStart, D(12, 7)),
+            Event(s2, 2, TelemetryEventTypes.SessionEnd, D(12, 8)));
+
+        var status = ActivityAggregator.ReadStatus(_root);
+
+        status.FileCount.Should().Be(2);
+        status.TotalSizeBytes.Should().Be(new FileInfo(p1).Length + new FileInfo(p2).Length);
+        status.OldestEventTs.Should().Be(D(12, 7));
+    }
+
+    [Fact]
+    public void ReadStatus_skips_corrupt_leading_lines_for_oldest()
+    {
+        var s = Guid.NewGuid().ToString();
+        var path = Path.Combine(_root, OutboxFiles.SessionFileName(InstallId, s));
+        File.WriteAllText(path,
+            "{not json\n" +
+            TelemetryJson.SerializeLine(Event(s, 2, TelemetryEventTypes.SessionStart, D(14, 6))) + "\n");
+
+        ActivityAggregator.ReadStatus(_root).OldestEventTs.Should().Be(D(14, 6));
     }
 }
