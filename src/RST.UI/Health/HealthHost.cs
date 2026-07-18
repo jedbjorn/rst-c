@@ -17,9 +17,10 @@ public static class HealthHost
     /// active model, warnings count). Pass <see cref="HealthContext.Empty"/>
     /// when running outside Revit — the scanner falls back to its
     /// system-only sections.</param>
-    /// <param name="telemetryToggled">Invoked after the Activity tab's
-    /// collection toggle persists a new enabled state — the collector
-    /// seam (markers + heartbeat). Null = persist-only.</param>
+    /// <param name="telemetryToggled">Invoked with the clicked value on
+    /// every successful persist of the Activity tab's collection toggle
+    /// — the collector seam (markers + heartbeat; see
+    /// <see cref="HealthBridge"/>). Null = persist-only.</param>
     /// <param name="liveSessionStartUtc">Live read of the collector's
     /// session_start ts (see <see cref="HealthBridge"/>). Null = the
     /// context's captured value only.</param>
