@@ -44,17 +44,27 @@ public class HealthBridge
     private readonly HealthContext _context;
     private readonly Action _closeRequested;
     private readonly Action<bool>? _telemetryToggled;
+    private readonly Func<DateTimeOffset?>? _liveSessionStartUtc;
 
-    /// <param name="telemetryToggled">Invoked after the collection toggle
-    /// persists a NEW enabled state — the seam the consent/collector
-    /// wiring (telemetry Build Plan step 5) hooks to emit marker events
-    /// and stop/start the heartbeat. Null until then.</param>
+    /// <param name="telemetryToggled">Invoked with the clicked value on
+    /// EVERY successful toggle persist — including when disk already
+    /// matched (SC-034: another instance may have written the shared
+    /// prefs while this process's collector kept its old state). The
+    /// seam the consent/collector wiring (telemetry Build Plan step 5)
+    /// hooks to emit marker events and stop/start the heartbeat; it is
+    /// idempotent when local state already matches. Null until then.</param>
+    /// <param name="liveSessionStartUtc">Live read of the collector's
+    /// session_start ts, preferred over the context's captured value so
+    /// a mid-window enable (which emits session_start right then) starts
+    /// the session clock on the very next refresh. Null → context only.</param>
     public HealthBridge(HealthContext context, Action closeRequested,
-                        Action<bool>? telemetryToggled = null)
+                        Action<bool>? telemetryToggled = null,
+                        Func<DateTimeOffset?>? liveSessionStartUtc = null)
     {
         _context = context ?? HealthContext.Empty;
         _closeRequested = closeRequested ?? (() => { });
         _telemetryToggled = telemetryToggled;
+        _liveSessionStartUtc = liveSessionStartUtc;
         Log.Information("HealthBridge ready: revit={Revit}, model={Model}",
                         _context.RevitVersion, _context.ModelName);
     }
@@ -203,7 +213,9 @@ public class HealthBridge
                 rangeDays,
                 session = new
                 {
-                    startTs = _context.TelemetrySessionStartUtc,
+                    startTs = _liveSessionStartUtc is null
+                        ? _context.TelemetrySessionStartUtc
+                        : _liveSessionStartUtc(),
                     currentFileOpenTs = series.LiveOpenSinceUtc,
                 },
                 file = currentFile is null ? null : (object)new
@@ -237,10 +249,12 @@ public class HealthBridge
     }
 
     /// <summary>
-    /// Persist the collection toggle (Activity tab footer). Writes the
-    /// roaming prefs atomically, then notifies the collector seam when
-    /// the state actually changed. Returns { ok, enabled } with the state
-    /// now on disk.
+    /// Persist the collection toggle (Activity tab footer) via
+    /// <see cref="ConsentToggle.Apply"/>: the clicked value goes through
+    /// the shared merge-preserving prefs writer, and this process's
+    /// collector reconciles on every successful click — even when disk
+    /// already matched, which says nothing about the local collector
+    /// (SC-034). Returns { ok, enabled } with the state now on disk.
     /// </summary>
     public string SetTelemetryEnabled(string enabledJson)
     {
@@ -251,15 +265,9 @@ public class HealthBridge
             if (enabled is null)
                 return Serialize(new { ok = false, error = "expected true or false", enabled = TelemetryPrefs.Read().Enabled });
 
-            var prefs = TelemetryPrefs.Read();
-            if (prefs.Enabled != enabled.Value)
-            {
-                prefs.Enabled = enabled.Value;
-                if (!prefs.Write(log: m => Log.Warning("Telemetry prefs: {Message}", m)))
-                    return Serialize(new { ok = false, error = "failed to save preference", enabled = TelemetryPrefs.Read().Enabled });
-                try { _telemetryToggled?.Invoke(enabled.Value); }
-                catch (Exception ex) { Log.Warning(ex, "Bridge.set_telemetry_enabled: toggle callback threw"); }
-            }
+            if (!ConsentToggle.Apply(enabled.Value, _telemetryToggled,
+                    log: m => Log.Warning("Telemetry toggle: {Message}", m)))
+                return Serialize(new { ok = false, error = "failed to save preference", enabled = TelemetryPrefs.Read().Enabled });
             return Serialize(new { ok = true, error = (string?)null, enabled = enabled.Value });
         }
         catch (Exception ex)

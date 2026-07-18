@@ -2,6 +2,7 @@
 // the health viewer without the Engine taking a direct dependency on
 // WPF / WebView2 types at the call site.
 
+using System;
 using RST.Core.Health;
 
 namespace RST.UI.Health;
@@ -16,9 +17,18 @@ public static class HealthHost
     /// active model, warnings count). Pass <see cref="HealthContext.Empty"/>
     /// when running outside Revit — the scanner falls back to its
     /// system-only sections.</param>
-    public static void ShowModal(HealthContext context)
+    /// <param name="telemetryToggled">Invoked with the clicked value on
+    /// every successful persist of the Activity tab's collection toggle
+    /// — the collector seam (markers + heartbeat; see
+    /// <see cref="HealthBridge"/>). Null = persist-only.</param>
+    /// <param name="liveSessionStartUtc">Live read of the collector's
+    /// session_start ts (see <see cref="HealthBridge"/>). Null = the
+    /// context's captured value only.</param>
+    public static void ShowModal(HealthContext context,
+                                 Action<bool>? telemetryToggled = null,
+                                 Func<DateTimeOffset?>? liveSessionStartUtc = null)
     {
-        var window = new HealthWindow(context);
+        var window = new HealthWindow(context, telemetryToggled, liveSessionStartUtc);
         window.ShowDialog();
     }
 }

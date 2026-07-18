@@ -54,6 +54,7 @@ public sealed class CollectorLifecycle : IDisposable
     private volatile bool _enabled;
     private volatile bool _shutdown;
     private bool _sessionStartWritten;
+    private DateTimeOffset? _sessionStartUtc;
     private bool _heartbeatWarned;
 
     public CollectorLifecycle(
@@ -82,6 +83,12 @@ public sealed class CollectorLifecycle : IDisposable
 
     /// <summary>True once session_start has been enqueued this session.</summary>
     public bool SessionStartWritten { get { lock (_gate) return _sessionStartWritten; } }
+
+    /// <summary>The session_start event's ts, once one has been written
+    /// this session — the Activity tab's live-session anchor (spec:
+    /// "ticking client-side from session_start.ts"). Null until then;
+    /// stays null for a session that never collects.</summary>
+    public DateTimeOffset? SessionStartUtc { get { lock (_gate) return _sessionStartUtc; } }
 
     internal bool HeartbeatRunning { get { lock (_gate) return _heartbeat is not null; } }
 
@@ -238,6 +245,7 @@ public sealed class CollectorLifecycle : IDisposable
         _enrichSessionStart(e);
         _writer.Enqueue(e);
         _sessionStartWritten = true;
+        _sessionStartUtc = e.Ts;
     }
 
     private void StartHeartbeatLocked()

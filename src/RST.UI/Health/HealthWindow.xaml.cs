@@ -24,12 +24,15 @@ public partial class HealthWindow : Window
     private const string VirtualHost = "rst.ui";
     private readonly HealthBridge _bridge;
 
-    public HealthWindow(HealthContext context)
+    public HealthWindow(HealthContext context, Action<bool>? telemetryToggled = null,
+                        Func<DateTimeOffset?>? liveSessionStartUtc = null)
     {
         InitializeComponent();
         _bridge = new HealthBridge(
             context,
-            () => Dispatcher.BeginInvoke(new Action(Close)));
+            () => Dispatcher.BeginInvoke(new Action(Close)),
+            telemetryToggled,
+            liveSessionStartUtc);
         Loaded += async (_, _) => await InitializeWebViewAsync();
     }
 

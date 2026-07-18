@@ -101,6 +101,94 @@ public sealed class TelemetryPrefsTests : IDisposable
     }
 
     [Fact]
+    public void Update_on_a_missing_file_applies_the_mutation_to_first_run_defaults()
+    {
+        TelemetryPrefs.Update(p => p.RetentionDays = 90, _path).Should().BeTrue();
+
+        var back = TelemetryPrefs.Read(_path);
+        back.RetentionDays.Should().Be(90);
+        back.Enabled.Should().BeTrue("the untouched fields keep their first-run defaults");
+    }
+
+    [Fact]
+    public void Update_mutates_against_the_freshest_state_not_a_cached_one()
+    {
+        // Two instances each change their own field; neither write may
+        // revert the other's — the field update must re-read under the
+        // lock, never trust what its caller read earlier.
+        TelemetryPrefs.Update(p => p.Enabled = false, _path).Should().BeTrue();
+        TelemetryPrefs.Update(p => p.RetentionDays = 30, _path).Should().BeTrue();
+
+        var back = TelemetryPrefs.Read(_path);
+        back.Enabled.Should().BeFalse("the retention edit must not resurrect the toggled-off state");
+        back.RetentionDays.Should().Be(30);
+    }
+
+    [Fact]
+    public void Update_failure_returns_false_and_never_throws()
+    {
+        var blocker = Path.Combine(_root, "blocker");
+        File.WriteAllText(blocker, "x");
+        var unwritable = Path.Combine(blocker, "telemetry_prefs.json");
+
+        string? logged = null;
+        var act = () => TelemetryPrefs.Update(p => p.Enabled = false, unwritable, m => logged = m)
+            .Should().BeFalse();
+        act.Should().NotThrow();
+        logged.Should().Contain("failed");
+    }
+
+    [Fact]
+    public void Update_reports_false_when_the_writer_lock_stays_held()
+    {
+        var originalTimeout = TelemetryPrefs.LockTimeoutMs;
+        TelemetryPrefs.LockTimeoutMs = 150;
+        try
+        {
+            new TelemetryPrefs().Write(_path).Should().BeTrue();
+            using var held = new FileStream(
+                _path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+            string? logged = null;
+            TelemetryPrefs.Update(p => p.Enabled = false, _path, m => logged = m)
+                .Should().BeFalse("a wedged peer must produce a reported failure, not a stall or a lockless write");
+            logged.Should().Contain("lock");
+            TelemetryPrefs.Read(_path).Enabled.Should().BeTrue("nothing may be written without the lock");
+        }
+        finally
+        {
+            TelemetryPrefs.LockTimeoutMs = originalTimeout;
+        }
+    }
+
+    [Fact]
+    public void Concurrent_updates_serialize_under_the_lock_and_lose_nothing()
+    {
+        // Two writers hammering read-modify-write increments: any lost
+        // update (stale read overwritten) or torn read (fail-closed reset)
+        // breaks the final count. Exercises the real lock-file contention
+        // path — each Update opens its own FileShare.None handle.
+        const int writers = 2, perWriter = 25;
+        new TelemetryPrefs { RetentionDays = 0 }.Write(_path).Should().BeTrue();
+
+        var threads = Enumerable.Range(0, writers).Select(_ => new Thread(() =>
+        {
+            for (var i = 0; i < perWriter; i++)
+                TelemetryPrefs.Update(p => p.RetentionDays++, _path)
+                    .Should().BeTrue("no increment may fail under contention");
+        })).ToArray();
+        foreach (var t in threads) t.Start();
+        foreach (var t in threads) t.Join();
+
+        var back = TelemetryPrefs.Read(_path);
+        back.RetentionDays.Should().Be(writers * perWriter, "every increment must survive");
+        back.Enabled.Should().BeTrue("no interleaving may tear the file into the fail-closed state");
+        Directory.GetFiles(_root).Should().BeEquivalentTo(
+            new[] { _path, _path + ".lock" },
+            "contention must leak no temp files — only the prefs file and its lock remain");
+    }
+
+    [Fact]
     public void Round_trips_all_fields()
     {
         var shown = new DateTimeOffset(2026, 7, 18, 8, 0, 0, TimeSpan.Zero);
