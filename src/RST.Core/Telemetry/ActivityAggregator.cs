@@ -3,8 +3,10 @@
 // step 3). Pure, unit-testable, no Revit references.
 //
 // Current-file matching uses the same priority order the server would —
-// cloud GUID pair → central GUID → creation GUID — decided per event at
-// the highest level the event carries: a present key that differs
+// cloud GUID pair → central GUID → central path → creation GUID
+// (WorksharingCentralGUID is Revit Server-only, so file-share centrals
+// match on the normalized user-visible central path; SC-032) — decided
+// per event at the highest level the event carries: a present key that differs
 // rejects, an absent key falls through, so an identity-capture gap on
 // one event can't orphan its close or sync endpoint. The cloud level
 // confirms only a complete pair — a matching model guid without its
@@ -166,7 +168,7 @@ public static class ActivityAggregator
     /// <summary>
     /// Return the current file's best key kind and a per-event match
     /// predicate. Each event is decided at the highest priority level
-    /// (cloud pair → central → creation) it actually carries: a present
+    /// (cloud pair → central guid → central path → creation) it actually carries: a present
     /// key that differs rejects, an absent key falls through to the next
     /// level — an identity-capture gap on one event must not orphan its
     /// close or sync endpoint. The cloud level confirms only when both
@@ -204,6 +206,17 @@ public static class ActivityAggregator
         {
             kind ??= ActivityMatchKinds.Central;
             levels.Add(e => e.GetString(TelemetryFields.CentralGuid) is { } v ? KeyEquals(v, central) : null);
+        }
+
+        if (file.CentralPath is { Length: > 0 } centralPath)
+        {
+            // File-share centrals carry no WorksharingCentralGUID (Revit
+            // Server-only) — the user-visible central path is their key,
+            // compared case-insensitive ordinal. Only full-block events
+            // carry it; keys-only events fall through to creation_guid.
+            kind ??= ActivityMatchKinds.CentralPath;
+            levels.Add(e => e.GetString(TelemetryFields.CentralPath) is { Length: > 0 } v
+                ? KeyEquals(v, centralPath) : null);
         }
 
         if (file.CreationGuid is { } creation)

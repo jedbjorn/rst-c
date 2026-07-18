@@ -385,6 +385,36 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Central_path_matches_file_share_central_and_outranks_creation_guid()
+    {
+        // File-share central: WorksharingCentralGUID is Revit Server-only,
+        // so the user-visible central path is the only central key
+        // (SC-032). It joins local copies case-insensitively and outranks
+        // a conflicting creation guid — lineage never overrides a present
+        // central identity.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var localCopy = new DocumentIdentity
+        {
+            CreationGuid = "doc-b",
+            CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), localCopy),
+            Event(s, 2, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var series = Aggregate(current);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.CentralPath);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the normalized central path joins file-share local copies despite the differing creation guid");
+    }
+
+    [Fact]
     public void Close_with_identity_capture_gap_ends_the_interval_via_a_lower_key()
     {
         // The doc opened with full cloud identity, but the doc_closing

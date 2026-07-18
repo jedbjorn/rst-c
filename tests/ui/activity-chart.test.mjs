@@ -106,6 +106,21 @@ function check(name, cond) { if (!cond) failures.push(name); }
   check('tangent at a local maximum is 0', m[1] === 0);
 }
 
+// --- SC-031: equal-x points (two events in the same instant) must not
+//     emit NaN — the equal-x pair zeroed a secant denominator at PR head.
+//     They collapse to their mean y before interpolation.
+{
+  const p = monotoneCubicPath([{ x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 3 }]);
+  check('equal-x pair emits a NaN-free path', p !== '' && !p.includes('NaN'));
+  check('equal-x pair collapses to its mean y (curve starts at 1.50)',
+    p.startsWith('M1.00 1.50'));
+  const sampled = p ? sampleBezierYs(p) : [];
+  check('equal-x collapsed curve samples finite',
+    sampled.length > 0 && sampled.every(q => isFinite(q.x) && isFinite(q.y)));
+}
+check('all points at a single x emit no path (dots only)',
+  monotoneCubicPath([{ x: 5, y: 1 }, { x: 5, y: 2 }]) === '');
+
 // --- Sparse states: <2 points → no curve; the mode helper gates rendering.
 check('monotoneCubicPath with 1 point emits no path',
   monotoneCubicPath([{ x: 0, y: 3 }]) === '');

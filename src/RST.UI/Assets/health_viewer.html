@@ -1036,11 +1036,20 @@
   }
 
   // Cubic Hermite → cubic Bézier path through pts ([{x,y}], ascending x).
-  // Empty string below 2 points — the caller renders dots only.
+  // Points sharing an x collapse to their mean y first — an equal-x pair
+  // zeroes a secant denominator and emits NaN into the path (SC-031); the
+  // curve passes through the mean while the caller still dots every raw
+  // point. Empty string below 2 distinct x — the caller renders dots only.
   function monotoneCubicPath(pts) {
-    const n = pts.length;
+    const groups = [];
+    for (const p of pts) {
+      const last = groups[groups.length - 1];
+      if (last && p.x === last.x) { last.sum += p.y; last.count++; }
+      else groups.push({ x: p.x, sum: p.y, count: 1 });
+    }
+    const n = groups.length;
     if (n < 2) return '';
-    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const xs = groups.map(g => g.x), ys = groups.map(g => g.sum / g.count);
     const m = monotoneTangents(xs, ys);
     let path = 'M' + xs[0].toFixed(2) + ' ' + ys[0].toFixed(2);
     for (let i = 0; i < n - 1; i++) {

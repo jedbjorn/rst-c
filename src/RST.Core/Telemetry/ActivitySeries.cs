@@ -29,6 +29,7 @@ public static class ActivityMatchKinds
 {
     public const string Cloud = "cloud";
     public const string Central = "central";
+    public const string CentralPath = "central_path";
     public const string Creation = "creation";
 }
 

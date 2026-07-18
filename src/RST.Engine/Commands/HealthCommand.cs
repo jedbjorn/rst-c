@@ -64,6 +64,7 @@ public sealed class HealthCommand : IExternalCommand
         string? cloudProjectGuid = null;
         string? cloudModelGuid = null;
         string? centralGuid = null;
+        string? centralPath = null;
         bool? isWorkshared = null;
         bool? isCloud = null;
 
@@ -75,9 +76,9 @@ public sealed class HealthCommand : IExternalCommand
             modelPath = SafeStr(() => doc.PathName ?? "");
 
             // Identity keys for the Activity tab's current-file matching
-            // (cloud pair → central → creation). Cheap property reads
-            // only, every one null-on-failure — same rule as telemetry
-            // capture.
+            // (cloud pair → central guid → central path → creation).
+            // Cheap property reads only, every one null-on-failure —
+            // same rule as telemetry capture.
             creationGuid = SafeGet(() => doc.CreationGUID.ToString());
             isWorkshared = SafeGetBool(() => doc.IsWorkshared);
             isCloud = SafeGetBool(() => doc.IsModelInCloud);
@@ -92,7 +93,17 @@ public sealed class HealthCommand : IExternalCommand
             }
             if (isWorkshared == true)
             {
+                // WorksharingCentralGUID is Revit Server-only — on a
+                // file-share central it throws and stays null; the
+                // user-visible central path is that case's identity key
+                // (SC-032).
                 centralGuid = SafeGet(() => doc.WorksharingCentralGUID.ToString());
+                centralPath = SafeGet(() =>
+                {
+                    var mp = doc.GetWorksharingCentralModelPath();
+                    var visible = mp is null ? null : ModelPathUtils.ConvertModelPathToUserVisiblePath(mp);
+                    return string.IsNullOrEmpty(visible) ? null : visible;
+                });
             }
 
             modelSizeMb = TryGetFileSizeMb(modelPath);
@@ -123,6 +134,7 @@ public sealed class HealthCommand : IExternalCommand
             CloudProjectGuid = cloudProjectGuid,
             CloudModelGuid = cloudModelGuid,
             CentralGuid = centralGuid,
+            CentralPath = centralPath,
             IsWorkshared = isWorkshared,
             IsCloud = isCloud,
         };

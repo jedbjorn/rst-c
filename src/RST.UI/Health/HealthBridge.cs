@@ -280,6 +280,7 @@ public class HealthBridge
                      !string.IsNullOrEmpty(_context.ModelPath) ||
                      _context.CreationGuid is not null ||
                      _context.CentralGuid is not null ||
+                     _context.CentralPath is not null ||
                      _context.CloudModelGuid is not null;
         if (!hasDoc) return null;
         return new DocumentIdentity
@@ -288,6 +289,7 @@ public class HealthBridge
             CloudProjectGuid = _context.CloudProjectGuid,
             CloudModelGuid = _context.CloudModelGuid,
             CentralGuid = _context.CentralGuid,
+            CentralPath = _context.CentralPath,
             IsWorkshared = _context.IsWorkshared,
             IsCloud = _context.IsCloud,
         };
