@@ -258,9 +258,11 @@ public static class ActivityAggregator
         // Open doc_openings awaiting their doc_opened, in seq order.
         var pendingOpenings = new List<(DateTimeOffset Ts, string? LocalPath)>();
         // Current file's open docs: per-session join key → (opened ts,
-        // local path). The path is what doc_saved_as re-identification
-        // joins through (previous_local_path).
-        var openDocs = new Dictionary<string, (DateTimeOffset Ts, string? LocalPath)>();
+        // local path, creation guid). The path is what doc_saved_as
+        // re-identification joins through (previous_local_path); the
+        // creation guid is its lineage fallback when the path join is
+        // absent.
+        var openDocs = new Dictionary<string, (DateTimeOffset Ts, string? LocalPath, string? CreationGuid)>();
         // closing_id → join key, for docs that matched at doc_closing.
         var closingIdToKey = new Dictionary<string, string>();
         // Current file's in-flight syncs: join key → sync_start ts.
@@ -319,8 +321,9 @@ public static class ActivityAggregator
                     if (opening is { } o && e.Ts >= o.Ts)
                         openPoints.Add(new DurationPoint(e.Ts, (e.Ts - o.Ts).TotalSeconds));
 
-                    var key = DocumentIdentity.ReadFrom(e).JoinKey ?? e.EventId;
-                    if (!openDocs.ContainsKey(key)) openDocs[key] = (e.Ts, localPath);
+                    var openedId = DocumentIdentity.ReadFrom(e);
+                    var key = openedId.JoinKey ?? e.EventId;
+                    if (!openDocs.ContainsKey(key)) openDocs[key] = (e.Ts, localPath, openedId.CreationGuid);
                     break;
                 }
 
@@ -328,9 +331,10 @@ public static class ActivityAggregator
                 {
                     // Save As re-identifies an open model in place. The
                     // entry opened under the previous identity (joined by
-                    // previous_local_path) ends here when the join key
-                    // changed — post-save time belongs to the new
-                    // identity, pre-save time to the old; neither ever
+                    // previous_local_path, falling back to creation-GUID
+                    // lineage when the path join is absent) ends here when
+                    // the join key changed — post-save time belongs to the
+                    // new identity, pre-save time to the old; neither ever
                     // inherits the other's. Same key = same bookkeeping
                     // doc: the interval continues, only the path moves.
                     var id = DocumentIdentity.ReadFrom(e);
@@ -342,12 +346,13 @@ public static class ActivityAggregator
                             if (kv.Value.LocalPath is not null &&
                                 string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
                             { oldKey = kv.Key; break; }
+                    oldKey ??= LineageFallbackKey(openDocs, id.CreationGuid, prevPath);
 
                     if (oldKey is not null)
                     {
                         if (newKey is not null && KeyEquals(oldKey, newKey))
                         {
-                            openDocs[oldKey] = (openDocs[oldKey].Ts, id.LocalPath);
+                            openDocs[oldKey] = (openDocs[oldKey].Ts, id.LocalPath, id.CreationGuid);
                             break;
                         }
                         AddInterval(intervals, openDocs[oldKey].Ts, e.Ts, nowUtc);
@@ -356,7 +361,7 @@ public static class ActivityAggregator
 
                     if (!matches(e)) break;
                     var key = newKey ?? e.EventId;
-                    if (!openDocs.ContainsKey(key)) openDocs[key] = (e.Ts, id.LocalPath);
+                    if (!openDocs.ContainsKey(key)) openDocs[key] = (e.Ts, id.LocalPath, id.CreationGuid);
                     break;
                 }
 
@@ -462,6 +467,34 @@ public static class ActivityAggregator
                     if (liveOpenSince is null || entry.Ts < liveOpenSince) liveOpenSince = entry.Ts;
             CloseAll(isLive ? nowUtc : events[^1].Ts);
         }
+    }
+
+    /// <summary>
+    /// Save-As retirement fallback when the previous_local_path ↔
+    /// LocalPath join is absent (an allowed LocalPath read gap on the
+    /// open, or a missing previous_local_path): Save As keeps the
+    /// creation GUID, so an open entry sharing it is the doc that just
+    /// re-identified. Conservative — a stored path that contradicts
+    /// previous_local_path rejects the candidate, and anything but
+    /// exactly one candidate returns null; never guess which doc moved.
+    /// Mirrors RecoveryScanner's fallback.
+    /// </summary>
+    private static string? LineageFallbackKey(
+        Dictionary<string, (DateTimeOffset Ts, string? LocalPath, string? CreationGuid)> openDocs,
+        string? creationGuid, string? prevPath)
+    {
+        if (creationGuid is null) return null;
+        string? match = null;
+        foreach (var kv in openDocs)
+        {
+            if (!KeyEquals(kv.Value.CreationGuid, creationGuid)) continue;
+            if (kv.Value.LocalPath is not null && prevPath is not null &&
+                !string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
+                continue; // a present path that differs is another doc in the lineage
+            if (match is not null) return null; // ambiguous
+            match = kv.Key;
+        }
+        return match;
     }
 
     private static void AddInterval(

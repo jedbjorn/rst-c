@@ -857,6 +857,78 @@ public sealed class ActivityAggregatorTests : IDisposable
         HoursOn(Aggregate(original), 18).Should().BeApproximately(2.0, 1e-9);
     }
 
+    [Fact]
+    public void Save_as_with_absent_path_join_ends_the_old_identity_via_creation_lineage()
+    {
+        // SC-035 review fix: the open's LocalPath read failed (an
+        // allowed identity gap) and doc_saved_as carries no
+        // previous_local_path — the path join is absent. The unchanged
+        // creation GUID retires the pre-save entry; without the
+        // fallback the old identity accrues to session_end even though
+        // the doc closed for real under its post-save path.
+        var before = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var after = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 2, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        after.WriteTo(savedAs); // no previous_local_path — the read gap under test
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), before),
+            savedAs,
+            Closing(s, 3, D(18, 11), after, "c1"),
+            Closed(s, 4, D(18, 11), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(before), 18).Should().BeApproximately(1.0, 1e-9,
+            "the old identity ends at the save; 2.5 means the absent path join left it open to session_end");
+    }
+
+    [Fact]
+    public void Save_as_lineage_fallback_declines_when_two_open_docs_share_the_creation_guid()
+    {
+        // Two entries of one lineage are open for the current file (the
+        // second's central-path capture failed, so it keyed at the
+        // creation guid) when a path-less doc_saved_as arrives —
+        // retiring either candidate would be a guess, so neither ends
+        // here and both run to their real closes.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var gapped = new DocumentIdentity { CreationGuid = "doc-g" };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — ambiguous lineage
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 30), gapped),
+            savedAs,
+            Closing(s, 4, D(18, 10, 30), current, "c1"),
+            Closed(s, 5, D(18, 10, 30), "c1"),
+            Closing(s, 6, D(18, 11), gapped, "c2"),
+            Closed(s, 7, D(18, 11), "c2"),
+            Event(s, 8, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "both lineage entries survive to their real closes (9:00–10:30 ∪ 9:30–11:00); "
+            + "1.5 means the ambiguous fallback guessed one at the save");
+    }
+
     // ---- range windowing & tolerance ------------------------------------
 
     [Fact]
