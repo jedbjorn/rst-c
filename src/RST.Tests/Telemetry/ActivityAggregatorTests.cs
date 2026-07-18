@@ -929,6 +929,90 @@ public sealed class ActivityAggregatorTests : IDisposable
             + "1.5 means the ambiguous fallback guessed one at the save");
     }
 
+    [Fact]
+    public void Save_as_of_a_keyed_sibling_cannot_end_the_current_file()
+    {
+        // SC-037: sibling B is open under its own central path — same
+        // creation GUID G, so it never matches current file A and is
+        // invisible to A's matched view — when a path-less B→C
+        // doc_saved_as arrives. Uniqueness judged only among A's docs
+        // sees A alone in the lineage, calls it unique, and falsely
+        // ends A at B's save; judged over every open doc the lineage is
+        // ambiguous, nothing retires, and A runs to its real close.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_C_Central.rvt",
+            LocalPath = "C:\\models\\tower-c.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — B's save, path join absent
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 30), sibling),
+            savedAs,
+            Closing(s, 4, D(18, 11), current, "c1"),
+            Closed(s, 5, D(18, 11), "c1"),
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "the current file runs 9:00–11:00 to its real close; "
+            + "1.0 means the sibling's save falsely ended it at 10:00");
+    }
+
+    [Fact]
+    public void Closed_sibling_no_longer_blocks_the_lineage_fallback()
+    {
+        // Companion to the SC-037 fix's other edge: the all-docs view
+        // must retire on the sibling's real close — a closed sibling
+        // that lingered would turn every later path-less Save-As of the
+        // lineage ambiguous, leaving the old identity open past its
+        // save (an overcount, the one direction durations never err).
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_C_Central.rvt",
+            LocalPath = "C:\\models\\tower-c.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 5, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — A's save this time
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 15), sibling),
+            Closing(s, 3, D(18, 9, 45), sibling, "c1"),
+            Closed(s, 4, D(18, 9, 45), "c1"),
+            savedAs,
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(1.0, 1e-9,
+            "the current file ends at its 10:00 save to a new identity; "
+            + "2.0 means the already-closed sibling still counted toward ambiguity");
+    }
+
     // ---- range windowing & tolerance ------------------------------------
 
     [Fact]
