@@ -96,14 +96,19 @@ public sealed class HealthCommand : IExternalCommand
                 // WorksharingCentralGUID is Revit Server-only — on a
                 // file-share central it throws and stays null; the
                 // user-visible central path is that case's identity key
-                // (SC-032).
+                // (SC-032). Cloud models keep central_path null per spec:
+                // their identity is the cloud pair, and the cloud path's
+                // display form isn't a stable key.
                 centralGuid = SafeGet(() => doc.WorksharingCentralGUID.ToString());
-                centralPath = SafeGet(() =>
+                if (isCloud != true)
                 {
-                    var mp = doc.GetWorksharingCentralModelPath();
-                    var visible = mp is null ? null : ModelPathUtils.ConvertModelPathToUserVisiblePath(mp);
-                    return string.IsNullOrEmpty(visible) ? null : visible;
-                });
+                    centralPath = SafeGet(() =>
+                    {
+                        var mp = doc.GetWorksharingCentralModelPath();
+                        var visible = mp is null ? null : ModelPathUtils.ConvertModelPathToUserVisiblePath(mp);
+                        return string.IsNullOrEmpty(visible) ? null : visible;
+                    });
+                }
             }
 
             modelSizeMb = TryGetFileSizeMb(modelPath);

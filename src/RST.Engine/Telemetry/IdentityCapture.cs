@@ -44,8 +44,12 @@ internal static class IdentityCapture
             Get(() => doc.PathName),
             Get(() => doc.Title));
 
-    /// <summary>Join keys only — creation_guid + cloud/central GUIDs;
-    /// the block every non-full-block doc event carries.</summary>
+    /// <summary>Join keys only — creation_guid + cloud pair +
+    /// central_guid + central_path; the block every non-full-block doc
+    /// event carries. The path is the file-share central's only central
+    /// key (WorksharingCentralGUID is Revit Server-only), so it rides
+    /// every keys-only event to keep close/sync endpoints matchable
+    /// (SC-032, decision #3); cloud models keep it null.</summary>
     public static DocumentIdentity CaptureKeys(Document doc)
     {
         var identity = new DocumentIdentity
@@ -69,6 +73,11 @@ internal static class IdentityCapture
         {
             // File-based workshared only; throws on anything else → null.
             identity.CentralGuid = Get(() => doc.WorksharingCentralGUID.ToString());
+            // Cheap property read + in-memory path conversion — no file
+            // IO, hot-path safe.
+            identity.CentralPath = Get(() =>
+                ModelPathUtils.ConvertModelPathToUserVisiblePath(
+                    doc.GetWorksharingCentralModelPath()));
         }
 
         return identity;
@@ -91,13 +100,6 @@ internal static class IdentityCapture
         identity.Title = Get(() => doc.Title);
         identity.IsFamilyDoc = Get<bool?>(() => doc.IsFamilyDocument);
         identity.IsDetached = Get<bool?>(() => doc.IsDetached);
-
-        if (identity.IsWorkshared == true && identity.IsCloud != true)
-        {
-            identity.CentralPath = Get(() =>
-                ModelPathUtils.ConvertModelPathToUserVisiblePath(
-                    doc.GetWorksharingCentralModelPath()));
-        }
 
         if (LocalPathGuard.IsLocalFile(identity.LocalPath))
         {

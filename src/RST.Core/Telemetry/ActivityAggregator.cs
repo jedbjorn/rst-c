@@ -212,8 +212,10 @@ public static class ActivityAggregator
         {
             // File-share centrals carry no WorksharingCentralGUID (Revit
             // Server-only) — the user-visible central path is their key,
-            // compared case-insensitive ordinal. Only full-block events
-            // carry it; keys-only events fall through to creation_guid.
+            // compared case-insensitive ordinal. Keys-only events carry
+            // it too (SC-032, decision #3), so close/sync endpoints are
+            // decided here, not at creation_guid — a same-lineage sibling
+            // central can never claim them.
             kind ??= ActivityMatchKinds.CentralPath;
             levels.Add(e => e.GetString(TelemetryFields.CentralPath) is { Length: > 0 } v
                 ? KeyEquals(v, centralPath) : null);
