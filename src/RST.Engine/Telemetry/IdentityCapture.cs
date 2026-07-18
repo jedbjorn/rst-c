@@ -71,13 +71,19 @@ internal static class IdentityCapture
         identity.IsWorkshared = Get<bool?>(() => doc.IsWorkshared);
         if (identity.IsWorkshared == true && identity.IsCloud != true)
         {
-            // File-based workshared only; throws on anything else → null.
+            // File-based workshared only; throws on anything else → null,
+            // so an unknown cloud-ness can't stamp a cloud value here.
             identity.CentralGuid = Get(() => doc.WorksharingCentralGUID.ToString());
-            // Cheap property read + in-memory path conversion — no file
-            // IO, hot-path safe.
-            identity.CentralPath = Get(() =>
-                ModelPathUtils.ConvertModelPathToUserVisiblePath(
-                    doc.GetWorksharingCentralModelPath()));
+            // The path CAN be wrongly stamped on a cloud model, so it
+            // additionally requires known non-cloud (== false) — see
+            // DocumentIdentity.AllowsCentralPath. Cheap property read +
+            // in-memory path conversion — no file IO, hot-path safe.
+            if (DocumentIdentity.AllowsCentralPath(identity.IsCloud))
+            {
+                identity.CentralPath = Get(() =>
+                    ModelPathUtils.ConvertModelPathToUserVisiblePath(
+                        doc.GetWorksharingCentralModelPath()));
+            }
         }
 
         return identity;

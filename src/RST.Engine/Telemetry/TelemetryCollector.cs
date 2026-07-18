@@ -316,9 +316,10 @@ public sealed class TelemetryCollector : IDisposable
             if (!IdentityCapture.IsTrackable(doc)) return;
             var keys = IdentityCapture.CaptureKeys(doc!);
             // args.Location is a fallback for a lost central-path read
-            // only — never an overwrite, and never for cloud models,
-            // whose central_path stays null (SC-032, decision #3).
-            if (keys.CentralPath is null && keys.IsCloud != true)
+            // only — never an overwrite, and only for a KNOWN non-cloud
+            // model: cloud and unknown-cloud-ness alike keep central_path
+            // null (SC-032, decision #3).
+            if (keys.CentralPath is null && DocumentIdentity.AllowsCentralPath(keys.IsCloud))
                 keys.CentralPath = Get(() => args.Location);
             var comment = Get(() => args.Comments);
             _lifecycle.TryEmit(TelemetryEventTypes.SyncStart, populate: e =>

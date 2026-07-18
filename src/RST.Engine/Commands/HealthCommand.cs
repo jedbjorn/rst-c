@@ -19,6 +19,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RST.Core.Health;
+using RST.Core.Telemetry;
 using RST.UI.Health;
 using Serilog;
 
@@ -98,9 +99,10 @@ public sealed class HealthCommand : IExternalCommand
                 // user-visible central path is that case's identity key
                 // (SC-032). Cloud models keep central_path null per spec:
                 // their identity is the cloud pair, and the cloud path's
-                // display form isn't a stable key.
+                // display form isn't a stable key — so the path requires
+                // KNOWN non-cloud; unknown cloud-ness suppresses it too.
                 centralGuid = SafeGet(() => doc.WorksharingCentralGUID.ToString());
-                if (isCloud != true)
+                if (DocumentIdentity.AllowsCentralPath(isCloud))
                 {
                     centralPath = SafeGet(() =>
                     {

@@ -33,6 +33,16 @@ public sealed class DocumentIdentity
     public bool? IsDetached { get; set; }
 
     /// <summary>
+    /// Central-path capture requires KNOWN non-cloud. Revit's
+    /// GetWorksharingCentralModelPath returns a real path for a cloud
+    /// model, so when the IsModelInCloud read failed (null) the model may
+    /// be cloud and a captured path could violate the cloud-null
+    /// invariant — a wrongly-stamped central_path is worse than a null,
+    /// which is itself data (SC-032, decision #3).
+    /// </summary>
+    public static bool AllowsCentralPath(bool? isCloud) => isCloud == false;
+
+    /// <summary>
     /// Best local handle for "same document" bookkeeping (open-doc
     /// tracking in the recovery scanner, throttle keys in the collector).
     /// NOT server resolution — just a stable per-session key.

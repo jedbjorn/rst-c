@@ -46,6 +46,24 @@ public sealed class DocumentIdentityTests
         e.GetString(TelemetryFields.Title).Should().BeNull("descriptive fields are full-block-only");
     }
 
+    // SC-032 round 4: every central-path capture site (CaptureKeys,
+    // HealthCommand, the sync_start args.Location fallback) gates on this
+    // predicate, so it IS the capture-seam behavior: unknown cloud-ness
+    // (IsModelInCloud read failed → null) must suppress the path exactly
+    // like known cloud — GetWorksharingCentralModelPath returns a real
+    // path for cloud models, and a wrongly-stamped central_path is worse
+    // than a null. Known non-cloud must still capture.
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(null, false)]
+    public void Central_path_capture_requires_known_non_cloud(bool? isCloud, bool allowed)
+    {
+        DocumentIdentity.AllowsCentralPath(isCloud).Should().Be(
+            allowed,
+            "unknown cloud-ness is UNKNOWN, not non-cloud — only a successful IsModelInCloud=false read permits central_path");
+    }
+
     [Fact]
     public void Full_block_shape_carries_keys_and_descriptive_fields()
     {
