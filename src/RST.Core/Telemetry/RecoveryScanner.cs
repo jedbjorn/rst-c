@@ -101,11 +101,15 @@ public static class RecoveryScanner
     }
 
     /// <summary>
-    /// Replay doc_opened / doc_closing / doc_closed to find the docs
-    /// still open at the end of the file. doc_closed carries only
-    /// closing_id + status (DocumentClosed doesn't expose the Document),
-    /// so identity joins through the preceding doc_closing. A cancelled
-    /// or failed close leaves the doc open.
+    /// Replay doc_opened / doc_saved_as / doc_closing / doc_closed to
+    /// find the docs still open at the end of the file. doc_closed
+    /// carries only closing_id + status (DocumentClosed doesn't expose
+    /// the Document), so identity joins through the preceding
+    /// doc_closing. A cancelled or failed close leaves the doc open.
+    /// doc_saved_as re-identifies its doc in place (joined by
+    /// previous_local_path) — the doc is open under the new identity
+    /// from there, so a synthetic close carries the post-save keys and a
+    /// real close of the new identity clears it (SC-035).
     /// </summary>
     private static Dictionary<string, DocumentIdentity> TrackOpenDocs(List<TelemetryEvent> events)
     {
@@ -119,6 +123,20 @@ public static class RecoveryScanner
                 case TelemetryEventTypes.DocOpened:
                 {
                     var identity = DocumentIdentity.ReadFrom(e);
+                    open[identity.JoinKey ?? e.EventId] = identity;
+                    break;
+                }
+                case TelemetryEventTypes.DocSavedAs:
+                {
+                    var identity = DocumentIdentity.ReadFrom(e);
+                    var prevPath = e.GetString(TelemetryFields.PreviousLocalPath);
+                    string? oldKey = null;
+                    if (prevPath is not null)
+                        foreach (var kv in open)
+                            if (kv.Value.LocalPath is not null &&
+                                string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
+                            { oldKey = kv.Key; break; }
+                    if (oldKey is not null) open.Remove(oldKey);
                     open[identity.JoinKey ?? e.EventId] = identity;
                     break;
                 }

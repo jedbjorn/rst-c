@@ -478,6 +478,89 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Central_path_only_close_correlates_when_creation_guid_is_null()
+    {
+        // SC-035 failure 1: creation_guid capture failed (an allowed
+        // identity gap) but central_path succeeded. The keys-only
+        // doc_closing must still produce a join key — without the path
+        // level the close can't correlate and open time runs to
+        // session_end.
+        var current = new DocumentIdentity { CentralPath = "\\\\server\\projects\\Tower_Central.rvt" };
+        var recorded = new DocumentIdentity
+        {
+            CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT",
+            LocalPath = "C:\\models\\tower.rvt",
+            Title = "tower.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), recorded),
+            Closing(s, 2, D(18, 10), recorded, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        var series = Aggregate(current);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.CentralPath);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the close correlates on central path alone; 2.5 means the keys-only closing produced no join key and the interval ran to session_end");
+    }
+
+    [Fact]
+    public void Central_path_only_sync_endpoints_pair_when_creation_guid_is_null()
+    {
+        // SC-035 failure 1, sync side: with creation_guid null the
+        // central path is the only key the keys-only sync endpoints
+        // carry — losing it drops the pairing and plots nothing.
+        var current = new DocumentIdentity { CentralPath = "\\\\server\\projects\\Tower_Central.rvt" };
+        var recorded = new DocumentIdentity
+        {
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), recorded),
+            Sync(s, 2, D(18, 9, 30), recorded, TelemetryEventTypes.SyncStart),
+            Sync(s, 3, D(18, 9, 35), recorded, TelemetryEventTypes.SyncEnd),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle(
+            "central path is the only join key this identity has").Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(300, 1e-9);
+    }
+
+    [Fact]
+    public void Save_as_to_a_new_central_path_ends_the_old_identity_at_save()
+    {
+        // SC-035 failure 2 + the ratified Save-As mirror: Save As from
+        // one file-share central to another keeps the creation GUID, so
+        // a creation-keyed bookkeeping entry would read "same doc" and
+        // accrue the old identity to session_end.
+        var oldCentral = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var newCentral = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), oldCentral),
+            SavedAs(s, 2, D(18, 10), newCentral, "C:\\models\\tower.rvt"),
+            Event(s, 3, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(oldCentral), 18).Should().BeApproximately(1.0, 1e-9,
+            "the old identity ends at the save; 2.5 means the unchanged creation GUID read as the same bookkeeping doc");
+    }
+
+    [Fact]
     public void Sibling_central_with_same_creation_guid_cannot_close_the_current_file()
     {
         // SC-032 residual, discrimination side: two file-share centrals
