@@ -136,6 +136,26 @@ public sealed class OutboxWriterTests : IDisposable
     }
 
     [Fact]
+    public void Overflow_warning_is_never_invoked_synchronously_by_Enqueue()
+    {
+        var logThreads = new List<int>();
+        using var writer = NewWriter(capacity: 2, log: _ => logThreads.Add(Environment.CurrentManagedThreadId));
+
+        // Writer not started: every overflow happens on this thread, and
+        // the warning must NOT — Enqueue runs on Revit's event thread and
+        // may never perform or block on logging IO.
+        for (var i = 0; i < 5; i++)
+            writer.Enqueue(_session.Create(TelemetryEventTypes.DocChangedPulse));
+        logThreads.Should().BeEmpty("Enqueue must only flag the warning, never emit it");
+
+        writer.Start();
+        writer.CompleteAndJoin(TimeSpan.FromSeconds(10)).Should().BeTrue();
+
+        logThreads.Should().ContainSingle("the writer thread emits the one-shot warning")
+            .Which.Should().NotBe(Environment.CurrentManagedThreadId);
+    }
+
+    [Fact]
     public void Enqueue_after_complete_is_a_silent_no_op()
     {
         var writer = NewWriter();

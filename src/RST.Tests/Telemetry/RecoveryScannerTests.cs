@@ -145,30 +145,73 @@ public sealed class RecoveryScannerTests : IDisposable
         events[^1].EventType.Should().Be("session_end");
     }
 
-    [Fact]
-    public void Cancelled_close_leaves_the_doc_open_for_recovery()
+    private string WriteFileWithClosedStatus(string sessionGuid, string? status)
     {
-        var s = Guid.NewGuid().ToString();
-        var closing = Event(s, 3, TelemetryEventTypes.DocClosing, T0.AddMinutes(5));
+        var closing = Event(sessionGuid, 3, TelemetryEventTypes.DocClosing, T0.AddMinutes(5));
         new DocumentIdentity { CreationGuid = "doc-a" }.WriteKeysTo(closing);
         closing.SetField(TelemetryFields.ClosingId, "17");
-        var closed = Event(s, 4, TelemetryEventTypes.DocClosed, T0.AddMinutes(5));
+        var closed = Event(sessionGuid, 4, TelemetryEventTypes.DocClosed, T0.AddMinutes(5));
         closed.SetField(TelemetryFields.ClosingId, "17");
-        closed.SetField(TelemetryFields.Status, "Cancelled");
+        if (status is not null) closed.SetField(TelemetryFields.Status, status);
 
-        var path = WriteSessionFile(_root, s,
-            Event(s, 1, TelemetryEventTypes.SessionStart, T0),
-            DocOpened(s, 2, T0.AddMinutes(1), "doc-a"),
+        return WriteSessionFile(_root, sessionGuid,
+            Event(sessionGuid, 1, TelemetryEventTypes.SessionStart, T0),
+            DocOpened(sessionGuid, 2, T0.AddMinutes(1), "doc-a"),
             closing,
             closed);
+    }
+
+    [Theory]
+    [InlineData("Cancelled")]
+    [InlineData("Failed")]
+    public void Cancelled_or_failed_close_leaves_the_doc_open_for_recovery(string status)
+    {
+        var s = Guid.NewGuid().ToString();
+        var path = WriteFileWithClosedStatus(s, status);
 
         RecoveryScanner.Scan(_root).Should().Equal(path);
 
         var synthetic = OutboxFiles.ReadEvents(path)
             .Where(e => e.Synthetic == true && e.EventType == TelemetryEventTypes.DocClosed)
             .ToList();
-        synthetic.Should().ContainSingle("a cancelled close never actually closed the doc")
+        synthetic.Should().ContainSingle($"a {status} close never actually closed the doc")
             .Which.GetString(TelemetryFields.CreationGuid).Should().Be("doc-a");
+    }
+
+    [Theory]
+    [InlineData(null)]            // status field absent
+    [InlineData("SomethingElse")] // unrecognized status
+    public void Missing_or_other_close_status_counts_as_closed(string? status)
+    {
+        var s = Guid.NewGuid().ToString();
+        var path = WriteFileWithClosedStatus(s, status);
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        var events = OutboxFiles.ReadEvents(path);
+        events.Where(e => e.Synthetic == true).Should().ContainSingle(
+                "only Cancelled/Failed mean the close did not happen — anything else closed the doc, "
+                + "so the session_end is the sole synthetic")
+            .Which.EventType.Should().Be(TelemetryEventTypes.SessionEnd);
+    }
+
+    [Fact]
+    public void Envelope_less_session_end_does_not_count_as_closed()
+    {
+        // A damaged line that still says event_type:session_end must not
+        // satisfy the closed-file contract — recovery treats the file as
+        // a zero-parseable-line orphan and closes it for real.
+        var s = Guid.NewGuid().ToString();
+        var path = Path.Combine(_root, OutboxFiles.SessionFileName(InstallId, s));
+        File.WriteAllText(path, "{\"event_type\":\"session_end\"}\n");
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        var events = OutboxFiles.ReadEvents(path);
+        events.Should().ContainSingle("the forged line stays unparseable; the synthetic close is real");
+        events[0].EventType.Should().Be("session_end");
+        events[0].Synthetic.Should().BeTrue();
+        events[0].SessionGuid.Should().Be(s);
     }
 
     [Fact]

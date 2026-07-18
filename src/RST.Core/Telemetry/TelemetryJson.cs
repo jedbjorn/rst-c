@@ -26,7 +26,11 @@ public static class TelemetryJson
 
     /// <summary>
     /// Parse one outbox line. Returns null for blank, truncated, or
-    /// otherwise unparseable input — readers skip and move on.
+    /// otherwise unparseable input — readers skip and move on. A line
+    /// only counts as an event when the full mandatory envelope is
+    /// present (event_id, session_guid, seq ≥ 1, ts, event_type):
+    /// recovery and prune decide "closed" from parsed events, so a bare
+    /// {"event_type":"session_end"} must never masquerade as a close.
     /// </summary>
     public static TelemetryEvent? TryParseLine(string? line)
     {
@@ -34,7 +38,13 @@ public static class TelemetryJson
         try
         {
             var e = JsonSerializer.Deserialize<TelemetryEvent>(line, Options);
-            if (e is null || string.IsNullOrEmpty(e.EventType)) return null;
+            if (e is null ||
+                string.IsNullOrEmpty(e.EventId) ||
+                string.IsNullOrEmpty(e.SessionGuid) ||
+                e.Seq < 1 ||
+                e.Ts == default ||
+                string.IsNullOrEmpty(e.EventType))
+                return null;
             return e;
         }
         catch

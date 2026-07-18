@@ -4,6 +4,8 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using FluentAssertions;
 using RST.Core.Configuration;
 using RST.Core.Telemetry;
@@ -35,6 +37,30 @@ public sealed class InstallIdStoreTests : IDisposable
 
         InstallIdStore.GetOrCreate(_root).Should().Be(first,
             "the install id is minted once and re-read forever after");
+    }
+
+    [Fact]
+    public void Concurrent_first_runs_agree_on_one_install_id()
+    {
+        // Two (here: eight) Revit instances starting simultaneously on a
+        // fresh machine race to mint — every session must report the SAME
+        // id, and the file must hold it (create-if-absent, loser re-reads).
+        const int racers = 8;
+        var ids = new string[racers];
+        using var barrier = new Barrier(racers);
+        var threads = Enumerable.Range(0, racers)
+            .Select(i => new Thread(() =>
+            {
+                barrier.SignalAndWait();
+                ids[i] = InstallIdStore.GetOrCreate(_root);
+            }))
+            .ToList();
+        threads.ForEach(t => t.Start());
+        threads.ForEach(t => t.Join());
+
+        ids.Distinct().Should().ContainSingle(
+            "concurrent first starts must never attribute one install to two ids");
+        File.ReadAllText(Path.Combine(_root, "install_id")).Trim().Should().Be(ids[0]);
     }
 
     [Fact]

@@ -17,11 +17,18 @@ public static class RetentionPruner
 {
     public const int DefaultRetentionDays = 180;
 
+    /// <summary>Upper bound (10 years) on a sane retention window — the
+    /// guard that keeps a corrupt-but-parseable prefs value (int.MaxValue
+    /// overflows AddDays) inside Prune's never-throws contract.</summary>
+    public const int MaxRetentionDays = 3650;
+
     /// <summary>
     /// Delete closed files whose newest event predates
     /// <paramref name="utcNow"/> − <paramref name="retentionDays"/>.
-    /// Returns the paths deleted. A non-positive retention window prunes
-    /// nothing (corrupt prefs must not mass-delete history).
+    /// Returns the paths deleted. An out-of-range window — non-positive
+    /// or beyond <see cref="MaxRetentionDays"/> — prunes nothing: corrupt
+    /// prefs must never mass-delete history, and a huge value means
+    /// "keep everything", not an AddDays overflow.
     /// </summary>
     public static List<string> Prune(
         string outboxDir,
@@ -30,7 +37,7 @@ public static class RetentionPruner
         Action<string>? log = null)
     {
         var deleted = new List<string>();
-        if (retentionDays <= 0) return deleted;
+        if (retentionDays <= 0 || retentionDays > MaxRetentionDays) return deleted;
 
         string[] files;
         try

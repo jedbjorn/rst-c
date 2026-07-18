@@ -102,6 +102,19 @@ public sealed class TelemetryJsonTests
         TelemetryJson.TryParseLine(line).Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("{\"event_type\":\"session_end\"}")]                       // bare event_type, no envelope
+    [InlineData("{\"session_guid\":\"s\",\"seq\":1,\"ts\":\"2026-07-18T00:00:00.000Z\",\"event_type\":\"session_end\"}")]  // no event_id
+    [InlineData("{\"event_id\":\"e\",\"seq\":1,\"ts\":\"2026-07-18T00:00:00.000Z\",\"event_type\":\"session_end\"}")]      // no session_guid
+    [InlineData("{\"event_id\":\"e\",\"session_guid\":\"s\",\"seq\":0,\"ts\":\"2026-07-18T00:00:00.000Z\",\"event_type\":\"session_end\"}")]  // seq below 1
+    [InlineData("{\"event_id\":\"e\",\"session_guid\":\"s\",\"seq\":1,\"event_type\":\"session_end\"}")]                   // no ts
+    public void TryParseLine_rejects_incomplete_envelopes(string line)
+    {
+        TelemetryJson.TryParseLine(line).Should().BeNull(
+            "recovery and prune decide closed-ness from parsed events — a forged or damaged " +
+            "session_end without the mandatory envelope must not count");
+    }
+
     [Fact]
     public void Identity_block_round_trips_through_payload()
     {
@@ -121,7 +134,14 @@ public sealed class TelemetryJsonTests
             IsFamilyDoc = false,
             IsDetached = false,
         };
-        var e = new TelemetryEvent { EventType = TelemetryEventTypes.DocOpened };
+        var e = new TelemetryEvent
+        {
+            EventId = Guid.NewGuid().ToString(),
+            SessionGuid = Guid.NewGuid().ToString(),
+            Seq = 1,
+            Ts = new DateTimeOffset(2026, 7, 18, 10, 0, 0, TimeSpan.Zero),
+            EventType = TelemetryEventTypes.DocOpened,
+        };
         identity.WriteTo(e);
 
         var back = DocumentIdentity.ReadFrom(

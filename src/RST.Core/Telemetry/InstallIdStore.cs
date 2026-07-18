@@ -10,6 +10,8 @@
 // identity gap is data, never an exception.
 
 using System.IO;
+using System.Text;
+using System.Threading;
 
 namespace RST.Core.Telemetry;
 
@@ -19,36 +21,76 @@ public static class InstallIdStore
 
     /// <summary>
     /// Read the persisted install id, minting + persisting one on first
-    /// run. On IO failure returns a fresh GUID for this session and logs
-    /// once — telemetry keeps working, attribution just loses stability.
+    /// run. First-run minting is atomic (FileMode.CreateNew — O_EXCL /
+    /// CREATE_NEW): two Revit instances starting simultaneously race to
+    /// create the file, the loser re-reads the winner's id, and both
+    /// sessions report the SAME install id. On IO failure returns a
+    /// fresh GUID for this session and logs once — telemetry keeps
+    /// working, attribution just loses stability.
     /// </summary>
     public static string GetOrCreate(string telemetryRoot, Action<string>? log = null)
     {
         var path = Path.Combine(telemetryRoot, FileName);
-        try
+        if (File.Exists(path))
         {
-            if (File.Exists(path))
-            {
-                var text = File.ReadAllText(path).Trim();
-                if (Guid.TryParse(text, out var existing)) return existing.ToString();
-            }
-        }
-        catch (Exception ex)
-        {
-            SafeLog(log, "install_id read failed: " + ex.Message);
+            var existing = TryReadExisting(path);
+            if (existing is not null) return existing;
+            // Fall through: file exists but never parsed — genuinely
+            // corrupt, repaired below by overwrite.
         }
 
         var minted = Guid.NewGuid().ToString();
         try
         {
             Directory.CreateDirectory(telemetryRoot);
-            File.WriteAllText(path, minted);
+            if (File.Exists(path))
+            {
+                // Corruption repair, not a first-run race: any writer
+                // lands a valid GUID, last one wins.
+                File.WriteAllText(path, minted);
+                return minted;
+            }
+            using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            var bytes = Encoding.UTF8.GetBytes(minted);
+            fs.Write(bytes, 0, bytes.Length);
+            fs.Flush(flushToDisk: true);
+            return minted;
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            // Lost the first-run race — the winner's id IS the install id.
+            var winner = TryReadExisting(path);
+            if (winner is not null) return winner;
+            SafeLog(log, "install_id unreadable after losing first-run race — using session-scoped id");
+            return minted;
         }
         catch (Exception ex)
         {
             SafeLog(log, "install_id write failed — using session-scoped id: " + ex.Message);
+            return minted;
         }
-        return minted;
+    }
+
+    /// <summary>
+    /// Read + parse the id file, retrying briefly: a race loser can
+    /// observe the winner's file created but not yet flushed.
+    /// </summary>
+    private static string? TryReadExisting(string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var text = File.ReadAllText(path).Trim();
+                if (Guid.TryParse(text, out var g)) return g.ToString();
+            }
+            catch
+            {
+                // unreadable this attempt — retry below
+            }
+            if (attempt >= 4) return null;
+            Thread.Sleep(10);
+        }
     }
 
     private static void SafeLog(Action<string>? log, string message)

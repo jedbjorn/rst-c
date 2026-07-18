@@ -1,5 +1,6 @@
-// TelemetryPrefsTests.cs — defaults, tolerant reads, and round-trip for
-// the consent/config prefs file (Telemetry v1 spec, Build Plan step 1).
+// TelemetryPrefsTests.cs — defaults, fail-closed damaged-state reads,
+// atomic never-throw writes, and round-trip for the consent/config prefs
+// file (Telemetry v1 spec, Build Plan step 1 + Threading & Safety).
 
 using System;
 using System.IO;
@@ -37,11 +38,43 @@ public sealed class TelemetryPrefsTests : IDisposable
         prefs.RetentionDays.Should().Be(180);
     }
 
-    [Fact]
-    public void Corrupt_file_reads_as_defaults()
+    [Theory]
+    [InlineData("{ not json")]                 // corrupt
+    [InlineData("{\"enabled\": fal")]          // truncated mid-write
+    [InlineData("")]                           // zero-byte (crash during create)
+    [InlineData("null")]                       // parseable but not an object
+    [InlineData("[]")]                         // parseable but wrong shape
+    public void Damaged_existing_file_fails_closed(string content)
     {
-        File.WriteAllText(_path, "{ not json");
-        TelemetryPrefs.Read(_path).Enabled.Should().BeTrue();
+        File.WriteAllText(_path, content);
+        TelemetryPrefs.Read(_path).Enabled.Should().BeFalse(
+            "damaged prefs degrade to telemetry OFF — a torn disable-write must never re-enable capture");
+    }
+
+    [Fact]
+    public void Write_is_atomic_and_leaves_no_temp_files()
+    {
+        new TelemetryPrefs { Enabled = false }.Write(_path).Should().BeTrue();
+        new TelemetryPrefs { Enabled = false, RetentionDays = 90 }.Write(_path).Should().BeTrue(
+            "overwriting an existing prefs file must work");
+
+        TelemetryPrefs.Read(_path).RetentionDays.Should().Be(90);
+        // The temp file from the atomic write must not linger.
+        Directory.GetFiles(_root).Should().Equal(_path);
+    }
+
+    [Fact]
+    public void Write_failure_returns_false_and_never_throws()
+    {
+        // A directory component that is actually a FILE makes
+        // CreateDirectory fail on every platform.
+        var blocker = Path.Combine(_root, "blocker");
+        File.WriteAllText(blocker, "x");
+        var unwritable = Path.Combine(blocker, "telemetry_prefs.json");
+
+        string? logged = null;
+        new TelemetryPrefs().Write(unwritable, m => logged = m).Should().BeFalse();
+        logged.Should().Contain("prefs write failed");
     }
 
     [Fact]

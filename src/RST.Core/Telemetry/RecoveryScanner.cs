@@ -73,9 +73,13 @@ public static class RecoveryScanner
         var last = events.Count > 0 ? events[^1] : null;
         var ts = last?.Ts ?? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
         var seq = events.Count > 0 ? events.Max(e => e.Seq) : 0;
+        // A fresh GUID as the last resort: the real session identity is
+        // already lost, and an empty session_guid would make our own
+        // synthetics fail envelope validation — the file would never
+        // read as closed and recovery would re-append forever.
         var sessionGuid = last?.SessionGuid
             ?? OutboxFiles.TryParseSessionGuid(Path.GetFileName(path))
-            ?? "";
+            ?? Guid.NewGuid().ToString();
 
         var sb = new StringBuilder();
         foreach (var identity in openDocs.Values)

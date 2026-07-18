@@ -79,7 +79,9 @@ public sealed class RetentionPrunerTests : IDisposable
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
-    public void Non_positive_retention_prunes_nothing(int retentionDays)
+    [InlineData(RetentionPruner.MaxRetentionDays + 1)]
+    [InlineData(int.MaxValue)] // would overflow AddDays if not bounded
+    public void Out_of_range_retention_prunes_nothing_and_never_throws(int retentionDays)
     {
         var oldClosed = ClosedFile(Now.AddDays(-2000));
 
@@ -87,6 +89,21 @@ public sealed class RetentionPrunerTests : IDisposable
 
         File.Exists(oldClosed).Should().BeTrue(
             "corrupt prefs must never translate into mass deletion");
+    }
+
+    [Fact]
+    public void Envelope_less_session_end_is_not_closed_and_never_prunes()
+    {
+        // An old file whose only session_end lacks the mandatory envelope
+        // is NOT closed — recovery must fix it first; deleting it would
+        // erase crash evidence.
+        var s = Guid.NewGuid().ToString();
+        var path = Path.Combine(_root, OutboxFiles.SessionFileName(InstallId, s));
+        File.WriteAllText(path, "{\"event_type\":\"session_end\"}\n");
+
+        RetentionPruner.Prune(_root, 180, Now).Should().BeEmpty();
+
+        File.Exists(path).Should().BeTrue();
     }
 
     [Fact]

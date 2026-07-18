@@ -36,6 +36,7 @@ public sealed class OutboxWriter : IDisposable
     private FileStream? _stream;
     private bool _started;
     private bool _completed;
+    private bool _dropWarnPending;
     private bool _dropWarned;
     private volatile bool _dead;
 
@@ -76,8 +77,9 @@ public sealed class OutboxWriter : IDisposable
 
     /// <summary>
     /// Queue one event for the writer thread. Never throws, never blocks
-    /// on IO. When the queue is full (writer stalled) the oldest record
-    /// drops and a single degraded-mode warning logs per session.
+    /// on IO — including logging IO: an overflow only flags the one-shot
+    /// degraded-mode warning, which the writer thread emits. When the
+    /// queue is full (writer stalled) the oldest record drops.
     /// </summary>
     public void Enqueue(TelemetryEvent e)
     {
@@ -87,11 +89,7 @@ public sealed class OutboxWriter : IDisposable
             if (_queue.Count >= _capacity)
             {
                 _queue.Dequeue();
-                if (!_dropWarned)
-                {
-                    _dropWarned = true;
-                    SafeLog("telemetry queue full — dropping oldest records (writer stalled?)");
-                }
+                _dropWarnPending = true;
             }
             _queue.Enqueue(e);
             Monitor.Pulse(_gate);
@@ -132,13 +130,17 @@ public sealed class OutboxWriter : IDisposable
             while (true)
             {
                 TelemetryEvent[] batch;
+                bool warnDrop;
                 lock (_gate)
                 {
                     while (_queue.Count == 0 && !_completed) Monitor.Wait(_gate);
-                    if (_queue.Count == 0) break;
+                    warnDrop = _dropWarnPending && !_dropWarned;
+                    if (warnDrop) _dropWarned = true;
                     batch = _queue.ToArray();
                     _queue.Clear();
                 }
+                if (warnDrop) SafeLog("telemetry queue full — dropping oldest records (writer stalled?)");
+                if (batch.Length == 0) break;
                 foreach (var e in batch) WriteOne(e);
             }
         }
