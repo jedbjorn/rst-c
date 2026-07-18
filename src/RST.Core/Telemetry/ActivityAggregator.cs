@@ -69,6 +69,7 @@ public static class ActivityAggregator
         var intervals = new List<(DateTimeOffset Start, DateTimeOffset End)>();
         var openPoints = new List<DurationPoint>();
         var syncPoints = new List<DurationPoint>();
+        DateTimeOffset? liveOpenSince = null;
 
         foreach (var path in ListOutboxFiles(outboxDir, log))
         {
@@ -77,7 +78,7 @@ public static class ActivityAggregator
                 var events = OutboxFiles.ReadEvents(path);
                 if (events.Count == 0) continue;
                 ReplaySession(events, matcher.Value.Matches, nowUtc, liveSessionGuid,
-                    intervals, openPoints, syncPoints);
+                    intervals, openPoints, syncPoints, ref liveOpenSince);
             }
             catch (Exception ex)
             {
@@ -93,10 +94,57 @@ public static class ActivityAggregator
         return new ActivitySeries
         {
             MatchedKeyKind = matcher.Value.Kind,
+            LiveOpenSinceUtc = liveOpenSince,
             PerDayOpenHours = perDay,
             OpenEvents = FilterToRange(openPoints, zone, firstDay, lastDay),
             SyncEvents = FilterToRange(syncPoints, zone, firstDay, lastDay),
         };
+    }
+
+    /// <summary>
+    /// The Activity footer's status line: file count, total bytes on
+    /// disk, and the oldest parseable event's ts across the outbox.
+    /// Never throws; unreadable files still count toward size when their
+    /// length is readable, and are skipped for the oldest-event scan.
+    /// </summary>
+    public static OutboxStatus ReadStatus(string outboxDir, Action<string>? log = null)
+    {
+        var files = ListOutboxFiles(outboxDir, log);
+        if (files.Length == 0) return OutboxStatus.Empty;
+
+        var count = 0;
+        long totalBytes = 0;
+        DateTimeOffset? oldest = null;
+        foreach (var path in files)
+        {
+            count++;
+            try { totalBytes += new FileInfo(path).Length; }
+            catch (Exception ex) { SafeLog(log, "telemetry status size failed for " + Path.GetFileName(path) + ": " + ex.Message); }
+            try
+            {
+                if (ReadFirstEventTs(path) is { } ts && (oldest is null || ts < oldest))
+                    oldest = ts;
+            }
+            catch (Exception ex)
+            {
+                SafeLog(log, "telemetry status read failed for " + Path.GetFileName(path) + ": " + ex.Message);
+            }
+        }
+        return new OutboxStatus(count, totalBytes, oldest);
+    }
+
+    /// <summary>Ts of the first parseable line — the whole file is
+    /// scanned only when every earlier line is damaged.</summary>
+    private static DateTimeOffset? ReadFirstEventTs(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(fs);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (TelemetryJson.TryParseLine(line) is { } e) return e.Ts;
+        }
+        return null;
     }
 
     private static string[] ListOutboxFiles(string outboxDir, Action<string>? log)
@@ -187,7 +235,8 @@ public static class ActivityAggregator
         string? liveSessionGuid,
         List<(DateTimeOffset Start, DateTimeOffset End)> intervals,
         List<DurationPoint> openPoints,
-        List<DurationPoint> syncPoints)
+        List<DurationPoint> syncPoints,
+        ref DateTimeOffset? liveOpenSince)
     {
         events.Sort((a, b) => a.Seq.CompareTo(b.Seq));
 
@@ -393,6 +442,9 @@ public static class ActivityAggregator
             // same truncation recovery will apply.
             var isLive = liveSessionGuid is not null &&
                 string.Equals(events[^1].SessionGuid, liveSessionGuid, StringComparison.OrdinalIgnoreCase);
+            if (isLive)
+                foreach (var entry in openDocs.Values)
+                    if (liveOpenSince is null || entry.Ts < liveOpenSince) liveOpenSince = entry.Ts;
             CloseAll(isLive ? nowUtc : events[^1].Ts);
         }
     }

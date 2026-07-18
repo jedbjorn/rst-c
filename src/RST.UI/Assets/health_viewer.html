@@ -396,12 +396,137 @@
     border-color: rgba(245,158,11,0.45);
   }
   .rst-junk-btn--primary:hover { background: rgba(245,158,11,0.28); }
+
+  /* ── TAB BAR (Health / Activity) ─────────────────────────────────────── */
+  .tab-bar {
+    display: flex;
+    gap: 4px;
+    align-self: stretch;
+    align-items: stretch;
+    margin-left: 8px;
+  }
+  .tab-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text3);
+    cursor: pointer;
+    padding: 0 14px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--heading); border-bottom-color: var(--accent); }
+
+  /* ── ACTIVITY TAB ────────────────────────────────────────────────────── */
+  .act-session {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 18px;
+    margin-bottom: 10px;
+  }
+  .act-session-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 6px;
+  }
+  .act-session-time {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--heading);
+    font-variant-numeric: tabular-nums;
+  }
+  .act-session-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text2);
+    margin-top: 4px;
+    min-height: 14px;
+  }
+
+  .act-range {
+    display: inline-flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 10px;
+  }
+  .act-pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    border-radius: 5px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .act-pill:hover { color: var(--text); }
+  .act-pill.active { background: var(--surface3); color: var(--heading); }
+
+  .act-chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 14px 18px 10px;
+    margin-bottom: 10px;
+  }
+  .act-chart-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--heading);
+    margin-bottom: 8px;
+  }
+  .act-chart-body svg { display: block; width: 100%; height: auto; }
+  .act-grid { stroke: var(--border); stroke-width: 1; }
+  .act-axis-label { font-family: var(--font-mono); font-size: 9px; fill: var(--text3); }
+  .act-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .act-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 1; }
+  .act-dot:hover { r: 5; }
+  .act-empty { text-align: center; padding: 28px 12px; color: var(--text3); }
+  .act-empty-title { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+  .act-empty-hint { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; }
+
+  /* Activity footer: collection toggle + status line */
+  .footer-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .footer-status {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--text3);
+  }
 </style>
 <script src="rst_messages.js"></script>
 </head>
 <body>
   <div class="window-header">
-    <div class="window-title">RST · HEALTH SNAPSHOT</div>
+    <div class="window-title">RST · HEALTH</div>
+    <div class="tab-bar">
+      <button type="button" class="tab-btn active" id="tabHealth" data-tab="health">Health</button>
+      <button type="button" class="tab-btn" id="tabActivity" data-tab="activity">Activity</button>
+    </div>
     <div class="header-meta">
       <span>DEVICE<strong data-field="device">—</strong></span>
       <span>CAPTURED<strong data-field="captured">—</strong></span>
@@ -412,14 +537,52 @@
     <div class="content-inner" id="sections">
       <!-- Sections rendered by JS -->
     </div>
+    <div class="content-inner" id="activityPane" hidden>
+      <div class="act-session">
+        <div class="act-session-label">Current Session</div>
+        <div class="act-session-time" id="actSessionTime">—</div>
+        <div class="act-session-sub" id="actSessionSub"></div>
+      </div>
+      <div class="act-range" id="actRange">
+        <button type="button" class="act-pill active" data-days="7">7D</button>
+        <button type="button" class="act-pill" data-days="30">1M</button>
+        <button type="button" class="act-pill" data-days="90">3M</button>
+        <button type="button" class="act-pill" data-days="180">6M</button>
+      </div>
+      <div class="act-chart-card">
+        <div class="act-chart-title">Session time — this file</div>
+        <div class="act-chart-body" id="chartSessionBody"></div>
+      </div>
+      <div class="act-chart-card">
+        <div class="act-chart-title">Opening time — this file</div>
+        <div class="act-chart-body" id="chartOpenBody"></div>
+      </div>
+      <div class="act-chart-card">
+        <div class="act-chart-title">Sync history — this file</div>
+        <div class="act-chart-body" id="chartSyncBody"></div>
+      </div>
+    </div>
   </div>
 
   <div class="window-footer">
-    <button type="button" class="rst-footer-btn rst-footer-btn--scan" id="btnScan">
-      <span class="rst-footer-btn__label">Scan System</span>
-    </button>
-    <div class="footer-spacer"></div>
-    <button type="button" class="rst-footer-btn rst-footer-btn--clean" id="btnClean">Clean Junk Files</button>
+    <div id="footerHealth" style="display: contents">
+      <button type="button" class="rst-footer-btn rst-footer-btn--scan" id="btnScan">
+        <span class="rst-footer-btn__label">Scan System</span>
+      </button>
+      <div class="footer-spacer"></div>
+      <button type="button" class="rst-footer-btn rst-footer-btn--clean" id="btnClean">Clean Junk Files</button>
+    </div>
+    <div id="footerActivity" style="display: none">
+      <span class="footer-toggle-label">
+        <label class="rst-toggle">
+          <input type="checkbox" id="telemetryToggle">
+          <div class="rst-toggle-track"><div class="rst-toggle-thumb"></div></div>
+        </label>
+        <span>Collection</span>
+      </span>
+      <span class="footer-status" id="telemetryStatusLine">—</span>
+      <div class="footer-spacer"></div>
+    </div>
     <button type="button" class="rst-footer-btn" id="btnClose">Close</button>
   </div>
 
@@ -835,6 +998,289 @@
     } catch (e) {
       RSTmsgWaitClose();
       RSTmsgInform('Cleanup failed', String(e));
+    }
+  });
+
+  // ── Activity tab ─────────────────────────────────────────────────────────
+  // Charts are inline SVG (the asset is CSP-locked — no CDN libraries):
+  // monotone cubic (Fritsch–Carlson) smoothing so the curve never
+  // overshoots between points — a fast sync next to a slow one can't
+  // render as a negative duration. The chart-math functions below are
+  // top-level declarations on purpose: the headless UI tests extract and
+  // exercise the shipped code.
+
+  // Fritsch–Carlson tangents: monotone on every segment, flat where the
+  // data is flat, so the interpolant stays within each segment's y-range.
+  function monotoneTangents(xs, ys) {
+    const n = xs.length;
+    if (n === 0) return [];
+    if (n === 1) return [0];
+    const d = [];
+    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+    const m = [d[0]];
+    for (let i = 1; i < n - 1; i++) {
+      m.push(d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2);
+    }
+    m.push(d[n - 2]);
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+      const a = m[i] / d[i], b = m[i + 1] / d[i];
+      const s = a * a + b * b;
+      if (s > 9) {
+        const t = 3 / Math.sqrt(s);
+        m[i] = t * a * d[i];
+        m[i + 1] = t * b * d[i];
+      }
+    }
+    return m;
+  }
+
+  // Cubic Hermite → cubic Bézier path through pts ([{x,y}], ascending x).
+  // Empty string below 2 points — the caller renders dots only.
+  function monotoneCubicPath(pts) {
+    const n = pts.length;
+    if (n < 2) return '';
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const m = monotoneTangents(xs, ys);
+    let path = 'M' + xs[0].toFixed(2) + ' ' + ys[0].toFixed(2);
+    for (let i = 0; i < n - 1; i++) {
+      const h = xs[i + 1] - xs[i];
+      path += 'C' + [
+        xs[i] + h / 3, ys[i] + (m[i] * h) / 3,
+        xs[i + 1] - h / 3, ys[i + 1] - (m[i + 1] * h) / 3,
+        xs[i + 1], ys[i + 1],
+      ].map(v => v.toFixed(2)).join(' ');
+    }
+    return path;
+  }
+
+  // Empty/sparse states are first-class: 0 points → quiet empty state,
+  // 1 point → dot without a curve, 2+ → dots + smoothed curve.
+  function chartMode(points) {
+    if (!points || points.length === 0) return 'empty';
+    if (points.length < 2) return 'dots';
+    return 'curve';
+  }
+
+  function fmtDur(seconds) {
+    if (seconds == null || !isFinite(seconds)) return '—';
+    if (seconds < 90) return (seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)) + 's';
+    const mTot = Math.floor(seconds / 60);
+    if (mTot < 90) return mTot + 'm ' + String(Math.round(seconds % 60)).padStart(2, '0') + 's';
+    return Math.floor(mTot / 60) + 'h ' + String(mTot % 60).padStart(2, '0') + 'm';
+  }
+
+  function fmtHoursShort(h) {
+    if (h == null || !isFinite(h)) return '—';
+    return (Math.round(h * 10) / 10) + 'h';
+  }
+
+  function fmtElapsed(ms) {
+    if (ms == null || !isFinite(ms) || ms < 0) return '—';
+    const s = Math.floor(ms / 1000);
+    return String(Math.floor(s / 3600)).padStart(2, '0') + ':' +
+           String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':' +
+           String(s % 60).padStart(2, '0');
+  }
+
+  // One shared renderer: axis gridlines, monotone curve, hover dots
+  // (native <title> tooltips). Pure string builder — testable headless.
+  function buildChartSvg(points, opts) {
+    const W = 760, H = 190, padL = 46, padR = 14, padT = 14, padB = 26;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const yFmt = opts.yFmt, mode = chartMode(points);
+    const xs = points.map(p => p.x), ys = points.map(p => p.y);
+    const xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+    const yTop = Math.max(Math.max.apply(null, ys), 0) || 1;
+    const yMax = yTop * 1.12;
+    const sx = x => (xMax === xMin) ? padL + iw / 2 : padL + ((x - xMin) / (xMax - xMin)) * iw;
+    const sy = y => padT + ih - (y / yMax) * ih;
+
+    const parts = ['<svg viewBox="0 0 ' + W + ' ' + H + '" role="img">'];
+    for (let g = 0; g <= 3; g++) {
+      const gy = padT + (ih * g) / 3;
+      const gv = yMax * (1 - g / 3);
+      parts.push('<line class="act-grid" x1="' + padL + '" y1="' + gy.toFixed(1) +
+                 '" x2="' + (W - padR) + '" y2="' + gy.toFixed(1) + '"/>');
+      parts.push('<text class="act-axis-label" x="' + (padL - 6) + '" y="' + (gy + 3).toFixed(1) +
+                 '" text-anchor="end">' + yFmt(gv) + '</text>');
+    }
+    const tickCount = Math.min(points.length, 5);
+    for (let t = 0; t < tickCount; t++) {
+      const idx = tickCount === 1 ? 0 : Math.round((t * (points.length - 1)) / (tickCount - 1));
+      const p = points[idx];
+      parts.push('<text class="act-axis-label" x="' + sx(p.x).toFixed(1) + '" y="' + (H - 8) +
+                 '" text-anchor="middle">' +
+                 new Date(p.x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+                 '</text>');
+    }
+    if (mode === 'curve') {
+      const path = monotoneCubicPath(points.map(p => ({ x: sx(p.x), y: sy(p.y) })));
+      parts.push('<path class="act-line" d="' + path + '"/>');
+    }
+    points.forEach(p => {
+      parts.push('<circle class="act-dot" cx="' + sx(p.x).toFixed(1) + '" cy="' + sy(p.y).toFixed(1) +
+                 '" r="3"><title>' + p.label + '</title></circle>');
+    });
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function chartEmptyHtml(title, hint) {
+    return '<div class="act-empty"><div class="act-empty-title">' + title + '</div>' +
+           (hint ? '<div class="act-empty-hint">' + hint + '</div>' : '') + '</div>';
+  }
+
+  let activityRangeDays = 7;
+  let sessionTicker = null;
+
+  function stopTicker() {
+    if (sessionTicker) { clearInterval(sessionTicker); sessionTicker = null; }
+  }
+
+  function startTicker(session) {
+    stopTicker();
+    const startTs = session && session.startTs ? Date.parse(session.startTs) : null;
+    const fileTs = session && session.currentFileOpenTs ? Date.parse(session.currentFileOpenTs) : null;
+    const timeEl = document.getElementById('actSessionTime');
+    const subEl = document.getElementById('actSessionSub');
+    function tick() {
+      const now = Date.now();
+      timeEl.textContent = startTs ? fmtElapsed(now - startTs) : '—';
+      subEl.textContent = fileTs ? ('this file open ' + fmtElapsed(now - fileTs)) : '';
+    }
+    tick();
+    if (startTs || fileTs) sessionTicker = setInterval(tick, 1000);
+  }
+
+  function renderTelemetryStatus(status) {
+    status = status || {};
+    document.getElementById('telemetryToggle').checked = (status.enabled === true);
+    const bits = [
+      status.enabled === true ? 'collection on' : 'collection off',
+      fmt.num(status.outboxFileCount) + ' files',
+      fmt.bytes(status.outboxSizeBytes),
+    ];
+    if (status.oldestEventTs) {
+      bits.push('since ' + new Date(status.oldestEventTs).toLocaleDateString());
+    }
+    document.getElementById('telemetryStatusLine').textContent = bits.join(' · ');
+  }
+
+  function renderActivity(data) {
+    startTicker(data.session);
+    renderTelemetryStatus(data.status);
+
+    const sessionBody = document.getElementById('chartSessionBody');
+    const openBody = document.getElementById('chartOpenBody');
+    const syncBody = document.getElementById('chartSyncBody');
+    const file = data.file;
+
+    if (!file) {
+      const noModel = chartEmptyHtml('No model open', 'Open a model to see its activity history.');
+      sessionBody.innerHTML = noModel;
+      openBody.innerHTML = noModel;
+      syncBody.innerHTML = noModel;
+      return;
+    }
+
+    // Session time — one point per calendar day, zeros included. All-zero
+    // range = no recorded history, not a flat line at 0.
+    const perDay = (file.perDayOpenHours || []).map(p => ({
+      x: Date.parse(p.date + 'T00:00:00'),
+      y: p.hours,
+      label: p.date + ' — ' + fmtHoursShort(p.hours),
+    }));
+    if (perDay.some(p => p.y > 0)) {
+      sessionBody.innerHTML = buildChartSvg(perDay, { yFmt: fmtHoursShort });
+    } else {
+      sessionBody.innerHTML = chartEmptyHtml('No time recorded in this range',
+        file.matchedKeys ? '' : 'This model has no usable identity key yet — save it first.');
+    }
+
+    const opens = (file.openEvents || []).map(p => ({
+      x: Date.parse(p.ts), y: p.seconds,
+      label: new Date(p.ts).toLocaleString() + ' — ' + fmtDur(p.seconds),
+    }));
+    const openMode = chartMode(opens);
+    openBody.innerHTML =
+      openMode === 'empty' ? chartEmptyHtml('No opens in this range', '') :
+      openMode === 'dots' ? buildChartSvg(opens, { yFmt: fmtDur }) + chartEmptyHtml('', 'not enough history yet') :
+      buildChartSvg(opens, { yFmt: fmtDur });
+
+    // Sync history only applies to workshared / cloud models.
+    if (file.isWorkshared !== true && file.isCloud !== true) {
+      syncBody.innerHTML = chartEmptyHtml('Not a workshared model',
+        'Sync history appears for workshared and cloud models.');
+    } else {
+      const syncs = (file.syncEvents || []).map(p => ({
+        x: Date.parse(p.ts), y: p.seconds,
+        label: new Date(p.ts).toLocaleString() + ' — ' + fmtDur(p.seconds),
+      }));
+      const syncMode = chartMode(syncs);
+      syncBody.innerHTML =
+        syncMode === 'empty' ? chartEmptyHtml('No syncs in this range', '') :
+        syncMode === 'dots' ? buildChartSvg(syncs, { yFmt: fmtDur }) + chartEmptyHtml('', 'not enough history yet') :
+        buildChartSvg(syncs, { yFmt: fmtDur });
+    }
+  }
+
+  function renderActivityError(message) {
+    stopTicker();
+    const err = chartEmptyHtml('Could not load activity', message);
+    document.getElementById('chartSessionBody').innerHTML = err;
+    document.getElementById('chartOpenBody').innerHTML = err;
+    document.getElementById('chartSyncBody').innerHTML = err;
+  }
+
+  async function loadActivity() {
+    try {
+      const data = await window.pywebview.api.get_activity(activityRangeDays);
+      if (data && data.ok) renderActivity(data);
+      else renderActivityError((data && data.error) || 'Unknown error');
+    } catch (e) {
+      renderActivityError(String(e));
+    }
+  }
+
+  // ── Tab switching ────────────────────────────────────────────────────────
+  function setTab(name) {
+    const activity = (name === 'activity');
+    document.getElementById('tabHealth').classList.toggle('active', !activity);
+    document.getElementById('tabActivity').classList.toggle('active', activity);
+    document.getElementById('sections').hidden = activity;
+    document.getElementById('activityPane').hidden = !activity;
+    document.getElementById('footerHealth').style.display = activity ? 'none' : 'contents';
+    document.getElementById('footerActivity').style.display = activity ? 'contents' : 'none';
+    if (activity) loadActivity();
+    else stopTicker();
+  }
+
+  document.getElementById('tabHealth').addEventListener('click', function () { setTab('health'); });
+  document.getElementById('tabActivity').addEventListener('click', function () { setTab('activity'); });
+
+  document.getElementById('actRange').addEventListener('click', function (ev) {
+    const btn = ev.target.closest('.act-pill');
+    if (!btn) return;
+    activityRangeDays = parseInt(btn.dataset.days, 10) || 7;
+    this.querySelectorAll('.act-pill').forEach(p => p.classList.toggle('active', p === btn));
+    loadActivity();
+  });
+
+  document.getElementById('telemetryToggle').addEventListener('change', async function () {
+    const want = this.checked;
+    try {
+      const res = await window.pywebview.api.set_telemetry_enabled(want);
+      if (res && res.ok) {
+        this.checked = (res.enabled === true);
+        loadActivity();
+      } else {
+        this.checked = (res && typeof res.enabled === 'boolean') ? res.enabled : !want;
+        RSTmsgInform('Could not change collection', (res && res.error) || 'Unknown error');
+      }
+    } catch (e) {
+      this.checked = !want;
+      RSTmsgInform('Could not change collection', String(e));
     }
   });
 </script>

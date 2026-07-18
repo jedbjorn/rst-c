@@ -675,4 +675,104 @@ public sealed class ActivityAggregatorTests : IDisposable
         series.PerDayOpenHours.Should().HaveCount(7);
         series.PerDayOpenHours.Should().OnlyContain(p => p.Hours == 0);
     }
+
+    // ---- live open-since (Activity tab current-session sub-line) --------
+
+    [Fact]
+    public void Live_session_reports_open_since_and_extends_to_now()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, D(18, 8)),
+            Opened(s, 2, D(18, 9), doc));
+
+        var series = Aggregate(doc, liveSessionGuid: s);
+
+        series.LiveOpenSinceUtc.Should().Be(D(18, 9));
+        HoursOn(series, 18).Should().BeApproximately(3.0, 1e-9,
+            "the live session's open interval extends to now (12:00)");
+    }
+
+    [Fact]
+    public void Unclosed_file_without_live_guid_reports_no_open_since()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), doc),
+            Event(s, 2, TelemetryEventTypes.Heartbeat, D(18, 10)));
+
+        Aggregate(doc).LiveOpenSinceUtc.Should().BeNull(
+            "an unclosed file with no live session named is a crashed session, not a live open");
+    }
+
+    [Fact]
+    public void Doc_closed_in_live_session_reports_no_open_since()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), doc),
+            Closing(s, 2, D(18, 10), doc, "c1"),
+            Closed(s, 3, D(18, 10), "c1"));
+
+        var series = Aggregate(doc, liveSessionGuid: s);
+
+        series.LiveOpenSinceUtc.Should().BeNull("the file is no longer open in the live session");
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9);
+    }
+
+    [Fact]
+    public void Toggle_off_in_live_session_clears_open_since()
+    {
+        var doc = ByCreation("doc-a");
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), doc),
+            Event(s, 2, TelemetryEventTypes.CollectionDisabled, D(18, 10)));
+
+        Aggregate(doc, liveSessionGuid: s).LiveOpenSinceUtc.Should().BeNull(
+            "open time caps at the toggle; the gap is unobserved");
+    }
+
+    // ---- outbox status (Activity tab footer) ----------------------------
+
+    [Fact]
+    public void ReadStatus_empty_or_missing_dir_is_empty()
+    {
+        ActivityAggregator.ReadStatus(Path.Combine(_root, "missing")).Should().Be(OutboxStatus.Empty);
+        ActivityAggregator.ReadStatus(_root).Should().Be(OutboxStatus.Empty);
+    }
+
+    [Fact]
+    public void ReadStatus_counts_files_bytes_and_oldest_event()
+    {
+        var s1 = Guid.NewGuid().ToString();
+        var s2 = Guid.NewGuid().ToString();
+        var p1 = WriteSessionFile(_root, s1,
+            Event(s1, 1, TelemetryEventTypes.SessionStart, D(15, 8)),
+            Event(s1, 2, TelemetryEventTypes.SessionEnd, D(15, 9)));
+        var p2 = WriteSessionFile(_root, s2,
+            Event(s2, 1, TelemetryEventTypes.SessionStart, D(12, 7)),
+            Event(s2, 2, TelemetryEventTypes.SessionEnd, D(12, 8)));
+
+        var status = ActivityAggregator.ReadStatus(_root);
+
+        status.FileCount.Should().Be(2);
+        status.TotalSizeBytes.Should().Be(new FileInfo(p1).Length + new FileInfo(p2).Length);
+        status.OldestEventTs.Should().Be(D(12, 7));
+    }
+
+    [Fact]
+    public void ReadStatus_skips_corrupt_leading_lines_for_oldest()
+    {
+        var s = Guid.NewGuid().ToString();
+        var path = Path.Combine(_root, OutboxFiles.SessionFileName(InstallId, s));
+        File.WriteAllText(path,
+            "{not json\n" +
+            TelemetryJson.SerializeLine(Event(s, 2, TelemetryEventTypes.SessionStart, D(14, 6))) + "\n");
+
+        ActivityAggregator.ReadStatus(_root).OldestEventTs.Should().Be(D(14, 6));
+    }
 }

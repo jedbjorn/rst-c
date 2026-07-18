@@ -32,6 +32,15 @@ public static class ActivityMatchKinds
     public const string Creation = "creation";
 }
 
+/// <summary>Footer status line for the Activity tab: what the outbox
+/// holds right now. Sizes are file bytes (JSONL on disk), oldest is the
+/// first parseable event's ts across all files — null on an empty or
+/// unreadable outbox.</summary>
+public sealed record OutboxStatus(int FileCount, long TotalSizeBytes, DateTimeOffset? OldestEventTs)
+{
+    public static readonly OutboxStatus Empty = new(0, 0, null);
+}
+
 public sealed class ActivitySeries
 {
     public static readonly ActivitySeries Empty = new();
@@ -39,6 +48,13 @@ public sealed class ActivitySeries
     /// <summary>See <see cref="ActivityMatchKinds"/>; null when no key
     /// was usable and the series are necessarily empty.</summary>
     public string? MatchedKeyKind { get; init; }
+
+    /// <summary>When the live session (the caller's
+    /// <c>liveSessionGuid</c>) currently has the file open: the ts its
+    /// earliest still-open interval started — the "open since" the
+    /// current-session block shows. Null when no live session was named,
+    /// the file isn't open in it, or collection was toggled off.</summary>
+    public DateTimeOffset? LiveOpenSinceUtc { get; init; }
 
     /// <summary>One point per calendar day in range, oldest first,
     /// zero-hour days included.</summary>

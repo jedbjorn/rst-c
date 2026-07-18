@@ -60,12 +60,40 @@ public sealed class HealthCommand : IExternalCommand
         double? modelSizeMb = null;
         int? warningsCount = null;
 
+        string? creationGuid = null;
+        string? cloudProjectGuid = null;
+        string? cloudModelGuid = null;
+        string? centralGuid = null;
+        bool? isWorkshared = null;
+        bool? isCloud = null;
+
         var uidoc = commandData.Application.ActiveUIDocument;
         var doc = uidoc?.Document;
         if (doc is not null && !doc.IsFamilyDocument)
         {
             modelName = SafeStr(() => doc.Title ?? "");
             modelPath = SafeStr(() => doc.PathName ?? "");
+
+            // Identity keys for the Activity tab's current-file matching
+            // (cloud pair → central → creation). Cheap property reads
+            // only, every one null-on-failure — same rule as telemetry
+            // capture.
+            creationGuid = SafeGet(() => doc.CreationGUID.ToString());
+            isWorkshared = SafeGetBool(() => doc.IsWorkshared);
+            isCloud = SafeGetBool(() => doc.IsModelInCloud);
+            if (isCloud == true)
+            {
+                var cmp = SafeGet(() => doc.GetCloudModelPath());
+                if (cmp is not null && !cmp.Empty)
+                {
+                    cloudProjectGuid = SafeGet(() => cmp.GetProjectGUID().ToString());
+                    cloudModelGuid = SafeGet(() => cmp.GetModelGUID().ToString());
+                }
+            }
+            if (isWorkshared == true)
+            {
+                centralGuid = SafeGet(() => doc.WorksharingCentralGUID.ToString());
+            }
 
             modelSizeMb = TryGetFileSizeMb(modelPath);
 
@@ -91,6 +119,12 @@ public sealed class HealthCommand : IExternalCommand
             ModelPath = modelPath,
             ModelSizeMb = modelSizeMb,
             WarningsCount = warningsCount,
+            CreationGuid = creationGuid,
+            CloudProjectGuid = cloudProjectGuid,
+            CloudModelGuid = cloudModelGuid,
+            CentralGuid = centralGuid,
+            IsWorkshared = isWorkshared,
+            IsCloud = isCloud,
         };
     }
 
@@ -98,6 +132,18 @@ public sealed class HealthCommand : IExternalCommand
     {
         try { return getter() ?? ""; }
         catch { return ""; }
+    }
+
+    private static T? SafeGet<T>(Func<T?> getter) where T : class
+    {
+        try { return getter(); }
+        catch { return null; }
+    }
+
+    private static bool? SafeGetBool(Func<bool> getter)
+    {
+        try { return getter(); }
+        catch { return null; }
     }
 
     private static double? TryGetFileSizeMb(string path)
