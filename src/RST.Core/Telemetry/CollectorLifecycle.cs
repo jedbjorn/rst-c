@@ -13,6 +13,13 @@
 // record lands after the disabled marker or before the enabled marker
 // (spec Consent & Config).
 //
+// The gate holds NO Revit API calls and no file IO (spec Threading &
+// Safety; SC-030): callers capture everything Revit-derived BEFORE
+// TryEmit, and the callbacks that do run under the gate (populate,
+// admit, the enrichers) are in-process only — throttle state, cached
+// fields, counters. Inside stays: the enabled/shutdown check, the
+// throttle commit, session_start/seq ordering, and the enqueue.
+//
 // Closed-file contract: once session_start has been written the file
 // MUST end with session_end even if collection is disabled by then.
 // Shutdown writes it under the same lock and flips the shutdown latch
@@ -112,19 +119,24 @@ public sealed class CollectorLifecycle : IDisposable
 
     /// <summary>
     /// Gated emission: under the transition lock, when enabled and not
-    /// shut down, ensure session_start then enqueue what
-    /// <paramref name="create"/> returns (null = the caller's throttle
-    /// refused inside the gate — nothing enqueues). False when the gate
-    /// refused or create returned null.
+    /// shut down, ensure session_start, ask <paramref name="admit"/>
+    /// (the caller's throttle commit — refusal enqueues nothing but
+    /// cannot burn a window on a gate refusal), then create the event
+    /// (seq order = file order), apply <paramref name="populate"/>, and
+    /// enqueue. Both callbacks run UNDER the gate and must be
+    /// in-process only — no Revit API, no file IO (SC-030); capture
+    /// Revit-derived data before calling. False when the gate or admit
+    /// refused.
     /// </summary>
-    public bool TryEmit(Func<TelemetryEvent?> create)
+    public bool TryEmit(string eventType, Action<TelemetryEvent>? populate = null, Func<bool>? admit = null)
     {
         lock (_gate)
         {
             if (_shutdown || !_enabled) return false;
             EnsureSessionStartLocked();
-            var e = create();
-            if (e is null) return false;
+            if (admit is not null && !admit()) return false;
+            var e = _session.Create(eventType);
+            populate?.Invoke(e);
             _writer.Enqueue(e);
             return true;
         }
@@ -205,12 +217,7 @@ public sealed class CollectorLifecycle : IDisposable
     {
         try
         {
-            TryEmit(() =>
-            {
-                var e = _session.Create(TelemetryEventTypes.Heartbeat);
-                _enrichHeartbeat(e);
-                return e;
-            });
+            TryEmit(TelemetryEventTypes.Heartbeat, populate: _enrichHeartbeat);
         }
         catch (Exception ex)
         {

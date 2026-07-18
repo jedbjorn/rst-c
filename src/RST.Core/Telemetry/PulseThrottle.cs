@@ -33,10 +33,22 @@ public sealed class PulseThrottle
     /// </summary>
     public bool TryAcquire(string key)
     {
-        var now = _clock();
-        if (_lastByKey.TryGetValue(key, out var last) && now - last < _interval)
-            return false;
-        _lastByKey[key] = now;
+        if (!CanAcquire(key)) return false;
+        _lastByKey[key] = _clock();
         return true;
+    }
+
+    /// <summary>
+    /// Pure peek — whether <see cref="TryAcquire"/> would admit
+    /// <paramref name="key"/> now. Mutates nothing, so the hot
+    /// DocumentChanged path can refuse before capturing identity keys
+    /// while the authoritative acquire still commits under the
+    /// lifecycle gate (SC-030). Same UI thread for both, so a true
+    /// peek cannot go stale (time only moves the window further open).
+    /// </summary>
+    public bool CanAcquire(string key)
+    {
+        var now = _clock();
+        return !(_lastByKey.TryGetValue(key, out var last) && now - last < _interval);
     }
 }

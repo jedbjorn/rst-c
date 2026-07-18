@@ -2,8 +2,9 @@
 // consent-flip marker framing under one gate (SC-028), startup rollback
 // on post-start failure (SC-029), session_start-once ordering, the
 // closed-file contract at shutdown, and heartbeat safety. Interleaving
-// tests are deterministic: a blocked emitter holds the gate via a
-// ManualResetEvent while the racing transition is asserted to wait.
+// tests are deterministic: a blocked emitter holds the gate (via a
+// ManualResetEvent inside its populate callback, which TryEmit runs
+// under the gate) while the racing transition is asserted to wait.
 
 using System;
 using System.Collections.Generic;
@@ -40,6 +41,11 @@ public sealed class CollectorLifecycleTests : IDisposable
 
     public void Dispose()
     {
+        // Teardown owns the writer stop: an assertion failure before an
+        // in-body Shutdown must not leak the writer thread or its open
+        // stream into the temp-dir delete (idempotent when a test's own
+        // Shutdown already joined it).
+        _writer.CompleteAndJoin(TimeSpan.FromSeconds(5));
         try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
         catch { /* best-effort */ }
     }
@@ -54,9 +60,6 @@ public sealed class CollectorLifecycleTests : IDisposable
             enrichHeartbeat ?? (e => e.SetField(TelemetryFields.OpenDocCount, 0)),
             log ?? (_ => { }));
 
-    private TelemetryEvent NewEvent(string type = TelemetryEventTypes.DocOpening) =>
-        _session.Create(type);
-
     private IReadOnlyList<string> WrittenEventTypes() =>
         OutboxFiles.ReadEvents(_writer.SessionFilePath).Select(e => e.EventType).ToList();
 
@@ -66,7 +69,7 @@ public sealed class CollectorLifecycleTests : IDisposable
     public void First_emission_writes_session_start_first_and_shutdown_appends_session_end()
     {
         var lifecycle = NewLifecycle(enabled: true);
-        lifecycle.TryEmit(() => NewEvent()).Should().BeTrue();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeTrue();
         lifecycle.Shutdown();
 
         WrittenEventTypes().Should().Equal("session_start", "doc_opening", "session_end");
@@ -79,7 +82,7 @@ public sealed class CollectorLifecycleTests : IDisposable
     {
         var lifecycle = NewLifecycle(enabled: false);
         lifecycle.RunStartup(() => { }, () => { });
-        lifecycle.TryEmit(() => NewEvent()).Should().BeFalse();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeFalse();
         lifecycle.EmitHeartbeat();
         lifecycle.Shutdown();
 
@@ -91,7 +94,7 @@ public sealed class CollectorLifecycleTests : IDisposable
     public void Session_end_still_written_when_collection_was_disabled_before_shutdown()
     {
         var lifecycle = NewLifecycle(enabled: true);
-        lifecycle.TryEmit(() => NewEvent()).Should().BeTrue();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeTrue();
         lifecycle.SetEnabled(false);
         lifecycle.Shutdown();
 
@@ -114,7 +117,7 @@ public sealed class CollectorLifecycleTests : IDisposable
     {
         var lifecycle = NewLifecycle(enabled: false);
         lifecycle.SetEnabled(true);
-        lifecycle.TryEmit(() => NewEvent()).Should().BeTrue();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeTrue();
         lifecycle.Shutdown();
 
         WrittenEventTypes().Should().Equal(
@@ -125,7 +128,7 @@ public sealed class CollectorLifecycleTests : IDisposable
     public void Throttle_refusal_inside_the_gate_enqueues_nothing()
     {
         var lifecycle = NewLifecycle(enabled: true);
-        lifecycle.TryEmit(() => null).Should().BeFalse();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening, admit: () => false).Should().BeFalse();
         lifecycle.Shutdown();
         // session_start was ensured before the throttle refused — the
         // closed-file contract then demands session_end.
@@ -133,13 +136,29 @@ public sealed class CollectorLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void Gate_refusal_never_reaches_admit_so_no_throttle_window_burns()
+    {
+        // SC-030's split leaves the throttle COMMIT inside the gate for
+        // exactly this: a disabled or shut-down gate refuses before the
+        // caller's throttle state can be touched.
+        var admitCalls = 0;
+        var lifecycle = NewLifecycle(enabled: false);
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening,
+            admit: () => { admitCalls++; return true; }).Should().BeFalse();
+        lifecycle.Shutdown();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening,
+            admit: () => { admitCalls++; return true; }).Should().BeFalse();
+        admitCalls.Should().Be(0, "a gate refusal must not commit throttle state");
+    }
+
+    [Fact]
     public void Shutdown_is_idempotent_and_gates_all_later_emission()
     {
         var lifecycle = NewLifecycle(enabled: true);
-        lifecycle.TryEmit(() => NewEvent()).Should().BeTrue();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeTrue();
         lifecycle.Shutdown();
         lifecycle.Shutdown();
-        lifecycle.TryEmit(() => NewEvent()).Should().BeFalse();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeFalse();
         lifecycle.SetEnabled(false);
         lifecycle.EmitHeartbeat();
 
@@ -156,11 +175,10 @@ public sealed class CollectorLifecycleTests : IDisposable
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
 
-        var emitter = Task.Run(() => lifecycle.TryEmit(() =>
+        var emitter = Task.Run(() => lifecycle.TryEmit(TelemetryEventTypes.Heartbeat, populate: _ =>
         {
             entered.Set();
             release.Wait(Patience);
-            return NewEvent(TelemetryEventTypes.Heartbeat);
         }));
         entered.Wait(Patience).Should().BeTrue();
 
@@ -174,7 +192,7 @@ public sealed class CollectorLifecycleTests : IDisposable
 
         // Post-flip emitters are refused — nothing can land after the marker.
         lifecycle.EmitHeartbeat();
-        lifecycle.TryEmit(() => NewEvent()).Should().BeFalse();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeFalse();
         lifecycle.Shutdown();
 
         WrittenEventTypes().Should().Equal(
@@ -195,7 +213,7 @@ public sealed class CollectorLifecycleTests : IDisposable
         var enable = Task.Run(() => lifecycle.SetEnabled(true));
         entered.Wait(Patience).Should().BeTrue();
 
-        var emitter = Task.Run(() => lifecycle.TryEmit(() => NewEvent()));
+        var emitter = Task.Run(() => lifecycle.TryEmit(TelemetryEventTypes.DocOpening));
         (await Task.WhenAny(emitter, Task.Delay(150))).Should().NotBeSameAs(emitter,
             "an emission must serialize behind the in-flight enable transition");
 
@@ -215,11 +233,10 @@ public sealed class CollectorLifecycleTests : IDisposable
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
 
-        var emitter = Task.Run(() => lifecycle.TryEmit(() =>
+        var emitter = Task.Run(() => lifecycle.TryEmit(TelemetryEventTypes.DocOpening, populate: _ =>
         {
             entered.Set();
             release.Wait(Patience);
-            return NewEvent();
         }));
         entered.Wait(Patience).Should().BeTrue();
 
@@ -249,7 +266,7 @@ public sealed class CollectorLifecycleTests : IDisposable
         act.Should().Throw<InvalidOperationException>().WithMessage("subscribe boom");
         unsubscribed.Should().BeTrue("a partial subscription must be detached");
         lifecycle.HeartbeatRunning.Should().BeFalse();
-        lifecycle.TryEmit(() => NewEvent()).Should().BeFalse("the gate must be closed after rollback");
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeFalse("the gate must be closed after rollback");
         Directory.GetFiles(_root).Should().BeEmpty();
     }
 
@@ -267,7 +284,7 @@ public sealed class CollectorLifecycleTests : IDisposable
         act.Should().Throw<InvalidOperationException>().WithMessage("maintenance boom");
         unsubscribed.Should().BeTrue();
         lifecycle.HeartbeatRunning.Should().BeFalse("the already-started heartbeat must stop");
-        lifecycle.TryEmit(() => NewEvent()).Should().BeFalse();
+        lifecycle.TryEmit(TelemetryEventTypes.DocOpening).Should().BeFalse();
     }
 
     [Fact]

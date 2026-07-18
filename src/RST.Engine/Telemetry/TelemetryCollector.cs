@@ -19,8 +19,12 @@
 // Revit runs. A session that starts disabled writes no file at all (the
 // writer creates its file lazily on first write). Every emission runs
 // under the lifecycle's transition gate, so the markers strictly frame
-// the gap. Persisting the preference (and the first-run notice) is the
-// consent UI's job, not the collector's.
+// the gap — but all Revit reads (identity capture, args fields, the
+// BasicFileInfo read) happen BEFORE the gate; only the enabled check,
+// throttle commit, ordering, and enqueue run inside (spec Threading &
+// Safety: no locks held across Revit API calls; SC-030). Persisting the
+// preference (and the first-run notice) is the consent UI's job, not
+// the collector's.
 
 using System;
 using System.Threading.Tasks;
@@ -36,7 +40,6 @@ public sealed class TelemetryCollector : IDisposable
 {
     private readonly Autodesk.Revit.ApplicationServices.ControlledApplication _app;
     private readonly UIControlledApplication _uiApp;
-    private readonly TelemetrySession _session;
     private readonly Action<string> _log;
     private readonly string _installId;
     private readonly string _addinVersion;
@@ -47,6 +50,11 @@ public sealed class TelemetryCollector : IDisposable
     private readonly System.Collections.Generic.HashSet<string> _warnedSites = new();
 
     private readonly CollectorLifecycle _lifecycle;
+    // Per-session constants, read once at construction so session_start
+    // enrichment (which runs under the lifecycle gate) touches no Revit
+    // API (SC-030).
+    private readonly string? _revitVersion;
+    private readonly string? _revitBuild;
     private volatile string? _autodeskUser;
 
     private TelemetryCollector(
@@ -60,10 +68,11 @@ public sealed class TelemetryCollector : IDisposable
     {
         _uiApp = uiApp;
         _app = uiApp.ControlledApplication;
-        _session = session;
         _installId = installId;
         _addinVersion = addinVersion;
         _log = log;
+        _revitVersion = Get(() => _app.VersionNumber);
+        _revitBuild = Get(() => _app.VersionBuild);
         _lifecycle = new CollectorLifecycle(
             session, writer, enabled,
             enrichSessionStart: EnrichSessionStart,
@@ -179,15 +188,16 @@ public sealed class TelemetryCollector : IDisposable
 
     /// <summary>session_start enrichment — runs under the lifecycle
     /// gate at first emission, so autodesk_user is whatever
-    /// ApplicationInitialized has captured by then.</summary>
+    /// ApplicationInitialized has captured by then. Reads cached fields
+    /// and Environment only — no Revit API under the gate (SC-030).</summary>
     private void EnrichSessionStart(TelemetryEvent e)
     {
         e.SetField(TelemetryFields.MachineName, Get(() => Environment.MachineName));
         e.SetField(TelemetryFields.InstallId, _installId);
         e.SetField(TelemetryFields.OsUser, Get(() => Environment.UserName));
         e.SetField(TelemetryFields.AutodeskUser, _autodeskUser);
-        e.SetField(TelemetryFields.RevitVersion, Get(() => _app.VersionNumber));
-        e.SetField(TelemetryFields.RevitBuild, Get(() => _app.VersionBuild));
+        e.SetField(TelemetryFields.RevitVersion, _revitVersion);
+        e.SetField(TelemetryFields.RevitBuild, _revitBuild);
         e.SetField(TelemetryFields.AddinVersion, _addinVersion);
     }
 
@@ -208,12 +218,9 @@ public sealed class TelemetryCollector : IDisposable
         Guarded("doc_opening", () =>
         {
             if (!_lifecycle.IsEnabled) return;
-            _lifecycle.TryEmit(() =>
-            {
-                var e = _session.Create(TelemetryEventTypes.DocOpening);
-                e.SetField(TelemetryFields.LocalPath, Get(() => args.PathName));
-                return e;
-            });
+            var path = Get(() => args.PathName);
+            _lifecycle.TryEmit(TelemetryEventTypes.DocOpening,
+                populate: e => e.SetField(TelemetryFields.LocalPath, path));
         });
     }
 
@@ -227,12 +234,8 @@ public sealed class TelemetryCollector : IDisposable
             // if collection is enabled mid-session.
             _tracker.Opened();
             if (!_lifecycle.IsEnabled) return;
-            _lifecycle.TryEmit(() =>
-            {
-                var e = _session.Create(TelemetryEventTypes.DocOpened);
-                IdentityCapture.CaptureFull(doc!).WriteTo(e);
-                return e;
-            });
+            var identity = IdentityCapture.CaptureFull(doc!);
+            _lifecycle.TryEmit(TelemetryEventTypes.DocOpened, populate: identity.WriteTo);
         });
     }
 
@@ -246,12 +249,12 @@ public sealed class TelemetryCollector : IDisposable
             // now (regardless of the flag, to keep the count honest).
             _tracker.Closing(args.DocumentId);
             if (!_lifecycle.IsEnabled) return;
-            _lifecycle.TryEmit(() =>
+            var keys = IdentityCapture.CaptureKeys(doc!);
+            var closingId = args.DocumentId;
+            _lifecycle.TryEmit(TelemetryEventTypes.DocClosing, populate: e =>
             {
-                var e = _session.Create(TelemetryEventTypes.DocClosing);
-                IdentityCapture.CaptureKeys(doc!).WriteKeysTo(e);
-                e.SetField(TelemetryFields.ClosingId, args.DocumentId);
-                return e;
+                keys.WriteKeysTo(e);
+                e.SetField(TelemetryFields.ClosingId, closingId);
             });
         });
     }
@@ -266,12 +269,11 @@ public sealed class TelemetryCollector : IDisposable
             // (linked, untrackable) — stay symmetric and emit nothing.
             if (!_tracker.TryCompleteClosing(args.DocumentId, succeeded)) return;
             if (!_lifecycle.IsEnabled) return;
-            _lifecycle.TryEmit(() =>
+            var closingId = args.DocumentId;
+            _lifecycle.TryEmit(TelemetryEventTypes.DocClosed, populate: e =>
             {
-                var e = _session.Create(TelemetryEventTypes.DocClosed);
-                e.SetField(TelemetryFields.ClosingId, args.DocumentId);
+                e.SetField(TelemetryFields.ClosingId, closingId);
                 e.SetField(TelemetryFields.Status, status.ToString());
-                return e;
             });
         });
     }
@@ -283,12 +285,8 @@ public sealed class TelemetryCollector : IDisposable
             if (!_lifecycle.IsEnabled) return;
             var doc = args.Document;
             if (!IdentityCapture.IsTrackable(doc)) return;
-            _lifecycle.TryEmit(() =>
-            {
-                var e = _session.Create(TelemetryEventTypes.DocSaved);
-                IdentityCapture.CaptureFull(doc!).WriteTo(e);
-                return e;
-            });
+            var identity = IdentityCapture.CaptureFull(doc!);
+            _lifecycle.TryEmit(TelemetryEventTypes.DocSaved, populate: identity.WriteTo);
         });
     }
 
@@ -299,12 +297,12 @@ public sealed class TelemetryCollector : IDisposable
             if (!_lifecycle.IsEnabled) return;
             var doc = args.Document;
             if (!IdentityCapture.IsTrackable(doc)) return;
-            _lifecycle.TryEmit(() =>
+            var identity = IdentityCapture.CaptureFull(doc!);
+            var previousPath = Get(() => args.OriginalPath);
+            _lifecycle.TryEmit(TelemetryEventTypes.DocSavedAs, populate: e =>
             {
-                var e = _session.Create(TelemetryEventTypes.DocSavedAs);
-                IdentityCapture.CaptureFull(doc!).WriteTo(e);
-                e.SetField(TelemetryFields.PreviousLocalPath, Get(() => args.OriginalPath));
-                return e;
+                identity.WriteTo(e);
+                e.SetField(TelemetryFields.PreviousLocalPath, previousPath);
             });
         });
     }
@@ -316,13 +314,14 @@ public sealed class TelemetryCollector : IDisposable
             if (!_lifecycle.IsEnabled) return;
             var doc = args.Document;
             if (!IdentityCapture.IsTrackable(doc)) return;
-            _lifecycle.TryEmit(() =>
+            var keys = IdentityCapture.CaptureKeys(doc!);
+            var centralPath = Get(() => args.Location);
+            var comment = Get(() => args.Comments);
+            _lifecycle.TryEmit(TelemetryEventTypes.SyncStart, populate: e =>
             {
-                var e = _session.Create(TelemetryEventTypes.SyncStart);
-                IdentityCapture.CaptureKeys(doc!).WriteKeysTo(e);
-                e.SetField(TelemetryFields.CentralPath, Get(() => args.Location));
-                e.SetField(TelemetryFields.Comment, Get(() => args.Comments));
-                return e;
+                keys.WriteKeysTo(e);
+                e.SetField(TelemetryFields.CentralPath, centralPath);
+                e.SetField(TelemetryFields.Comment, comment);
             });
         });
     }
@@ -334,53 +333,59 @@ public sealed class TelemetryCollector : IDisposable
             if (!_lifecycle.IsEnabled) return;
             var doc = args.Document;
             if (!IdentityCapture.IsTrackable(doc)) return;
-            _lifecycle.TryEmit(() =>
+            var keys = IdentityCapture.CaptureKeys(doc!);
+            var status = args.Status.ToString();
+            _lifecycle.TryEmit(TelemetryEventTypes.SyncEnd, populate: e =>
             {
-                var e = _session.Create(TelemetryEventTypes.SyncEnd);
-                IdentityCapture.CaptureKeys(doc!).WriteKeysTo(e);
-                e.SetField(TelemetryFields.Status, args.Status.ToString());
-                return e;
+                keys.WriteKeysTo(e);
+                e.SetField(TelemetryFields.Status, status);
             });
         });
     }
 
     private void OnDocumentChanged(object? sender, DocumentChangedEventArgs args)
     {
-        // The hottest handler — fires per transaction. Throttle FIRST on
-        // the cheap tracking key; identity keys are read only when a
-        // pulse actually emits. The throttle runs inside TryEmit so a
-        // refusal by the gate (a racing consent flip) can't burn a
-        // throttle window. UI-thread-only state stays UI-thread-only —
-        // the gate adds mutual ordering, not new callers.
+        // The hottest handler — fires per transaction. Peek the throttle
+        // FIRST on the cheap tracking key (pure, no state change — a
+        // refused TryAcquire records nothing either, so skipping here is
+        // identical); identity keys are read only when a pulse will
+        // actually emit, and they are read BEFORE the gate (SC-030). The
+        // authoritative acquire commits inside TryEmit so a refusal by
+        // the gate (a racing consent flip) can't burn a throttle window.
+        // UI-thread-only state stays UI-thread-only — the gate adds
+        // mutual ordering, not new callers.
         Guarded("doc_changed_pulse", () =>
         {
             if (!_lifecycle.IsEnabled) return;
             var doc = args.GetDocument();
             if (!IdentityCapture.IsTrackable(doc)) return;
-            _lifecycle.TryEmit(() =>
-            {
-                if (!_pulseThrottle.TryAcquire(IdentityCapture.TrackingKey(doc!))) return null;
-                var e = _session.Create(TelemetryEventTypes.DocChangedPulse);
-                IdentityCapture.CaptureKeys(doc!).WriteKeysTo(e);
-                return e;
-            });
+            var key = IdentityCapture.TrackingKey(doc!);
+            if (!_pulseThrottle.CanAcquire(key)) return;
+            var keys = IdentityCapture.CaptureKeys(doc!);
+            _lifecycle.TryEmit(TelemetryEventTypes.DocChangedPulse,
+                populate: keys.WriteKeysTo,
+                admit: () => _pulseThrottle.TryAcquire(key));
         });
     }
 
     private void OnViewActivated(object? sender, ViewActivatedEventArgs args)
     {
+        // Keys are captured eagerly here (low-frequency handler): the
+        // gate's ShouldEmit must stay a SINGLE call because a
+        // throttle-refused document change still updates "current
+        // document" — splitting it into peek + commit would let a later
+        // within-doc view switch read as a change. In-process state
+        // only inside the gate; capture stays outside (SC-030).
         Guarded("view_activated", () =>
         {
             if (!_lifecycle.IsEnabled) return;
             var doc = Get(() => args.Document);
             if (!IdentityCapture.IsTrackable(doc)) return;
-            _lifecycle.TryEmit(() =>
-            {
-                if (!_viewGate.ShouldEmit(IdentityCapture.TrackingKey(doc!))) return null;
-                var e = _session.Create(TelemetryEventTypes.ViewActivated);
-                IdentityCapture.CaptureKeys(doc!).WriteKeysTo(e);
-                return e;
-            });
+            var key = IdentityCapture.TrackingKey(doc!);
+            var keys = IdentityCapture.CaptureKeys(doc!);
+            _lifecycle.TryEmit(TelemetryEventTypes.ViewActivated,
+                populate: keys.WriteKeysTo,
+                admit: () => _viewGate.ShouldEmit(key));
         });
     }
 

@@ -68,6 +68,24 @@ public sealed class PulseThrottleTests
     }
 
     [Fact]
+    public void CanAcquire_peeks_without_recording()
+    {
+        // The hot-path peek (SC-030): a peek must never start a window,
+        // and must mirror what TryAcquire would answer.
+        var throttle = NewThrottle();
+        throttle.CanAcquire("doc-a").Should().BeTrue();
+        throttle.CanAcquire("doc-a").Should().BeTrue("a peek must not record an acquisition");
+        throttle.TryAcquire("doc-a").Should().BeTrue();
+
+        _now += TimeSpan.FromSeconds(59);
+        throttle.CanAcquire("doc-a").Should().BeFalse("the peek mirrors TryAcquire inside the window");
+
+        _now += TimeSpan.FromSeconds(1);
+        throttle.CanAcquire("doc-a").Should().BeTrue();
+        throttle.TryAcquire("doc-a").Should().BeTrue();
+    }
+
+    [Fact]
     public void Custom_interval_is_honored()
     {
         var throttle = NewThrottle(TimeSpan.FromSeconds(5));
