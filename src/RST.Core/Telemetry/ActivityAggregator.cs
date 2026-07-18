@@ -16,13 +16,19 @@
 // Open-hours replay mirrors RecoveryScanner.TrackOpenDocs: doc_closed
 // carries only closing_id + status, so identity joins through the
 // preceding doc_closing; recovery-written synthetic closes carry join
-// keys directly. Durations are bounded undercounts, never overcounts:
+// keys directly. Duration errors are bounded by the session and never
+// invented from a wrong pairing:
 //   - an unclosed non-live session is capped at its last observed event
 //     (recovery's ≤2-minute truncation, applied at read time);
 //   - a collection_disabled marker caps open intervals at the toggle —
 //     time in the gap is unknown and never invented;
 //   - negative spans (clock changes mid-session) are dropped, not
-//     clamped into being.
+//     clamped into being;
+//   - a close whose keys more than one live doc could own (an
+//     identity-capture gap keying it at a level lineage siblings
+//     share — SC-038) retires nothing: the doc stays open to
+//     session_end/recovery's cap, a bounded overshoot accepted over
+//     truncating the wrong doc.
 // Overlapping intervals across concurrent sessions are unioned before
 // bucketing, so a file open in two instances never exceeds wall-clock.
 
@@ -261,20 +267,19 @@ public static class ActivityAggregator
         // the interval bookkeeping. Identity joins (previous_local_path,
         // creation-GUID lineage) run on allOpenDocs below.
         var openDocs = new Dictionary<string, DateTimeOffset>();
-        // Every open doc in the session, matched or not: join key →
-        // (local path, creation guid). The Save-As joins run against
-        // this view (SC-037): lineage uniqueness judged only among the
-        // current file's docs would miss an open keyed sibling (same
-        // creation GUID, its own central), falsely call the lineage
-        // unique, and retire the current file at the sibling's save.
-        // Mirrors RecoveryScanner.TrackOpenDocs' full visibility.
-        var allOpenDocs = new Dictionary<string, (string? LocalPath, string? CreationGuid)>();
-        // closing_id → join key, for docs that matched at doc_closing.
-        var closingIdToKey = new Dictionary<string, string>();
-        // Same join for every doc: a sibling's real close must clear it
-        // from allOpenDocs, or a closed sibling would keep the lineage
-        // ambiguous and hold retired identities open past their save.
-        var allClosingIdToKey = new Dictionary<string, string>();
+        // Every open doc in the session, matched or not: join key → the
+        // identity it is open under. The Save-As joins and the close
+        // resolution run against this view (SC-037): uniqueness judged
+        // only among the current file's docs would miss an open keyed
+        // sibling (same creation GUID, its own central), falsely call
+        // the match unique, and retire the current file at the
+        // sibling's save or close. Mirrors RecoveryScanner.TrackOpenDocs'
+        // full visibility.
+        var allOpenDocs = new Dictionary<string, DocumentIdentity>();
+        // closing_id → the doc_closing's identity, for every doc:
+        // doc_closed carries no keys of its own, so this is what the
+        // close resolution judges against.
+        var closingIds = new Dictionary<string, DocumentIdentity>();
         // Current file's in-flight syncs: join key → sync_start ts.
         var pendingSyncs = new Dictionary<string, DateTimeOffset>();
         var sessionEnded = false;
@@ -285,20 +290,6 @@ public static class ActivityAggregator
                 AddInterval(intervals, openedTs, endTs, nowUtc);
             openDocs.Clear();
             allOpenDocs.Clear();
-        }
-
-        // Every openDocs entry is the current file (only matched events
-        // create one), and overlapping intervals union before bucketing —
-        // so when an identity-capture gap keys a matched close under a
-        // different level than its open, ending the latest-started entry
-        // yields the same union as ending the "right" one.
-        string? LatestOpenKey()
-        {
-            string? latest = null;
-            var best = DateTimeOffset.MinValue;
-            foreach (var kv in openDocs)
-                if (kv.Value >= best) { best = kv.Value; latest = kv.Key; }
-            return latest;
         }
 
         foreach (var e in events)
@@ -330,7 +321,7 @@ public static class ActivityAggregator
 
                     var openedId = DocumentIdentity.ReadFrom(e);
                     var key = openedId.JoinKey ?? e.EventId;
-                    if (!allOpenDocs.ContainsKey(key)) allOpenDocs[key] = (localPath, openedId.CreationGuid);
+                    if (!allOpenDocs.ContainsKey(key)) allOpenDocs[key] = openedId;
 
                     if (!matches(e)) break;
                     if (opening is { } o && e.Ts >= o.Ts)
@@ -374,7 +365,7 @@ public static class ActivityAggregator
                             // opened unmatched can match from here (an
                             // identity gap healed in place) — its matched
                             // interval starts at the save.
-                            allOpenDocs[oldKey] = (id.LocalPath, id.CreationGuid);
+                            allOpenDocs[oldKey] = id;
                             if (matches(e) && !openDocs.ContainsKey(oldKey))
                                 openDocs[oldKey] = e.Ts;
                             break;
@@ -388,7 +379,7 @@ public static class ActivityAggregator
                     }
 
                     var key = newKey ?? e.EventId;
-                    if (!allOpenDocs.ContainsKey(key)) allOpenDocs[key] = (id.LocalPath, id.CreationGuid);
+                    if (!allOpenDocs.ContainsKey(key)) allOpenDocs[key] = id;
                     if (!matches(e)) break;
                     if (!openDocs.ContainsKey(key)) openDocs[key] = e.Ts;
                     break;
@@ -397,12 +388,7 @@ public static class ActivityAggregator
                 case TelemetryEventTypes.DocClosing:
                 {
                     var closingId = e.GetString(TelemetryFields.ClosingId);
-                    var key = DocumentIdentity.ReadFrom(e).JoinKey;
-                    if (closingId is not null && key is not null)
-                    {
-                        allClosingIdToKey[closingId] = key;
-                        if (matches(e)) closingIdToKey[closingId] = key;
-                    }
+                    if (closingId is not null) closingIds[closingId] = DocumentIdentity.ReadFrom(e);
                     break;
                 }
 
@@ -416,32 +402,32 @@ public static class ActivityAggregator
 
                     // Real closes carry no identity — join through the
                     // doc_closing's closing_id; synthetic closes carry
-                    // keys directly. The all-docs view clears on every
-                    // close, matched or not — a closed sibling must stop
-                    // counting toward lineage ambiguity.
+                    // keys directly.
                     var closingId = e.GetString(TelemetryFields.ClosingId);
-                    var allKey = closingId is not null && allClosingIdToKey.TryGetValue(closingId, out var ak)
-                        ? ak
-                        : DocumentIdentity.ReadFrom(e).JoinKey;
-                    if (allKey is not null) allOpenDocs.Remove(allKey);
-                    var key = closingId is not null && closingIdToKey.TryGetValue(closingId, out var k)
-                        ? k
-                        : matches(e) ? DocumentIdentity.ReadFrom(e).JoinKey : null;
-                    if (closingId is not null)
-                    {
-                        closingIdToKey.Remove(closingId);
-                        allClosingIdToKey.Remove(closingId);
-                    }
-                    // key non-null = a matched close. An identity-capture
-                    // gap can key it under a lower level than its open —
-                    // fall back to the latest matched entry (see
-                    // LatestOpenKey for why any matched entry is sound).
-                    if (key is not null && !openDocs.ContainsKey(key))
-                        key = LatestOpenKey();
-                    if (key is not null && openDocs.TryGetValue(key, out var openedTs))
+                    var closeId = closingId is not null && closingIds.TryGetValue(closingId, out var ci)
+                        ? ci
+                        : DocumentIdentity.ReadFrom(e);
+                    if (closingId is not null) closingIds.Remove(closingId);
+
+                    // The close's key names an open doc directly, or an
+                    // identity-capture gap keyed it under a lower level
+                    // than the open — then it retires a doc only when
+                    // exactly one live candidate is consistent with it,
+                    // judged over every open doc, matched or not
+                    // (SC-038). Anything else declines: nothing retires,
+                    // the doc stays open, and session_end/recovery caps
+                    // it — undercounting a close is recoverable;
+                    // retiring the wrong doc is not. Both views resolve
+                    // through the same key, so a declined close can't
+                    // strand one of them.
+                    var key = closeId.JoinKey is { } exact && allOpenDocs.ContainsKey(exact)
+                        ? exact
+                        : UniqueOpenDocKey(allOpenDocs, closeId);
+                    if (key is null) break;
+                    allOpenDocs.Remove(key);
+                    if (openDocs.TryGetValue(key, out var openedTs))
                     {
                         openDocs.Remove(key);
-                        allOpenDocs.Remove(key); // keep both views aligned when the gap fallback re-keyed the close
                         AddInterval(intervals, openedTs, e.Ts, nowUtc);
                     }
                     break;
@@ -460,14 +446,19 @@ public static class ActivityAggregator
                 case TelemetryEventTypes.SyncEnd:
                 {
                     if (!matches(e)) break;
-                    var key = DocumentIdentity.ReadFrom(e).JoinKey;
+                    var id = DocumentIdentity.ReadFrom(e);
+                    var key = id.JoinKey;
                     // An identity-capture gap can key a matched sync_end
                     // under a lower level than its sync_start. Durations
                     // are per-pair (no union to hide a wrong pairing), so
                     // fall back only when a single pending sync makes the
-                    // pairing unambiguous; otherwise drop — undercount,
-                    // never invent.
-                    if (key is not null && !pendingSyncs.ContainsKey(key) && pendingSyncs.Count == 1)
+                    // pairing unambiguous AND the end's identity resolves
+                    // to a unique live doc (SC-038) — several live docs
+                    // sharing the gapped key mean the end may be a
+                    // sibling's; otherwise drop — undercount, never
+                    // invent.
+                    if (key is not null && !pendingSyncs.ContainsKey(key) && pendingSyncs.Count == 1
+                        && UniqueOpenDocKey(allOpenDocs, id) is not null)
                         key = pendingSyncs.Keys.First();
                     if (key is not null && pendingSyncs.TryGetValue(key, out var startTs))
                     {
@@ -487,8 +478,7 @@ public static class ActivityAggregator
                     CloseAll(e.Ts);
                     pendingOpenings.Clear();
                     pendingSyncs.Clear();
-                    closingIdToKey.Clear();
-                    allClosingIdToKey.Clear();
+                    closingIds.Clear();
                     break;
 
                 case TelemetryEventTypes.SessionEnd:
@@ -526,7 +516,7 @@ public static class ActivityAggregator
     /// file's view can't see it. Mirrors RecoveryScanner's fallback.
     /// </summary>
     private static string? LineageFallbackKey(
-        Dictionary<string, (string? LocalPath, string? CreationGuid)> allOpenDocs,
+        Dictionary<string, DocumentIdentity> allOpenDocs,
         string? creationGuid, string? prevPath)
     {
         if (creationGuid is null) return null;
@@ -541,6 +531,59 @@ public static class ActivityAggregator
             match = kv.Key;
         }
         return match;
+    }
+
+    /// <summary>
+    /// Resolve which live doc an event's identity belongs to when its
+    /// join key misses the open-docs view (an identity-capture gap keyed
+    /// it under a lower level than the open). Every open doc, matched or
+    /// not, is judged pairwise at the highest identity level the two
+    /// sides share; a doc confirming at a higher priority level outranks
+    /// lower-level candidates — the event names its doc at the best
+    /// level it carries. Exactly one candidate at the winning level
+    /// resolves; zero, or several tied (live lineage siblings sharing
+    /// the gapped key), returns null — the general decline rule
+    /// (SC-038): never guess which doc an ambiguous key means.
+    /// </summary>
+    private static string? UniqueOpenDocKey(
+        Dictionary<string, DocumentIdentity> allOpenDocs, DocumentIdentity id)
+    {
+        string? match = null;
+        var matchLevel = int.MaxValue;
+        var ambiguous = false;
+        foreach (var kv in allOpenDocs)
+        {
+            if (ConfirmLevel(id, kv.Value) is not { } level) continue;
+            if (level < matchLevel) { match = kv.Key; matchLevel = level; ambiguous = false; }
+            else if (level == matchLevel) ambiguous = true;
+        }
+        return ambiguous ? null : match;
+    }
+
+    /// <summary>
+    /// The priority level (0 = cloud pair … 3 = creation GUID) at which
+    /// two identities confirm as the same document, or null when they
+    /// reject or share no decidable level — BuildMatcher's per-level
+    /// semantics applied pairwise: a present key that differs rejects,
+    /// an absent key falls through, and the cloud level confirms only a
+    /// complete pair while a differing present half rejects outright.
+    /// </summary>
+    private static int? ConfirmLevel(DocumentIdentity a, DocumentIdentity b)
+    {
+        if (a.CloudModelGuid is not null && b.CloudModelGuid is not null &&
+            !KeyEquals(a.CloudModelGuid, b.CloudModelGuid)) return null;
+        if (a.CloudProjectGuid is not null && b.CloudProjectGuid is not null &&
+            !KeyEquals(a.CloudProjectGuid, b.CloudProjectGuid)) return null;
+        if (a.CloudModelGuid is not null && b.CloudModelGuid is not null &&
+            a.CloudProjectGuid is not null && b.CloudProjectGuid is not null)
+            return 0; // complete pair on both sides, halves equal
+        if (a.CentralGuid is not null && b.CentralGuid is not null)
+            return KeyEquals(a.CentralGuid, b.CentralGuid) ? 1 : null;
+        if (a.CentralPath is { Length: > 0 } aPath && b.CentralPath is { Length: > 0 } bPath)
+            return KeyEquals(aPath, bPath) ? 2 : null;
+        if (a.CreationGuid is not null && b.CreationGuid is not null)
+            return KeyEquals(a.CreationGuid, b.CreationGuid) ? 3 : null;
+        return null;
     }
 
     private static void AddInterval(

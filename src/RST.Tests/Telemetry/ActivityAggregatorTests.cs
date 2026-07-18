@@ -1013,6 +1013,83 @@ public sealed class ActivityAggregatorTests : IDisposable
             + "2.0 means the already-closed sibling still counted toward ambiguity");
     }
 
+    [Fact]
+    public void Creation_only_sibling_close_declines_and_never_retires_the_current_file()
+    {
+        // SC-038: current A (central path A + creation G) and keyed
+        // sibling B (central path B + creation G) are both open when B's
+        // doc_closing suffers the spec-allowed central_path read gap and
+        // carries only the creation GUID. Two live docs share that key —
+        // retiring either would be a guess, and the old latest-open
+        // fallback guessed A, truncating the current file at the
+        // sibling's close. An ambiguous close declines: A runs to its
+        // own real close.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var gapClosing = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 30), sibling),
+            Closing(s, 3, D(18, 10), gapClosing, "c1"), // B's closing, path lost to the gap
+            Closed(s, 4, D(18, 10), "c1"),
+            Closing(s, 5, D(18, 11), current, "c2"),
+            Closed(s, 6, D(18, 11), "c2"),
+            Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "the current file runs 9:00–11:00 to its own close; "
+            + "1.0 means the sibling's creation-only close retired it at 10:00");
+        // The decline path itself: the sibling's declined close retires
+        // nothing anywhere — seen as the current file, B stays open past
+        // its own 10:00 close and session_end caps it, the sanctioned
+        // recoverable undercount of the close.
+        HoursOn(Aggregate(sibling), 18).Should().BeApproximately(2.0, 1e-9,
+            "the sibling declines its ambiguous close and runs 9:30 to session_end (11:30); "
+            + "0.5 means the close was attributed despite two live candidates");
+    }
+
+    [Fact]
+    public void Creation_only_sibling_sync_end_declines_when_the_lineage_is_ambiguous()
+    {
+        // SC-038, sync side: with sibling B open, a sync_end that lost
+        // its central path to a capture gap could be A's or B's —
+        // pairing it with A's pending sync would invent a duration, so
+        // it drops and A's own sync_end pairs instead.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var gapId = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 15), sibling),
+            Sync(s, 3, D(18, 9, 30), current, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gapId, TelemetryEventTypes.SyncEnd), // B's end, path lost
+            Sync(s, 5, D(18, 9, 40), current, TelemetryEventTypes.SyncEnd),
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle().Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(600, 1e-9,
+            "180 means the ambiguous creation-only sync_end stole the pairing at 9:33");
+    }
+
     // ---- range windowing & tolerance ------------------------------------
 
     [Fact]
