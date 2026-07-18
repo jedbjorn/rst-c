@@ -43,7 +43,7 @@ internal static class ConsentNotice
             };
             dlg.Show();
 
-            if (!FirstRunNotice.MarkShown(prefs, DateTimeOffset.UtcNow, log: log))
+            if (!FirstRunNotice.MarkShown(DateTimeOffset.UtcNow, log: log))
                 log("consent notice shown but not recorded — it will show again next session");
         }
         catch (Exception ex)

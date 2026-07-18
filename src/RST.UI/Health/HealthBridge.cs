@@ -263,8 +263,9 @@ public class HealthBridge
             var prefs = TelemetryPrefs.Read();
             if (prefs.Enabled != enabled.Value)
             {
-                prefs.Enabled = enabled.Value;
-                if (!prefs.Write(log: m => Log.Warning("Telemetry prefs: {Message}", m)))
+                if (!TelemetryPrefs.Update(
+                        p => p.Enabled = enabled.Value,
+                        log: m => Log.Warning("Telemetry prefs: {Message}", m)))
                     return Serialize(new { ok = false, error = "failed to save preference", enabled = TelemetryPrefs.Read().Enabled });
                 try { _telemetryToggled?.Invoke(enabled.Value); }
                 catch (Exception ex) { Log.Warning(ex, "Bridge.set_telemetry_enabled: toggle callback threw"); }

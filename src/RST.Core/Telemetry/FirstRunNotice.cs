@@ -16,15 +16,15 @@ public static class FirstRunNotice
         prefs.Enabled && prefs.NoticeShownUtc is null;
 
     /// <summary>
-    /// Record the notice as shown (atomic prefs write, never throws).
+    /// Record the notice as shown via the shared merge-preserving prefs
+    /// update (never throws): only noticeShownUtc changes, against the
+    /// freshest on-disk state — a toggle-off or retention edit landed by
+    /// another Revit instance while the dialog sat open must survive the
+    /// dismissal, never be overwritten by the pre-dialog snapshot.
     /// False on IO failure — the notice then reappears next session,
     /// erring on the side of re-informing, never a crash.
     /// </summary>
     public static bool MarkShown(
-        TelemetryPrefs prefs, DateTimeOffset shownUtc,
-        string? path = null, Action<string>? log = null)
-    {
-        prefs.NoticeShownUtc = shownUtc;
-        return prefs.Write(path, log);
-    }
+        DateTimeOffset shownUtc, string? path = null, Action<string>? log = null)
+        => TelemetryPrefs.Update(p => p.NoticeShownUtc = shownUtc, path, log);
 }
