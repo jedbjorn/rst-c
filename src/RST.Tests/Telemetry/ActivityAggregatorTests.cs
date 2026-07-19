@@ -1258,8 +1258,11 @@ public sealed class ActivityAggregatorTests : IDisposable
         // remains. Blanket-declining any Count > 1 bucket (the SC-040
         // over-correction) misses that later uniquely-attributable
         // endpoint evidence; retiring the whole key would retire B with
-        // it. The close must retire A alone: the key — and the matched
-        // interval under it — stays live until B's own close kills it.
+        // it. The close must retire A alone — and end A's matched
+        // interval at that close (SC-043): B rejects A's view, so its
+        // survival keeps the *key* live, never the current file's time.
+        // Keying the interval to the whole bucket attributed B's
+        // explicitly different cloud project's hour to A.
         var current = new DocumentIdentity
         {
             CloudProjectGuid = "proj-1",
@@ -1287,17 +1290,65 @@ public sealed class ActivityAggregatorTests : IDisposable
             Closed(s, 6, D(18, 11), "c2"),
             Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
 
-        // The current file matches A at the creation level; the shared
-        // key dies at B's 11:00 close, so its interval is 9:00–11:00.
-        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
-            "A's close is uniquely attributable (B's present project GUID rejects) and B's "
-            + "close then kills the key; 2.5 means Count > 1 blanket-declined the unique "
-            + "endpoint and session_end capped the pair (SC-041)");
+        // The current file matches A at the creation level; A's uniquely
+        // attributed 10:00 close ends the matched interval — B is the
+        // key's last live doc but rejects A's view, so it never accrues
+        // to it. A = 9:00–10:00.
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(1.0, 1e-9,
+            "A's close is uniquely attributable (B's present project GUID rejects) and A "
+            + "is the key's last MATCHING doc, so the matched interval ends at 10:00; 2.0 "
+            + "means the rejecting sibling's survival extended A's interval to B's close "
+            + "(SC-043); 2.5 means Count > 1 blanket-declined the unique endpoint and "
+            + "session_end capped the pair (SC-041)");
         // The sibling's view: B must survive A's close — its accrual
         // ends at its own 11:00 close, not at 10:00.
         HoursOn(Aggregate(siblingView), 18).Should().BeApproximately(1.5, 1e-9,
             "B runs 9:30 to its own 11:00 close; 0.5 means A's close retired the whole "
             + "key and took the sibling with it (SC-041)");
+    }
+
+    [Fact]
+    public void Save_as_ends_the_matched_interval_when_the_last_matching_doc_moves_away()
+    {
+        // SC-043, Save-As side: A (P1+G, model GUID gapped) is the
+        // current file's only matching doc in the creation bucket; B
+        // (P2+G) shares the key but rejects. A's 10:00 Save As captures
+        // a new cloud model GUID — post-save time belongs to the new
+        // identity, which the current file's matcher rejects at the
+        // cloud level. A's matched interval must end at the save even
+        // though B keeps the old key live: the interval tracks matching
+        // occupancy, not the bucket.
+        var current = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var gappedA = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CreationGuid = "doc-g",
+            LocalPath = "C:\\models\\tower-a.rvt",
+        };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        var movedA = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-3",
+            CreationGuid = "doc-g",
+            LocalPath = "C:\\models\\tower-a-copy.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), siblingB),
+            SavedAs(s, 3, D(18, 10), movedA, "C:\\models\\tower-a.rvt"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(1.0, 1e-9,
+            "A moved to a rejected identity at 10:00 and B never matched the current "
+            + "file, so the interval is 9:00–10:00; 2.0 means the rejecting sibling "
+            + "kept the matched interval alive to session_end (SC-043)");
     }
 
     [Fact]
