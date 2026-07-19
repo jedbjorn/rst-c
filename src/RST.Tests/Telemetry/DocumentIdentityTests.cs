@@ -64,6 +64,34 @@ public sealed class DocumentIdentityTests
             "unknown cloud-ness is UNKNOWN, not non-cloud — only a successful IsModelInCloud=false read permits central_path");
     }
 
+    // SC-035: the bookkeeping key must honor the amended match priority.
+    // File-share centrals have no WorksharingCentralGUID, and a Save As
+    // between centrals keeps the creation GUID — so a present central
+    // path outranks creation lineage, case-insensitively.
+    [Fact]
+    public void Join_key_ranks_normalized_central_path_ahead_of_creation_guid()
+    {
+        var a = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var b = new DocumentIdentity { CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT" };
+
+        a.JoinKey.Should().NotBe("doc-a", "a present central path outranks creation lineage");
+        a.JoinKey.Should().Be(b.JoinKey, "casing drift must not split one document into two keys");
+    }
+
+    [Fact]
+    public void Join_key_priority_holds_around_the_central_path_level()
+    {
+        new DocumentIdentity { CreationGuid = "doc-a", CentralPath = "" }
+            .JoinKey.Should().Be("doc-a", "an empty central path is no key");
+        new DocumentIdentity { CentralGuid = "central-1", CentralPath = "\\\\server\\a.rvt" }
+            .JoinKey.Should().Be("central-1", "central GUID still outranks the path level");
+    }
+
     [Fact]
     public void Full_block_shape_carries_keys_and_descriptive_fields()
     {

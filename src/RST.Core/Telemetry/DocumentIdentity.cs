@@ -44,11 +44,22 @@ public sealed class DocumentIdentity
 
     /// <summary>
     /// Best local handle for "same document" bookkeeping (open-doc
-    /// tracking in the recovery scanner, throttle keys in the collector).
-    /// NOT server resolution — just a stable per-session key.
+    /// tracking in the recovery scanner and activity aggregator).
+    /// Follows the amended match priority (SC-032/SC-035): cloud model →
+    /// central GUID → normalized central path → creation GUID. File-share
+    /// centrals carry no WorksharingCentralGUID, so the path level is
+    /// what lets a creation-guid-less close correlate and a Save As
+    /// between centrals read as a new document. Case-folded so casing
+    /// drift can't split one document into two keys. NOT server
+    /// resolution — just a stable per-session key.
     /// </summary>
     public string? JoinKey =>
-        CloudModelGuid ?? CentralGuid ?? CreationGuid ?? LocalPath ?? Title;
+        CloudModelGuid
+        ?? CentralGuid
+        ?? (CentralPath is { Length: > 0 } p ? p.ToUpperInvariant() : null)
+        ?? CreationGuid
+        ?? LocalPath
+        ?? Title;
 
     /// <summary>Write the full block — nulls included, absence is data.</summary>
     public void WriteTo(TelemetryEvent e)

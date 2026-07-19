@@ -101,11 +101,16 @@ public static class RecoveryScanner
     }
 
     /// <summary>
-    /// Replay doc_opened / doc_closing / doc_closed to find the docs
-    /// still open at the end of the file. doc_closed carries only
-    /// closing_id + status (DocumentClosed doesn't expose the Document),
-    /// so identity joins through the preceding doc_closing. A cancelled
-    /// or failed close leaves the doc open.
+    /// Replay doc_opened / doc_saved_as / doc_closing / doc_closed to
+    /// find the docs still open at the end of the file. doc_closed
+    /// carries only closing_id + status (DocumentClosed doesn't expose
+    /// the Document), so identity joins through the preceding
+    /// doc_closing. A cancelled or failed close leaves the doc open.
+    /// doc_saved_as re-identifies its doc in place (joined by
+    /// previous_local_path, falling back to creation-GUID lineage when
+    /// the path join is absent) — the doc is open under the new identity
+    /// from there, so a synthetic close carries the post-save keys and a
+    /// real close of the new identity clears it (SC-035).
     /// </summary>
     private static Dictionary<string, DocumentIdentity> TrackOpenDocs(List<TelemetryEvent> events)
     {
@@ -119,6 +124,21 @@ public static class RecoveryScanner
                 case TelemetryEventTypes.DocOpened:
                 {
                     var identity = DocumentIdentity.ReadFrom(e);
+                    open[identity.JoinKey ?? e.EventId] = identity;
+                    break;
+                }
+                case TelemetryEventTypes.DocSavedAs:
+                {
+                    var identity = DocumentIdentity.ReadFrom(e);
+                    var prevPath = e.GetString(TelemetryFields.PreviousLocalPath);
+                    string? oldKey = null;
+                    if (prevPath is not null)
+                        foreach (var kv in open)
+                            if (kv.Value.LocalPath is not null &&
+                                string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
+                            { oldKey = kv.Key; break; }
+                    oldKey ??= LineageFallbackKey(open, identity.CreationGuid, prevPath);
+                    if (oldKey is not null) open.Remove(oldKey);
                     open[identity.JoinKey ?? e.EventId] = identity;
                     break;
                 }
@@ -147,6 +167,34 @@ public static class RecoveryScanner
             }
         }
         return open;
+    }
+
+    /// <summary>
+    /// Save-As retirement fallback when the previous_local_path ↔
+    /// LocalPath join is absent (an allowed LocalPath read gap on the
+    /// open, or a missing previous_local_path): Save As keeps the
+    /// creation GUID, so an open entry sharing it is the doc that just
+    /// re-identified. Conservative — a stored path that contradicts
+    /// previous_local_path rejects the candidate, and anything but
+    /// exactly one candidate returns null; never guess which doc moved.
+    /// </summary>
+    private static string? LineageFallbackKey(
+        Dictionary<string, DocumentIdentity> open, string? creationGuid, string? prevPath)
+    {
+        if (creationGuid is null) return null;
+        string? match = null;
+        foreach (var kv in open)
+        {
+            if (kv.Value.CreationGuid is null ||
+                !string.Equals(kv.Value.CreationGuid, creationGuid, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (kv.Value.LocalPath is not null && prevPath is not null &&
+                !string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
+                continue; // a present path that differs is another doc in the lineage
+            if (match is not null) return null; // ambiguous
+            match = kv.Key;
+        }
+        return match;
     }
 
     private static TelemetryEvent Synthetic(string eventType, string sessionGuid, long seq, DateTimeOffset ts) => new()

@@ -478,6 +478,89 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Central_path_only_close_correlates_when_creation_guid_is_null()
+    {
+        // SC-035 failure 1: creation_guid capture failed (an allowed
+        // identity gap) but central_path succeeded. The keys-only
+        // doc_closing must still produce a join key — without the path
+        // level the close can't correlate and open time runs to
+        // session_end.
+        var current = new DocumentIdentity { CentralPath = "\\\\server\\projects\\Tower_Central.rvt" };
+        var recorded = new DocumentIdentity
+        {
+            CentralPath = "\\\\SERVER\\Projects\\tower_central.RVT",
+            LocalPath = "C:\\models\\tower.rvt",
+            Title = "tower.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), recorded),
+            Closing(s, 2, D(18, 10), recorded, "c1"),
+            Closed(s, 3, D(18, 10), "c1"),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        var series = Aggregate(current);
+
+        series.MatchedKeyKind.Should().Be(ActivityMatchKinds.CentralPath);
+        HoursOn(series, 18).Should().BeApproximately(1.0, 1e-9,
+            "the close correlates on central path alone; 2.5 means the keys-only closing produced no join key and the interval ran to session_end");
+    }
+
+    [Fact]
+    public void Central_path_only_sync_endpoints_pair_when_creation_guid_is_null()
+    {
+        // SC-035 failure 1, sync side: with creation_guid null the
+        // central path is the only key the keys-only sync endpoints
+        // carry — losing it drops the pairing and plots nothing.
+        var current = new DocumentIdentity { CentralPath = "\\\\server\\projects\\Tower_Central.rvt" };
+        var recorded = new DocumentIdentity
+        {
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), recorded),
+            Sync(s, 2, D(18, 9, 30), recorded, TelemetryEventTypes.SyncStart),
+            Sync(s, 3, D(18, 9, 35), recorded, TelemetryEventTypes.SyncEnd),
+            Event(s, 4, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle(
+            "central path is the only join key this identity has").Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(300, 1e-9);
+    }
+
+    [Fact]
+    public void Save_as_to_a_new_central_path_ends_the_old_identity_at_save()
+    {
+        // SC-035 failure 2 + the ratified Save-As mirror: Save As from
+        // one file-share central to another keeps the creation GUID, so
+        // a creation-keyed bookkeeping entry would read "same doc" and
+        // accrue the old identity to session_end.
+        var oldCentral = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var newCentral = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), oldCentral),
+            SavedAs(s, 2, D(18, 10), newCentral, "C:\\models\\tower.rvt"),
+            Event(s, 3, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(oldCentral), 18).Should().BeApproximately(1.0, 1e-9,
+            "the old identity ends at the save; 2.5 means the unchanged creation GUID read as the same bookkeeping doc");
+    }
+
+    [Fact]
     public void Sibling_central_with_same_creation_guid_cannot_close_the_current_file()
     {
         // SC-032 residual, discrimination side: two file-share centrals
@@ -772,6 +855,310 @@ public sealed class ActivityAggregatorTests : IDisposable
             Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11)));
 
         HoursOn(Aggregate(original), 18).Should().BeApproximately(2.0, 1e-9);
+    }
+
+    [Fact]
+    public void Save_as_with_absent_path_join_ends_the_old_identity_via_creation_lineage()
+    {
+        // SC-035 review fix: the open's LocalPath read failed (an
+        // allowed identity gap) and doc_saved_as carries no
+        // previous_local_path — the path join is absent. The unchanged
+        // creation GUID retires the pre-save entry; without the
+        // fallback the old identity accrues to session_end even though
+        // the doc closed for real under its post-save path.
+        var before = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var after = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 2, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        after.WriteTo(savedAs); // no previous_local_path — the read gap under test
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), before),
+            savedAs,
+            Closing(s, 3, D(18, 11), after, "c1"),
+            Closed(s, 4, D(18, 11), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(before), 18).Should().BeApproximately(1.0, 1e-9,
+            "the old identity ends at the save; 2.5 means the absent path join left it open to session_end");
+    }
+
+    [Fact]
+    public void Save_as_lineage_fallback_declines_when_two_open_docs_share_the_creation_guid()
+    {
+        // Two entries of one lineage are open for the current file (the
+        // second's central-path capture failed, so it keyed at the
+        // creation guid) when a path-less doc_saved_as arrives —
+        // retiring either candidate would be a guess, so neither ends
+        // here. The current entry still ends at its own full-identity
+        // close; the gapped entry's creation-only close is itself
+        // ambiguous once the save's target (central path B, same
+        // creation G) is live in the lineage (SC-039), so it declines
+        // too and session_end caps the entry.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var gapped = new DocumentIdentity { CreationGuid = "doc-g" };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — ambiguous lineage
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 30), gapped),
+            savedAs,
+            Closing(s, 4, D(18, 10, 30), current, "c1"),
+            Closed(s, 5, D(18, 10, 30), "c1"),
+            Closing(s, 6, D(18, 11), gapped, "c2"),
+            Closed(s, 7, D(18, 11), "c2"),
+            Event(s, 8, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.5, 1e-9,
+            "the current entry ends at its 10:30 close while the gapped entry declines "
+            + "its ambiguous creation-only close and runs to session_end "
+            + "(9:00–10:30 ∪ 9:30–11:30); 1.5 means the ambiguous fallback guessed one "
+            + "at the save; 2.0 means the exact creation-key hit retired the gapped "
+            + "entry despite the live lineage sibling (SC-039)");
+    }
+
+    [Fact]
+    public void Save_as_of_a_keyed_sibling_cannot_end_the_current_file()
+    {
+        // SC-037: sibling B is open under its own central path — same
+        // creation GUID G, so it never matches current file A and is
+        // invisible to A's matched view — when a path-less B→C
+        // doc_saved_as arrives. Uniqueness judged only among A's docs
+        // sees A alone in the lineage, calls it unique, and falsely
+        // ends A at B's save; judged over every open doc the lineage is
+        // ambiguous, nothing retires, and A runs to its real close.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_C_Central.rvt",
+            LocalPath = "C:\\models\\tower-c.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — B's save, path join absent
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 30), sibling),
+            savedAs,
+            Closing(s, 4, D(18, 11), current, "c1"),
+            Closed(s, 5, D(18, 11), "c1"),
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "the current file runs 9:00–11:00 to its real close; "
+            + "1.0 means the sibling's save falsely ended it at 10:00");
+    }
+
+    [Fact]
+    public void Closed_sibling_no_longer_blocks_the_lineage_fallback()
+    {
+        // Companion to the SC-037 fix's other edge: the all-docs view
+        // must retire on the sibling's real close — a closed sibling
+        // that lingered would turn every later path-less Save-As of the
+        // lineage ambiguous, leaving the old identity open past its
+        // save (an overcount, the one direction durations never err).
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_C_Central.rvt",
+            LocalPath = "C:\\models\\tower-c.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 5, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — A's save this time
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 15), sibling),
+            Closing(s, 3, D(18, 9, 45), sibling, "c1"),
+            Closed(s, 4, D(18, 9, 45), "c1"),
+            savedAs,
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(1.0, 1e-9,
+            "the current file ends at its 10:00 save to a new identity; "
+            + "2.0 means the already-closed sibling still counted toward ambiguity");
+    }
+
+    [Fact]
+    public void Creation_only_sibling_close_declines_and_never_retires_the_current_file()
+    {
+        // SC-038: current A (central path A + creation G) and keyed
+        // sibling B (central path B + creation G) are both open when B's
+        // doc_closing suffers the spec-allowed central_path read gap and
+        // carries only the creation GUID. Two live docs share that key —
+        // retiring either would be a guess, and the old latest-open
+        // fallback guessed A, truncating the current file at the
+        // sibling's close. An ambiguous close declines: A runs to its
+        // own real close.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var gapClosing = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 30), sibling),
+            Closing(s, 3, D(18, 10), gapClosing, "c1"), // B's closing, path lost to the gap
+            Closed(s, 4, D(18, 10), "c1"),
+            Closing(s, 5, D(18, 11), current, "c2"),
+            Closed(s, 6, D(18, 11), "c2"),
+            Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "the current file runs 9:00–11:00 to its own close; "
+            + "1.0 means the sibling's creation-only close retired it at 10:00");
+        // The decline path itself: the sibling's declined close retires
+        // nothing anywhere — seen as the current file, B stays open past
+        // its own 10:00 close and session_end caps it, the sanctioned
+        // recoverable undercount of the close.
+        HoursOn(Aggregate(sibling), 18).Should().BeApproximately(2.0, 1e-9,
+            "the sibling declines its ambiguous close and runs 9:30 to session_end (11:30); "
+            + "0.5 means the close was attributed despite two live candidates");
+    }
+
+    [Fact]
+    public void Creation_only_sibling_sync_end_declines_when_the_lineage_is_ambiguous()
+    {
+        // SC-038, sync side: with sibling B open, a sync_end that lost
+        // its central path to a capture gap could be A's or B's —
+        // pairing it with A's pending sync would invent a duration, so
+        // it drops and A's own sync_end pairs instead.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var sibling = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+        };
+        var gapId = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 15), sibling),
+            Sync(s, 3, D(18, 9, 30), current, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gapId, TelemetryEventTypes.SyncEnd), // B's end, path lost
+            Sync(s, 5, D(18, 9, 40), current, TelemetryEventTypes.SyncEnd),
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle().Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(600, 1e-9,
+            "180 means the ambiguous creation-only sync_end stole the pairing at 9:33");
+    }
+
+    [Fact]
+    public void Creation_keyed_close_declines_when_a_higher_key_sibling_shares_the_lineage()
+    {
+        // SC-039: sibling B's doc_opened itself suffered the capture gap,
+        // so B is open under the creation GUID — the very key a
+        // creation-only close carries. The exact key hit proves the key
+        // is live, not whose close this is: current A shares the lineage
+        // at its central path, so the close could be A's (gapped at
+        // close) just as well as B's. Ambiguity declines even the exact
+        // hit — B runs to session_end's cap; A ends at its own real
+        // close, which still resolves through level ranking.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var gapSibling = new DocumentIdentity { CreationGuid = "doc-g" }; // B, opened gapped
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 7), current),
+            Opened(s, 2, D(18, 8), gapSibling),
+            Closing(s, 3, D(18, 9), gapSibling, "c1"), // creation-only — A's or B's?
+            Closed(s, 4, D(18, 9), "c1"),
+            Closing(s, 5, D(18, 10), current, "c2"),
+            Closed(s, 6, D(18, 10), "c2"),
+            Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        // A runs 7:00–10:00 to its own close; B (matched through the
+        // shared creation GUID) declines the ambiguous 9:00 close and
+        // runs 8:00 to session_end (11:00). Union 7:00–11:00 = 4h;
+        // 3.0 means the exact creation-key hit retired B at 9:00.
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(4.0, 1e-9,
+            "an exact hit on the gapped-open sibling's creation key must still decline "
+            + "while a higher-key lineage sibling is live");
+    }
+
+    [Fact]
+    public void Creation_keyed_sync_end_declines_when_a_higher_key_sibling_shares_the_lineage()
+    {
+        // SC-039, sync side: B opened gapped, so its sync_start is
+        // pending under the creation GUID — and a creation-only sync_end
+        // hits that pending key exactly. With current A live in the same
+        // lineage, the end could be A's (gapped at end) just as well as
+        // B's; pairing on the exact hit would invent a duration from a
+        // possibly-wrong pair, so it drops.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var gapSibling = new DocumentIdentity { CreationGuid = "doc-g" }; // B, opened gapped
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 15), gapSibling),
+            Sync(s, 3, D(18, 9, 30), gapSibling, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gapSibling, TelemetryEventTypes.SyncEnd), // exact key hit — A's or B's?
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        Aggregate(current).SyncEvents.Should().BeEmpty(
+            "a creation-only sync_end hitting the gapped-open sibling's pending key exactly "
+            + "is still ambiguous while a higher-key lineage sibling is live");
     }
 
     // ---- range windowing & tolerance ------------------------------------
