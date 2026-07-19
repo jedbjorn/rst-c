@@ -68,7 +68,7 @@ dcheck() {
 # breaks claude — so seed it with empty json. Real creds come from a one-time
 # host login (`./sc doctor` guides it); this just keeps the mounts valid.
 dcreds() {
-  mkdir -p "$HOME/.claude" "$HOME/.config/opencode" "$HOME/.local/share/opencode" "$HOME/.codex" "$HOME/.vibe" 2>/dev/null || true
+  mkdir -p "$HOME/.claude" "$HOME/.config/opencode" "$HOME/.local/share/opencode" "$HOME/.codex" "$HOME/.vibe" "$HOME/.kimi-code" 2>/dev/null || true
   [ -e "$HOME/.claude.json" ] || echo '{}' > "$HOME/.claude.json"
 }
 
@@ -928,6 +928,9 @@ case "$cmd" in
                 esac
                 exec "$PY" "$S/map_repo.py" ;;
   map-setup)    exec "$PY" "$S/map_setup.py" ;;
+  # Token & session analytics — sweep each harness's on-disk usage data for
+  # THIS repo into session_token_usage (incremental, idempotent; doc #11).
+  analytics)    exec "$PY" "$S/analytics.py" "$@" ;;
   seed-skills)  exec "$PY" "$S/seed_skills.py" ;;
   # Skill catalogue write surface — grants/retirement by name, loud on a miss
   # (the raw-SQL grant's silent no-op class). Snapshot is still the persist step.
@@ -1074,6 +1077,7 @@ case "$cmd" in
       -v "$HOME/.local/share/opencode:$HOME/.local/share/opencode" \
       -v "$HOME/.codex:$HOME/.codex" \
       -v "$HOME/.vibe:$HOME/.vibe" \
+      -v "$HOME/.kimi-code:$HOME/.kimi-code" \
       -p "127.0.0.1:$p:$p" \
       -p "127.0.0.1:$dp:$dp" \
       "$IMG" ./sc serve --port "$p" >/dev/null
@@ -1134,13 +1138,13 @@ case "$cmd" in
 super-coder — forkable shell substrate
 
   ./sc install             first-launch bootstrap for a fork (requirements, harness, first shell)
-  ./sc ensure-harness      install claude + opencode + codex if missing (official native installers, no npm)
+  ./sc ensure-harness      install claude + opencode + codex + vibe + kimi if missing (official native installers, no npm)
   ./sc doctor              sandbox readiness: docker (rootless/rootful) + harness login
   ./sc update              fetch + materialize the engine (gitignored dep) + reconcile IN PLACE (migrate, sync skills, map);
                              --no-fetch skips the fetch · --ref <tag|sha> pins a version · blocks on local engine edits (--force discards them)
-  ./sc update-harnesses    update claude + opencode + codex + vibe to latest (force-reruns official installers)
+  ./sc update-harnesses    update claude + opencode + codex + vibe + kimi to latest (force-reruns official installers)
   ./sc rollback            sound undo of a bad update — restore the DB + engine (engine.ref.prev) together
-  ./sc feature             list the opt-in features (pg · windows · tailnet) and the state of both halves (config block + skill grants)
+  ./sc feature             list the opt-in features (pg · windows · tailnet · pm2 · app-deploy) and the state of both halves (config block + skill grants)
   ./sc feature enable <f>  enable one: grant its skills to the owning flavors + create/point-at its instance.json block (disable reverses)
   ./sc eject               ONE-WAY: stop tracking upstream and own the engine — un-gitignore + stage .super-coder/ as fork source (confirm-gated)
   ./sc rebuild             build the .db from schema + migrations + snapshot
