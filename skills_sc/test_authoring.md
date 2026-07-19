@@ -6,7 +6,7 @@ edit: changes here are overwritten — author via the shell or localhost GUI
 
 # test_authoring
 
-Principles for stringent pytest tests — tests that can actually fail. Pair with test_authoring_sqlite or test_authoring_pg for stack-specific infra context.
+Principles for stringent pytest tests — tests a realistic bug turns red. Pair with a granted stack-infra testing skill (test_authoring_sqlite / test_authoring_pg / a fork-local one) if the shell has one.
 
 **Category:** craft
 
@@ -14,81 +14,91 @@ Principles for stringent pytest tests — tests that can actually fail. Pair wit
 
 # test_authoring — stringent pytest tests
 
-Use this when writing a new test, or reviewing a diff that touches `tests/`.
-The goal of a test is to **fail when the code is wrong**. A test that passes
-no matter what the code does is worse than no test — it reads as coverage while
-guarding nothing.
+Apply when writing a test or reviewing a diff that touches `tests/`.
+Pass condition for any test: a realistic bug turns it red. A test no bug
+can fail reads as coverage while guarding nothing — sharpen or cut it.
 
-Load `test_authoring_sqlite` or `test_authoring_pg` alongside this for the
-test infrastructure your stack uses (fixture setup, callers, DB access pattern).
+Stack infra (fixture setup, callers, DB access pattern) lives in the granted
+stack skill — `test_authoring_sqlite` / `test_authoring_pg` / a fork-local
+skill that supersedes this one. Load it alongside. None granted -> this skill
+stands alone; do NOT hunt for one the fork doesn't ship.
 
-## The rules (the floor)
+## Rules (the floor)
 
-1. **Count + content + negative.** A count assertion (`written == 1`) must be
-   followed by a content assertion (the *right* row, with the right fields and
-   FKs) **and** a negative assertion (the row that must *not* exist). A bug that
-   writes the wrong body, wrong participant, or a stray contact must turn the
-   test red. `>= 1` is banned where an exact count is knowable.
+1. **Count + content + negative.** After a count assertion (`written == 1`),
+   assert the content (the right row: fields + FKs) + the negative (the row
+   that must NOT exist). Wrong body / wrong participant / stray contact must
+   turn the test red. `>= 1` is banned where the exact count is knowable.
 
-2. **No config-mirror tautologies.** Never assert that code output equals a
-   constant the code-under-test imports in-process
-   (`assert resp == list(THE_SAME_CONSTANT)`). It can only catch hardcoding, not
-   a wrong value. Instead: pin the literal expectation in the test, or derive it
-   from independent behavior (e.g. the error classes a real `classify_error()`
-   actually emits across sample failures).
+2. **No config-mirror tautologies.** NEVER assert output equals a constant
+   the code under test imports in-process
+   (`assert resp == list(THE_SAME_CONSTANT)`) — it catches hardcoding only,
+   never a wrong value. Pin the literal expectation in the test, or derive it
+   from independent behavior (e.g. the error classes a real
+   `classify_error()` emits across sample failures).
 
-3. **Round-trips assert the negative space too.** Insert `new`; assert `new` is
-   present **and** the prior value is gone **and** sibling fields are untouched.
+3. **Round-trips assert the negative space.** Insert `new` -> assert `new`
+   present + prior value gone + sibling fields untouched.
    `assert get() == put_value` alone passes against a stub that echoes input.
 
-4. **Every error / edge branch gets a test.** If the code has a failure path, a
-   reject path, a NULL path, or an empty-input path, each gets its own case.
-   Happy-path-only is the most common way a test is "written to pass."
-   `is not None` / truthiness is banned where the exact value is knowable.
+4. **Every error / edge branch gets its own case.** Failure path / reject
+   path / NULL path / empty-input path -> one test each. `is not None` /
+   bare truthiness banned where the exact value is knowable.
 
-5. **Negative tests assert the action did not happen, not just the message.**
-   For a denied / rejected / gated path, assert the underlying effect is absent
-   (no row written, resource still unreachable, no egress call) — not only that
-   a 4xx or a `permission_denied` string came back.
+5. **Negative tests assert the effect is absent.** Denied / rejected / gated
+   path -> assert the underlying action did not happen (no row written,
+   resource still unreachable, no egress call) — a 4xx or a
+   `permission_denied` string alone does not pass.
 
-6. **Schema changes are tested by behavior, not by `PRAGMA`.** To prove a column
-   is nullable, insert a NULL row and assert it's accepted — don't read the
-   catalog flag. The pragma can be right while a CHECK or trigger still rejects.
+6. **Schema changes: test behavior, not `PRAGMA`.** To prove a column
+   nullable, insert a NULL row -> assert accepted. The catalog flag can be
+   right while a CHECK or trigger still rejects.
 
-7. **Idempotency / migration tests run on a *dirty* fixture.** Seed the exact
-   state the migration is meant to clean (the rows it removes still present),
-   then run it once and twice, asserting convergence. Idempotency-on-clean is
-   nearly free to pass and proves almost nothing.
+7. **Idempotency / migration tests run on a dirty fixture.** Seed the exact
+   state the migration cleans (the rows it removes still present) -> run once
+   and twice -> assert convergence. Idempotency-on-clean proves almost
+   nothing.
 
-8. **Reject silent-empty.** A bad filter / typo'd enum value must 422, never a
-   200 reading as "nothing found." Assert the rejection explicitly.
+8. **Reject silent-empty.** Bad filter / typo'd enum value -> assert 422
+   explicitly, never a 200 reading as "nothing found."
 
-## Review lens (use when reviewing a tests/ diff)
+9. **Cleanup lives in the fixture, never after the asserts.** A resource
+   opened in a test body (connection, file handle, subprocess) and closed
+   on the line after the assertions leaks exactly when the test FAILS —
+   the worst possible correlation: the suite hangs or exhausts a pool
+   only when it is catching bugs (a close-after-assert probe connection
+   deadlocked three concurrent pytest runs of one file for four hours in
+   a dos-arch sprint). Open in a fixture (`yield` + teardown /
+   `addfinalizer`) or a `with` block; teardown must run on the red path.
+   Audit pattern: AST-scan the suite for opens whose close sits after an
+   `assert` in the same body.
 
-- Read the assertions, not the test name. Does any realistic bug survive them?
-- For each `assert`: name a one-line code change that would still pass it. If
-  that change is a real bug, the assertion is too weak.
-- Count-only? Substring-only? `is not None`? — demand the exact value.
-- Does the test compare output to a constant the code imports? — flag rule 2.
-- Is only the success branch tested? — name the missing edge and require it.
+## Review lens (tests/ diff)
 
-## Mechanizable subset (enforce in CI, not just here)
+- Read the assertions, not the test name.
+- Per `assert`: name a one-line code change that would still pass it. That
+  change is a real bug -> the assertion is too weak; demand the fix.
+- Count-only / substring-only / `is not None` -> demand the exact value.
+- Output compared to a constant the code imports -> flag rule 2.
+- Only the success branch tested -> name the missing edge + require it.
 
-These are grep-able and belong in a `.github` workflow that fails the build, so
-the floor holds even when this skill isn't loaded:
+## Mechanizable subset (enforce in CI)
+
+Grep-able; wire into a `.github` workflow that fails the build so the floor
+holds when this skill isn't loaded. Point the CI failure message back at
+this skill.
 
 - `assert .* (==|!=) (list|set)\(<KNOWN_CONSTANT>\)` — config-mirror shape.
-- `assert .* >= 1` / bare `assert .* is not None` in a new test diff — demand an
-  exact value.
-- a count assertion with no content assertion in the following N lines.
-
-A skill teaches the judgment; CI enforces the floor. Wire the CI failure message
-to point back at this skill.
+- `assert .* >= 1` / bare `assert .* is not None` in a new test diff —
+  demand an exact value.
+- Count assertion with no content assertion in the following N lines.
 
 ## Never
 
+- Close a resource on the line after an assert — a failing assert skips
+  it; fixtures own teardown (rule 9).
 - Mock the function under test, then assert the mock returned what you set.
 - Assert a key exists without asserting its value.
 - Let a count or status code stand in for "the right thing happened."
-- Test only the happy path for code that has error branches.
+- Test only the happy path of code that has error branches.
 - Ship a test whose assertions no realistic bug could violate.

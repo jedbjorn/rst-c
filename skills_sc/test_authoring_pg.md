@@ -14,16 +14,23 @@ Postgres test infrastructure for postgres-backed forks — throwaway DB, Alice/B
 
 # test_authoring_pg — Postgres test infra
 
-Read `test_authoring` for the foundational rules. This skill covers the
-test infrastructure for Postgres-backed forks.
+Rules live in `test_authoring` — read it alongside. This skill = the test
+infrastructure PATTERN for Postgres-backed forks.
 
-## Foundation
+**Your fork's `tests/conftest.py` is the source of truth** for the throwaway
+DB's naming, what schema artifact seeds it (a live `schema.sql`, a squash, a
+migration replay), and the fixture roster — read it before writing a test.
+Everything below is the typical shape, not a contract; where your conftest
+differs, the conftest wins. A fork may also ship its own superseding
+test-authoring skill — if one is granted, prefer it.
+
+## Foundation (typical shape)
 
 `tests/conftest.py` creates a throwaway Postgres DB at session start, applies
-`schema.sql` + migrations, seeds two tenants (Alice / Bob) + a shared system
+the fork's schema artifact, seeds two tenants (Alice / Bob) + a shared system
 shell, and drives the real app through `TestClient` with real auth.
 
-**Key identities (fixed rowids — address by literal in tests):**
+**Key identities (an example roster — confirm against your conftest):**
 
 | Name | Kind | ID |
 |---|---|---|
@@ -37,16 +44,18 @@ shell, and drives the real app through `TestClient` with real auth.
 
 **Throwaway DB setup:**
 - An admin connection (`psycopg.connect(DATABASE_URL_ADMIN, autocommit=True)`)
-  creates a unique `dosarch_test_<uuid>` database at session start and drops it
-  at session teardown.
-- `DATABASE_URL` is injected via `os.environ["DATABASE_URL"]` **before**
-  importing the app; the app's DB layer reads it at import time.
-- `schema.sql` (the postgres variant) + migrations are applied via
-  `cur.execute(SCHEMA.read_text())` on the throwaway DB connection.
-- A second throwaway database (or schema) isolates egress/spend rows
-  (`DISPATCH_DATABASE_URL`).
+  creates a uniquely-named `<fork>_test_<unique>` database at session start
+  and drops it at session teardown — the naming scheme is the conftest's.
+- `DATABASE_URL` injected via `os.environ["DATABASE_URL"]` BEFORE importing
+  the app — the app's DB layer reads it at import time.
+- The fork's schema artifact applied on the throwaway connection — which
+  artifact (postgres `schema.sql`, a schema squash, a migration replay) is a
+  per-fork choice; read the conftest, don't assume.
+- Some forks isolate egress/spend rows in a second throwaway DB/schema —
+  only if your conftest declares one.
 
-**Callers:**
+**Callers** — same `Caller` pattern as the SQLite variant; identity carried
+via cookie or `Authorization: Bearer` header:
 ```python
 alice   # session-cookie caller, USER_A identity
 bob     # session-cookie caller, USER_B identity
@@ -55,15 +64,12 @@ anon    # no auth
 shell_a # bearer-key caller, KEY_A
 shell_b # bearer-key caller, KEY_B
 ```
-Same `Caller` pattern as the SQLite variant — identity carried via cookie
-or `Authorization: Bearer` header.
 
 **TestClient:**
-- Created without a `with` block — skips startup hooks (catalogue / model
+- Create WITHOUT a `with` block -> skips startup hooks (catalogue / model
   sync) that would hit the network.
-- Session-scoped (`scope="session"`) so the DB is shared across all tests
-  in a run; tests that need isolation seed their own fixture rows and
-  clean up explicitly.
+- `scope="session"` -> one DB shared across the whole run. A test needing
+  isolation seeds its own fixture rows + cleans up explicitly.
 
 **Direct DB assertions:**
 ```python
@@ -76,6 +82,6 @@ rows = cur.fetchall()
 ```
 Assert against real rows, not the response payload.
 
-**Mocking boundary:**
-Mock only true external egress — outbound HTTP, broker calls, third-party
-APIs. Never mock the router, the DB layer, or the function under test.
+**Mocking boundary:** mock only true external egress — outbound HTTP, broker
+calls, third-party APIs. NEVER mock the router, the DB layer, or the
+function under test.

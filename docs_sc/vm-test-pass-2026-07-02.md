@@ -103,9 +103,9 @@ re-snapshots, the in-Revit half of doc #3's checklist can run with these as-is.
 # Addendum — In-Revit GUI half — 2026-07-03
 
 QAQC-2 cleared: the operator signed in on the VM console (Autodesk account
-`jedBPKK4`); Revit 2026.4 boots straight to Home. Tests ran on the **live
-signed-in box** (not from a reset — the sign-in is NOT yet baked into the
-`clean` snapshot; a reset still re-locks QAQC-2 until the operator re-bakes).
+`jedBPKK4`) and the sign-in **is baked into the `clean` snapshot** (confirmed
+by the operator 2026-07-03) — resets are safe; in-Revit testing stays
+unblocked. Tests ran on the live signed-in box.
 
 **Method.** Windows-MCP inside the guest on port **8001** (the baked
 `windows-mcp-server` task binds 8000 and dies: the **dos-arch API test
@@ -170,9 +170,11 @@ ACC cache on box), upgrade-with-Revit-open.
 
 ## Box state left behind
 
-VM left **running** (sign-in must survive for the operator to re-bake —
-do NOT `/reset` before re-snapshotting). Revit closed. Leftovers, operator's
-call before bake: profile `qaqc1_985536c5-….json` (+ `user_profile_prefs.json`
-now points at qaqc1; `example` unloaded), scheduled task `RSTMcp8001` +
+VM left **running**, Revit closed. Sign-in is already baked into `clean`, so
+a normal `/reset` is safe and will also discard this session's leftovers:
+profile `qaqc1_985536c5-….json` (+ `user_profile_prefs.json` now points at
+qaqc1; `example` unloaded), scheduled task `RSTMcp8001` +
 `C:\Users\Public\{mcp8001.cmd,mcp_bridge.py,uia.ps1,probe8000.py,mcp8001.log/err}`.
-Fix the baked windows-mcp task port (8000 collision) at the same time.
+Still open for the next bake: fix the baked `windows-mcp-server` task port
+(8000 collides with the dos-arch API instance; this pass ran it on 8001).
+
