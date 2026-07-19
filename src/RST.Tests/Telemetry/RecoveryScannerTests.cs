@@ -145,6 +145,188 @@ public sealed class RecoveryScannerTests : IDisposable
         events[^1].EventType.Should().Be("session_end");
     }
 
+    [Fact]
+    public void Central_path_only_close_correlates_when_creation_guid_is_null()
+    {
+        // SC-035 failure 1: a file-share central whose creation_guid
+        // capture failed (an allowed identity gap) still closes through
+        // its keys-only doc_closing — the central path is the join key.
+        // Without it the doc reads as still open and recovery would
+        // synthesize a close for a doc that closed for real.
+        var s = Guid.NewGuid().ToString();
+        var identity = new DocumentIdentity
+        {
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+            Title = "tower.rvt",
+            IsWorkshared = true,
+            IsCloud = false,
+        };
+        var opened = Event(s, 2, TelemetryEventTypes.DocOpened, T0.AddMinutes(1));
+        identity.WriteTo(opened);
+        var closing = Event(s, 3, TelemetryEventTypes.DocClosing, T0.AddMinutes(5));
+        identity.WriteKeysTo(closing);
+        closing.SetField(TelemetryFields.ClosingId, "17");
+        var closed = Event(s, 4, TelemetryEventTypes.DocClosed, T0.AddMinutes(5));
+        closed.SetField(TelemetryFields.ClosingId, "17");
+        closed.SetField(TelemetryFields.Status, "Succeeded");
+
+        var path = WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, T0),
+            opened, closing, closed);
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        OutboxFiles.ReadEvents(path).Where(e => e.Synthetic == true).Should().ContainSingle(
+                "the doc closed for real — its keys-only close correlates on central path alone, "
+                + "so the session_end is the sole synthetic")
+            .Which.EventType.Should().Be(TelemetryEventTypes.SessionEnd);
+    }
+
+    [Fact]
+    public void Save_as_between_file_share_centrals_re_identifies_the_open_doc()
+    {
+        // SC-035 failure 2: Save As from one file-share central to
+        // another keeps the creation GUID. The doc is open under the NEW
+        // identity from the save — a crash must synthesize its close
+        // with the post-save central path, not the pre-save one, and one
+        // close only: the identity moved, it didn't fork.
+        var s = Guid.NewGuid().ToString();
+        var before = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            LocalPath = "C:\\models\\tower.rvt",
+            IsWorkshared = true,
+            IsCloud = false,
+        };
+        var after = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+            IsWorkshared = true,
+            IsCloud = false,
+        };
+        var opened = Event(s, 2, TelemetryEventTypes.DocOpened, T0.AddMinutes(1));
+        before.WriteTo(opened);
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, T0.AddMinutes(30));
+        after.WriteTo(savedAs);
+        savedAs.SetField(TelemetryFields.PreviousLocalPath, "C:\\models\\tower.rvt");
+
+        var path = WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, T0),
+            opened, savedAs);
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        OutboxFiles.ReadEvents(path)
+            .Where(e => e.Synthetic == true && e.EventType == TelemetryEventTypes.DocClosed)
+            .Should().ContainSingle("one doc is open — the identity moved, it didn't fork")
+            .Which.GetString(TelemetryFields.CentralPath).Should().Be(
+                "\\\\server\\projects\\Tower_B_Central.rvt",
+                "the synthetic close must carry the post-save identity");
+    }
+
+    [Fact]
+    public void Save_as_with_absent_path_join_retires_the_old_identity_via_creation_lineage()
+    {
+        // SC-035 review fix: doc_opened's LocalPath read failed (an
+        // allowed identity gap) and doc_saved_as carries no
+        // previous_local_path — the path join is absent. The unchanged
+        // creation GUID is what says "same doc": without the lineage
+        // fallback the pre-save entry survives the real post-save close
+        // and recovery forges a doc_closed under the old central path.
+        var s = Guid.NewGuid().ToString();
+        var before = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+            IsWorkshared = true,
+            IsCloud = false,
+        };
+        var after = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+            IsWorkshared = true,
+            IsCloud = false,
+        };
+        var opened = Event(s, 2, TelemetryEventTypes.DocOpened, T0.AddMinutes(1));
+        before.WriteTo(opened);
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, T0.AddMinutes(30));
+        after.WriteTo(savedAs); // no previous_local_path — the read gap under test
+        var closing = Event(s, 4, TelemetryEventTypes.DocClosing, T0.AddMinutes(45));
+        after.WriteKeysTo(closing);
+        closing.SetField(TelemetryFields.ClosingId, "17");
+        var closed = Event(s, 5, TelemetryEventTypes.DocClosed, T0.AddMinutes(45));
+        closed.SetField(TelemetryFields.ClosingId, "17");
+        closed.SetField(TelemetryFields.Status, "Succeeded");
+
+        var path = WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, T0),
+            opened, savedAs, closing, closed);
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        OutboxFiles.ReadEvents(path).Where(e => e.Synthetic == true).Should().ContainSingle(
+                "the doc closed for real under its post-save identity — a synthetic doc_closed "
+                + "means the pre-save entry survived the save-as")
+            .Which.EventType.Should().Be(TelemetryEventTypes.SessionEnd);
+    }
+
+    [Fact]
+    public void Save_as_lineage_fallback_declines_when_two_open_docs_share_the_creation_guid()
+    {
+        // Two Save-As siblings of one lineage are open with no local
+        // paths on record when a path-less doc_saved_as arrives —
+        // retiring either candidate would be a guess. Both stay open, so
+        // a crash closes all three identities: a conservative extra
+        // close beats silently dropping a real one.
+        var s = Guid.NewGuid().ToString();
+        var siblingA = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var siblingB = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_Copy_Central.rvt",
+        };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-a",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var openedA = Event(s, 2, TelemetryEventTypes.DocOpened, T0.AddMinutes(1));
+        siblingA.WriteTo(openedA);
+        var openedB = Event(s, 3, TelemetryEventTypes.DocOpened, T0.AddMinutes(2));
+        siblingB.WriteTo(openedB);
+        var savedAs = Event(s, 4, TelemetryEventTypes.DocSavedAs, T0.AddMinutes(30));
+        moved.WriteTo(savedAs); // no previous_local_path — ambiguous lineage
+
+        var path = WriteSessionFile(_root, s,
+            Event(s, 1, TelemetryEventTypes.SessionStart, T0),
+            openedA, openedB, savedAs);
+
+        RecoveryScanner.Scan(_root).Should().Equal(path);
+
+        OutboxFiles.ReadEvents(path)
+            .Where(e => e.Synthetic == true && e.EventType == TelemetryEventTypes.DocClosed)
+            .Select(e => e.GetString(TelemetryFields.CentralPath))
+            .Should().BeEquivalentTo(
+                new[]
+                {
+                    "\\\\server\\projects\\Tower_Central.rvt",
+                    "\\\\server\\projects\\Tower_Copy_Central.rvt",
+                    "\\\\server\\projects\\Tower_B_Central.rvt",
+                },
+                "ambiguous lineage retires nothing — two closes here mean the fallback guessed a sibling");
+    }
+
     private string WriteFileWithClosedStatus(string sessionGuid, string? status)
     {
         var closing = Event(sessionGuid, 3, TelemetryEventTypes.DocClosing, T0.AddMinutes(5));
