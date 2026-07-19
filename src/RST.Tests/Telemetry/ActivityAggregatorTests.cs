@@ -1161,6 +1161,220 @@ public sealed class ActivityAggregatorTests : IDisposable
             + "is still ambiguous while a higher-key lineage sibling is live");
     }
 
+    [Fact]
+    public void Duplicate_key_close_declines_when_two_gapped_docs_share_the_lower_level_key()
+    {
+        // SC-040: lineage siblings A and B BOTH lost central-path capture
+        // at their doc_opened, so both are live under the creation GUID —
+        // one key, two docs. Collapsing them to one open-doc entry before
+        // resolution erased that multiplicity: an exact creation-key
+        // close read as unique and retired "the" doc, though it could be
+        // A's just as well as B's. Ambiguity is counted over live open
+        // docs, not distinct keys — the exact hit declines and
+        // session_end caps both.
+        var gappedA = new DocumentIdentity { CreationGuid = "doc-g" };
+        var gappedB = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), gappedB),
+            Closing(s, 3, D(18, 10), gappedA, "c1"), // exact key hit — A's or B's?
+            Closed(s, 4, D(18, 10), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(gappedA), 18).Should().BeApproximately(2.5, 1e-9,
+            "two live docs share the creation key, so the exact-key close declines and "
+            + "the pair runs 9:00 to session_end (11:30); 1.0 means the duplicate-key "
+            + "collapse erased the multiplicity and the close retired the pair (SC-040)");
+    }
+
+    [Fact]
+    public void Duplicate_key_sync_end_declines_when_two_gapped_docs_share_the_lower_level_key()
+    {
+        // SC-040, sync side: with A and B both live under the creation
+        // GUID, a creation-keyed sync_end hits the pending sync exactly —
+        // but the start and the end could belong to different docs, so
+        // pairing them would invent a duration. It drops.
+        var gappedA = new DocumentIdentity { CreationGuid = "doc-g" };
+        var gappedB = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 15), gappedB),
+            Sync(s, 3, D(18, 9, 30), gappedA, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gappedA, TelemetryEventTypes.SyncEnd), // exact hit — A's or B's?
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        Aggregate(gappedA).SyncEvents.Should().BeEmpty(
+            "a creation-keyed sync_end is ambiguous between two live docs sharing the "
+            + "key; a paired duration means the duplicate-key collapse erased the "
+            + "multiplicity (SC-040)");
+    }
+
+    [Fact]
+    public void Save_as_lineage_fallback_declines_when_two_gapped_docs_share_the_creation_key()
+    {
+        // SC-040 reaches the Save-As joins too: A and B are both live
+        // under the creation GUID when a path-less doc_saved_as in the
+        // lineage arrives. One collapsed entry read as the unique lineage
+        // candidate and retired at the save; counted over live docs the
+        // fallback is ambiguous — neither entry ends here. The moved doc
+        // still ends at its own full-identity close (central path
+        // outranks the creation-level tie); the gapped pair declines
+        // every creation-keyed event and runs to session_end.
+        var gappedA = new DocumentIdentity { CreationGuid = "doc-g" };
+        var gappedB = new DocumentIdentity { CreationGuid = "doc-g" };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — ambiguous lineage
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), gappedB),
+            savedAs,
+            Closing(s, 4, D(18, 10, 30), moved, "c1"),
+            Closed(s, 5, D(18, 10, 30), "c1"),
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(gappedA), 18).Should().BeApproximately(2.0, 1e-9,
+            "the gapped pair declines the ambiguous path-less save and runs 9:00 to "
+            + "session_end (11:00) while the moved doc ends at its 10:30 close "
+            + "(9:00–11:00 ∪ 10:00–10:30); 1.5 means the collapsed entry read as the "
+            + "unique lineage candidate and retired at the save (SC-040)");
+    }
+
+    [Fact]
+    public void Duplicate_key_close_retires_the_uniquely_confirmed_doc_and_preserves_the_rejecting_sibling()
+    {
+        // SC-041: A (cloud project P1, model GUID lost to a capture gap,
+        // creation G) and B (project P2, same lineage G) both key under
+        // the creation GUID — one bucket, two docs. A's close carries
+        // P1+G: B's present P2 rejects it, so exactly one live candidate
+        // remains. Blanket-declining any Count > 1 bucket (the SC-040
+        // over-correction) misses that later uniquely-attributable
+        // endpoint evidence; retiring the whole key would retire B with
+        // it. The close must retire A alone: the key — and the matched
+        // interval under it — stays live until B's own close kills it.
+        var current = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var gappedA = new DocumentIdentity { CloudProjectGuid = "proj-1", CreationGuid = "doc-g" };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        // The sibling file's own Activity view — full pair, so its
+        // matcher rejects A's P1 events instead of falling through to
+        // the shared creation level.
+        var siblingView = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-2",
+            CloudModelGuid = "model-2",
+            CreationGuid = "doc-g",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), siblingB),
+            Closing(s, 3, D(18, 10), gappedA, "c1"), // P2 rejects — uniquely A's
+            Closed(s, 4, D(18, 10), "c1"),
+            Closing(s, 5, D(18, 11), siblingB, "c2"),
+            Closed(s, 6, D(18, 11), "c2"),
+            Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        // The current file matches A at the creation level; the shared
+        // key dies at B's 11:00 close, so its interval is 9:00–11:00.
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "A's close is uniquely attributable (B's present project GUID rejects) and B's "
+            + "close then kills the key; 2.5 means Count > 1 blanket-declined the unique "
+            + "endpoint and session_end capped the pair (SC-041)");
+        // The sibling's view: B must survive A's close — its accrual
+        // ends at its own 11:00 close, not at 10:00.
+        HoursOn(Aggregate(siblingView), 18).Should().BeApproximately(1.5, 1e-9,
+            "B runs 9:30 to its own 11:00 close; 0.5 means A's close retired the whole "
+            + "key and took the sibling with it (SC-041)");
+    }
+
+    [Fact]
+    public void Cross_bucket_close_follows_the_resolver_winner_over_the_exact_key_bucket()
+    {
+        // SC-042: A (P1+M1+G, bucket M1) and B (P2+G, model GUID lost at
+        // its open — bucket G) are live when A's close arrives gapped as
+        // P1+G, keying at G. The resolver uniquely names A — B's present
+        // P2 rejects — but the one-element exact-JoinKey shortcut saw
+        // bucket G hold a single doc and retired B instead, leaving A to
+        // accrue to session_end. The exact hit is a fallback for docs the
+        // pairwise judgement can't see, never an override of its winner:
+        // the close must retire A in bucket M1 and leave B live.
+        var currentA = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        // B's own file's Activity view — its real, ungapped identity.
+        var siblingView = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-2",
+            CloudModelGuid = "model-2",
+            CreationGuid = "doc-g",
+        };
+        var gappedCloseA = new DocumentIdentity { CloudProjectGuid = "proj-1", CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), currentA),
+            Opened(s, 2, D(18, 9, 30), siblingB),
+            Closing(s, 3, D(18, 10), gappedCloseA, "c1"), // keys at G; P2 rejects — uniquely A's
+            Closed(s, 4, D(18, 10), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(currentA), 18).Should().BeApproximately(1.0, 1e-9,
+            "the resolver uniquely attributes the gapped close to A, which ends at 10:00; "
+            + "2.5 means the exact-key shortcut retired B instead and A ran to "
+            + "session_end (SC-042)");
+        HoursOn(Aggregate(siblingView), 18).Should().BeApproximately(2.0, 1e-9,
+            "B must survive A's cross-bucket close and run 9:30 to session_end (11:30); "
+            + "0.5 means the exact-key bucket's lone doc was retired over the resolver's "
+            + "winner (SC-042)");
+    }
+
+    [Fact]
+    public void Duplicate_key_sync_end_pairs_when_the_rejecting_sibling_leaves_it_uniquely_attributable()
+    {
+        // SC-041, sync side: with A (P1+G, model GUID gapped) and B
+        // (P2+G) both live under the creation key, A's sync_end carrying
+        // P1+G is uniquely A's — B's present P2 rejects. The pairing
+        // must resolve; dropping it on bucket multiplicity alone is the
+        // over-decline.
+        var current = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var gappedA = new DocumentIdentity { CloudProjectGuid = "proj-1", CreationGuid = "doc-g" };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 15), siblingB),
+            Sync(s, 3, D(18, 9, 30), gappedA, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gappedA, TelemetryEventTypes.SyncEnd), // P2 rejects — uniquely A's
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle(
+            "the sync_end is uniquely attributable — the duplicate-key sibling's present "
+            + "project GUID rejects it (SC-041)").Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(180, 1e-9);
+    }
+
     // ---- range windowing & tolerance ------------------------------------
 
     [Fact]

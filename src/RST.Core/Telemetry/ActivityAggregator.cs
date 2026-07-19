@@ -269,14 +269,17 @@ public static class ActivityAggregator
         // creation-GUID lineage) run on allOpenDocs below.
         var openDocs = new Dictionary<string, DateTimeOffset>();
         // Every open doc in the session, matched or not: join key → the
-        // identity it is open under. The Save-As joins and the close
+        // identities live under it. The Save-As joins and the close
         // resolution run against this view (SC-037): uniqueness judged
         // only among the current file's docs would miss an open keyed
         // sibling (same creation GUID, its own central), falsely call
         // the match unique, and retire the current file at the
-        // sibling's save or close. Mirrors RecoveryScanner.TrackOpenDocs'
-        // full visibility.
-        var allOpenDocs = new Dictionary<string, DocumentIdentity>();
+        // sibling's save or close. One key can hold several live docs —
+        // gapped lineage siblings open under the same lower-level key —
+        // and collapsing them to one entry would erase the very
+        // multiplicity the decline rule counts (SC-040), so each live
+        // doc keeps its own entry.
+        var allOpenDocs = new Dictionary<string, List<DocumentIdentity>>();
         // closing_id → the doc_closing's identity, for every doc:
         // doc_closed carries no keys of its own, so this is what the
         // close resolution judges against.
@@ -320,9 +323,14 @@ public static class ActivityAggregator
                     (DateTimeOffset Ts, string? LocalPath)? opening = idx >= 0 ? pendingOpenings[idx] : null;
                     if (idx >= 0) pendingOpenings.RemoveAt(idx);
 
+                    // Every doc_opened is its own live doc: a second open
+                    // under an already-live key is a gapped sibling, not
+                    // a re-open, and it must count toward ambiguity
+                    // multiplicity (SC-040).
                     var openedId = DocumentIdentity.ReadFrom(e);
                     var key = openedId.JoinKey ?? e.EventId;
-                    if (!allOpenDocs.ContainsKey(key)) allOpenDocs[key] = openedId;
+                    if (allOpenDocs.TryGetValue(key, out var liveDocs)) liveDocs.Add(openedId);
+                    else allOpenDocs[key] = new List<DocumentIdentity> { openedId };
 
                     if (!matches(e)) break;
                     if (opening is { } o && e.Ts >= o.Ts)
@@ -349,15 +357,20 @@ public static class ActivityAggregator
                     var newKey = id.JoinKey;
                     var prevPath = e.GetString(TelemetryFields.PreviousLocalPath);
                     string? oldKey = null;
+                    var oldIndex = -1;
                     if (prevPath is not null)
                         foreach (var kv in allOpenDocs)
-                            if (kv.Value.LocalPath is not null &&
-                                string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
-                            { oldKey = kv.Key; break; }
-                    oldKey ??= LineageFallbackKey(allOpenDocs, id.CreationGuid, prevPath);
+                        {
+                            oldIndex = kv.Value.FindIndex(d => d.LocalPath is not null &&
+                                string.Equals(d.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase));
+                            if (oldIndex >= 0) { oldKey = kv.Key; break; }
+                        }
+                    if (oldKey is null && LineageFallback(allOpenDocs, id.CreationGuid, prevPath) is { } lineage)
+                        (oldKey, oldIndex) = lineage;
 
                     if (oldKey is not null)
                     {
+                        var oldDocs = allOpenDocs[oldKey];
                         if (newKey is not null && KeyEquals(oldKey, newKey))
                         {
                             // Same key = same bookkeeping doc — only the
@@ -366,21 +379,33 @@ public static class ActivityAggregator
                             // opened unmatched can match from here (an
                             // identity gap healed in place) — its matched
                             // interval starts at the save.
-                            allOpenDocs[oldKey] = id;
+                            oldDocs[oldIndex] = id;
                             if (matches(e) && !openDocs.ContainsKey(oldKey))
                                 openDocs[oldKey] = e.Ts;
                             break;
                         }
-                        allOpenDocs.Remove(oldKey);
-                        if (openDocs.TryGetValue(oldKey, out var openedTs))
+                        // Only the doc that moved retires from the old
+                        // key. The matched interval under it ends only
+                        // when the key went dead (SC-025: post-save time
+                        // belongs to the new identity) — a live gapped
+                        // sibling still accrues under the key, and the
+                        // mover's pre-save time sits inside the union
+                        // either way (SC-040).
+                        oldDocs.RemoveAt(oldIndex);
+                        if (oldDocs.Count == 0)
                         {
-                            AddInterval(intervals, openedTs, e.Ts, nowUtc);
-                            openDocs.Remove(oldKey);
+                            allOpenDocs.Remove(oldKey);
+                            if (openDocs.TryGetValue(oldKey, out var openedTs))
+                            {
+                                AddInterval(intervals, openedTs, e.Ts, nowUtc);
+                                openDocs.Remove(oldKey);
+                            }
                         }
                     }
 
                     var key = newKey ?? e.EventId;
-                    if (!allOpenDocs.ContainsKey(key)) allOpenDocs[key] = id;
+                    if (allOpenDocs.TryGetValue(key, out var newDocs)) newDocs.Add(id);
+                    else allOpenDocs[key] = new List<DocumentIdentity> { id };
                     if (!matches(e)) break;
                     if (!openDocs.ContainsKey(key)) openDocs[key] = e.Ts;
                     break;
@@ -421,19 +446,37 @@ public static class ActivityAggregator
                     // the same. Ambiguity declines: nothing retires, the
                     // doc stays open, and session_end/recovery caps it —
                     // undercounting a close is recoverable; retiring the
-                    // wrong doc is not. A non-ambiguous exact hit still
-                    // wins outright — it also covers docs keyed below
-                    // the identity levels (local path / title), which
-                    // the pairwise judgement can't see. Both views
-                    // resolve through the same key, so a declined close
-                    // can't strand one of them.
-                    var (docKey, ambiguousClose) = ResolveOpenDoc(allOpenDocs, closeId);
-                    var key = ambiguousClose
-                        ? null
-                        : closeId.JoinKey is { } exact && allOpenDocs.ContainsKey(exact)
-                            ? exact
-                            : docKey;
+                    // wrong doc is not. Multiplicity is counted over
+                    // live open docs, not distinct keys (SC-040), but
+                    // only genuine candidates tie (SC-041): a
+                    // resolution names an element, that element alone
+                    // retires, and a rejecting sibling sharing the key
+                    // stays live — the key, and the matched interval
+                    // under it, die only with their last doc (same rule
+                    // as the Save-As retirement). A non-ambiguous exact
+                    // key hit covers docs keyed below the identity
+                    // levels (local path / title), which the pairwise
+                    // judgement can't see — but only as a fallback when
+                    // the resolver saw no candidate at all (SC-042): a
+                    // resolver winner is the close's doc named at the
+                    // best shared identity level, and the exact bucket's
+                    // lone doc may itself reject the close's present
+                    // keys, so letting the exact hit supersede would
+                    // retire a rejecting sibling in another bucket.
+                    var (docKey, docIndex, ambiguousClose) = ResolveOpenDoc(allOpenDocs, closeId);
+                    if (ambiguousClose) break;
+                    var key = docKey;
+                    var index = docIndex;
+                    if (key is null && closeId.JoinKey is { } exact
+                        && allOpenDocs.TryGetValue(exact, out var exactDocs) && exactDocs.Count == 1)
+                    {
+                        key = exact;
+                        index = 0;
+                    }
                     if (key is null) break;
+                    var closeDocs = allOpenDocs[key];
+                    closeDocs.RemoveAt(index);
+                    if (closeDocs.Count > 0) break; // live sibling keeps the key
                     allOpenDocs.Remove(key);
                     if (openDocs.TryGetValue(key, out var openedTs))
                     {
@@ -469,8 +512,10 @@ public static class ActivityAggregator
                     // back only when a single pending sync makes the
                     // pairing unambiguous AND the end's identity resolves
                     // to a unique live doc (SC-038); otherwise drop —
-                    // undercount, never invent.
-                    var (endDocKey, ambiguousEnd) = ResolveOpenDoc(allOpenDocs, id);
+                    // undercount, never invent. An end uniquely
+                    // confirmed among duplicate-key siblings resolves
+                    // like any other unique candidate (SC-041).
+                    var (endDocKey, _, ambiguousEnd) = ResolveOpenDoc(allOpenDocs, id);
                     if (ambiguousEnd) break;
                     if (key is not null && !pendingSyncs.ContainsKey(key) && pendingSyncs.Count == 1
                         && endDocKey is not null)
@@ -522,29 +567,32 @@ public static class ActivityAggregator
     /// Save-As retirement fallback when the previous_local_path ↔
     /// LocalPath join is absent (an allowed LocalPath read gap on the
     /// open, or a missing previous_local_path): Save As keeps the
-    /// creation GUID, so an open entry sharing it is the doc that just
+    /// creation GUID, so an open doc sharing it is the doc that just
     /// re-identified. Conservative — a stored path that contradicts
     /// previous_local_path rejects the candidate, and anything but
     /// exactly one candidate returns null; never guess which doc moved.
-    /// Judged over every open doc, matched or not (SC-037) — a keyed
+    /// Judged over every live doc, matched or not (SC-037) — a keyed
     /// sibling of the lineage is a candidate even though the current
-    /// file's view can't see it. Mirrors RecoveryScanner's fallback.
+    /// file's view can't see it, and siblings sharing one key each
+    /// count on their own (SC-040). Mirrors RecoveryScanner's fallback.
     /// </summary>
-    private static string? LineageFallbackKey(
-        Dictionary<string, DocumentIdentity> allOpenDocs,
+    private static (string Key, int Index)? LineageFallback(
+        Dictionary<string, List<DocumentIdentity>> allOpenDocs,
         string? creationGuid, string? prevPath)
     {
         if (creationGuid is null) return null;
-        string? match = null;
+        (string Key, int Index)? match = null;
         foreach (var kv in allOpenDocs)
-        {
-            if (!KeyEquals(kv.Value.CreationGuid, creationGuid)) continue;
-            if (kv.Value.LocalPath is not null && prevPath is not null &&
-                !string.Equals(kv.Value.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
-                continue; // a present path that differs is another doc in the lineage
-            if (match is not null) return null; // ambiguous
-            match = kv.Key;
-        }
+            for (var i = 0; i < kv.Value.Count; i++)
+            {
+                var docId = kv.Value[i];
+                if (!KeyEquals(docId.CreationGuid, creationGuid)) continue;
+                if (docId.LocalPath is not null && prevPath is not null &&
+                    !string.Equals(docId.LocalPath, prevPath, StringComparison.OrdinalIgnoreCase))
+                    continue; // a present path that differs is another doc in the lineage
+                if (match is not null) return null; // ambiguous
+                match = (kv.Key, i);
+            }
         return match;
     }
 
@@ -561,21 +609,30 @@ public static class ActivityAggregator
     /// caller even when the event's own join key names an open doc
     /// exactly (SC-039): a sibling opened through a capture gap sits
     /// under the shared lower-level key itself, so the exact hit proves
-    /// the key is live, not which lineage doc the event meant.
+    /// the key is live, not which lineage doc the event meant. The
+    /// count is over live open docs, not distinct keys (SC-040): two
+    /// siblings live under one collapsed key tie exactly like two
+    /// distinct-key candidates. But the tie must be real (SC-041): a
+    /// bucket sibling whose present keys reject the event is no
+    /// candidate, so a doc uniquely confirmed at the winning level
+    /// resolves even when others share its key — the resolution names
+    /// the element, and the caller retires that element alone.
     /// </summary>
-    private static (string? Key, bool Ambiguous) ResolveOpenDoc(
-        Dictionary<string, DocumentIdentity> allOpenDocs, DocumentIdentity id)
+    private static (string? Key, int Index, bool Ambiguous) ResolveOpenDoc(
+        Dictionary<string, List<DocumentIdentity>> allOpenDocs, DocumentIdentity id)
     {
         string? match = null;
+        var matchIndex = -1;
         var matchLevel = int.MaxValue;
         var ambiguous = false;
         foreach (var kv in allOpenDocs)
-        {
-            if (ConfirmLevel(id, kv.Value) is not { } level) continue;
-            if (level < matchLevel) { match = kv.Key; matchLevel = level; ambiguous = false; }
-            else if (level == matchLevel) ambiguous = true;
-        }
-        return ambiguous ? (null, true) : (match, false);
+            for (var i = 0; i < kv.Value.Count; i++)
+            {
+                if (ConfirmLevel(id, kv.Value[i]) is not { } level) continue;
+                if (level < matchLevel) { match = kv.Key; matchIndex = i; matchLevel = level; ambiguous = false; }
+                else if (level == matchLevel) ambiguous = true;
+            }
+        return ambiguous ? (null, -1, true) : (match, matchIndex, false);
     }
 
     /// <summary>
