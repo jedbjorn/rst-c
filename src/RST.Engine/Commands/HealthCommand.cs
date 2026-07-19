@@ -19,6 +19,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RST.Core.Health;
+using RST.Core.Telemetry;
 using RST.UI.Health;
 using Serilog;
 
@@ -36,7 +37,16 @@ public sealed class HealthCommand : IExternalCommand
             var context = CaptureContext(commandData);
             Log.Information("=== Health session opened: revit={Version}, model={Model} ===",
                             context.RevitVersion, context.ModelName);
-            HealthHost.ShowModal(context);
+            // The Activity footer toggle routes back to the live
+            // collector (markers + heartbeat); resolved at invoke time
+            // so a collector that failed to start degrades to a no-op —
+            // the preference still persists via the bridge. The session
+            // start is a live read for the same reason: a mid-window
+            // enable emits session_start, and the clock should tick on
+            // the very next refresh.
+            HealthHost.ShowModal(context,
+                telemetryToggled: enabled => RstApplication.GetTelemetry()?.SetEnabled(enabled),
+                liveSessionStartUtc: () => RstApplication.GetTelemetry()?.SessionStartUtc);
             Log.Information("=== Health session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }
@@ -60,12 +70,57 @@ public sealed class HealthCommand : IExternalCommand
         double? modelSizeMb = null;
         int? warningsCount = null;
 
+        string? creationGuid = null;
+        string? cloudProjectGuid = null;
+        string? cloudModelGuid = null;
+        string? centralGuid = null;
+        string? centralPath = null;
+        bool? isWorkshared = null;
+        bool? isCloud = null;
+
         var uidoc = commandData.Application.ActiveUIDocument;
         var doc = uidoc?.Document;
         if (doc is not null && !doc.IsFamilyDocument)
         {
             modelName = SafeStr(() => doc.Title ?? "");
             modelPath = SafeStr(() => doc.PathName ?? "");
+
+            // Identity keys for the Activity tab's current-file matching
+            // (cloud pair → central guid → central path → creation).
+            // Cheap property reads only, every one null-on-failure —
+            // same rule as telemetry capture.
+            creationGuid = SafeGet(() => doc.CreationGUID.ToString());
+            isWorkshared = SafeGetBool(() => doc.IsWorkshared);
+            isCloud = SafeGetBool(() => doc.IsModelInCloud);
+            if (isCloud == true)
+            {
+                var cmp = SafeGet(() => doc.GetCloudModelPath());
+                if (cmp is not null && !cmp.Empty)
+                {
+                    cloudProjectGuid = SafeGet(() => cmp.GetProjectGUID().ToString());
+                    cloudModelGuid = SafeGet(() => cmp.GetModelGUID().ToString());
+                }
+            }
+            if (isWorkshared == true)
+            {
+                // WorksharingCentralGUID is Revit Server-only — on a
+                // file-share central it throws and stays null; the
+                // user-visible central path is that case's identity key
+                // (SC-032). Cloud models keep central_path null per spec:
+                // their identity is the cloud pair, and the cloud path's
+                // display form isn't a stable key — so the path requires
+                // KNOWN non-cloud; unknown cloud-ness suppresses it too.
+                centralGuid = SafeGet(() => doc.WorksharingCentralGUID.ToString());
+                if (DocumentIdentity.AllowsCentralPath(isCloud))
+                {
+                    centralPath = SafeGet(() =>
+                    {
+                        var mp = doc.GetWorksharingCentralModelPath();
+                        var visible = mp is null ? null : ModelPathUtils.ConvertModelPathToUserVisiblePath(mp);
+                        return string.IsNullOrEmpty(visible) ? null : visible;
+                    });
+                }
+            }
 
             modelSizeMb = TryGetFileSizeMb(modelPath);
 
@@ -82,6 +137,11 @@ public sealed class HealthCommand : IExternalCommand
             catch (Exception ex) { Log.Debug(ex, "HealthCommand: GetWarnings failed"); }
         }
 
+        // Live telemetry session for the Activity tab's current-session
+        // block. Null collector (failed start) or a session that never
+        // collected → nulls; the tab renders its em-dash state.
+        var telemetry = RstApplication.GetTelemetry();
+
         return new HealthContext
         {
             RevitVersion = version,
@@ -91,6 +151,15 @@ public sealed class HealthCommand : IExternalCommand
             ModelPath = modelPath,
             ModelSizeMb = modelSizeMb,
             WarningsCount = warningsCount,
+            CreationGuid = creationGuid,
+            CloudProjectGuid = cloudProjectGuid,
+            CloudModelGuid = cloudModelGuid,
+            CentralGuid = centralGuid,
+            CentralPath = centralPath,
+            IsWorkshared = isWorkshared,
+            IsCloud = isCloud,
+            TelemetrySessionGuid = telemetry?.SessionGuid,
+            TelemetrySessionStartUtc = telemetry?.SessionStartUtc,
         };
     }
 
@@ -98,6 +167,18 @@ public sealed class HealthCommand : IExternalCommand
     {
         try { return getter() ?? ""; }
         catch { return ""; }
+    }
+
+    private static T? SafeGet<T>(Func<T?> getter) where T : class
+    {
+        try { return getter(); }
+        catch { return null; }
+    }
+
+    private static bool? SafeGetBool(Func<bool> getter)
+    {
+        try { return getter(); }
+        catch { return null; }
     }
 
     private static double? TryGetFileSizeMb(string path)

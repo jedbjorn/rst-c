@@ -25,7 +25,7 @@
        reassign. See ../installer/RST.Installer.wixproj for the full rationale. -->
   <PropertyGroup>
     <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
-    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">1.2.0</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">2.0.0</RstMsiVersionEffective>
     <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 

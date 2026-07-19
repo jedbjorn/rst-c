@@ -20,6 +20,7 @@ using RST.Core.Profiles;
 using RST.Core.Scanning;
 using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
+using RST.Engine.Telemetry;
 using Serilog;
 
 namespace RST.Engine;
@@ -37,6 +38,7 @@ public sealed class RstApplication : IExternalApplication
     private UIControlledApplication? _uiControlledApp;
     private bool _reassertQueued;
     private static ProfileSwitchScheduler? _switchScheduler;
+    private static TelemetryCollector? _telemetry;
 
     /// <summary>
     /// Single ExternalEvent-backed switch scheduler shared across every
@@ -45,6 +47,16 @@ public sealed class RstApplication : IExternalApplication
     /// invocation would race with Revit's idle pump.
     /// </summary>
     internal static IProfileSwitchScheduler? GetSwitchScheduler() => _switchScheduler;
+
+    /// <summary>
+    /// The session's telemetry collector, for the consent/Activity
+    /// wiring (HealthCommand reads the live session identity and routes
+    /// the collection toggle here). Null when telemetry failed to start
+    /// — callers treat that as "no live session". Static for the same
+    /// reason as the switch scheduler: Revit holds one application
+    /// instance, and command classes have no path to it.
+    /// </summary>
+    internal static TelemetryCollector? GetTelemetry() => _telemetry;
 
     public Result OnStartup(UIControlledApplication application)
     {
@@ -60,6 +72,12 @@ public sealed class RstApplication : IExternalApplication
                             AppDataPaths.Root, AppDataPaths.ProfilesDir,
                             AppDataPaths.ActiveProfileFile, BanList.DefaultPath,
                             typeof(RstApplication).Assembly.Location);
+
+            // Activity telemetry (doc #5). Handlers are cheap capture +
+            // enqueue; all file IO lives on the collector's writer thread.
+            // Its own guard: telemetry failing must never fail OnStartup.
+            try { _telemetry = TelemetryCollector.Start(application, ThisVersion, m => Log.Warning("Telemetry: {Message}", m)); }
+            catch (Exception ex) { Log.Warning(ex, "Telemetry startup failed — telemetry off for this session"); }
 
             RibbonBuilder.Build(application);
 
@@ -94,6 +112,11 @@ public sealed class RstApplication : IExternalApplication
         catch (Exception ex)
         {
             Log.Error(ex, "RST.OnStartup failed");
+            // Result.Failed means Revit never calls OnShutdown — release
+            // the collector's subscriptions and writer thread here or never.
+            try { _telemetry?.Shutdown(); }
+            catch (Exception tex) { Log.Debug(tex, "Telemetry rollback failed (non-fatal)"); }
+            _telemetry = null;
             return Result.Failed;
         }
     }
@@ -108,6 +131,17 @@ public sealed class RstApplication : IExternalApplication
             _initializedHandler = null;
         }
 
+        BuildProfileTab(sender);
+
+        // One-time consent notice (telemetry spec Consent & Config) —
+        // after the profile tab is up, so the modal never sits between
+        // Revit and the ribbon build. Runs on the paths that skip the
+        // build too (no active profile); its own guard, never throws.
+        ConsentNotice.ShowIfDue(_telemetry, m => Log.Warning("Telemetry: {Message}", m));
+    }
+
+    private static void BuildProfileTab(object? sender)
+    {
         try
         {
             if (sender is not Application app)
@@ -239,6 +273,11 @@ public sealed class RstApplication : IExternalApplication
         try { _switchScheduler?.Dispose(); }
         catch (Exception ex) { Log.Debug(ex, "Switch scheduler dispose failed (non-fatal)"); }
         _switchScheduler = null;
+        // Drain + join the telemetry writer (bounded) BEFORE the log
+        // sink closes — the collector logs through Serilog.
+        try { _telemetry?.Shutdown(); }
+        catch (Exception ex) { Log.Debug(ex, "Telemetry shutdown failed (non-fatal)"); }
+        _telemetry = null;
         Log.CloseAndFlush();
         return Result.Succeeded;
     }
