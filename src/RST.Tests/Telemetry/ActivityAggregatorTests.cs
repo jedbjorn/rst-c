@@ -1161,6 +1161,93 @@ public sealed class ActivityAggregatorTests : IDisposable
             + "is still ambiguous while a higher-key lineage sibling is live");
     }
 
+    [Fact]
+    public void Duplicate_key_close_declines_when_two_gapped_docs_share_the_lower_level_key()
+    {
+        // SC-040: lineage siblings A and B BOTH lost central-path capture
+        // at their doc_opened, so both are live under the creation GUID —
+        // one key, two docs. Collapsing them to one open-doc entry before
+        // resolution erased that multiplicity: an exact creation-key
+        // close read as unique and retired "the" doc, though it could be
+        // A's just as well as B's. Ambiguity is counted over live open
+        // docs, not distinct keys — the exact hit declines and
+        // session_end caps both.
+        var gappedA = new DocumentIdentity { CreationGuid = "doc-g" };
+        var gappedB = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), gappedB),
+            Closing(s, 3, D(18, 10), gappedA, "c1"), // exact key hit — A's or B's?
+            Closed(s, 4, D(18, 10), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(gappedA), 18).Should().BeApproximately(2.5, 1e-9,
+            "two live docs share the creation key, so the exact-key close declines and "
+            + "the pair runs 9:00 to session_end (11:30); 1.0 means the duplicate-key "
+            + "collapse erased the multiplicity and the close retired the pair (SC-040)");
+    }
+
+    [Fact]
+    public void Duplicate_key_sync_end_declines_when_two_gapped_docs_share_the_lower_level_key()
+    {
+        // SC-040, sync side: with A and B both live under the creation
+        // GUID, a creation-keyed sync_end hits the pending sync exactly —
+        // but the start and the end could belong to different docs, so
+        // pairing them would invent a duration. It drops.
+        var gappedA = new DocumentIdentity { CreationGuid = "doc-g" };
+        var gappedB = new DocumentIdentity { CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 15), gappedB),
+            Sync(s, 3, D(18, 9, 30), gappedA, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gappedA, TelemetryEventTypes.SyncEnd), // exact hit — A's or B's?
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        Aggregate(gappedA).SyncEvents.Should().BeEmpty(
+            "a creation-keyed sync_end is ambiguous between two live docs sharing the "
+            + "key; a paired duration means the duplicate-key collapse erased the "
+            + "multiplicity (SC-040)");
+    }
+
+    [Fact]
+    public void Save_as_lineage_fallback_declines_when_two_gapped_docs_share_the_creation_key()
+    {
+        // SC-040 reaches the Save-As joins too: A and B are both live
+        // under the creation GUID when a path-less doc_saved_as in the
+        // lineage arrives. One collapsed entry read as the unique lineage
+        // candidate and retired at the save; counted over live docs the
+        // fallback is ambiguous — neither entry ends here. The moved doc
+        // still ends at its own full-identity close (central path
+        // outranks the creation-level tie); the gapped pair declines
+        // every creation-keyed event and runs to session_end.
+        var gappedA = new DocumentIdentity { CreationGuid = "doc-g" };
+        var gappedB = new DocumentIdentity { CreationGuid = "doc-g" };
+        var moved = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_B_Central.rvt",
+            LocalPath = "C:\\models\\tower-b.rvt",
+        };
+        var s = Guid.NewGuid().ToString();
+        var savedAs = Event(s, 3, TelemetryEventTypes.DocSavedAs, D(18, 10));
+        moved.WriteTo(savedAs); // no previous_local_path — ambiguous lineage
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), gappedB),
+            savedAs,
+            Closing(s, 4, D(18, 10, 30), moved, "c1"),
+            Closed(s, 5, D(18, 10, 30), "c1"),
+            Event(s, 6, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        HoursOn(Aggregate(gappedA), 18).Should().BeApproximately(2.0, 1e-9,
+            "the gapped pair declines the ambiguous path-less save and runs 9:00 to "
+            + "session_end (11:00) while the moved doc ends at its 10:30 close "
+            + "(9:00–11:00 ∪ 10:00–10:30); 1.5 means the collapsed entry read as the "
+            + "unique lineage candidate and retired at the save (SC-040)");
+    }
+
     // ---- range windowing & tolerance ------------------------------------
 
     [Fact]
