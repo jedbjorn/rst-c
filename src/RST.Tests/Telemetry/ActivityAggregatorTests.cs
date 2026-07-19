@@ -1248,6 +1248,89 @@ public sealed class ActivityAggregatorTests : IDisposable
             + "unique lineage candidate and retired at the save (SC-040)");
     }
 
+    [Fact]
+    public void Duplicate_key_close_retires_the_uniquely_confirmed_doc_and_preserves_the_rejecting_sibling()
+    {
+        // SC-041: A (cloud project P1, model GUID lost to a capture gap,
+        // creation G) and B (project P2, same lineage G) both key under
+        // the creation GUID — one bucket, two docs. A's close carries
+        // P1+G: B's present P2 rejects it, so exactly one live candidate
+        // remains. Blanket-declining any Count > 1 bucket (the SC-040
+        // over-correction) misses that later uniquely-attributable
+        // endpoint evidence; retiring the whole key would retire B with
+        // it. The close must retire A alone: the key — and the matched
+        // interval under it — stays live until B's own close kills it.
+        var current = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var gappedA = new DocumentIdentity { CloudProjectGuid = "proj-1", CreationGuid = "doc-g" };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        // The sibling file's own Activity view — full pair, so its
+        // matcher rejects A's P1 events instead of falling through to
+        // the shared creation level.
+        var siblingView = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-2",
+            CloudModelGuid = "model-2",
+            CreationGuid = "doc-g",
+        };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 30), siblingB),
+            Closing(s, 3, D(18, 10), gappedA, "c1"), // P2 rejects — uniquely A's
+            Closed(s, 4, D(18, 10), "c1"),
+            Closing(s, 5, D(18, 11), siblingB, "c2"),
+            Closed(s, 6, D(18, 11), "c2"),
+            Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        // The current file matches A at the creation level; the shared
+        // key dies at B's 11:00 close, so its interval is 9:00–11:00.
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
+            "A's close is uniquely attributable (B's present project GUID rejects) and B's "
+            + "close then kills the key; 2.5 means Count > 1 blanket-declined the unique "
+            + "endpoint and session_end capped the pair (SC-041)");
+        // The sibling's view: B must survive A's close — its accrual
+        // ends at its own 11:00 close, not at 10:00.
+        HoursOn(Aggregate(siblingView), 18).Should().BeApproximately(1.5, 1e-9,
+            "B runs 9:30 to its own 11:00 close; 0.5 means A's close retired the whole "
+            + "key and took the sibling with it (SC-041)");
+    }
+
+    [Fact]
+    public void Duplicate_key_sync_end_pairs_when_the_rejecting_sibling_leaves_it_uniquely_attributable()
+    {
+        // SC-041, sync side: with A (P1+G, model GUID gapped) and B
+        // (P2+G) both live under the creation key, A's sync_end carrying
+        // P1+G is uniquely A's — B's present P2 rejects. The pairing
+        // must resolve; dropping it on bucket multiplicity alone is the
+        // over-decline.
+        var current = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var gappedA = new DocumentIdentity { CloudProjectGuid = "proj-1", CreationGuid = "doc-g" };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), gappedA),
+            Opened(s, 2, D(18, 9, 15), siblingB),
+            Sync(s, 3, D(18, 9, 30), gappedA, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gappedA, TelemetryEventTypes.SyncEnd), // P2 rejects — uniquely A's
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        var point = Aggregate(current).SyncEvents.Should().ContainSingle(
+            "the sync_end is uniquely attributable — the duplicate-key sibling's present "
+            + "project GUID rejects it (SC-041)").Subject;
+        point.Ts.Should().Be(D(18, 9, 30));
+        point.Seconds.Should().BeApproximately(180, 1e-9);
+    }
+
     // ---- range windowing & tolerance ------------------------------------
 
     [Fact]

@@ -449,20 +449,33 @@ public static class ActivityAggregator
                     // wrong doc is not. A non-ambiguous exact hit still
                     // wins outright — it also covers docs keyed below
                     // the identity levels (local path / title), which
-                    // the pairwise judgement can't see — but never
-                    // through a key several docs are live under
-                    // (SC-040): multiplicity is counted over live open
-                    // docs, not distinct keys. Both views resolve
-                    // through the same key, so a declined close can't
-                    // strand one of them.
-                    var (docKey, ambiguousClose) = ResolveOpenDoc(allOpenDocs, closeId);
-                    var key = ambiguousClose
-                        ? null
-                        : closeId.JoinKey is { } exact
-                            && allOpenDocs.TryGetValue(exact, out var exactDocs) && exactDocs.Count == 1
-                            ? exact
-                            : docKey;
+                    // the pairwise judgement can't see. Multiplicity is
+                    // counted over live open docs, not distinct keys
+                    // (SC-040), but only genuine candidates tie
+                    // (SC-041): a resolution names an element, that
+                    // element alone retires, and a rejecting sibling
+                    // sharing the key stays live — the key, and the
+                    // matched interval under it, die only with their
+                    // last doc (same rule as the Save-As retirement).
+                    var (docKey, docIndex, ambiguousClose) = ResolveOpenDoc(allOpenDocs, closeId);
+                    if (ambiguousClose) break;
+                    string? key;
+                    int index;
+                    if (closeId.JoinKey is { } exact
+                        && allOpenDocs.TryGetValue(exact, out var exactDocs) && exactDocs.Count == 1)
+                    {
+                        key = exact;
+                        index = 0;
+                    }
+                    else
+                    {
+                        key = docKey;
+                        index = docIndex;
+                    }
                     if (key is null) break;
+                    var closeDocs = allOpenDocs[key];
+                    closeDocs.RemoveAt(index);
+                    if (closeDocs.Count > 0) break; // live sibling keeps the key
                     allOpenDocs.Remove(key);
                     if (openDocs.TryGetValue(key, out var openedTs))
                     {
@@ -498,8 +511,10 @@ public static class ActivityAggregator
                     // back only when a single pending sync makes the
                     // pairing unambiguous AND the end's identity resolves
                     // to a unique live doc (SC-038); otherwise drop —
-                    // undercount, never invent.
-                    var (endDocKey, ambiguousEnd) = ResolveOpenDoc(allOpenDocs, id);
+                    // undercount, never invent. An end uniquely
+                    // confirmed among duplicate-key siblings resolves
+                    // like any other unique candidate (SC-041).
+                    var (endDocKey, _, ambiguousEnd) = ResolveOpenDoc(allOpenDocs, id);
                     if (ambiguousEnd) break;
                     if (key is not null && !pendingSyncs.ContainsKey(key) && pendingSyncs.Count == 1
                         && endDocKey is not null)
@@ -596,24 +611,27 @@ public static class ActivityAggregator
     /// the key is live, not which lineage doc the event meant. The
     /// count is over live open docs, not distinct keys (SC-040): two
     /// siblings live under one collapsed key tie exactly like two
-    /// distinct-key candidates, and a winner whose key several docs are
-    /// live under is no resolution — resolving must name a doc.
+    /// distinct-key candidates. But the tie must be real (SC-041): a
+    /// bucket sibling whose present keys reject the event is no
+    /// candidate, so a doc uniquely confirmed at the winning level
+    /// resolves even when others share its key — the resolution names
+    /// the element, and the caller retires that element alone.
     /// </summary>
-    private static (string? Key, bool Ambiguous) ResolveOpenDoc(
+    private static (string? Key, int Index, bool Ambiguous) ResolveOpenDoc(
         Dictionary<string, List<DocumentIdentity>> allOpenDocs, DocumentIdentity id)
     {
         string? match = null;
+        var matchIndex = -1;
         var matchLevel = int.MaxValue;
         var ambiguous = false;
         foreach (var kv in allOpenDocs)
-            foreach (var docId in kv.Value)
+            for (var i = 0; i < kv.Value.Count; i++)
             {
-                if (ConfirmLevel(id, docId) is not { } level) continue;
-                if (level < matchLevel) { match = kv.Key; matchLevel = level; ambiguous = false; }
+                if (ConfirmLevel(id, kv.Value[i]) is not { } level) continue;
+                if (level < matchLevel) { match = kv.Key; matchIndex = i; matchLevel = level; ambiguous = false; }
                 else if (level == matchLevel) ambiguous = true;
             }
-        if (match is not null && allOpenDocs[match].Count > 1) ambiguous = true;
-        return ambiguous ? (null, true) : (match, false);
+        return ambiguous ? (null, -1, true) : (match, matchIndex, false);
     }
 
     /// <summary>
