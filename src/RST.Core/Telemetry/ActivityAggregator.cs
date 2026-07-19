@@ -446,31 +446,32 @@ public static class ActivityAggregator
                     // the same. Ambiguity declines: nothing retires, the
                     // doc stays open, and session_end/recovery caps it —
                     // undercounting a close is recoverable; retiring the
-                    // wrong doc is not. A non-ambiguous exact hit still
-                    // wins outright — it also covers docs keyed below
-                    // the identity levels (local path / title), which
-                    // the pairwise judgement can't see. Multiplicity is
-                    // counted over live open docs, not distinct keys
-                    // (SC-040), but only genuine candidates tie
-                    // (SC-041): a resolution names an element, that
-                    // element alone retires, and a rejecting sibling
-                    // sharing the key stays live — the key, and the
-                    // matched interval under it, die only with their
-                    // last doc (same rule as the Save-As retirement).
+                    // wrong doc is not. Multiplicity is counted over
+                    // live open docs, not distinct keys (SC-040), but
+                    // only genuine candidates tie (SC-041): a
+                    // resolution names an element, that element alone
+                    // retires, and a rejecting sibling sharing the key
+                    // stays live — the key, and the matched interval
+                    // under it, die only with their last doc (same rule
+                    // as the Save-As retirement). A non-ambiguous exact
+                    // key hit covers docs keyed below the identity
+                    // levels (local path / title), which the pairwise
+                    // judgement can't see — but only as a fallback when
+                    // the resolver saw no candidate at all (SC-042): a
+                    // resolver winner is the close's doc named at the
+                    // best shared identity level, and the exact bucket's
+                    // lone doc may itself reject the close's present
+                    // keys, so letting the exact hit supersede would
+                    // retire a rejecting sibling in another bucket.
                     var (docKey, docIndex, ambiguousClose) = ResolveOpenDoc(allOpenDocs, closeId);
                     if (ambiguousClose) break;
-                    string? key;
-                    int index;
-                    if (closeId.JoinKey is { } exact
+                    var key = docKey;
+                    var index = docIndex;
+                    if (key is null && closeId.JoinKey is { } exact
                         && allOpenDocs.TryGetValue(exact, out var exactDocs) && exactDocs.Count == 1)
                     {
                         key = exact;
                         index = 0;
-                    }
-                    else
-                    {
-                        key = docKey;
-                        index = docIndex;
                     }
                     if (key is null) break;
                     var closeDocs = allOpenDocs[key];

@@ -1301,6 +1301,50 @@ public sealed class ActivityAggregatorTests : IDisposable
     }
 
     [Fact]
+    public void Cross_bucket_close_follows_the_resolver_winner_over_the_exact_key_bucket()
+    {
+        // SC-042: A (P1+M1+G, bucket M1) and B (P2+G, model GUID lost at
+        // its open — bucket G) are live when A's close arrives gapped as
+        // P1+G, keying at G. The resolver uniquely names A — B's present
+        // P2 rejects — but the one-element exact-JoinKey shortcut saw
+        // bucket G hold a single doc and retired B instead, leaving A to
+        // accrue to session_end. The exact hit is a fallback for docs the
+        // pairwise judgement can't see, never an override of its winner:
+        // the close must retire A in bucket M1 and leave B live.
+        var currentA = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-1",
+            CloudModelGuid = "model-1",
+            CreationGuid = "doc-g",
+        };
+        var siblingB = new DocumentIdentity { CloudProjectGuid = "proj-2", CreationGuid = "doc-g" };
+        // B's own file's Activity view — its real, ungapped identity.
+        var siblingView = new DocumentIdentity
+        {
+            CloudProjectGuid = "proj-2",
+            CloudModelGuid = "model-2",
+            CreationGuid = "doc-g",
+        };
+        var gappedCloseA = new DocumentIdentity { CloudProjectGuid = "proj-1", CreationGuid = "doc-g" };
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), currentA),
+            Opened(s, 2, D(18, 9, 30), siblingB),
+            Closing(s, 3, D(18, 10), gappedCloseA, "c1"), // keys at G; P2 rejects — uniquely A's
+            Closed(s, 4, D(18, 10), "c1"),
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
+
+        HoursOn(Aggregate(currentA), 18).Should().BeApproximately(1.0, 1e-9,
+            "the resolver uniquely attributes the gapped close to A, which ends at 10:00; "
+            + "2.5 means the exact-key shortcut retired B instead and A ran to "
+            + "session_end (SC-042)");
+        HoursOn(Aggregate(siblingView), 18).Should().BeApproximately(2.0, 1e-9,
+            "B must survive A's cross-bucket close and run 9:30 to session_end (11:30); "
+            + "0.5 means the exact-key bucket's lone doc was retired over the resolver's "
+            + "winner (SC-042)");
+    }
+
+    [Fact]
     public void Duplicate_key_sync_end_pairs_when_the_rejecting_sibling_leaves_it_uniquely_attributable()
     {
         // SC-041, sync side: with A (P1+G, model GUID gapped) and B
