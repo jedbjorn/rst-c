@@ -26,7 +26,8 @@
 //     clamped into being;
 //   - a close whose keys more than one live doc could own (an
 //     identity-capture gap keying it at a level lineage siblings
-//     share — SC-038) retires nothing: the doc stays open to
+//     share — SC-038 — including a key a gapped-open sibling sits
+//     under exactly, SC-039) retires nothing: the doc stays open to
 //     session_end/recovery's cap, a bounded overshoot accepted over
 //     truncating the wrong doc.
 // Overlapping intervals across concurrent sessions are unioned before
@@ -409,20 +410,29 @@ public static class ActivityAggregator
                         : DocumentIdentity.ReadFrom(e);
                     if (closingId is not null) closingIds.Remove(closingId);
 
-                    // The close's key names an open doc directly, or an
-                    // identity-capture gap keyed it under a lower level
-                    // than the open — then it retires a doc only when
-                    // exactly one live candidate is consistent with it,
-                    // judged over every open doc, matched or not
-                    // (SC-038). Anything else declines: nothing retires,
-                    // the doc stays open, and session_end/recovery caps
-                    // it — undercounting a close is recoverable;
-                    // retiring the wrong doc is not. Both views resolve
-                    // through the same key, so a declined close can't
-                    // strand one of them.
-                    var key = closeId.JoinKey is { } exact && allOpenDocs.ContainsKey(exact)
-                        ? exact
-                        : UniqueOpenDocKey(allOpenDocs, closeId);
+                    // The close retires a doc only when exactly one live
+                    // candidate is consistent with its identity, judged
+                    // over every open doc, matched or not (SC-038). An
+                    // exact key hit is no exemption (SC-039): a sibling
+                    // opened through a capture gap sits under the shared
+                    // lower-level key itself, so the hit proves the key
+                    // is live, not which lineage doc the close meant —
+                    // a live higher-key sibling makes it ambiguous all
+                    // the same. Ambiguity declines: nothing retires, the
+                    // doc stays open, and session_end/recovery caps it —
+                    // undercounting a close is recoverable; retiring the
+                    // wrong doc is not. A non-ambiguous exact hit still
+                    // wins outright — it also covers docs keyed below
+                    // the identity levels (local path / title), which
+                    // the pairwise judgement can't see. Both views
+                    // resolve through the same key, so a declined close
+                    // can't strand one of them.
+                    var (docKey, ambiguousClose) = ResolveOpenDoc(allOpenDocs, closeId);
+                    var key = ambiguousClose
+                        ? null
+                        : closeId.JoinKey is { } exact && allOpenDocs.ContainsKey(exact)
+                            ? exact
+                            : docKey;
                     if (key is null) break;
                     allOpenDocs.Remove(key);
                     if (openDocs.TryGetValue(key, out var openedTs))
@@ -451,14 +461,19 @@ public static class ActivityAggregator
                     // An identity-capture gap can key a matched sync_end
                     // under a lower level than its sync_start. Durations
                     // are per-pair (no union to hide a wrong pairing), so
-                    // fall back only when a single pending sync makes the
+                    // an end whose identity is ambiguous among live docs
+                    // drops outright — even when its key hits a pending
+                    // sync exactly (SC-039), a gapped-open sibling puts a
+                    // live doc under that very key, so the hit says
+                    // nothing about whose end this is. A keyed miss falls
+                    // back only when a single pending sync makes the
                     // pairing unambiguous AND the end's identity resolves
-                    // to a unique live doc (SC-038) — several live docs
-                    // sharing the gapped key mean the end may be a
-                    // sibling's; otherwise drop — undercount, never
-                    // invent.
+                    // to a unique live doc (SC-038); otherwise drop —
+                    // undercount, never invent.
+                    var (endDocKey, ambiguousEnd) = ResolveOpenDoc(allOpenDocs, id);
+                    if (ambiguousEnd) break;
                     if (key is not null && !pendingSyncs.ContainsKey(key) && pendingSyncs.Count == 1
-                        && UniqueOpenDocKey(allOpenDocs, id) is not null)
+                        && endDocKey is not null)
                         key = pendingSyncs.Keys.First();
                     if (key is not null && pendingSyncs.TryGetValue(key, out var startTs))
                     {
@@ -534,18 +549,21 @@ public static class ActivityAggregator
     }
 
     /// <summary>
-    /// Resolve which live doc an event's identity belongs to when its
-    /// join key misses the open-docs view (an identity-capture gap keyed
-    /// it under a lower level than the open). Every open doc, matched or
-    /// not, is judged pairwise at the highest identity level the two
-    /// sides share; a doc confirming at a higher priority level outranks
-    /// lower-level candidates — the event names its doc at the best
-    /// level it carries. Exactly one candidate at the winning level
-    /// resolves; zero, or several tied (live lineage siblings sharing
-    /// the gapped key), returns null — the general decline rule
-    /// (SC-038): never guess which doc an ambiguous key means.
+    /// Resolve which live doc an event's identity belongs to. Every open
+    /// doc, matched or not, is judged pairwise at the highest identity
+    /// level the two sides share; a doc confirming at a higher priority
+    /// level outranks lower-level candidates — the event names its doc
+    /// at the best level it carries. Exactly one candidate at the
+    /// winning level resolves to its key; zero candidates resolve to
+    /// null quietly; several tied (live lineage siblings sharing the
+    /// gapped key) return Ambiguous — the general decline rule (SC-038):
+    /// never guess which doc an ambiguous key means. Ambiguity binds the
+    /// caller even when the event's own join key names an open doc
+    /// exactly (SC-039): a sibling opened through a capture gap sits
+    /// under the shared lower-level key itself, so the exact hit proves
+    /// the key is live, not which lineage doc the event meant.
     /// </summary>
-    private static string? UniqueOpenDocKey(
+    private static (string? Key, bool Ambiguous) ResolveOpenDoc(
         Dictionary<string, DocumentIdentity> allOpenDocs, DocumentIdentity id)
     {
         string? match = null;
@@ -557,7 +575,7 @@ public static class ActivityAggregator
             if (level < matchLevel) { match = kv.Key; matchLevel = level; ambiguous = false; }
             else if (level == matchLevel) ambiguous = true;
         }
-        return ambiguous ? null : match;
+        return ambiguous ? (null, true) : (match, false);
     }
 
     /// <summary>

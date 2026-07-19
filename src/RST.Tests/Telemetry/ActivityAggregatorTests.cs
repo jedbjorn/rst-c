@@ -898,7 +898,11 @@ public sealed class ActivityAggregatorTests : IDisposable
         // second's central-path capture failed, so it keyed at the
         // creation guid) when a path-less doc_saved_as arrives —
         // retiring either candidate would be a guess, so neither ends
-        // here and both run to their real closes.
+        // here. The current entry still ends at its own full-identity
+        // close; the gapped entry's creation-only close is itself
+        // ambiguous once the save's target (central path B, same
+        // creation G) is live in the lineage (SC-039), so it declines
+        // too and session_end caps the entry.
         var current = new DocumentIdentity
         {
             CreationGuid = "doc-g",
@@ -924,9 +928,12 @@ public sealed class ActivityAggregatorTests : IDisposable
             Closed(s, 7, D(18, 11), "c2"),
             Event(s, 8, TelemetryEventTypes.SessionEnd, D(18, 11, 30)));
 
-        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.0, 1e-9,
-            "both lineage entries survive to their real closes (9:00–10:30 ∪ 9:30–11:00); "
-            + "1.5 means the ambiguous fallback guessed one at the save");
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(2.5, 1e-9,
+            "the current entry ends at its 10:30 close while the gapped entry declines "
+            + "its ambiguous creation-only close and runs to session_end "
+            + "(9:00–10:30 ∪ 9:30–11:30); 1.5 means the ambiguous fallback guessed one "
+            + "at the save; 2.0 means the exact creation-key hit retired the gapped "
+            + "entry despite the live lineage sibling (SC-039)");
     }
 
     [Fact]
@@ -1088,6 +1095,70 @@ public sealed class ActivityAggregatorTests : IDisposable
         point.Ts.Should().Be(D(18, 9, 30));
         point.Seconds.Should().BeApproximately(600, 1e-9,
             "180 means the ambiguous creation-only sync_end stole the pairing at 9:33");
+    }
+
+    [Fact]
+    public void Creation_keyed_close_declines_when_a_higher_key_sibling_shares_the_lineage()
+    {
+        // SC-039: sibling B's doc_opened itself suffered the capture gap,
+        // so B is open under the creation GUID — the very key a
+        // creation-only close carries. The exact key hit proves the key
+        // is live, not whose close this is: current A shares the lineage
+        // at its central path, so the close could be A's (gapped at
+        // close) just as well as B's. Ambiguity declines even the exact
+        // hit — B runs to session_end's cap; A ends at its own real
+        // close, which still resolves through level ranking.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var gapSibling = new DocumentIdentity { CreationGuid = "doc-g" }; // B, opened gapped
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 7), current),
+            Opened(s, 2, D(18, 8), gapSibling),
+            Closing(s, 3, D(18, 9), gapSibling, "c1"), // creation-only — A's or B's?
+            Closed(s, 4, D(18, 9), "c1"),
+            Closing(s, 5, D(18, 10), current, "c2"),
+            Closed(s, 6, D(18, 10), "c2"),
+            Event(s, 7, TelemetryEventTypes.SessionEnd, D(18, 11)));
+
+        // A runs 7:00–10:00 to its own close; B (matched through the
+        // shared creation GUID) declines the ambiguous 9:00 close and
+        // runs 8:00 to session_end (11:00). Union 7:00–11:00 = 4h;
+        // 3.0 means the exact creation-key hit retired B at 9:00.
+        HoursOn(Aggregate(current), 18).Should().BeApproximately(4.0, 1e-9,
+            "an exact hit on the gapped-open sibling's creation key must still decline "
+            + "while a higher-key lineage sibling is live");
+    }
+
+    [Fact]
+    public void Creation_keyed_sync_end_declines_when_a_higher_key_sibling_shares_the_lineage()
+    {
+        // SC-039, sync side: B opened gapped, so its sync_start is
+        // pending under the creation GUID — and a creation-only sync_end
+        // hits that pending key exactly. With current A live in the same
+        // lineage, the end could be A's (gapped at end) just as well as
+        // B's; pairing on the exact hit would invent a duration from a
+        // possibly-wrong pair, so it drops.
+        var current = new DocumentIdentity
+        {
+            CreationGuid = "doc-g",
+            CentralPath = "\\\\server\\projects\\Tower_Central.rvt",
+        };
+        var gapSibling = new DocumentIdentity { CreationGuid = "doc-g" }; // B, opened gapped
+        var s = Guid.NewGuid().ToString();
+        WriteSessionFile(_root, s,
+            Opened(s, 1, D(18, 9), current),
+            Opened(s, 2, D(18, 9, 15), gapSibling),
+            Sync(s, 3, D(18, 9, 30), gapSibling, TelemetryEventTypes.SyncStart),
+            Sync(s, 4, D(18, 9, 33), gapSibling, TelemetryEventTypes.SyncEnd), // exact key hit — A's or B's?
+            Event(s, 5, TelemetryEventTypes.SessionEnd, D(18, 10)));
+
+        Aggregate(current).SyncEvents.Should().BeEmpty(
+            "a creation-only sync_end hitting the gapped-open sibling's pending key exactly "
+            + "is still ambiguous while a higher-key lineage sibling is live");
     }
 
     // ---- range windowing & tolerance ------------------------------------
