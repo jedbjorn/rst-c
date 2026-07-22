@@ -1,10 +1,9 @@
 // RstManagedTabs.cs — names of ribbon tabs RST itself put on the ribbon.
 //
-// Populated by RibbonBuilder at OnStartup with the always-present "RST"
-// tab and (when an active profile resolves) the profile's chosen Tab
-// name. RibbonScanner consults this set so the catalog doesn't include
-// our own buttons — a profile button for "Wall" appearing in the
-// catalog tree as a profile-buildable command is confusing and
+// Populated by ProfileTabBuilder when an active profile resolves, using the
+// profile's chosen tab name. RibbonScanner consults this set so the catalog
+// doesn't include generated profile buttons — a profile button for "Wall" in
+// the catalog tree as a profile-buildable command is confusing and
 // circular.
 //
 // Per-process static. Cleared on assembly unload (Revit shutdown);
