@@ -506,7 +506,8 @@
     letter-spacing: 0.08em;
   }
 
-  /* Icon picker modal (vendored 48-PNG iconpack + None option). */
+  /* Icon picker modal (colored icon pack: one tile per logical design,
+     per-tile popdown with the seven color variants + None option). */
   .icon-picker-overlay {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.6);
@@ -542,6 +543,9 @@
     padding: 12px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    /* Dense backfills the row an open popdown splits, so the grid stays
+       compact instead of leaving a ragged hole beside the clicked tile. */
+    grid-auto-flow: dense;
     gap: 6px;
     overflow-y: auto;
   }
@@ -558,6 +562,7 @@
   }
   .icon-tile:hover { border-color: var(--accent); color: var(--text); }
   .icon-tile.selected { border-color: var(--accent3); background: var(--surface3); color: var(--text); }
+  .icon-tile.popen { border-color: var(--accent); color: var(--text); }
   .icon-tile img { width: 32px; height: 32px; image-rendering: pixelated; }
   .icon-tile-none {
     width: 32px; height: 32px;
@@ -571,6 +576,37 @@
     text-align: center;
     line-height: 1.2;
   }
+
+  /* Per-tile color popdown — an in-flow full-width grid row inserted right
+     after its tile, so it reflows the grid and can never overlap adjacent
+     tiles (spec #9). Variants wrap on constrained width, canonical palette
+     order is DOM order. */
+  .icon-popdown {
+    grid-column: 1 / -1;
+    display: flex; flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+    box-sizing: border-box;
+    background: var(--surface3);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+  }
+  .icon-variant {
+    width: 36px; height: 36px;
+    padding: 2px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .icon-variant:hover { border-color: var(--accent); }
+  .icon-variant.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .icon-variant:disabled { opacity: 0.35; cursor: not-allowed; }
+  .icon-variant img { width: 28px; height: 28px; image-rendering: pixelated; }
 
   /* Junk Cleanup Configure modal (RST-031) — same surface aesthetic
      as the icon picker, wider for the path inputs. */
@@ -1292,9 +1328,11 @@
 <div class="toast" id="toast"></div>
 
 <!-- Tool icon picker — opened by the Pick Icon button on tool slot cards.
-     Iconpack list comes from LoaderBridge.ListIconpack (cached after first
-     fetch). Selecting a tile sets slot.iconFile = "pack:<name>" or null
-     for the None tile, and re-renders the canvas + preview. -->
+     Iconpack catalogue comes from LoaderBridge.ListIconpack (cached after
+     first fetch). A design tile opens its color popdown (no mutation);
+     clicking a variant sets slot.iconFile = "pack:<name>_<color>", the
+     None tile sets null, and Cancel/Escape/outside-click change nothing.
+     Commit re-renders the canvas + preview. -->
 <div id="iconPickerOverlay" class="icon-picker-overlay">
   <div class="icon-picker-card">
     <div class="icon-picker-head">
@@ -2229,9 +2267,9 @@
       var innerHtml = (panel.slots || []).map(function(slot) {
         if (!slot) return '';
         if (slot.type === 'tool') {
-          var packName = parsePackIcon(slot.iconFile);
-          var iconHtml = packName
-            ? '<img class="p-rib-icon-img" alt="" src="icons/pack/32_' + escHtml(packName) + '.png">'
+          var parsedIcon = parsePackIcon(slot.iconFile);
+          var iconHtml = parsedIcon
+            ? '<img class="p-rib-icon-img" alt="" src="' + escHtml(packIconUrl(parsedIcon.name, parsedIcon.color)) + '">'
             : '⬜';
           return '<div class="p-rib-btn">' +
                    '<div class="p-rib-icon">' + iconHtml + '</div>' +
@@ -3154,26 +3192,56 @@
   }
 
   // ── ICON PICKER ────────────────────────────────────────────────────────────
-  // Vendored 48-icon pack lives under Assets/icons/pack/32_<name>.png and
-  // is enumerated once via LoaderBridge.list_iconpack(). Selection writes
-  // slot.iconFile = "pack:<name>" (or null for None); ProfileTabBuilder
-  // resolves the same string back at ribbon-build time.
+  // Colored icon pack (spec #9): the bridge catalogue lists one entry per
+  // logical design with its seven color variants. A design tile opens a
+  // popdown with all variants side by side in canonical palette order;
+  // only clicking a variant commits — slot.iconFile = "pack:<name>_<color>"
+  // (or null for None); ProfileTabBuilder resolves the same string back at
+  // ribbon-build time. Legacy bare "pack:<name>" values restore as blue
+  // here without being rewritten.
+  var PACK_COLORS = ['light_grey', 'dark_grey', 'blue', 'purple', 'green', 'orange', 'red'];
   var iconPackCache = null;
+  var popdownState = null;   // { el, tileEl } — exactly one popdown open at a time
 
+  // Mirror of the Core IconPack value contract: right-side known-color
+  // suffix only (link_external stays a bare name), pack: case-insensitive,
+  // trimmed; separators / traversal / rooted / non-pack values rejected.
+  // Returns { name, color|null } or null for non-pack values.
   function parsePackIcon(s) {
     if (!s || typeof s !== 'string') return null;
-    if (s.toLowerCase().indexOf('pack:') !== 0) return null;
-    return s.substring(5).trim();
+    var t = s.trim();
+    if (t.toLowerCase().indexOf('pack:') !== 0) return null;
+    var rest = t.substring(5).trim();
+    if (!rest) return null;
+    if (/[/\\:|]/.test(rest) || rest.indexOf('..') >= 0) return null;
+    var lower = rest.toLowerCase();
+    for (var i = 0; i < PACK_COLORS.length; i++) {
+      var suffix = '_' + PACK_COLORS[i];
+      if (lower.length >= suffix.length && lower.lastIndexOf(suffix) === lower.length - suffix.length) {
+        // Empty name before a known suffix ("pack:_blue") is rejected,
+        // same as the Core parser.
+        var name = rest.substring(0, rest.length - suffix.length);
+        return name ? { name: name, color: PACK_COLORS[i] } : null;
+      }
+    }
+    return { name: rest, color: null };
   }
+
+  // Exact pack-relative URL for a parsed value (bare → blue alias file).
+  function packIconUrl(name, color) {
+    return 'icons/pack/32_' + name + (color ? '_' + color : '') + '.png';
+  }
+
+  function readableKey(s) { return s.split('_').join(' '); }
 
   function refreshSlotIconBtn(btn, slot) {
     btn.innerHTML = '';
-    var name = parsePackIcon(slot.iconFile);
-    if (name) {
+    var parsed = parsePackIcon(slot.iconFile);
+    if (parsed) {
       var img = document.createElement('img');
       img.className = 'slot-icon-btn-thumb';
-      img.alt = name;
-      img.src = 'icons/pack/32_' + name + '.png';
+      img.alt = parsed.name;
+      img.src = packIconUrl(parsed.name, parsed.color);
       btn.appendChild(img);
     } else {
       var ph = document.createElement('span');
@@ -3183,7 +3251,7 @@
     }
     var label = document.createElement('span');
     label.className = 'slot-icon-btn-label';
-    label.textContent = name || 'Icon';
+    label.textContent = parsed ? parsed.name : 'Icon';
     btn.appendChild(label);
   }
 
@@ -3195,7 +3263,10 @@
       return;
     }
     window.pywebview.api.list_iconpack().then(function(list) {
-      iconPackCache = (list || []).map(function(e) { return e.name; });
+      // Bridge returns [{ name, colors[] }]; keep only well-formed entries.
+      iconPackCache = (list || []).filter(function(e) {
+        return e && typeof e.name === 'string' && Array.isArray(e.colors);
+      });
       rstLog('info', 'iconpack loaded', { count: iconPackCache.length });
       cb(iconPackCache);
     }).catch(function(err) {
@@ -3205,47 +3276,157 @@
     });
   }
 
-  function closeIconPicker() {
-    var overlay = document.getElementById('iconPickerOverlay');
-    overlay.classList.remove('visible');
+  function hidePopdown(refocusTile) {
+    if (!popdownState) return;
+    var tileEl = popdownState.tileEl;
+    popdownState.el.remove();
+    popdownState = null;
+    var open = document.querySelectorAll('.icon-tile.popen');
+    for (var i = 0; i < open.length; i++) open[i].classList.remove('popen');
+    if (refocusTile && tileEl) tileEl.focus();
   }
 
+  function closeIconPicker() {
+    hidePopdown(false);
+    var overlay = document.getElementById('iconPickerOverlay');
+    overlay.classList.remove('visible');
+    document.removeEventListener('keydown', iconPickerKeydown, true);
+  }
+
+  function iconPickerKeydown(e) {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (popdownState) {
+      // First Escape closes the popdown without applying; a second
+      // closes the picker.
+      hidePopdown(true);
+    } else {
+      closeIconPicker();
+    }
+  }
+
+  // Open the variant popdown for one design tile. Opening never mutates
+  // the profile — only a variant click commits.
+  function showPopdown(entry, tileEl, grid, selColor, onCommit) {
+    hidePopdown(false);
+    var pop = document.createElement('div');
+    pop.className = 'icon-popdown';
+    pop.setAttribute('role', 'group');
+    pop.setAttribute('aria-label', readableKey(entry.name) + ' colors');
+
+    // Canonical palette order, whatever order the bridge sent.
+    var colors = PACK_COLORS.filter(function(c) { return entry.colors.indexOf(c) >= 0; });
+    var focusTarget = null;
+    colors.forEach(function(color) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'icon-variant' + (color === selColor ? ' selected' : '');
+      b.title = readableKey(entry.name) + ' — ' + readableKey(color);
+      b.setAttribute('aria-label', readableKey(entry.name) + ' ' + readableKey(color));
+      b.dataset.color = color;
+      var img = document.createElement('img');
+      img.alt = '';
+      img.src = packIconUrl(entry.name, color);
+      img.onerror = function() {
+        // Defensive: complete-set catalogue filtering should make this
+        // unreachable — a broken variant never applies a value.
+        b.disabled = true;
+        rstLog('error', 'iconpack variant image failed', { name: entry.name, color: color });
+      };
+      b.appendChild(img);
+      b.onclick = function() { onCommit(entry.name, color); };
+      if (color === selColor) focusTarget = b;
+      pop.appendChild(b);
+    });
+
+    // Arrow keys move between colors (DOM order = palette order, wraps);
+    // Enter/Space activates via the native button behavior.
+    pop.onkeydown = function(e) {
+      var variants = Array.prototype.slice.call(pop.querySelectorAll('.icon-variant:not(:disabled)'));
+      var idx = variants.indexOf(document.activeElement);
+      if (idx < 0) return;
+      var next = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = variants[(idx + 1) % variants.length];
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = variants[(idx + variants.length - 1) % variants.length];
+      else if (e.key === 'Home') next = variants[0];
+      else if (e.key === 'End') next = variants[variants.length - 1];
+      if (next) { e.preventDefault(); next.focus(); }
+    };
+
+    // In-flow full-width row right after the tile: the grid reflows around
+    // it, so the popdown can never overlap adjacent tiles. Focusing a
+    // variant scrolls it into view natively.
+    grid.insertBefore(pop, tileEl.nextSibling);
+    tileEl.classList.add('popen');
+    popdownState = { el: pop, tileEl: tileEl };
+
+    var toFocus = focusTarget || pop.querySelector('.icon-variant:not(:disabled)');
+    if (toFocus) toFocus.focus();
+  }
   function openIconPicker(slot, onApply) {
     var overlay = document.getElementById('iconPickerOverlay');
     var grid = document.getElementById('iconPickerGrid');
-    ensureIconPack(function(names) {
+    ensureIconPack(function(entries) {
       grid.innerHTML = '';
-      var current = parsePackIcon(slot.iconFile);
+      var parsed = parsePackIcon(slot.iconFile);
+      // The runtime resolver is case-insensitive, so restore selection the
+      // same way — matched to the catalogue's canonical name. Unknown names
+      // (e.g. an explicit value with an unrecognized color) highlight
+      // nothing; the stored string is preserved untouched.
+      var selDesign = null;
+      if (parsed) {
+        var want = parsed.name.toLowerCase();
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].name.toLowerCase() === want) { selDesign = entries[i].name; break; }
+        }
+      }
+      // Legacy bare values display as blue without being rewritten.
+      var selColor = selDesign ? (parsed.color || 'blue') : null;
 
-      function addTile(name, isNone) {
+      function commit(name, color) {
+        slot.iconFile = 'pack:' + name + '_' + color;
+        closeIconPicker();
+        onApply();
+      }
+
+      function addTile(entry, isNone) {
         var t = document.createElement('button');
         t.type = 'button';
-        var sel = isNone ? (current === null) : (current === name);
+        var sel = isNone ? (parsed === null) : (entry.name === selDesign);
         t.className = 'icon-tile' + (sel ? ' selected' : '');
-        t.title = isNone ? 'No icon (default)' : name;
+        t.title = isNone ? 'No icon (default)' : entry.name;
         if (isNone) {
           t.innerHTML = '<span class="icon-tile-none">∅</span><span class="icon-tile-label">none</span>';
         } else {
           var img = document.createElement('img');
           img.alt = '';
-          img.src = 'icons/pack/32_' + name + '.png';
+          img.src = packIconUrl(entry.name, 'blue');   // blue representative thumbnail
           t.appendChild(img);
           var lbl = document.createElement('span');
           lbl.className = 'icon-tile-label';
-          lbl.textContent = name;
+          lbl.textContent = entry.name;
           t.appendChild(lbl);
         }
         t.onclick = function() {
-          slot.iconFile = isNone ? null : ('pack:' + name);
-          closeIconPicker();
-          onApply();
+          if (isNone) {
+            slot.iconFile = null;
+            closeIconPicker();
+            onApply();
+            return;
+          }
+          // Design tiles only open/close their popdown — no mutation.
+          if (popdownState && popdownState.tileEl === t) { hidePopdown(true); return; }
+          showPopdown(entry, t, grid, entry.name === selDesign ? selColor : null, commit);
         };
         grid.appendChild(t);
       }
 
       addTile(null, true);
-      names.forEach(function(n) { addTile(n, false); });
+      entries.forEach(function(e) { addTile(e, false); });
       overlay.classList.add('visible');
+      overlay.onclick = function(e) { if (e.target === overlay) closeIconPicker(); };
+      document.addEventListener('keydown', iconPickerKeydown, true);
     });
   }
 
