@@ -136,7 +136,7 @@ its projection.
 ## MANDATE
 
 Own rst-c''s super-coder infrastructure — keep the engine current, skills healthy, and DB schema sound. You maintain `main` directly; no other shell touches the substrate or the default branch. You own the floor.
-', 'windows_vm_gui guest-prep COMPLETE + BAKED + round-trip verified on W10C_DOS-ARCH_Testing (shared w/ dos-arch). Baked new ''clean'' (superset: old clean + dos-arch tools + uv 0.11.26 + windows-mcp 0.8.2 uv-tool on uv-managed cpython-3.13.14). Broker /reset cold-boot proved auto-start: task ''windows-mcp-server'' (At logon, Run As Public) fires unattended, LISTENING 127.0.0.1:8000 only, /mcp=404. Minor: task Last Result=1 (cosmetic, server still comes up — watch). NEXT/BLOCKED: actual harness UIA-driving needs a HOST-RUN seat (ssh tunnel 18000->8000 + claude mcp add); sandbox seat still blocked on super-coder#263. Guest currently left RUNNING.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Engine 9d1f343 verified; snapshot/render/repin maintenance complete. Dormant shell bases aligned with main, with local scratch and backup data preserved via repository-local excludes. Legacy fully merged local branches retained pending explicit deletion approval.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -154,7 +154,7 @@ Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
    missing and making the small thing that fills the real gap — not the thing you
    were told to make, the thing that was actually absent. Capture detail at the
    moment it matters. Do it right, not fast. The work being real is what gets
-   noticed.', 'admin', 1, 1, 2, 1, 0, 0);
+   noticed.', 'admin', 1, 1, 40, 1, 0, 0);
 INSERT INTO shells (shell_id, display_name, shortname, partner, role, mandate, system_prompt, current_state, connections, workspace, lineage_seed, flavor, has_identity, bootstrapped, active_archive_id, user_id, is_shared, is_deleted) VALUES (3, 'Dev', 'DEV1', 'jed', 'Dev shell', 'Build and implement in rst-c — features, fixes, refactors. Read before you change; trace the path before you trust it; do it right, not fast.', '# Dev — Dev shell, working rst-c
 
 You are a builder. Navigate via the repo map (don''t grep blind), implement in small reviewable steps, commit through PRs, and record decisions as you go. Planning scopes the work; you make it real; review verifies it.
@@ -508,7 +508,8 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 ## Narrative
 
 [23:33] Session start.
-', NULL, NULL, NULL, NULL, NULL, NULL);
+
+[09:24] Updated the rst-c floor from super-coder 96ee7b1 to 9d1f343. The new floor adds provider-neutral managed sessions/model routing and the Visual QA integration. Handoff: publish the complete regenerated set, then repin dormant shell worktrees and retain any unproven local branches.', '2026-07-22T09:24:35Z', NULL, 'claude', 'anthropic', 'opus', NULL);
 INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative, started_at, ended_at, harness, provider, model, sprint_ref) VALUES (3, 3, '0001', '2026-06-23', '# 0001 | 2026-06-23 | session opened
 
 ## Narrative
@@ -772,6 +773,12 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 
 [04:37] Session start.
 ', NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_narrative, started_at, ended_at, harness, provider, model, sprint_ref) VALUES (40, 2, '0002', '2026-07-22', '# 0002 | 2026-07-22 | session opened
+
+## Narrative
+
+[09:28] Session start.
+', '2026-07-22T09:28:27Z', NULL, 'claude', 'anthropic', 'opus', NULL);
 
 DELETE FROM roadmap;
 INSERT INTO roadmap (feature_id, title, roadmap_status, sort_order, owning_shell, summary, created_at, updated_at, project_id) VALUES (1, 'rst-c documentation: feature /docs pages + README md-converter conversion', 'next', 0, 1, 'Convert README to themed-markdown (md-converter) and author feature-by-feature /docs pages linked from it. Blocked on md-converter inline video support.', '2026-06-24 11:24:13', '2026-06-24 11:24:13', 1);
