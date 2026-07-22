@@ -116,15 +116,13 @@ Both MSIs appear as separate entries in Add/Remove Programs because their `Upgra
 
 ## Versioning
 
-**Source of truth:** the `<Package Version="…">` attribute in `installer/Product.wxs` and `installer-r27/Product.wxs`. This drives the version Add/Remove Programs displays and is what the MSI engine uses to decide whether an installer is an upgrade, downgrade, or sidegrade vs. the currently installed product.
+**Source of truth:** the release **tag**. `release.yml`'s `prepare` job strips the leading `v` and any `-prerelease` suffix from the tag down to a numeric `a.b.c` and passes it to `_build.yml`, which stamps both MSIs via `-p:RstMsiVersion=a.b.c`. The WXS consumes it as `$(var.RstMsiVersion)`; each `.wixproj` carries a fallback used only for local builds without an explicit `-p:RstMsiVersion=`. The stamped version is what Add/Remove Programs displays and what the MSI engine uses to decide whether an installer is an upgrade, downgrade, or sidegrade vs. the currently installed product.
 
 **Release flow:**
 
-1. Bump `<Package Version="x.y.z">` in **both** `installer/Product.wxs` and `installer-r27/Product.wxs` (keep them in lockstep — the user-visible product is one thing, the two MSIs are an internal split).
-2. Commit the bump, merge to `main`.
-3. Tag from `main` HEAD: `git tag v1.0.0 && git push origin v1.0.0`.
-4. `.github/workflows/release.yml` fires on the `v*` tag, runs the matrix in `_build.yml`, creates a GitHub Release at `releases/tag/v1.0.0`, and attaches `RST.msi` (R25+R26) and `RST-R27.msi` (when its build succeeds — R27 is currently soft-fail in `release.yml`).
-5. The tag is the release name; the `Version=` attribute is the installed product version. They should match — the workflow does not thread the tag value into the build, so a missed bump means the Release is named `v1.0.0` while installed copies report `0.x.y`.
+1. Tag from `main` HEAD: `git tag -a v1.0.0 -m "…" && git push origin v1.0.0`. No version-bump commit is needed — the tag carries the version.
+2. `.github/workflows/release.yml` fires on the `v*` tag, runs the matrix in `_build.yml`, creates a GitHub Release at `releases/tag/v1.0.0`, and attaches `RST.msi` (R25+R26) and `RST-R27.msi` (when its build succeeds — R27 is currently soft-fail in `release.yml`).
+3. The installed ProductVersion always matches the tag, and a new tag always raises it — driving `MajorUpgrade` / `RemoveExistingProducts` on in-place upgrade.
 
 **Pre-release tags:** any tag with a hyphen (`v1.0.0-rc.1`, `v0.2.0-alpha`) is flagged as pre-release on the GitHub Release.
 
