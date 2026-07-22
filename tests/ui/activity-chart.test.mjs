@@ -34,10 +34,10 @@ function extractFunction(name) {
   return html.slice(start, i);
 }
 
-const block = ['monotoneTangents', 'monotoneCubicPath', 'chartMode', 'fmtDur']
+const block = ['monotoneTangents', 'monotoneCubicPath', 'chartMode', 'fmtDur', 'activityStatValues']
   .map(extractFunction).join('\n');
-const { monotoneTangents, monotoneCubicPath, chartMode, fmtDur } = new Function(
-  block + '\n; return { monotoneTangents, monotoneCubicPath, chartMode, fmtDur };')();
+const { monotoneTangents, monotoneCubicPath, chartMode, fmtDur, activityStatValues } = new Function(
+  block + '\n; return { monotoneTangents, monotoneCubicPath, chartMode, fmtDur, activityStatValues };')();
 
 // --- Parse the emitted path into cubic Bézier segments and sample them.
 function sampleBezierYs(pathStr, samplesPerSeg = 64) {
@@ -142,6 +142,37 @@ check('range pills carry 7/30/90/180',
     .every(a => html.includes(a)));
 check('7D pill is the default-active one',
   /class="act-pill active" data-days="7"/.test(html));
+
+// --- Stat cards: all six ship in one row at the top of the Activity tab.
+check('all six stat cards ship with their value hosts',
+  ['Session Timer', 'Session Total', 'Longest Sync', 'Longest Open Time', 'Warning Count', 'File Size']
+    .every(l => html.includes('>' + l + '<')) &&
+  ['actSessionTime', 'statSessionTotal', 'statLongestSync', 'statLongestOpen', 'statWarnings', 'statFileSize']
+    .every(id => html.includes('id="' + id + '"')));
+
+// --- activityStatValues: range-scoped cards come from the same series the
+//     charts plot; warnings/file size pass through point-in-time.
+check('no model open → null (all cards render —)', activityStatValues(null) === null);
+{
+  const s = activityStatValues({
+    perDayOpenHours: [{ date: '2026-07-20', hours: 2.5 }, { date: '2026-07-21', hours: 1.5 }, { date: '2026-07-22', hours: 0 }],
+    openEvents: [{ ts: 'a', seconds: 12 }, { ts: 'b', seconds: 47.5 }, { ts: 'c', seconds: 30 }],
+    syncEvents: [{ ts: 'd', seconds: 90 }, { ts: 'e', seconds: 8 }],
+    warningsCount: 1234,
+    fileSizeMb: 512,
+  });
+  check('session total sums the per-day hours in range', s.totalHours === 4);
+  check('longest open is the max open-event duration', s.longestOpenSeconds === 47.5);
+  check('longest sync is the max sync-event duration', s.longestSyncSeconds === 90);
+  check('warning count passes through', s.warningsCount === 1234);
+  check('file size converts MB → bytes for fmt.bytes', s.fileSizeBytes === 512 * 1024 * 1024);
+}
+{
+  const s = activityStatValues({ perDayOpenHours: [], openEvents: [], syncEvents: [] });
+  check('empty series → zero total, null maxes (cards render 0h / —)',
+    s.totalHours === 0 && s.longestOpenSeconds === null && s.longestSyncSeconds === null);
+  check('missing point-in-time fields stay null', s.warningsCount === null && s.fileSizeBytes === null);
+}
 
 if (failures.length) {
   console.error('FAIL — activity chart regression:');
