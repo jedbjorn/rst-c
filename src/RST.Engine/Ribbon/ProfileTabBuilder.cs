@@ -233,7 +233,11 @@ internal static class ProfileTabBuilder
             if (string.IsNullOrEmpty(slot.CommandId)) continue;
 
             var target = ParseTarget(slot.CommandId!, slot.Name);
-            var icon = IconAssets.ResolveSlotIcon(slot.IconFile) ?? IconAssets.Default32;
+            // Precedence: explicit pack icon (admin override) → branded
+            // icon for RST native tools → generic default.
+            var icon = IconAssets.ResolveSlotIcon(slot.IconFile)
+                    ?? IconAssets.ResolveNativeToolIcon(slot.CommandId)
+                    ?? IconAssets.Default32;
             var btn = new AwRibbonButton
             {
                 Text = RST.Core.Ribbon.ButtonLabel.Wrap(slot.Name),

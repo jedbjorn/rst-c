@@ -15,6 +15,12 @@
 //   anything else     → null (caller falls back to Default32)
 // Resolved icons are cached so a profile rebuild doesn't re-decode the
 // same PNG on every button.
+//
+// Slots pointing at the RST native tools (Builder/Loader/RSTify/Health,
+// placeable on profile toolbars since PR #112) carry no iconFile by
+// default — ResolveNativeToolIcon(commandId) maps them back to their
+// branded icons so they don't render the generic default. An explicit
+// pack icon on the slot still wins (override).
 
 using System;
 using System.Collections.Concurrent;
@@ -232,6 +238,32 @@ internal static class IconAssets
         // well-formed pack value, and it falls back to the default icon.
         if (!IconPack.TryParseValue(iconFile, out var pack)) return null;
         return _packCache.GetOrAdd(pack.NormalizedKey, _ => LoadBundled(pack.RelativePath));
+    }
+
+    /// <summary>
+    /// Branded icon for an RST native tool (Builder/Loader/RSTify/Health)
+    /// placed on a profile tab through the command catalog. A catalog
+    /// slot's commandId is the scanned AdWindows button Id, which embeds
+    /// the PushButtonData name RibbonBuilder stamped at OnStartup (e.g.
+    /// "CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_Health") — a substring
+    /// match on the marker is the robust cut, immune to the prefix shape.
+    /// Returns null for non-RST commands; the caller then falls back to
+    /// <see cref="Default32"/>. An explicit per-slot pack icon
+    /// (<see cref="ResolveSlotIcon"/>) takes precedence over this.
+    /// RSTify always reports the "off" icon: the live on/off swap only
+    /// tracks the real RST-panel button (RstifyToggle.RefreshIcon stops
+    /// at the first marker match), so a profile-tab clone stays static.
+    /// </summary>
+    public static ImageSource? ResolveNativeToolIcon(string? commandId)
+    {
+        if (string.IsNullOrEmpty(commandId)) return null;
+        // Markers = the PushButtonData names in RibbonBuilder + the
+        // RSTify cookie (its PushButtonData name IS the cookie).
+        if (commandId.Contains("RST_Health",  StringComparison.Ordinal)) return HealthIcon;
+        if (commandId.Contains("RST_Loader",  StringComparison.Ordinal)) return LoaderIcon;
+        if (commandId.Contains("RST_Builder", StringComparison.Ordinal)) return BuilderIcon;
+        if (commandId.Contains(RstifyToggle.RstifyButtonCookie, StringComparison.Ordinal)) return RstifyIconOff;
+        return null;
     }
 
     private static ImageSource? LoadBundled(string relativePath)
