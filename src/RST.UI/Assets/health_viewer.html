@@ -422,34 +422,53 @@
   .tab-btn.active { color: var(--heading); border-bottom-color: var(--accent); }
 
   /* ── ACTIVITY TAB ────────────────────────────────────────────────────── */
-  .act-session {
+  /* Stat-card row: six cards across the top — Session Timer (live tick),
+     Session Total / Longest Sync / Longest Open Time (range-scoped, from
+     the same series the charts plot), Warning Count / File Size (current
+     model, point-in-time). */
+  .act-stats {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .act-stat {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 9px;
-    padding: 18px;
-    margin-bottom: 10px;
+    padding: 12px 12px 10px;
+    min-width: 0;
   }
-  .act-session-label {
+  .act-stat-label {
     font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.13em;
+    font-size: 9px;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text3);
     margin-bottom: 6px;
+    /* Two-line floor: keeps the values row-aligned when a long label
+       wraps (LONGEST OPEN TIME) on narrow windows. */
+    min-height: 22px;
   }
-  .act-session-time {
+  .act-stat-value {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 26px;
+    font-size: 16px;
     color: var(--heading);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .act-session-sub {
+  .act-stat-sub {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 9px;
     color: var(--text2);
     margin-top: 4px;
-    min-height: 14px;
+    min-height: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .act-range {
@@ -538,10 +557,37 @@
       <!-- Sections rendered by JS -->
     </div>
     <div class="content-inner" id="activityPane" hidden>
-      <div class="act-session">
-        <div class="act-session-label">Current Session</div>
-        <div class="act-session-time" id="actSessionTime">—</div>
-        <div class="act-session-sub" id="actSessionSub"></div>
+      <div class="act-stats">
+        <div class="act-stat">
+          <div class="act-stat-label">Session Timer</div>
+          <div class="act-stat-value" id="actSessionTime">—</div>
+          <div class="act-stat-sub" id="actSessionSub"></div>
+        </div>
+        <div class="act-stat">
+          <div class="act-stat-label">Session Total</div>
+          <div class="act-stat-value" id="statSessionTotal">—</div>
+          <div class="act-stat-sub"></div>
+        </div>
+        <div class="act-stat">
+          <div class="act-stat-label">Longest Sync</div>
+          <div class="act-stat-value" id="statLongestSync">—</div>
+          <div class="act-stat-sub"></div>
+        </div>
+        <div class="act-stat">
+          <div class="act-stat-label">Longest Open Time</div>
+          <div class="act-stat-value" id="statLongestOpen">—</div>
+          <div class="act-stat-sub"></div>
+        </div>
+        <div class="act-stat">
+          <div class="act-stat-label">Warning Count</div>
+          <div class="act-stat-value" id="statWarnings">—</div>
+          <div class="act-stat-sub"></div>
+        </div>
+        <div class="act-stat">
+          <div class="act-stat-label">File Size</div>
+          <div class="act-stat-value" id="statFileSize">—</div>
+          <div class="act-stat-sub"></div>
+        </div>
       </div>
       <div class="act-range" id="actRange">
         <button type="button" class="act-pill active" data-days="7">7D</button>
@@ -1140,6 +1186,34 @@
            (hint ? '<div class="act-empty-hint">' + hint + '</div>' : '') + '</div>';
   }
 
+  // Stat cards (top row). Session Total and the two Longest cards are
+  // range-scoped — computed from the same series the charts plot, so a
+  // range-pill switch recomputes them. Warning Count and File Size are
+  // the current model's point-in-time capture (bridge: HealthContext at
+  // window open) and ignore the range. Null file → null (all cards '—').
+  function activityStatValues(file) {
+    if (!file) return null;
+    const totalHours = (file.perDayOpenHours || [])
+      .reduce((s, p) => s + (p.hours || 0), 0);
+    const maxOf = evts => (evts || [])
+      .reduce((m, p) => (m == null || p.seconds > m ? p.seconds : m), null);
+    return {
+      totalHours: totalHours,
+      longestSyncSeconds: maxOf(file.syncEvents),
+      longestOpenSeconds: maxOf(file.openEvents),
+      warningsCount: file.warningsCount != null ? file.warningsCount : null,
+      fileSizeBytes: file.fileSizeMb != null ? file.fileSizeMb * 1024 * 1024 : null,
+    };
+  }
+
+  function renderActivityStats(s) {
+    document.getElementById('statSessionTotal').textContent = s ? fmtHoursShort(s.totalHours) : '—';
+    document.getElementById('statLongestSync').textContent = s ? fmtDur(s.longestSyncSeconds) : '—';
+    document.getElementById('statLongestOpen').textContent = s ? fmtDur(s.longestOpenSeconds) : '—';
+    document.getElementById('statWarnings').textContent = s ? fmt.num(s.warningsCount) : '—';
+    document.getElementById('statFileSize').textContent = s ? fmt.bytes(s.fileSizeBytes) : '—';
+  }
+
   let activityRangeDays = 7;
   let sessionTicker = null;
 
@@ -1156,7 +1230,7 @@
     function tick() {
       const now = Date.now();
       timeEl.textContent = startTs ? fmtElapsed(now - startTs) : '—';
-      subEl.textContent = fileTs ? ('this file open ' + fmtElapsed(now - fileTs)) : '';
+      subEl.textContent = fileTs ? ('file open ' + fmtElapsed(now - fileTs)) : '';
     }
     tick();
     if (startTs || fileTs) sessionTicker = setInterval(tick, 1000);
@@ -1179,6 +1253,7 @@
   function renderActivity(data) {
     startTicker(data.session);
     renderTelemetryStatus(data.status);
+    renderActivityStats(activityStatValues(data.file));
 
     const sessionBody = document.getElementById('chartSessionBody');
     const openBody = document.getElementById('chartOpenBody');
@@ -1236,6 +1311,7 @@
 
   function renderActivityError(message) {
     stopTicker();
+    renderActivityStats(null);
     const err = chartEmptyHtml('Could not load activity', message);
     document.getElementById('chartSessionBody').innerHTML = err;
     document.getElementById('chartOpenBody').innerHTML = err;

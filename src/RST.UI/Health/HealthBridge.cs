@@ -223,6 +223,10 @@ public class HealthBridge
                     matchedKeys = series.MatchedKeyKind,
                     isWorkshared = _context.IsWorkshared,
                     isCloud = _context.IsCloud,
+                    // Stat cards: the current model's point-in-time capture
+                    // (window-open) — range-independent, unlike the series.
+                    warningsCount = _context.WarningsCount,
+                    fileSizeMb = _context.ModelSizeMb,
                     perDayOpenHours = series.PerDayOpenHours
                         .Select(p => new
                         {
