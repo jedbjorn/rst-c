@@ -67,8 +67,9 @@ public sealed class LoaderBridgeIconpackTests : IDisposable
             .Should().BeInAscendingOrder(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
-            entry.EnumerateObject().Select(p => p.Name).Should().Equal("name", "colors",
-                "the bridge contract is exactly { name, colors[] }, lowercase");
+            entry.EnumerateObject().Select(p => p.Name).Should().Equal(
+                new[] { "name", "colors" },
+                "the bridge contract is exactly {{ name, colors[] }}, lowercase");
             entry.GetProperty("colors").EnumerateArray().Select(c => c.GetString())
                 .Should().Equal(IconPack.CanonicalColors,
                     "colors follow canonical palette order, never filesystem order");
