@@ -109,6 +109,8 @@ public sealed class IconPackValueTests
     [InlineData("pack:\\abs")]               // rooted
     [InlineData("pack:C:\\icons\\x.png")]    // rooted (Windows drive)
     [InlineData("pack:C:x")]                 // drive-relative
+    [InlineData("pack:move|green")]          // cache-key separator — never a real filename (SC-045)
+    [InlineData("pack:a|b")]                 // cache-key separator
     public void Malformed_or_path_like_values_are_rejected(string? input)
     {
         IconPack.TryParseValue(input, out var value).Should().BeFalse();

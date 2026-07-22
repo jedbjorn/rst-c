@@ -6,6 +6,8 @@ name: _build (reusable)
 # directly" by convention.
 #
 #   • test         — xunit on RST.Tests (configuration-agnostic)
+#   • test-runtime — xunit on RST.RuntimeTests (Windows-only WPF paths:
+#                    bridge + resolver production contracts)
 #   • stage        — matrix R25/R26/R27, runs build/stage.sh per major,
 #                    uploads the bundle as a per-major artifact. R27 is
 #                    soft-fail (continue-on-error) until the build path
@@ -51,6 +53,19 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - run: dotnet test src/RST.Tests/RST.Tests.csproj -c Release --nologo
+
+  # RuntimeTests invokes the real WPF assemblies (LoaderBridge, IconAssets)
+  # — it can only RUN on Windows. No Revit needed, so windows-latest
+  # suffices and the self-hosted Revit runner stays out of the PR gate.
+  test-runtime:
+    name: Test (runtime, Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet test src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
 
   stage:
     name: Stage ${{ matrix.major }}

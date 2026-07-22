@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RST.RuntimeTests — production-path contract tests that must run on a
+    real Windows runtime: they invoke LoaderBridge (RST.UI, WPF) and
+    IconAssets (RST.Engine, WPF) directly, which a Linux test host cannot
+    load. Spec #9's bridge/resolver verification gates live here;
+    everything that can run platform-agnostic stays in RST.Tests (Core).
+
+    TFM tracks the same $(RevitTargetFramework) grid as UI/Engine — always
+    build/test with an R-suffixed configuration (e.g. -c "Release R25");
+    plain Debug/Release leaves RevitTargetFramework empty and fails, the
+    same rule the UI/Engine projects already follow.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <RootNamespace>RST.RuntimeTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Configurations>Debug R25;Debug R26;Debug R27;Release R25;Release R26;Release R27</Configurations>
+    <!-- Allow Linux CI stage jobs to build (not run) the windows TFM. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
+    <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
+    <ProjectReference Include="..\RST.Engine\RST.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

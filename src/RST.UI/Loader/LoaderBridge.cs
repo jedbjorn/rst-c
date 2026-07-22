@@ -462,14 +462,22 @@ public class LoaderBridge
     /// returns <c>[]</c> with a warning, preserving the no-throw
     /// COM-boundary behavior.
     /// </summary>
-    public string ListIconpack()
+    public string ListIconpack() => ListIconpackCore(
+        Path.Combine(
+            Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
+            "Assets", "icons", "pack"));
+
+    /// <summary>
+    /// Pack-dir-injectable core of <see cref="ListIconpack"/> — internal
+    /// so RST.RuntimeTests can drive the missing/unreadable-directory
+    /// and incomplete-set branches against temp fixtures. Production
+    /// callers use the parameterless entry point.
+    /// </summary>
+    internal string ListIconpackCore(string assetsDir)
     {
         LogEntry(nameof(ListIconpack));
         try
         {
-            var assetsDir = Path.Combine(
-                Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
-                "Assets", "icons", "pack");
             var catalogue = IconPack.BuildCatalogue(assetsDir);
             if (!catalogue.DirectoryExists)
             {

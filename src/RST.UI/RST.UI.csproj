@@ -36,6 +36,12 @@
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- RuntimeTests drives the internal ListIconpackCore seam for the
+         spec #9 bridge failure branches (missing/unreadable pack dir). -->
+    <InternalsVisibleTo Include="RST.RuntimeTests" />
+  </ItemGroup>
+
   <!--
     Vendored web assets — copied next to the assembly so SetVirtualHost
     can serve them as https://rst.ui/<file>. Layout flat under Assets/

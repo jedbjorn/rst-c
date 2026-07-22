@@ -54,8 +54,11 @@ public static class IconPack
 
     // A pack value may not cross filesystem boundaries. ':' additionally
     // kills rooted Windows forms ("C:\...", "C:...") that '/' and '\'
-    // alone would miss.
-    private static readonly char[] RejectedNameChars = { '/', '\\', ':' };
+    // alone would miss. '|' can never appear in a real pack filename
+    // (Windows-invalid) and is the cache-key separator — accepting it
+    // would let a malformed value collide with a valid (name, color)
+    // pair's cache entry and suppress a valid icon process-wide.
+    private static readonly char[] RejectedNameChars = { '/', '\\', ':', '|' };
 
     /// <summary>
     /// Parse a profile <c>iconFile</c> value into its logical name and
