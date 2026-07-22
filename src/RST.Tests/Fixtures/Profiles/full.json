@@ -48,6 +48,12 @@
           "commandId": "ID_BUTTON_COPY"
         },
         {
+          "type": "tool",
+          "name": "Check",
+          "commandId": "ID_BUTTON_CHECK",
+          "iconFile": "pack:check_green"
+        },
+        {
           "type": "stack",
           "name": "Drawing"
         }
@@ -68,6 +74,12 @@
           "name": "Email IT",
           "commandId": "URL:mailto:it@example.com",
           "iconFile": "pack:at"
+        },
+        {
+          "type": "tool",
+          "name": "Cube",
+          "commandId": "ID_BUTTON_CUBE",
+          "iconFile": "pack:box_cube_purple"
         }
       ]
     }
