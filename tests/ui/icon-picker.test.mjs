@@ -74,6 +74,18 @@ class El {
   set innerHTML(v) { this._innerHTML = v; if (v === '') this.children = []; }
   get innerHTML() { return this._innerHTML || ''; }
   appendChild(c) { c.parentNode = this; this.children.push(c); return c; }
+  insertBefore(c, ref) {
+    if (ref == null) return this.appendChild(c);
+    const i = this.children.indexOf(ref);
+    if (i < 0) throw new Error('insertBefore: reference node is not a child');
+    c.parentNode = this;
+    this.children.splice(i, 0, c);
+    return c;
+  }
+  get nextSibling() {
+    if (!this.parentNode) return null;
+    return this.parentNode.children[this.parentNode.children.indexOf(this) + 1] || null;
+  }
   remove() {
     if (!this.parentNode) return;
     const i = this.parentNode.children.indexOf(this);
@@ -306,14 +318,16 @@ await check('Cancel closes without mutating', async () => {
 await check('outside click closes; inside click does not', async () => {
   const world = makeWorld({ catalogue: CATALOGUE });
   const picker = makePicker(world);
-  const slot = { iconFile: null };
-  picker.openIconPicker(slot, () => {});
+  const slot = { iconFile: 'pack:move_green' };
+  let applied = 0;
+  picker.openIconPicker(slot, () => applied++);
   await tick();
   world.overlay.onclick({ target: world.grid });            // inside
   assert.ok(world.overlay.classList.contains('visible'), 'inside click keeps the picker open');
   world.overlay.onclick({ target: world.overlay });         // backdrop
   assert.ok(!world.overlay.classList.contains('visible'), 'outside click closes');
-  assert.equal(slot.iconFile, null);
+  assert.equal(slot.iconFile, 'pack:move_green', 'outside click must not clear or mutate');
+  assert.equal(applied, 0, 'outside click must not fire onApply (no dirtying)');
 });
 
 await check('Escape closes the popdown first, then the picker', async () => {
@@ -383,6 +397,21 @@ await check('legacy bare value restores as blue without rewriting it', async () 
   assert.ok(variantFor(picker, 'blue').classList.contains('selected'));
   picker.closeIconPicker();
   assert.equal(slot.iconFile, 'pack:move', 'open + close must not rewrite the bare value');
+});
+
+await check('mixed-case stored value restores selection like the runtime resolver', async () => {
+  const world = makeWorld({ catalogue: CATALOGUE });
+  const picker = makePicker(world);
+  const slot = { iconFile: 'PACK:Move_Blue' };   // valid for the case-insensitive runtime
+  picker.openIconPicker(slot, () => {});
+  await tick();
+  assert.ok(tileFor(world.grid, 'move').classList.contains('selected'),
+    'mixed-case design highlights its canonical tile');
+  tileFor(world.grid, 'move').click();
+  assert.ok(variantFor(picker, 'blue').classList.contains('selected'),
+    'mixed-case color highlights its canonical variant');
+  picker.closeIconPicker();
+  assert.equal(slot.iconFile, 'PACK:Move_Blue', 'stored string preserved untouched');
 });
 
 await check('unknown color or design highlights nothing; string preserved', async () => {
@@ -467,35 +496,35 @@ await check('malformed catalogue entries are filtered out', async () => {
   assert.equal(world.grid.children.length, 2, 'None + the one well-formed entry');
 });
 
-// ── popdown positioning ───────────────────────────────────────────────
-await check('popdown flips above the tile when the space below is out of view', async () => {
+// ── popdown placement: in-flow row, never overlapping (spec #9) ───────
+await check('popdown inserts in-flow right after its tile, with no absolute positioning', async () => {
   const world = makeWorld({ catalogue: CATALOGUE });
   const picker = makePicker(world);
   picker.openIconPicker({ iconFile: null }, () => {});
   await tick();
   const tile = tileFor(world.grid, 'move');
-  // Stub measurements at click time: pop is 70 high (El default),
-  // tile sits at 380 in a 400-high viewport → no room below, room above.
-  world.grid.clientHeight = 400;
-  world.grid.scrollTop = 0;
-  tile.offsetTop = 380;
   tile.click();
   const pop = picker.__state().pop.el;
-  assert.equal(pop.style.top, (380 - 70 - 4) + 'px', 'flipped above the tile');
+  const kids = world.grid.children;
+  assert.equal(kids[kids.indexOf(tile) + 1], pop, 'popdown is the tile’s next grid sibling');
+  assert.equal(pop.style.top, undefined, 'no absolute top offset');
+  assert.equal(pop.style.left, undefined, 'no absolute left offset');
+
+  // Reopening on another design moves the row with its tile.
+  const other = tileFor(world.grid, 'link_external');
+  other.click();
+  const kids2 = world.grid.children;
+  assert.equal(kids2[kids2.indexOf(other) + 1], picker.__state().pop.el);
 });
 
-await check('popdown clamps horizontally into the grid width', async () => {
-  const world = makeWorld({ catalogue: CATALOGUE });
-  const picker = makePicker(world);
-  picker.openIconPicker({ iconFile: null }, () => {});
-  await tick();
-  const tile = tileFor(world.grid, 'move');
-  // Stub pop width is 86 (El default); tile near the right edge.
-  world.grid.clientWidth = 640;
-  tile.offsetLeft = 600;
-  tile.click();
-  const pop = picker.__state().pop.el;
-  assert.equal(pop.style.left, (640 - 86) + 'px', 'clamped to grid.clientWidth - popdown width');
+await check('CSS pins the popdown as an in-flow full-width row (no overlay)', async () => {
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  const rule = html.match(/\.icon-popdown\s*\{([^}]*)\}/);
+  assert.ok(rule, '.icon-popdown rule present');
+  assert.match(rule[1], /grid-column:\s*1\s*\/\s*-1/, 'spans the full grid width');
+  assert.ok(!/position:\s*absolute/.test(rule[1]), 'never absolutely positioned over tiles');
+  const gridRule = html.match(/\.icon-picker-grid\s*\{([^}]*)\}/);
+  assert.match(gridRule[1], /grid-auto-flow:\s*dense/, 'split row backfills densely');
 });
 
 // ── catalogue order in the popdown ────────────────────────────────────

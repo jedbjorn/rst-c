@@ -540,10 +540,12 @@
     color: var(--text2);
   }
   .icon-picker-grid {
-    position: relative;
     padding: 12px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    /* Dense backfills the row an open popdown splits, so the grid stays
+       compact instead of leaving a ragged hole beside the clicked tile. */
+    grid-auto-flow: dense;
     gap: 6px;
     overflow-y: auto;
   }
@@ -575,21 +577,19 @@
     line-height: 1.2;
   }
 
-  /* Per-tile color popdown — absolutely positioned inside the grid so it
-     scrolls with its tile and never reflows the grid. Variants wrap on
-     constrained width, canonical palette order is DOM order. */
+  /* Per-tile color popdown — an in-flow full-width grid row inserted right
+     after its tile, so it reflows the grid and can never overlap adjacent
+     tiles (spec #9). Variants wrap on constrained width, canonical palette
+     order is DOM order. */
   .icon-popdown {
-    position: absolute;
-    z-index: 5;
+    grid-column: 1 / -1;
     display: flex; flex-wrap: wrap;
     gap: 4px;
     padding: 6px;
-    max-width: calc(100% - 8px);
     box-sizing: border-box;
     background: var(--surface3);
     border: 1px solid var(--accent);
     border-radius: 4px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   }
   .icon-variant {
     width: 36px; height: 36px;
@@ -3354,21 +3354,12 @@
       if (next) { e.preventDefault(); next.focus(); }
     };
 
-    grid.appendChild(pop);
+    // In-flow full-width row right after the tile: the grid reflows around
+    // it, so the popdown can never overlap adjacent tiles. Focusing a
+    // variant scrolls it into view natively.
+    grid.insertBefore(pop, tileEl.nextSibling);
     tileEl.classList.add('popen');
     popdownState = { el: pop, tileEl: tileEl };
-
-    // Position under the tile, flipping above when the space below is
-    // out of view; clamp horizontally into the grid's visible width.
-    var ph = pop.offsetHeight;
-    var pw = pop.offsetWidth;
-    var top = tileEl.offsetTop + tileEl.offsetHeight + 4;
-    if (top + ph > grid.scrollTop + grid.clientHeight && tileEl.offsetTop - ph - 4 >= grid.scrollTop) {
-      top = tileEl.offsetTop - ph - 4;
-    }
-    var left = Math.min(tileEl.offsetLeft, Math.max(0, grid.clientWidth - pw));
-    pop.style.top = top + 'px';
-    pop.style.left = left + 'px';
 
     var toFocus = focusTarget || pop.querySelector('.icon-variant:not(:disabled)');
     if (toFocus) toFocus.focus();
@@ -3379,10 +3370,17 @@
     ensureIconPack(function(entries) {
       grid.innerHTML = '';
       var parsed = parsePackIcon(slot.iconFile);
-      var names = entries.map(function(e) { return e.name; });
-      // Unknown names (e.g. an explicit value with an unrecognized color)
-      // highlight nothing; the stored string is preserved untouched.
-      var selDesign = parsed && names.indexOf(parsed.name) >= 0 ? parsed.name : null;
+      // The runtime resolver is case-insensitive, so restore selection the
+      // same way — matched to the catalogue's canonical name. Unknown names
+      // (e.g. an explicit value with an unrecognized color) highlight
+      // nothing; the stored string is preserved untouched.
+      var selDesign = null;
+      if (parsed) {
+        var want = parsed.name.toLowerCase();
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].name.toLowerCase() === want) { selDesign = entries[i].name; break; }
+        }
+      }
       // Legacy bare values display as blue without being rewritten.
       var selColor = selDesign ? (parsed.color || 'blue') : null;
 
