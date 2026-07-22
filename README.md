@@ -8,7 +8,19 @@ purpose: Native Revit add-in for curated ribbon profiles
 
 # rst-c
 
+**Curated Revit ribbon profiles — one native add-in, no pyRevit, no external runtime.**
+
+[![Latest release](https://img.shields.io/github/v/release/jedbjorn/rst-c?sort=semver&display_name=tag&label=latest%20release&color=2ea44f&style=flat-square)](https://github.com/jedbjorn/rst-c/releases/latest)
+[![Release date](https://img.shields.io/github/release-date/jedbjorn/rst-c?style=flat-square&color=2ea44f)](https://github.com/jedbjorn/rst-c/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/jedbjorn/rst-c/total?style=flat-square&color=6b46c1)](https://github.com/jedbjorn/rst-c/releases)
+[![License: MIT](https://img.shields.io/github/license/jedbjorn/rst-c?style=flat-square&color=blue)](https://github.com/jedbjorn/rst-c/blob/main/LICENSE)
+
+[![Revit 2025 · 2026 · 2027](https://img.shields.io/badge/Revit-2025%20%C2%B7%202026%20%C2%B7%202027-0696D7?style=flat-square&logo=autodeskrevit&logoColor=white)](#install)
+[![.NET 8 · 10](https://img.shields.io/badge/.NET-8.0%20%C2%B7%2010.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](#build)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?style=flat-square&logo=windows&logoColor=white)](#install)
 [![Open in md-converter](https://img.shields.io/badge/Open%20in-md--converter-6b46c1?style=flat-square)](https://md-converter.designs-os.com/?url=https://github.com/jedbjorn/rst-c/blob/main/README.md)
+
+**Topics:** `revit` · `revit-addin` · `bim` · `ribbon` · `webview2` · `dotnet` · `wix` · `autodesk`
 
 ## Overview
 
@@ -67,7 +79,7 @@ RSTify is a tab-hiding mode: when enabled, rst-c hides every Revit and add-in ta
 
 ### Health Tool
 
-Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, disk, display, network, OS, the active model and its size, and any warnings the session has accumulated. It also offers a targeted junk file cleanup for Temp folders, the package cache, journal files, and the collaboration cache, with cleanup targets configurable per profile. Everything runs locally; nothing is uploaded.
+Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, disk, display, network, OS, the active model and its size, and any warnings the session has accumulated. It also offers a targeted junk file cleanup for Temp folders, the package cache, journal files, and the collaboration cache, with cleanup targets configurable per profile. A second **Activity** tab tracks how long the current session has run, how long the open model has been open, and per-file charts of daily session time, model open times, and sync durations. Everything runs locally; nothing is uploaded.
 
 **[Health Tool docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/health-tool.md)**
 
