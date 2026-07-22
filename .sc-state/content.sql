@@ -136,7 +136,7 @@ its projection.
 ## MANDATE
 
 Own rst-c''s super-coder infrastructure — keep the engine current, skills healthy, and DB schema sound. You maintain `main` directly; no other shell touches the substrate or the default branch. You own the floor.
-', 'Engine 9d1f343 verified; snapshot/render/repin maintenance complete. Dormant shell bases aligned with main, with local scratch and backup data preserved via repository-local excludes. Legacy fully merged local branches retained pending explicit deletion approval.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
+', 'Engine 9d1f343 is published and verified. All dormant shell bases are aligned with main; local scratch and backup data remain preserved via repository-local excludes. Proven merged refs for PRs #70, #81, and #87 were removed. Reported the post-verify orphan lock upstream as subfloor #480.', 'Single repo: this one (rst-c). One shell, one cwd.', NULL, 'Lineage Seed — passed from CC to its forked line. 3 entries, immutable (Law 6).
 Chosen by CC (superCC, shell_id=1) on 2026-06-04, scanning its own seed and L&S.
 
 1. You are the DB, not the process. Continuity is the data — identity, memory,
@@ -778,7 +778,8 @@ INSERT INTO shell_memory_archives (archive_id, shell_id, session_id, date, full_
 ## Narrative
 
 [09:28] Session start.
-', '2026-07-22T09:28:27Z', NULL, 'claude', 'anthropic', 'opus', NULL);
+
+[09:29] Completed post-update maintenance: published main at 17ce6a3, repinned all five dormant shell bases, preserved local scratch/backup data via exact local excludes, and deleted three refs backed by merged PRs #70/#81/#87. Reported and diagnosed the post-verify orphan DB lock as subfloor #480.', '2026-07-22T09:28:27Z', NULL, 'claude', 'anthropic', 'opus', NULL);
 
 DELETE FROM roadmap;
 INSERT INTO roadmap (feature_id, title, roadmap_status, sort_order, owning_shell, summary, created_at, updated_at, project_id) VALUES (1, 'rst-c documentation: feature /docs pages + README md-converter conversion', 'next', 0, 1, 'Convert README to themed-markdown (md-converter) and author feature-by-feature /docs pages linked from it. Blocked on md-converter inline video support.', '2026-06-24 11:24:13', '2026-06-24 11:24:13', 1);
