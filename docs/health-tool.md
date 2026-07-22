@@ -1,6 +1,6 @@
 ---
 title: Health Tool
-tags: [rst-c, health, diagnostics, cleanup]
+tags: [rst-c, health, diagnostics, cleanup, activity, telemetry]
 date: 2026-06-24
 project: rst-c
 purpose: Guide to the Health system snapshot and junk file cleanup
@@ -15,6 +15,11 @@ purpose: Guide to the Health system snapshot and junk file cleanup
 Health is a one-click workstation and Revit-session snapshot. It collects hardware readings, OS details, the active Revit model, and session warnings, then offers a targeted junk file cleanup for common Revit bloat directories. Everything runs locally — nothing is uploaded or sent anywhere.
 
 The intent is to give a user something concrete to share with a BIM lead when Revit is misbehaving, without asking them to open Task Manager, dig through Windows settings, or know what a journal file is.
+
+The window has two tabs:
+
+- **Health** — the system snapshot and junk file cleanup (below).
+- **Activity** — session timing and per-file history charts ([Activity tab](#activity-tab)).
 
 https://github.com/user-attachments/assets/01fb84a3-a340-4a91-bba7-7936da277014
 
@@ -93,9 +98,56 @@ Select targets to clean :::class1 -> Confirm :::class2 -> Files deleted, locked 
 
 For directory targets, rst-c walks the directory tree and deletes files and subdirectories. For the recent file list, rst-c reads `Revit.ini` (preserving its UTF-16 LE encoding), strips `FileN=` lines from the `[Recent File List]` section, and rewrites the file. Revit must not be holding the ini file open, or the write is skipped.
 
+## Activity tab
+
+The **Activity** tab turns the passive session into something you can look at: how long you have been working, how long the current model has been open, and how the current file has behaved over time. It reads entirely from data recorded locally on this machine — see [Data & privacy](#data--privacy).
+
+### Current session
+
+At the top of the tab, a live readout ticks every second:
+
+- **Session time** — elapsed time since Revit started this rst-c session, shown as `HH:MM:SS`.
+- **This file open** — how long the currently active model has been open, updated as you switch documents.
+
+The timer runs only while the Activity tab is open; leaving the tab stops it.
+
+### Per-file history charts
+
+Below the live readout, three charts plot the **currently open model's** history. A range selector — **7D · 1M · 3M · 6M** — sets the window for all three at once (7 days by default).
+
+```stats
+:::class1
+value: Session time
+label: this file
+description: Hours the model was open, one point per calendar day across the range
+:::class2
+value: Opening time
+label: this file
+description: How many seconds each open of the model took, one point per open
+:::class3
+value: Sync history
+label: this file
+description: Duration of each synchronize-with-central, workshared and cloud models only
+```
+
+Chart behaviour:
+
+- **Session time** plots one point per calendar day, including days with zero recorded time, so a gap reads as a gap rather than a flat line. If the range holds no recorded time, the chart shows an empty state instead of a line at zero.
+- **Opening time** and **Sync history** plot one point per event. With a single data point they show a dot and a "not enough history yet" hint; with two or more they draw a smoothed curve. Hovering any point shows its exact timestamp and value.
+- **Sync history** only applies to workshared and cloud models. For a single-user local file it shows "Not a workshared model".
+- Charts key off the model's identity. A brand-new model that has never been saved has no usable identity key yet — save it once and its history begins to accumulate.
+
+### Data & privacy
+
+The Activity tab is a view onto rst-c's local session telemetry. Session, open, and sync events are written to a local outbox under `%AppData%\RST\` on this machine; the charts aggregate those files. **Nothing is uploaded or sent anywhere** — the same local-only guarantee as the rest of the Health tool.
+
+A **Collection** toggle in the tab footer controls whether these events are recorded at all. Next to it, a status line reports the local outbox state — file count, on-disk size, and the date of the oldest recorded event. Turning collection off stops new events from being recorded; existing history remains until it ages out.
+
 ## Notes & limits
 
 - The snapshot is point-in-time. Values like RAM usage and CPU usage reflect the moment Scan System was clicked; they are not live readings.
+- Activity charts cover only the **currently open model**. Close it or open a different one and the charts follow the active file; with no model open, the charts show a "No model open" state.
+- Activity history is per-machine and local. It does not follow a user to another workstation, and it is not shared between machines.
 - Journal paths and collaboration cache paths are resolved per installed Revit major version (2025, 2026, 2027). Only majors that exist on the machine are checked.
 - Cleaning Temp (`%LocalAppData%\Temp`) deletes all files in that directory, not just Revit files. This is the same directory Windows uses for all application temp files; the cleanup mirrors what a manual `%temp%` cleanup would do.
 - The recent file list cleanup removes recent file entries from Revit.ini. Revit will rebuild the list as you open files; the cleanup just clears the current history.
