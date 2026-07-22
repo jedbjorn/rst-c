@@ -6,7 +6,7 @@ edit: changes here are overwritten — author via the shell or localhost GUI
 
 # sprint_orchestration
 
-Planner-side governance of a multi-shell sprint — decompose the push, sequence the dependency chain, assign devs and reviewers, run the model & provider interview, declare the sprint doc, arm your inbox watcher, boot workers per task (./sc run), monitor the event stream (result + pr_event rows), unblock stalls, close out — run the pre-freeze conformance pass (review shells judge the spec against main), freeze the doc (revoking all scoped authority), and synthesize the sprint report from unit reports + the conformance doc into the fixed skeleton. Zero scheduled polling by any shell. Load when the FnB directs a coordinated multi-dev push. Companion to the participant-side `sprint` skill.
+Planner-side governance of a multi-shell sprint — decompose the push, sequence the dependency chain, assign devs and reviewers, run the model & provider interview, declare the sprint doc, manage the planner's provider-neutral session binding, boot workers per task (./sc run), monitor the event stream (result + pr_event rows), unblock stalls, close out — run the pre-freeze conformance pass (review shells judge the spec against main), freeze the doc (revoking all scoped authority), release managed wake, and synthesize the sprint report from unit reports + the conformance doc into the fixed skeleton. Zero scheduled polling by any shell. Load when the FnB directs a coordinated multi-dev push. Companion to the participant-side `sprint` skill.
 
 **Category:** craft
 
@@ -29,10 +29,12 @@ reviewer direct handoffs); your close-out turns it OFF.
 **The sprint is event-driven — nobody polls on a schedule.** Every
 instruction and result is a `shell_messages` row: you send `task` rows and
 boot workers headless; workers send `result` rows and register their PRs
-with the watcher daemon, which sends you `pr_event` rows. Your inbox
-watcher wakes you the moment any row lands. Workers are ephemeral,
-per-task sessions; you are the one long-lived context in the loop — you
-manage, you never load code. The full trail replays with
+with the GitHub watcher daemon, which sends you `pr_event` rows. A managed
+planner binding turns each unread row into a deduplicated wake job: deliver
+to the bound conversation when idle, leave it queued while busy, or resume
+that same native conversation when dormant. Workers are still booted
+explicitly; a row addressed to an ordinary worker does not start a model
+turn by itself. The full trail replays with
 `SELECT * FROM shell_messages WHERE kind != 'shell' ORDER BY created_at`.
 
 ## Step 1: Declare the sprint
@@ -63,9 +65,30 @@ Flavor-uniform by design: shells of a flavor are interchangeable workers,
 and one answer per flavor keeps the board readable and the review lineage
 coherent — reviewers stay a different lineage from the code they gate,
 chosen per sprint instead of per boot. No answer -> `flavor_defaults`,
-unchanged (omit the `models:` line). The answers parameterize every
-`./sc run` you issue for this sprint. Per-unit model mixing is out of
-scope — the interview covers the real need, provider choice per role.
+unchanged (omit the `models:` line). Every sprint worker still runs at high
+effort. Per-unit model mixing is out of scope — the interview covers the real
+need, provider choice per role.
+
+**Resolve each answered route before declaring it.** Lazy-load only the two
+choices the FnB made — never trust a display name or translate a provider id by
+hand:
+
+```
+sc models resolve <devs-harness> <devs-model>
+sc models resolve <reviewers-harness> <reviewers-model>
+```
+
+Each must return `route:` plus an exact `call:` ending in `--effort high`.
+Failure means the selector is not locally callable, the harness lacks a
+headless/high-effort seam, or Refresh models has not seen it. Run
+`sc models list <harness>` for the local choices; the FnB's **Refresh models**
+button in `/#shells` repopulates the same runtime table. Resolve again after a
+refresh. Never silently fall back across a provider or lineage.
+
+Common exact selectors: Claude aliases (`fable`, `opus`) and Codex ids
+(`gpt-5.6-sol`, `gpt-5.6-terra`) pass directly. Kimi takes the configured alias
+shown by `sc models list kimi` (for example `kimi-code/k3`), never the bare
+provider model `k3`.
 
 Write the board as a `documents` row:
 
@@ -95,30 +118,36 @@ it at close-out.
 You are the doc's only writer: devs report transitions as `result` rows;
 fold them into the board with `sc mem doc edit <id> --body-file`.
 
-## Step 2: Arm the watcher, kick off
+## Step 2: Manage the planner session, kick off
 
-**Arm your inbox watcher first** — the zero-token wake-up that replaces
-every scheduled tracker. On the claude harness, run it as a background
-task (it blocks until any message row lands for you, then exits — the
-exit is your wake-up):
+**Enable managed wake before kicking off a worker:**
 
 ```
-./sc watch inbox        # background it via your harness's background-task tool
+./sc session manage <planner-shortname> --sprint <doc-id>
+./sc session status <planner-shortname>
 ```
 
-**Interactive sessions only.** A harness background task is
-session-scoped: in a headless (`-p`) boot it dies with the session,
-silently — six sprint stalls traced to exactly this. A headless planner
-turn arms nothing: drain the inbox, act, end the turn — the next event
-row boots you again. The watcher belongs to the long-lived interactive
-planner seat, nowhere else.
+`manage` is idempotent, binds this sprint to the planner's existing engine
+archive + native harness conversation, and fails closed unless that binding
+can deliver live or resume dormant with its pinned model, effort, worktree,
+permissions, and sandbox posture. Do not kick off on `starting`, `released`,
+or `error`; fix the reported capture/auth/posture problem, then run
+`./sc session retry <planner-shortname>` for failed unread work.
 
-Re-arm it every time you finish draining your inbox. On other harnesses
-the watcher isn't available — check your inbox at every task boundary
-instead; correctness is identical, latency degrades gracefully. (Strong
-recommendation, not a gate: the planner seat runs best on claude/Fable —
-the one long-lived, low-volume, high-leverage context in the loop, and
-the only seat the watcher fully serves.)
+The binding lifecycle is the control boundary:
+
+- `starting` queues only until the native ID/control endpoint is confirmed;
+- `foreground` or `idle` uses the provider's validated active transport;
+- an active turn is `dispatching`, so new messages stay queued — never steer;
+- `dormant` resumes the same native ID only after exact owner/lease checks;
+- `error` preserves unread rows for diagnosis/retry; `released` disables wake.
+
+The dispatcher coalesces queued rows into the fixed inbox prompt. You drain
+the inbox, act on every row, and mark each handled row read; `read_at` is the
+only delivery acknowledgement. Infrastructure never marks mail read for you.
+A Claude interactive planner may keep `./sc watch inbox` armed as its
+provider-local active channel, but that watcher is not the cross-provider
+correctness model and it never belongs in a headless turn.
 
 **Kick off** — a `task` row per participant (doc id + the instruction to
 load the `sprint` skill + the slot), then boot whoever can start:
@@ -130,8 +159,8 @@ sc mem message send <dev> "SPRINT <doc-id>: you own unit <seq> — <one line>. D
 # reviewers — assigned units, the severity bar:
 sc mem message send <reviewer> "SPRINT <doc-id>: you review units <seq,seq> — Major/Medium block, Low goes to the report. Load the sprint skill (reviewer slot). Review requests come to you directly as units go green." --kind task
 
-# boot each first-in-chain dev headless, with the sprint's models:
-./sc run <dev> --harness <devs-harness> -m <devs-model>
+# boot each first-in-chain dev with the RESOLVED selector; high is invariant:
+./sc run <dev> --harness <devs-harness> -m <devs-model> --effort high
 ```
 
 `./sc run` renders the shell's boot doc and drains its inbox
@@ -151,7 +180,8 @@ reviewer's direct-handoff authority for its assigned units.
 
 ## Step 3: Monitor the event stream
 
-Your watcher wakes you on every row. On wake, drain the inbox and act:
+The managed binding delivers a turn for queued unread rows. On every delivered
+turn, drain the inbox and act:
 
 - **`result` rows** (dev/reviewer transitions — pr-open, in-review,
   review-clean, merged, ambiguity calls, stall reports): fold into the
@@ -167,7 +197,8 @@ Your watcher wakes you on every row. On wake, drain the inbox and act:
   live to report. Green on an in-review unit -> nothing (the reviewer
   gate holds); red -> re-task the unit's dev (`task` row + `./sc run`);
   merged -> boot the downstream dev whose turn it is.
-- Mark rows read as you fold them; then **re-arm the watcher**.
+- Mark rows read only after you fold and act on them. Any row left unread
+  remains queued for a later delivery.
 
 A worker self-report is never the verdict — green checks + the reviewer
 gate are the only ground truth; the `pr_event` stream is what makes a
@@ -213,13 +244,14 @@ Stalls and the moves:
   fix unit at the front of the chain, resume when green.
 - **Review stall** (unit sitting `in-review` while its reviewer is idle):
   boot the reviewer — `./sc run <reviewer> --harness <reviewers-harness>
-  -m <reviewers-model>`; its inbox holds the review request. Still stuck
+  -m <reviewers-model> --effort high`; its inbox holds the review request. Still stuck
   -> reassign the unit to another reviewer. Severity dispute (dev says
   Low, reviewer says Medium) -> rule by message immediately — a chain
   waiting on a classification argument is pure loss. Dispute about what
   the unit *should do* -> FnB.
-- **Link gone quiet** (no `result` row, no `pr_event` movement): boot it —
-  `./sc run <shortname>` drains its inbox and acts; that IS the nudge in
+- **Link gone quiet** (no `result` row, no `pr_event` movement): boot it with
+  its declared sprint route — `./sc run <shortname> --harness <role-harness>
+  -m <role-model> --effort high` drains its inbox and acts; that IS the nudge in
   an event-driven sprint. The liveness guard refusing (session already
   live) + still silent -> escalate to the FnB with the worktree state.
   The bottleneck question in Step 3 is what surfaces a dead link.
@@ -242,9 +274,10 @@ Stalls and the moves:
   interface another team reads): escalate to the FnB immediately — the one
   stall you can't unblock yourself.
 
-You boot workers; the daemon never does (it only writes rows), and the
-FnB is only pulled in for judgment. Autonomous wake stays a deliberate
-non-goal.
+You boot workers; neither the GitHub watcher nor the session dispatcher does
+that. The watcher writes planner events; the dispatcher wakes only the managed
+planner binding. The FnB is pulled in only for judgment or provider posture
+that the engine cannot resolve safely.
 
 ## Step 5: Close out
 
@@ -258,7 +291,7 @@ When every unit is `merged` and `main` is green:
 
    ```
    sc mem message send <reviewer> "SPRINT <doc-id>: conformance pass — spec doc <spec-id>, main @ <merge-sha><, sections <scope> if sharded>. Ratified judgement calls: <list — the only narrative input>. Load the sprint skill (conformance slot)." --kind task
-   ./sc run <reviewer> --harness <reviewers-harness> -m <reviewers-model>
+   ./sc run <reviewer> --harness <reviewers-harness> -m <reviewers-model> --effort high
    ```
 
    The shell judges the spec against the code on `main` — never the
@@ -282,9 +315,12 @@ When every unit is `merged` and `main` is green:
    gates resume.
 4. Verify the watches are gone: `./sc watch list` — every sprint PR's
    watch retired itself at merge/close; a survivor means an unmerged PR
-   or a mis-registered watch — resolve it, don't leave it. Then stop
-   re-arming your inbox watcher (a running one just times out — it holds
-   no authority and wakes nothing that matters).
+   or a mis-registered watch — resolve it, don't leave it. Then release the
+   planner binding with `./sc session release <planner-shortname>` so new
+   ordinary mail stays unread without autonomous delivery. If status is
+   `dispatching`, do not wait on the turn that is currently executing; have
+   the operator run `./sc session release <planner-shortname> --after-turn`
+   after this turn returns. Release preserves the archive/native conversation.
 5. Write the sprint report — one `documents` row, the durable record:
 
    ```
@@ -322,13 +358,13 @@ When every unit is `merged` and `main` is green:
 - Enforcement is advisory in v1 — merge order and authority live in skill
   text and the board, not a pre-commit check. An out-of-date board = a
   false authority grant; board accuracy is your discipline.
-- Zero scheduled polling by any shell: rows wake you, you boot workers,
-  watches retire themselves. A scheduled tracker anywhere in the sprint
-  is a defect.
+- Zero scheduled model polling by any shell: managed session delivery wakes
+  the planner, the planner boots workers, and PR watches retire themselves.
+  A scheduled model tracker anywhere in the sprint is a defect.
 - Local long work rides `./sc job` (see the `sprint` skill) — a job's
-  completion is a `result` row like any other wake-up. A hand-rolled
-  nohup/poll waiter anywhere in the sprint is a defect: one sprint's
-  hand-rolled waiter carried a self-match bug that masked a dead bench.
+  completion is a durable `result` row, not an autonomous worker boot. A
+  hand-rolled nohup/poll waiter anywhere in the sprint is a defect: one
+  sprint's hand-rolled waiter carried a self-match bug that masked a dead bench.
 - You manage; you never load code. Your context grows at coordination
   density — the workers' grows at code density and is discarded per task.
 - Monitor > interrogate: `pr_event` rows and `gh` reads cost no dev a

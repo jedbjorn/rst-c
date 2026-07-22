@@ -901,11 +901,18 @@ case "$cmd" in
   watch-daemon-down) sc_watch_daemon_down ;;
   watch-daemon-install)   sc_watch_daemon_install ;;
   watch-daemon-uninstall) sc_watch_daemon_uninstall ;;
+  # Provider-neutral planner wake control. `session-control` stays the internal,
+  # token-scoped adapter client; `session` is the public shortname-based surface.
+  session)            exec "$PY" "$S/session_cli.py" --operator "$@" ;;
+  session-control)    exec "$PY" "$S/session_cli.py" "$@" ;;
+  session-dispatcher) exec "$PY" "$S/session_dispatcher.py" "$@" ;;
   # ── persist (HOST-side): reboot-proof all applicable daemons via systemd ──
   persist)           sc_persist ;;
   # ── session-surviving local jobs: detached supervised one-shots whose
   # completion posts a result row to the starting shell's inbox ──
   job)               exec "$PY" "$S/job.py" "$@" ;;
+  # Advisory viewport screenshots for fork apps (CI + local capture + init).
+  visual-qa)         exec "$PY" "$S/visual_qa.py" "$@" ;;
   # Raw read passthrough to the engine + map DBs, resolved by absolute path so no
   # skill example ever needs a cwd-relative `sqlite3 .super-coder/…` (which pulls a
   # shell into `cd`-ing to the root — the cwd trap). Read-only is ENFORCED
@@ -931,6 +938,7 @@ case "$cmd" in
   # Token & session analytics — sweep each harness's on-disk usage data for
   # THIS repo into session_token_usage (incremental, idempotent; doc #11).
   analytics)    exec "$PY" "$S/analytics.py" "$@" ;;
+  models)       exec "$PY" "$S/models.py" "$@" ;;
   seed-skills)  exec "$PY" "$S/seed_skills.py" ;;
   # Skill catalogue write surface — grants/retirement by name, loud on a miss
   # (the raw-SQL grant's silent no-op class). Snapshot is still the persist step.
@@ -938,7 +946,7 @@ case "$cmd" in
   ports)        exec "$PY" "$S/ports.py" show ;;
   preview)      exec "$PY" "$S/preview.py" "$@" ;;
   # ── in-container primitives (no docker; also the host escape hatch) ──
-  serve)        exec "$PY" "$ENGINE/api/server.py" "$@" ;;
+  serve)        exec "$PY" "$S/service_supervisor.py" "$@" ;;
   # ── Windows VM broker (HOST-side primitive — runs where virsh + the key live) ──
   vm-broker)         exec "$PY" "$ENGINE/api/vm_broker.py" "$@" ;;
   # Bake/re-bake the clean snapshot — HOST-side, deliberately NOT a broker verb:
@@ -1081,7 +1089,11 @@ case "$cmd" in
       -p "127.0.0.1:$p:$p" \
       -p "127.0.0.1:$dp:$dp" \
       "$IMG" ./sc serve --port "$p" >/dev/null
-    echo "→ sandbox up · review GUI at http://127.0.0.1:$p"
+    if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+      printf '\033[1m→ sandbox up\033[0m · \033[1mReview GUI  \033[36mhttp://127.0.0.1:%s\033[0m\n' "$p"
+    else
+      echo "→ sandbox up · review GUI at http://127.0.0.1:$p"
+    fi
     echo "  dev server:    bind 0.0.0.0:$dp inside (\$SC_DEV_PORT) → http://127.0.0.1:$dp"
     echo "  boot a shell:  ./sc enter   (or ./sc enter-<shortname>)"
     # Bring the VM broker up alongside the sandbox when a VM is linked (self-skips
@@ -1157,11 +1169,23 @@ super-coder — forkable shell substrate
   ./sc watch list          live PR watches (--all includes retired)
   ./sc watch inbox         block until this shell has unread messages, then exit — the zero-token
                              inbox watcher; arm as a background task and its exit is your wake-up
+  ./sc session-control …  internal token-scoped binding client for provider adapters
+                             (status/manage/release/retry/bind/channel)
+  ./sc session status [shortname]
+  ./sc session manage <shortname> --sprint <ref>
+  ./sc session release <shortname> [--after-turn] · retry <shortname>
+                             inspect and manage provider-neutral planner wake
+  ./sc session-dispatcher  run the provider-neutral wake dispatcher in the foreground
+                             (`./sc serve` supervises it automatically)
   ./sc job start -- <cmd>  run a long local command (suite/bench/build) detached + supervised — it
                              survives your session; completion lands in YOUR inbox as a result row
                              (--label <slug> names it, --timeout <s> kills the wedged process group)
   ./sc job wait <id>       bounded foreground wait, ≤550s slice — exit 0 done · 2 still running
                              (drain your inbox between slices); list/status/tail/kill complete the set
+  ./sc models refresh      refresh local model routes (same action as Shells → Refresh models)
+  ./sc models resolve <h> <model> [--shell <shortname>]
+                             print one exact, locally runnable high-effort sprint call; list [harness] shows routes
+  ./sc visual-qa <mode>    viewport screenshot QA: ci boots/captures · run captures a local app · init scaffolds config
   sc sql "<query>"         read-only passthrough to the engine DB (schema/skills/flags) — absolute path, cwd-independent (no `cd` to root)
   sc map-sql "<query>"     read-only passthrough to the repo-map DB (dr_* catalogue) — absolute path, cwd-independent
   sc sql-rw / map-sql-rw   read-WRITE passthroughs — bypass the API's triggers/caps; `sc mem` is the write path.
@@ -1179,14 +1203,14 @@ super-coder — forkable shell substrate
   Sandbox (docker — the default way to run; allow-everything is safe because the
   container only sees this repo + your harness creds):
   ./sc launch              build + start the sandbox container (server + GUI), 127.0.0.1 only
-  ./sc enter               attach an interactive session: auth + pick shell + pick harness + boot
-  ./sc enter-<shortname>   attach + boot that shell directly (skip the shell picker)
+  ./sc enter [--new-session]  attach an interactive session; managed bindings resume by default
+  ./sc enter-<shortname> [--new-session]  attach that shell directly; new session requires release
                              harness: --harness <name> or HARNESS=<name> forces it; else when
                              >1 harness is on PATH you're prompted (per-launch, not persisted)
   ./sc run <shortname>     headless boot: render + exec the harness NON-interactively (claude · codex ·
-                             opencode) to drain the shell's inbox and act; -p "<prompt>" overrides the
+                             opencode · kimi) to drain the shell's inbox and act; -p "<prompt>" overrides the
                              default prompt · --harness <h> · -m <model> (else flavor_defaults);
-                             refuses a shell that already has a live session
+                             --effort defaults to high; refuses a shell that already has a live session
   ./sc down                stop + remove the sandbox container
   ./sc restart             confirm (YES) + DB backup, then down + launch — recreate fresh (--yes skips the prompt)
   ./sc build               (re)build the sandbox image
