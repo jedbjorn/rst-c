@@ -30,6 +30,7 @@ using System.Windows.Media.Imaging;
 using RST.Core.AddIns;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
+using RST.Core.Ribbon;
 using RST.Core.Scanning;
 using Serilog;
 
@@ -445,37 +446,54 @@ public class LoaderBridge
     }
 
     /// <summary>
-    /// Enumerate the vendored iconpack — every PNG under Assets/icons/pack/
-    /// next to RST.UI.dll. The Builder's icon picker grid renders these
-    /// for selection; the chosen pack name persists as
-    /// <c>slot.iconFile = "pack:&lt;name&gt;"</c> and ProfileTabBuilder
-    /// resolves it back to <c>Assets/icons/pack/32_&lt;name&gt;.png</c> at
-    /// ribbon-build time. Files are named <c>32_&lt;name&gt;.png</c> by
-    /// convention (matches the upstream pyRevit pack); the prefix and
-    /// extension are stripped here so the picker shows clean names.
+    /// Enumerate the vendored iconpack as a logical catalogue — one
+    /// entry per icon design that ships a complete seven-variant set:
+    /// <c>[{ name, colors[] }]</c> with colors in canonical palette
+    /// order (never filesystem order). Built on the shared Core contract
+    /// (<see cref="IconPack.BuildCatalogue"/>) over Assets/icons/pack/
+    /// next to RST.UI.dll. The Builder's icon picker renders one tile
+    /// per design plus its color variants; the chosen value persists as
+    /// <c>slot.iconFile = "pack:&lt;name&gt;_&lt;color&gt;"</c> and
+    /// ProfileTabBuilder resolves it back to the exact PNG at
+    /// ribbon-build time. Bare blue aliases (<c>32_&lt;name&gt;.png</c>)
+    /// are compatibility files and never appear as entries. A design
+    /// with an incomplete variant set is logged once and omitted, so
+    /// the UI never promises a missing choice; a missing pack directory
+    /// returns <c>[]</c> with a warning, preserving the no-throw
+    /// COM-boundary behavior.
     /// </summary>
-    public string ListIconpack()
+    public string ListIconpack() => ListIconpackCore(
+        Path.Combine(
+            Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
+            "Assets", "icons", "pack"));
+
+    /// <summary>
+    /// Pack-dir-injectable core of <see cref="ListIconpack"/> — internal
+    /// so RST.RuntimeTests can drive the missing/unreadable-directory
+    /// and incomplete-set branches against temp fixtures. Production
+    /// callers use the parameterless entry point.
+    /// </summary>
+    internal string ListIconpackCore(string assetsDir)
     {
         LogEntry(nameof(ListIconpack));
         try
         {
-            var assetsDir = Path.Combine(
-                Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
-                "Assets", "icons", "pack");
-            if (!Directory.Exists(assetsDir))
+            var catalogue = IconPack.BuildCatalogue(assetsDir);
+            if (!catalogue.DirectoryExists)
             {
                 Log.Warning("Bridge.list_iconpack: missing pack dir {Dir}", assetsDir);
                 return "[]";
             }
-            var names = Directory.GetFiles(assetsDir, "32_*.png")
-                .Select(p => Path.GetFileNameWithoutExtension(p))
-                .Where(n => n.StartsWith("32_", StringComparison.Ordinal))
-                .Select(n => n.Substring(3))
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                .Select(name => new { name })
+            foreach (var name in catalogue.IncompleteNames)
+            {
+                Log.Warning("Bridge.list_iconpack: {Name} omitted — incomplete color-variant set in {Dir}",
+                            name, assetsDir);
+            }
+            var dtos = catalogue.Entries
+                .Select(e => new { name = e.Name, colors = e.Colors })
                 .ToArray();
-            Log.Information("Bridge.list_iconpack OK: {Count} icons from {Dir}", names.Length, assetsDir);
-            return Serialize(names);
+            Log.Information("Bridge.list_iconpack OK: {Count} icons from {Dir}", dtos.Length, assetsDir);
+            return Serialize(dtos);
         }
         catch (Exception ex)
         {

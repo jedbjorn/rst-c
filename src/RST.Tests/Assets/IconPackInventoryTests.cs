@@ -12,17 +12,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FluentAssertions;
+using RST.Core.Ribbon;
 using Xunit;
 
 namespace RST.Tests.Assets;
 
 public class IconPackInventoryTests
 {
-    // Canonical palette (fleet decision #4 / spec #9 palette contract).
-    // Order is stable everywhere; the Core palette constant lands with the
-    // parser task and this test will switch to it then.
-    private static readonly string[] CanonicalColors =
-        { "light_grey", "dark_grey", "blue", "purple", "green", "orange", "red" };
+    // Canonical palette (fleet decision #4 / spec #9 palette contract),
+    // shared with the resolver and bridge via the Core icon-pack contract.
+    private static readonly IReadOnlyList<string> CanonicalColors = IconPack.CanonicalColors;
 
     private const int ExpectedDesignCount = 52;
 
@@ -74,7 +73,7 @@ public class IconPackInventoryTests
 
         aliases.Should().HaveCount(ExpectedDesignCount, "every design keeps a blue compatibility alias");
         aliases.Should().OnlyHaveUniqueItems("no duplicate logical names");
-        variants.Should().HaveCount(ExpectedDesignCount * CanonicalColors.Length,
+        variants.Should().HaveCount(ExpectedDesignCount * CanonicalColors.Count,
             "every design ships exactly the seven canonical variants");
         variants.Select(p => p.Name).Should().OnlyContain(n => aliases.Contains(n),
             "no variant may exist without its alias");

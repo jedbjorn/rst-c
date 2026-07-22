@@ -57,6 +57,12 @@
     <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- RuntimeTests invokes the internal IconAssets resolver directly
+         (spec #9 production-path resolver gate). -->
+    <InternalsVisibleTo Include="RST.RuntimeTests" />
+  </ItemGroup>
+
   <!--
     Bundled default branding — vendored from the pyRevit-era RST tab.
     BrandingDefaults.EnsureSeeded copies this to %AppData%\RST\branding.png
