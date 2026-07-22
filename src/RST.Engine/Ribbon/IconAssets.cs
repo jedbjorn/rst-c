@@ -8,9 +8,11 @@
 // from upstream pyRevit RST) and set BOTH Image AND LargeImage on every
 // button — same pattern startup.py uses for unmapped slots.
 //
-// Per-slot icons resolve via ResolveSlotIcon(slot.IconFile):
-//   "pack:foo" → Assets/icons/pack/32_foo.png (vendored 48-PNG iconpack)
-//   anything else → null (caller falls back to Default32)
+// Per-slot icons resolve via ResolveSlotIcon(slot.IconFile), parsed by
+// the shared Core contract (RST.Core.Ribbon.IconPack):
+//   "pack:foo"        → Assets/icons/pack/32_foo.png (blue compatibility alias)
+//   "pack:foo_green"  → Assets/icons/pack/32_foo_green.png (explicit variant)
+//   anything else     → null (caller falls back to Default32)
 // Resolved icons are cached so a profile rebuild doesn't re-decode the
 // same PNG on every button.
 
@@ -19,6 +21,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using RST.Core.Ribbon;
 using Serilog;
 
 namespace RST.Engine.Ribbon;
@@ -209,29 +212,26 @@ internal static class IconAssets
 
     /// <summary>
     /// Resolve a slot's <c>iconFile</c> field into a Revit-ready
-    /// <see cref="ImageSource"/>. Today only the <c>pack:&lt;name&gt;</c>
-    /// shorthand is supported — looks up
-    /// <c>Assets/icons/pack/32_&lt;name&gt;.png</c>. Returns null when
-    /// the field is empty/unrecognised or the file is missing; caller
-    /// falls back to <see cref="Default32"/>.
-    /// Resolved bitmaps are process-cached so a live profile rebuild
-    /// (RST-020) doesn't re-decode the same PNG for every button.
+    /// <see cref="ImageSource"/>. The value is parsed by the shared Core
+    /// contract (<see cref="IconPack.TryParseValue"/>): an explicit
+    /// <c>pack:&lt;name&gt;_&lt;color&gt;</c> resolves to
+    /// <c>Assets/icons/pack/32_&lt;name&gt;_&lt;color&gt;.png</c>, a
+    /// legacy bare <c>pack:&lt;name&gt;</c> to the blue compatibility
+    /// alias <c>Assets/icons/pack/32_&lt;name&gt;.png</c>. Returns null
+    /// when the value is unrecognised/malformed or the file is missing;
+    /// caller falls back to <see cref="Default32"/>.
+    /// Resolved bitmaps are process-cached by normalized pack key so a
+    /// live profile rebuild (RST-020) doesn't re-decode the same PNG
+    /// for every button.
     /// </summary>
     public static ImageSource? ResolveSlotIcon(string? iconFile)
     {
-        if (string.IsNullOrWhiteSpace(iconFile)) return null;
-        var trimmed = iconFile!.Trim();
-        if (!trimmed.StartsWith("pack:", StringComparison.OrdinalIgnoreCase))
-        {
-            // Per-profile asset paths (e.g. "<profile-id>/foo.png") will
-            // resolve here in a follow-up flag once the upload + zip-bundle
-            // path lands. Until then, anything that isn't pack:* falls
-            // back to the default icon.
-            return null;
-        }
-        var name = trimmed.Substring(5).Trim();
-        if (name.Length == 0) return null;
-        return _packCache.GetOrAdd(name, key => LoadBundled($"icons/pack/32_{key}.png"));
+        // Per-profile asset paths (e.g. "<profile-id>/foo.png") will
+        // resolve in a follow-up flag once the upload + zip-bundle path
+        // lands. Until then the parser rejects anything that isn't a
+        // well-formed pack value, and it falls back to the default icon.
+        if (!IconPack.TryParseValue(iconFile, out var pack)) return null;
+        return _packCache.GetOrAdd(pack.NormalizedKey, _ => LoadBundled(pack.RelativePath));
     }
 
     private static ImageSource? LoadBundled(string relativePath)
