@@ -7,10 +7,9 @@
 // API that wires a PushButtonData to an IExternalCommand class
 // (LoaderCommand), and that wiring has to happen during OnStartup.
 //
-// The Loader button + RST tab are the user's permanent entry point and
-// stay static across profile switches. RstManagedTabs.Add(RstTabName)
-// is called so the catalog scanner skips this tab when enumerating
-// commands.
+// The Builder, Loader, RSTify, and Health buttons are permanent entry
+// points and stay static across profile switches. They intentionally remain
+// visible to the catalog scanner so users can place them on profile toolbars.
 
 using System;
 using Autodesk.Revit.UI;
@@ -41,13 +40,6 @@ internal static class RibbonBuilder
 
     public static void Build(UIControlledApplication app)
     {
-        // Register the panel title so the catalog scanner skips it —
-        // otherwise our own three buttons would surface as catalog
-        // entries on every Loader open. RstManagedTabs is too coarse on
-        // a shared tab (Add-Ins hosts every addin's buttons), so we
-        // filter at the panel-title level instead.
-        RstManagedPanels.Add(RstPanelTitle);
-
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
         // Single panel, four side-by-side Large buttons:

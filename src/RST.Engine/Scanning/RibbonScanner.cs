@@ -55,9 +55,10 @@ internal static class RibbonScanner
             if (tab is null) continue;
             tabsTotal++;
             if (ModeRestrictedTabs.Contains(tab.Title)) { tabsSkippedRestricted++; continue; }
-            // RST-managed tabs (the RST tab itself + the active profile's tab,
-            // if any). RST built them this session, so reading them back
-            // would surface our own buttons as profile-buildable commands.
+            // The active profile's tab, if any. RST built those buttons this
+            // session, so reading them back would surface circular entries.
+            // The permanent RST tools panel is intentionally not excluded:
+            // users may place Builder, Loader, RSTify, or Health on a profile.
             if (RstManagedTabs.Contains(tab.Title))     { tabsSkippedRst++; continue; }
             tabsWalked++;
 
@@ -66,12 +67,6 @@ internal static class RibbonScanner
             {
                 var source = panel?.Source;
                 if (source is null) continue;
-                // RST-managed panels on shared/built-in tabs (Add-Ins).
-                // RstManagedTabs would skip the entire host tab, eating
-                // every other add-in's buttons too — so we cut at the
-                // panel level instead.
-                if (RstManagedPanels.Contains(source.Title)) continue;
-
                 foreach (var item in source.Items)
                 {
                     foreach (var cmd in EnumerateItem(item, tab.Title, source.Title))
