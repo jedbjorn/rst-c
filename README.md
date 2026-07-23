@@ -22,6 +22,8 @@ purpose: Native Revit add-in for curated ribbon profiles
 
 **Topics:** `revit` · `revit-addin` · `bim` · `ribbon` · `webview2` · `dotnet` · `wix` · `autodesk`
 
+![A loaded rst-c profile on the Revit ribbon — company branding at the leading edge of the tab, followed by five coloured panels grouping Kinship, pyRevit, architectural, DiRoots, and RST-C tools](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
+
 ## Overview
 
 rst-c (Revit Standardization Tool) is a native Revit add-in that gives admins a way to build curated ribbon toolbar profiles, and gives end users a one-click way to load them. Architects, modellers, BIM coordinators, and trainees rarely need the same ribbon — rst-c lets each role get the ribbon that fits the work, without hunting through tabs or relearning where commands live.
@@ -51,11 +53,15 @@ The port from the original pyRevit-based RST enables this: a single managed asse
 
 The Loader is the end-user face of rst-c. It opens as a WebView2 window listing every profile installed on the machine, shows what is in each one before you commit, and applies the chosen profile to the ribbon with a single click. After Apply, the rst-c tab rebuilds with the profile's panels and tools in place; nothing else on the ribbon is touched. Profile switching is live — no Revit restart required.
 
+![The Profile Selector listing installed profiles, with a preview of the selected profile's tab, its RSTify tab-hiding toggles, and the add-ins it requires](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-profile-selector.png)
+
 **[Profile Loader docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/profile-loader.md)**
 
 ### Profile Builder, Live Switching & Export
 
 The Builder is the admin counterpart to the Loader. It scans the live Revit session for every command on every tab and presents them as a searchable catalogue you can drag into panels on a new profile tab. Each tool gets a name, an icon, and a panel assignment. The Builder also handles per-profile metadata — branding, colours, cleanup targets, required add-ins — and exports the finished profile as a self-contained zip that any rst-c install can import. Editing a profile and renaming it creates a copy, enabling flavours of the same profile.
+
+![The Profile Builder — the searchable Revit command catalogue on the left, the profile's panels and their tool slots in the centre, panel properties on the right, and a live preview of the resulting tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
 
 **[Profile Builder docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/profile-builder.md)**
 
