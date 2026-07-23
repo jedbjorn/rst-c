@@ -25,6 +25,8 @@ https://github.com/user-attachments/assets/01fb84a3-a340-4a91-bba7-7936da277014
 
 ## System snapshot
 
+![The Health tool's Health tab — collapsible Hardware, Display & Network, Revit, and Operating System sections, with Scan System and Clean Junk Files actions along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-system-snapshot.png)
+
 ### What is captured
 
 Clicking **Scan System** in the Health tool captures a point-in-time snapshot of the workstation and the running Revit session:
@@ -101,6 +103,8 @@ For directory targets, rst-c walks the directory tree and deletes files and subd
 ## Activity tab
 
 The **Activity** tab turns the passive session into something you can look at: how long you have been working, how long the current model has been open, and how the current file has behaved over time. It reads entirely from data recorded locally on this machine — see [Data & privacy](#data--privacy).
+
+![The Health tool's Activity tab — a row of stat cards showing session timer, session total, longest sync, longest open time, warning count, and file size, above per-file session-time and opening-time charts](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-activity-tab.png)
 
 ### Current session
 

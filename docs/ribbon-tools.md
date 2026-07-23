@@ -22,6 +22,10 @@ RSTify is a tab-hiding mode. When enabled, rst-c hides every Revit and add-in ta
 
 The intent is to remove the route back into the unfiltered Revit ribbon mid-session. A curated ribbon is only effective if users work from it — RSTify removes the distraction of the full tab bar while keeping the escape hatch (turning RSTify off) obvious and one click away.
 
+The admin sets which tabs a profile hides in the Builder's RST Presets dialog:
+
+![The RST Presets dialog in the Builder — a per-tab toggle list under "RSTify: hide these tabs", with Structure, Steel, Precast, Systems, and Analyze switched on and Architecture, Insert, and Massing & Site left off](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
+
 ### Turning RSTify on and off
 
 The RSTify button is on the RST panel of the Add-Ins tab. The button icon shows the current state — tabs-hidden (on) or tabs-visible (off). Clicking it toggles the state and the icon updates immediately.
