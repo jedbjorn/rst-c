@@ -18,6 +18,8 @@ https://github.com/user-attachments/assets/7ac96408-d531-4930-a1ad-446b2994739c
 
 ## Using it
 
+![The Profile Selector window — the installed profiles list on the left, and for the selected profile a preview of its ribbon tab, the RSTify tab-hiding toggles, and the required add-ins with their load status](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-profile-selector.png)
+
 ### Opening the Loader
 
 The Loader button lives on the Add-Ins tab under the RST panel. Click it to open the profile picker.

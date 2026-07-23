@@ -18,6 +18,8 @@ Live profile switching (no Revit restart on apply) is part of the same system �
 
 ## Building a profile
 
+![The Profile Builder window — the searchable command catalogue on the left filtered to "color", the profile's panels and their tool slots in the centre, the selected panel's properties on the right, and a live preview of the resulting ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
+
 ### Setting the profile name and tab title
 
 Every profile has a **profile name** (shown in the Loader's picker) and a **tab title** (the ribbon tab label). These are set at the top of the Builder. If you rename a profile while editing an existing one, rst-c saves it as a new copy — the original is unchanged. This is a deliberate "fork" mechanism for creating variants of an existing profile.
@@ -32,6 +34,8 @@ Drag any command from the catalogue into a panel slot on the right. Each tool in
 - **Icon** — chosen from a vendored 48-icon pack, or auto-derived from the source command's own icon.
 - **Panel assignment** — which panel on the profile tab the tool appears in.
 
+![The Builder's icon picker — the vendored icon pack laid out in a grid, with the colour-variant strip open below the selected "smiley" icon and its green variant highlighted](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
+
 ### Naming and colouring panels
 
 Panels are named individually. Each panel can also carry a hex colour and an opacity between 10% and 100% — see [Appearance](appearance.md) for how colours render on the ribbon.
@@ -42,6 +46,8 @@ The Builder lets admins set default behaviours that the Loader uses when a user 
 
 - **RSTify** — whether tab-hiding is on by default and which tabs to hide. Users can override this in the Loader. See [Ribbon Tools](ribbon-tools.md).
 - **Disable non-required add-ins** — whether add-ins not listed as required are disabled on Apply.
+
+![The RST Presets dialog in the Builder — a per-tab toggle list under "RSTify: hide these tabs", and a "Disable Unused Add-ins" toggle setting the Loader's default on first load](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
 
 These defaults are stored in the profile's `presets` field. The user's own override (stored in `active_profile.json`) takes precedence once they have loaded the profile at least once.
 

@@ -22,6 +22,8 @@ Every profile tab can display an 85×85 pixel square branding image with rounded
 
 The branding panel sits at the leading edge of the tab so the curated ribbon is visibly associated with the organisation that built it. This is intentional — a shared ribbon that carries no identity makes it harder for users to know they are working from a curated environment.
 
+![A profile tab on the Revit ribbon showing branding and panel colours together — the RST logo at the leading edge, followed by five panels each tinted a different colour](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
+
 ### Setting a logo
 
 The logo is set in the Builder as a machine-wide default. Once set, it applies to all profiles created or edited on that machine from that point forward. Logos are stored at `%AppData%\RST\branding.png`. On first launch with no logo set, rst-c seeds the branding panel with the bundled RST default logo.
