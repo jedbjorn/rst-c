@@ -1,6 +1,6 @@
 // IconPackInventoryTests.cs — build-time invariant over the vendored icon pack.
 //
-// Spec #9 (Colored Icon Pack Picker) asset contract: 52 logical icon
+// Spec #9 (Colored Icon Pack Picker) asset contract: 55 logical icon
 // designs, each with exactly seven canonical color variants
 // (32_<name>_<color>.png) plus a blue compatibility alias (32_<name>.png)
 // byte-equivalent to its blue variant. The bridge enumerates this
@@ -23,11 +23,13 @@ public class IconPackInventoryTests
     // shared with the resolver and bridge via the Core icon-pack contract.
     private static readonly IReadOnlyList<string> CanonicalColors = IconPack.CanonicalColors;
 
-    private const int ExpectedDesignCount = 52;
+    private const int ExpectedDesignCount = 55;
 
-    // The four designs spec #9 adds to the original 48.
+    // The four designs spec #9 adds to the original 48, plus the round-2
+    // additions (paintbrush / hammer / arrow_45).
     private static readonly string[] NewDesigns =
-        { "box_cube", "box_slot", "edit_line", "house_chimney" };
+        { "box_cube", "box_slot", "edit_line", "house_chimney",
+          "paintbrush", "hammer", "arrow_45" };
 
     private static string PackDir()
     {
@@ -100,14 +102,14 @@ public class IconPackInventoryTests
     }
 
     [Fact]
-    public void The_four_new_designs_are_vendored()
+    public void The_added_designs_are_vendored()
     {
         var aliases = Directory.GetFiles(PackDir(), "32_*.png")
             .Select(Path.GetFileName)
             .Select(f => Parse(f!))
             .Where(p => p.Color is null)
             .Select(p => p.Name);
-        aliases.Should().Contain(NewDesigns, "spec #9 extends the original 48 with these four");
+        aliases.Should().Contain(NewDesigns, "spec #9 and round 2 extend the original 48 with these");
     }
 
     [Fact]
