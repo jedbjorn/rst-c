@@ -31,7 +31,7 @@ When the Builder opens, rst-c scans every tab and panel in the live Revit sessio
 Drag any command from the catalogue into a panel slot on the right. Each tool in a panel gets:
 
 - **Name** — displayed on the ribbon button; defaults to the source command's name, editable.
-- **Icon** — chosen from a vendored 48-icon pack, or auto-derived from the source command's own icon.
+- **Icon** — chosen from a vendored 55-icon pack (each in seven colours), or auto-derived from the source command's own icon.
 - **Panel assignment** — which panel on the profile tab the tool appears in.
 
 ![The Builder's icon picker — the vendored icon pack laid out in a grid, with the colour-variant strip open below the selected "smiley" icon and its green variant highlighted](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
