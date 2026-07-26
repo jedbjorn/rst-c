@@ -62,7 +62,7 @@ public sealed class LoaderBridgeIconpackTests : IDisposable
         var json = NewBridge().ListIconpack();
         var entries = Entries(json).ToArray();
 
-        entries.Should().HaveCount(52, "the vendored pack ships 52 complete logical designs");
+        entries.Should().HaveCount(55, "the vendored pack ships 55 complete logical designs");
         entries.Select(e => e.GetProperty("name").GetString())
             .Should().BeInAscendingOrder(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
