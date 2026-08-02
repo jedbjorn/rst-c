@@ -274,12 +274,11 @@ _sc_find_manifests() {  # $1 = filename glob, e.g. 'requirements*.txt'
 # pruning; pytest still owns actual recursive collection from the repo root.
 _sc_has_python_tests() {
   _sc_find_manifests 'test_*.py' | (
-    found=""
     while IFS= read -r test_file; do
       relative_test=${test_file#"$here"/}
-      case "$relative_test" in tests/*|*/tests/*) found=1 ;; esac
+      case "$relative_test" in tests/*|*/tests/*) exit 0 ;; esac
     done
-    [ -n "$found" ]
+    exit 1
   )
 }
 
@@ -471,15 +470,26 @@ sc_test() {
   venv="$here/.venv"
   python_tests=""
   _sc_has_python_tests && python_tests=1
-  # Self-heal: a fork with python tests but no .venv/bin/pytest is an unprovisioned
-  # worktree (the .venv is only populated by the first `./sc deps`), NOT a fork that
-  # opted out of pytest. Provision the dev kit + fork deps rather than silently
-  # downgrading to stdlib unittest — under which a pytest-based suite fails with
-  # ModuleNotFoundError (pytest / the fork's own libs) that reads as a real test
-  # failure. We gate on the pytest binary, not sc_deps' exit code, so a partial
-  # provision (e.g. npm leg fails) still runs pytest if it landed.
-  if [ ! -x "$venv/bin/pytest" ] && [ -n "$python_tests" ]; then
-    echo "→ test: $venv/bin/pytest missing — provisioning first (./sc deps)"
+  # Self-heal an unprovisioned OR unrunnable host venv before selecting a test
+  # runner. A dangling interpreter leaves the pytest shim executable, so -x is
+  # not evidence that the venv can run. On the host the repo-local .venv is ours
+  # to rebuild; in the sandbox a host-managed venv stays untouched and sc_deps'
+  # existing ownership check chooses the safe PATH fallback.
+  provision_reason=""
+  if [ -n "$python_tests" ]; then
+    if [ ! -x "$venv/bin/pytest" ]; then
+      provision_reason=missing
+    elif ! _sc_venv_runnable; then
+      provision_reason=unrunnable
+    fi
+  fi
+  if [ -n "$provision_reason" ]; then
+    if [ "$provision_reason" = unrunnable ] && [ -z "${SC_SANDBOX:-}" ]; then
+      echo "→ test: $venv is not runnable — rebuilding before provisioning"
+      ( cd "$here" && rm -rf -- .venv )
+    else
+      echo "→ test: $venv/bin/pytest unavailable — provisioning first (./sc deps)"
+    fi
     sc_deps || echo "→ test: provisioning incomplete — continuing" >&2
   fi
   # Which pytest can we actually RUN? The .venv copy wins (fork pins + config)
@@ -1154,6 +1164,7 @@ case "$cmd" in
                 exec "$PY" "$S/rebuild.py" "$@" ;;
   migrate)      sc_help_form "$@" || sc_refuse_linked migrate "$DB"
                 exec "$PY" "$S/migrate.py" "$DB" "$@" ;;
+  migration)    exec "$PY" "$CALLER_ENGINE/scripts/migration.py" "$@" ;;
   # snapshot/render name the artifact they would overwrite as well as the DB
   # they read; resolving that path costs a subprocess, so only the refusing
   # branch pays for it.
@@ -1572,6 +1583,8 @@ super-coder — forkable shell substrate
                              --dry-run previews; --yes skips confirmation, never safety gates
   ./sc rebuild             build the .db from schema + migrations + snapshot
   ./sc migrate             apply pending migrations to an existing .db
+  ./sc migration new <slug>
+                           allocate the next free migration number, write the standard skeleton, and update the source removal-test allowlist
   ./sc snapshot            dump per-instance tables to gitignored .sc-state/local/
                              live-state commands (rebuild · migrate · verify · snapshot · render · clean-db) act on the SHARED live
                              instance at the main checkout, so they REFUSE from a linked worktree rather than substitute it, naming
