@@ -85,3 +85,16 @@ sign/
 /.sc-state/map.db
 /.sc-state/map.db-wal
 /.sc-state/map.db-shm
+# super-coder — engine ignore rules added by `./sc update`
+/.agents/skills/
+/.opencode/skills/
+/.sc-state/content.sql
+/.sc-state/map_content.sql
+/.sc-state/map.config.json
+/.sc-state/skills_retired.json
+/.sc-state/local/
+/roadmap_sc.md
+/docs_sc/
+/specs_sc/
+/skills_sc/
+/.sc-state/db_backups/
