@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RST.Tray — RST.Tray.exe, the small per-user tray app (feature #17, spec #20 §1; F17 WU1). One process per
+    signed-in user, started at sign-in from the HKMU Run value RST.msi writes. It owns the notification-area
+    icon, one window in the family look (RST.UI's kit), its settings and log. No Revit dependency.
+
+    Built ONCE, not per Revit year: the TFM is fixed at net8.0-windows with RollForward=Major (a machine with
+    only Revit 2027 has .NET 10 and no .NET 8; Major rolls forward to it). It references RST.UI, whose TFM
+    follows the Revit grid, so it must be built with an R25 configuration ("Debug R25" / "Release R25", where
+    RST.UI is net8.0-windows too). RST-C.sln builds it only in the R25 configurations, and
+    `build/stage.sh tray` publishes it with "Release R25" into build/Tray/. Building it with an R27
+    configuration fails restore (NU1201: RST.UI is net10.0-windows there).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RollForward>Major</RollForward>
+    <RootNamespace>RST.Tray</RootNamespace>
+    <AssemblyName>RST.Tray</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PlatformTarget>x64</PlatformTarget>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>..\..\installer\branding\rst.ico</ApplicationIcon>
+    <!-- Program.Main is the entry point; there is no App.xaml. -->
+    <StartupObject>RST.Tray.Program</StartupObject>
+    <!-- The tray is not localized (spec #16's English-only rule): no satellite folders. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
+    <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The notification-area icon and the window icon: RST.msi's own icon. -->
+    <EmbeddedResource Include="..\..\installer\branding\rst.ico" LogicalName="RST.Tray.rst.ico" Link="Resources\rst.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- RuntimeTests renders the tray window and reads its internal seams. -->
+    <InternalsVisibleTo Include="RST.RuntimeTests" />
+  </ItemGroup>
+
+  <Import Project="..\..\build\sign.targets" />
+
+</Project>
