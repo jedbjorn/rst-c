@@ -179,8 +179,11 @@ public class TrayUpdatesScreenshotTests
     private static string Name(string page, string scenario, UiTheme theme) =>
         $"tray-{page}-{scenario}-{theme.ToString().ToLowerInvariant()}";
 
+    /// <summary>The rendered text of every visible TextBlock, its Runs and Hyperlinks included (TextBlock.Text omits bound Runs).</summary>
     private static List<string> Texts(DependencyObject root) =>
-        WindowCapture.Descendants<TextBlock>(root).Where(t => t.IsVisible).Select(t => t.Text).ToList();
+        WindowCapture.Descendants<TextBlock>(root).Where(t => t.IsVisible)
+            .Select(t => new System.Windows.Documents.TextRange(t.ContentStart, t.ContentEnd).Text)
+            .ToList();
 
     private static FrameworkElement ById(DependencyObject root, string id) =>
         WindowCapture.Descendants<FrameworkElement>(root).Single(e => System.Windows.Automation.AutomationProperties.GetAutomationId(e) == id);
@@ -226,7 +229,7 @@ public class TrayUpdatesScreenshotTests
                 default:
                     Assert.True(failed.IsVisible);
                     Assert.Equal("Last checked 28 Oct 2026 at 16:05", window.LastChecked.Text);
-                    Assert.Contains("Couldn't check", texts);
+                    Assert.Contains(texts, t => t.Contains("Couldn't check"));
                     break;
             }
             Assert.Equal(scenario == "failed", failed.IsVisible);
@@ -554,7 +557,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         using var h = Make(handler);
         h.Advance(TimeSpan.FromHours(48));
         Assert.Equal(6, handler.Count);
-        var lines = h.Log.Where(l => l.Contains("couldn't check")).ToList();
+        var lines = h.Log.Where(l => l.StartsWith("update check: couldn't check", StringComparison.Ordinal)).ToList();
         Assert.Equal(3, lines.Count); // one per product, not one per try
         Assert.True(h.Updates.Current.LastCheckFailed);
         Assert.Empty(h.Announced);
