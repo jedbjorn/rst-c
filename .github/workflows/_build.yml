@@ -18,6 +18,8 @@ name: _build (reusable)
 #   • probe        — builds the RST-Probe test add-in (feature #16 VM checks)
 #                    and uploads it as the RST-Probe artifact. Never shipped.
 #   • stage        — matrix R25/R26/R27, runs build/stage.sh per major,
+#                    checks it ships no third-party DLL (decision #33,
+#                    build/check-shipped-dlls.sh), and
 #                    uploads the bundle as a per-major artifact. Every
 #                    major is a hard gate: an R27 failure fails the
 #                    workflow and blocks a release (feature #11, D7: no
@@ -210,6 +212,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: build/stage.sh ${{ matrix.major }} Release
+      # Decision #33: Revit's shared load context gets no third-party DLL
+      # from RST. Fails on any DLL that is not RST.* and not named in
+      # build/third-party-allowlist.txt (empty).
+      - name: No third-party DLLs (decision #33)
+        run: build/check-shipped-dlls.sh build/${{ matrix.major }}
       - uses: actions/upload-artifact@v4
         with:
           name: stage-${{ matrix.major }}
@@ -231,6 +238,10 @@ jobs:
       - run: build/stage.sh tray Release
         env:
           RST_VERSION: ${{ inputs.product_version }}
+      # The tray is not in Revit, but logs through the same in-house logger
+      # and ships no third-party DLL either (decision #33).
+      - name: No third-party DLLs (decision #33)
+        run: build/check-shipped-dlls.sh build/Tray
       - uses: actions/upload-artifact@v4
         with:
           name: stage-Tray

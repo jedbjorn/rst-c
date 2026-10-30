@@ -13,7 +13,7 @@ using RST.Core.Profiles;
 using RST.Core.Ribbon;
 using RST.Core.Scanning;
 using RST.UI.Loader;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Builder;
 

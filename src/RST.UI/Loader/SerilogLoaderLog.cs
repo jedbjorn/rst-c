@@ -1,12 +1,12 @@
-// rst-c's own (not vendored): the Loader services' log lines go to Serilog (spec #16, WU3).
+// rst-c's own (not vendored): the Loader services' log lines go to RST.Core.Logging.Log (spec #16, WU3; the name predates decision #33).
 
 using System.IO;
 using RST.Core.Loader;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Loader;
 
-/// <summary>Writes the RST.Core Loader services' lines to the Serilog log (rst_*.log).</summary>
+/// <summary>Writes the RST.Core Loader services' lines to the session log (rst_*.log).</summary>
 public sealed class SerilogLoaderLog : ILoaderLog
 {
     public static readonly SerilogLoaderLog Instance = new();

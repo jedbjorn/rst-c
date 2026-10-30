@@ -55,7 +55,7 @@ description: Total, used and free space on C:, type, bus type
 :::class3
 value: Display
 label: Monitors
-description: Monitor count, primary resolution
+description: Monitors on the desktop, primary resolution
 :::class4
 value: Network
 label: Connection

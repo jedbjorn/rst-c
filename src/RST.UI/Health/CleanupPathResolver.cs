@@ -21,7 +21,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Health;
 

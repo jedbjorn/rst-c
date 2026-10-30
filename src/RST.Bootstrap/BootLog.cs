@@ -1,7 +1,7 @@
-// BootLog.cs — zero-dependency text log for the pre-Serilog phase.
+// BootLog.cs — zero-dependency text log for the pre-engine phase.
 //
-// The engine sets up Serilog in RstApplication.ConfigureLogging, but
-// the bootstrap runs *before* the engine loads. Pulling Serilog into
+// The engine sets up its logger (RST.Core.Logging) in RstApplication.ConfigureLogging, but
+// the bootstrap runs *before* the engine loads. Pulling RST.Core into
 // the bootstrap would force its DLLs into the addins-dir payload — the
 // whole point of RST-033 is to keep that dir lean. So the bootstrap
 // uses File.AppendAllText to a sibling log next to the engine's

@@ -3,9 +3,9 @@
   RST.msi — per-user installer for RST, Revit 2025 / 2026 / 2027.
 
   Lays the bootstrap thunk (RST.addin + RST.Bootstrap.dll) into the
-  per-user Revit Add-Ins directory and the engine + transitives
-  (Serilog, System.Management runtime variant, Assets,
-  runtimes/native) into %AppData%\RST\R<major>\app\. The bootstrap
+  per-user Revit Add-Ins directory and the engine with RST.Core, RST.UI
+  and Assets into %AppData%\RST\R<major>\app\ (no third-party DLL,
+  decision #33: build/check-shipped-dlls.sh). The bootstrap
   derives R<major> from application.ControlledApplication.VersionNumber
   at OnStartup (RST-037) and loads the matching engine.
 
@@ -18,12 +18,8 @@
       RST.Engine.dll
       RST.UI.dll
       RST.Core.dll
-      Serilog*.dll
       RST.Engine.deps.json
       Assets\**\*
-      runtimes\win\lib\net8.0\System.Management.dll  (RST-038: stub at
-                                                      bin root removed at
-                                                      stage time)
       *.pdb
 
   Plus, once for every Revit year, the RST tray (feature #17, Tray.wxs):
