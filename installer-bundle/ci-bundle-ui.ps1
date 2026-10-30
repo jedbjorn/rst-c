@@ -72,6 +72,11 @@ function Wait-Control($Window, [Windows.Automation.ControlType]$Type, [string]$N
     if ($e) { return $e }
     Start-Sleep -Seconds 1
   }
+  Write-Host "---- all descendants of '$($Window.Current.Name)' (type | name | offscreen | enabled)"
+  foreach ($e in $Window.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)) {
+    Write-Host "  $($e.Current.ControlType.ProgrammaticName) | $($e.Current.Name) | $($e.Current.IsOffscreen) | $($e.Current.IsEnabled)"
+  }
+  try { Save-Shot $Window 'failure' } catch { Write-Host "screenshot failed: $_" }
   throw "no $($Type.ProgrammaticName) '$NameLike' after $TimeoutSec s"
 }
 function Get-Toggle($e) { $e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState }
