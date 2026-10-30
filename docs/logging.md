@@ -29,7 +29,7 @@ The directory is created on first launch. Each Revit launch writes two files tha
 
 When Revit starts, rst-c keeps the 10 most recent `rst_*.log` files (about five sessions) and deletes older ones, so the directory does not grow without bound.
 
-The RST tray app writes its own `tray_<yyyyMMdd>.log` files to the same folder and keeps its newest 10. The two clean-ups never delete each other's files. See [RST tray](tray.md).
+The RST tray app writes its own `tray_<yyyyMMdd>.log` files to the same folder and keeps its newest 10. Neither automatic clean-up deletes the other's files. Health's **RST Logs** clean-up, which you start yourself, clears both, except a log file that is open at the time. See [RST tray](tray.md).
 
 The active log is the first place to look when a profile does not apply as expected, when the Loader shows an error, or when Revit exhibits unexpected behaviour after rst-c loads.
 

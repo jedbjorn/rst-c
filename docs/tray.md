@@ -34,7 +34,7 @@ Click the icon to open the window. Right-click it for the menu: **Open RST**, **
 
 Each Windows user has their own tray, settings and log. Only one tray runs per user and sign-in session: starting `RST.Tray.exe` again brings the running tray's window to the front.
 
-The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own ten files, and neither one's clean-up deletes the other's.
+The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own ten files, and neither one's automatic clean-up deletes the other's. Health's **RST Logs** clean-up, which you start yourself, clears both, except the log the tray has open.
 
 ## Quitting it
 
@@ -65,3 +65,9 @@ The tray reads both keys when it starts, and a `0` in either one wins. Any other
 ## Uninstalling
 
 Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app, the `RST` Run value and the download cache. The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
+
+A repair or an upgrade also closes a running tray while its files are replaced. If Windows shows a **Files in Use** dialog, the default choice closes the tray, and Windows starts it again, hidden in the notification area, when the install finishes. An installer only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone.
+
+## For developers
+
+The installer's `util:CloseApplication` finds `RST.Tray.exe` by file name in every session. The updater copy that later versions run from `%LocalAppData%\RST\Tray\updater\` therefore has to use a different exe name, for example `RST.Tray.Updater.exe`. Otherwise the install it starts asks it to close part-way through.
