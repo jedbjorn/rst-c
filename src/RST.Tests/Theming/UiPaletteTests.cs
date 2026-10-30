@@ -1,5 +1,5 @@
 // Adapted from splash-it tests/SplashIt.Core.Tests/Theming/UiPaletteTests.cs (splash-it commit ba86a71; originally gantt-it tests/GanttIt.Core.Tests/Theming/UiPaletteTests.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); the XAML scan reads src/RST.UI and finds the repo by RST-C.sln; splash-it's SurfaceTokens_MatchTheTabTextBackdrops is left out (it needs SplashItDefaults); explicit Xunit usings; a test that every new rst-c style key has its contrast requirement.
+// Changes: namespaces (SplashIt.* to RST.*); the XAML scan reads src/RST.UI and finds the repo by RST-C.sln; splash-it's SurfaceTokens_MatchTheTabTextBackdrops is left out (it needs SplashItDefaults); explicit Xunit usings; a test that every new rst-c style key has its contrast requirement, and one for the Health window's keys.
 
 using System.Text.RegularExpressions;
 using RST.Core.Theming;
@@ -108,6 +108,16 @@ public class UiPaletteTests(ITestOutputHelper output)
         foreach (var key in added.Except(decorative))
             Assert.Contains(key, checkedKeys);
         Assert.All(UiPalette.RstRequirements, r => Assert.Contains(r, UiPalette.Requirements));
+    }
+
+    [Fact]
+    public void HealthKeys_HaveAContrastRequirement()
+    {
+        // The Health window's additions (spec #16, WU2): the soft-warning severity color is
+        // checked as text on every surface it is drawn on, and the requirements are in force.
+        var checkedKeys = UiPalette.HealthRequirements.Select(r => r.Foreground).ToHashSet(StringComparer.Ordinal);
+        Assert.Contains(UiPalette.CautionText, checkedKeys);
+        Assert.All(UiPalette.HealthRequirements, r => Assert.Contains(r, UiPalette.Requirements));
     }
 
     [Theory]
