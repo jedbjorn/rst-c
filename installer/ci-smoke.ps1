@@ -28,9 +28,8 @@
       (a) RST.Tray.exe installed and the HKCU Run value RST = "<exe>" --startup
       (t) --startup starts hidden; a second launch exits 0 and the first shows
           its window; a second --startup exits 0; one RST.Tray process
-      (d) the repair closes that running tray (Restart Manager, clean exit 0);
-          whether Restart Manager starts it again (RegisterApplicationRestart)
-          is recorded
+      (d) the repair closes that running tray (Restart Manager, clean exit 0)
+          and Restart Manager starts it again, hidden, when the install ends
       (b) the same-version upgrade with a tray running: closed cleanly, the
           upgrade completes, the cache (RemoveFolderEx) survives the old
           version's removal
@@ -41,9 +40,10 @@
           (user data) stay
       (u) -OlderMsi (this commit built with a lower ProductVersion) installed,
           a tray running, then this RST.msi over it: a real MajorUpgrade; the
-          tray is closed cleanly, one product at the new version, the tray and
-          Run value installed, the cache survives; then uninstall removes the
-          cache, the Run value and the tray
+          tray is closed cleanly and restarted, one product at the new version,
+          the cache survives; then uninstall with a tray running and Restart
+          Manager on (the Settings > Apps path) leaves no tray running and
+          removes the cache, the Run value and the files
       The package checks also cover the tray's components (unconditional, one
       per staged build/Tray file), the Run value, CloseApplication and
       RemoveFolderEx rows.
@@ -367,30 +367,36 @@ function Test-TraySingleInstance([string]$Label) {
 # Installer's Restart Manager, which reaches the tray first when it is on).
 # Without -NoRestart a tray Restart Manager started again afterwards (RegisterApplicationRestart) is allowed and
 # recorded; with it (Restart Manager off, or the files gone) nothing may be running.
+# -NoRestart: after a 10 s grace (Restart Manager's restart runs as msiexec exits), nothing may be running.
+# Otherwise the tray must come back (RegisterApplicationRestart), hidden; the restarted process is returned.
 function Assert-TrayClosed($Proc, [string]$Label, [string]$How, [switch]$NoRestart) {
   $exited = $Proc.WaitForExit(30000)
   if (-not $exited) { Show-TrayLog }
   Assert $exited "[$Label] the running tray (pid $($Proc.Id)) was closed"
   Assert ($Proc.ExitCode -eq 0) "[$Label] it exited cleanly (exit $($Proc.ExitCode))"
+  $again = $null
   if ($NoRestart) {
+    $late = Wait-TrayRestart $Proc.Id 10
+    if ($late) { Write-Host "  unexpected tray pid $($late.Id): $((Get-CimInstance Win32_Process -Filter "ProcessId=$($late.Id)").CommandLine)" }
+    Assert ($null -eq $late) "[$Label] no tray started again within 10 s"
     Assert (-not (Test-TrayMutex)) "[$Label] its mutex is released"
     Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 0) "[$Label] no RST.Tray process running"
   } else {
     $again = Wait-TrayRestart $Proc.Id 20
+    Assert ($null -ne $again) "[$Label] Restart Manager started the tray again after the install (RegisterApplicationRestart)"
     if ($again) {
       $w = Get-CimInstance Win32_Process -Filter "ProcessId=$($again.Id)"
       $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($w.ParentProcessId)" -ErrorAction SilentlyContinue
       $when = if ($script:LastMsiexecEnd) { "{0:N1} s after msiexec exited" -f ($again.StartTime - $script:LastMsiexecEnd).TotalSeconds } else { 'n/a' }
       Write-Host "OBSERVE: [$Label] Restart Manager restarted the tray: pid $($again.Id), started $($again.StartTime.ToString('HH:mm:ss.fff')) ($when), parent $($w.ParentProcessId) $(if ($parent) { $parent.Name }), args '$($w.CommandLine)'"
       Assert ($w.CommandLine -match '--startup') "[$Label] the restarted tray runs hidden (--startup)"
-    } else {
-      Write-Host "OBSERVE: [$Label] Restart Manager restart of the tray: none within 20 s"
     }
   }
   $exit = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' | ForEach-Object { Get-Content $_.FullName } |
             Where-Object { $_.Contains("[$($Proc.Id)]") -and $_.Contains('RST tray exited') })
   Write-Host "[$Label] tray log: $($exit -join ' / ')"
   Assert (@($exit | Where-Object { $_ -match $How }).Count -eq 1) "[$Label] the tray logged its exit by $How"
+  return $again
 }
 
 # ---- Package checks (every mode)
@@ -511,7 +517,7 @@ if ($Mode -eq 'Install') {
   Assert-OneProduct $newProductCode $newVersion '(d) repair'
   Assert-Years @('2025', '2026', '2027') '(d) repair added 2025'
   # The repair replaced the tray's files: Windows Installer (Restart Manager) closed the tray from (t) first.
-  Assert-TrayClosed $trayA '(d) repair' 'session ending|WM_CLOSE'
+  $null = Assert-TrayClosed $trayA '(d) repair' 'session ending|WM_CLOSE'
   Assert-TrayInstalled '(d) repair'
 
   Set-RevitStubs @('2025', '2027')
@@ -544,11 +550,16 @@ if ($Mode -eq 'Install') {
     Assert ($codeB -eq 0) "(b) the upgrade with a tray running needs no reboot (exit $codeB)"
     Assert-OneProduct $pc2 $v2 '(b) same-version install'
     Assert-Years @('2025', '2026', '2027') '(b) all three detected'
-    Assert-TrayClosed $trayB '(b) upgrade' 'session ending|WM_CLOSE'
+    $trayB2 = Assert-TrayClosed $trayB '(b) upgrade' 'session ending|WM_CLOSE'
     Assert (Test-Path $cacheB) '(b) the tray cache survives the upgrade (RemoveFolderEx skips UPGRADINGPRODUCTCODE)'
 
+    # A no-op reinstall of the installed product (delta review N1): CloseApplication's condition
+    # (NOT Installed OR REINSTALL OR REMOVE OR UPGRADINGPRODUCTCODE) is false, nothing is replaced, so the
+    # restarted tray is left running.
     Invoke-Msiexec '/i' $SameVersionMsi (Join-Path $LogDir 'rst-install-repeat.log') | Out-Null
     Assert-OneProduct $pc2 $v2 '(b) repeated install'
+    Start-Sleep -Seconds 2
+    Assert (-not $trayB2.HasExited) "[(b) repeated install] the running tray (pid $($trayB2.Id)) is left alone by a no-op reinstall"
     $uninstallMsi = $SameVersionMsi
   }
 
@@ -575,7 +586,7 @@ if ($Mode -eq 'Install') {
 
   # AC1: uninstall closed the running tray, removed the Run value, its files and its cache; only user data
   # under %AppData%\RST (settings, log) remains.
-  Assert-TrayClosed $trayE '(e) uninstall' 'WM_CLOSE' -NoRestart
+  $null = Assert-TrayClosed $trayE '(e) uninstall' 'WM_CLOSE' -NoRestart
   Assert ($null -eq (Get-RunValue)) '(e) HKCU Run value RST removed'
   Assert (-not (Test-Path $TrayDir)) "(e) $TrayDir removed"
   Assert (-not (Test-Path (Split-Path $TrayDir))) "(e) $(Split-Path $TrayDir) removed"
@@ -611,13 +622,21 @@ if ($Mode -eq 'Install') {
     Assert-OneProduct $pcNew $newVersion '(u) upgraded'
     Assert ((Select-String -Path $logU -Pattern $pcOld -SimpleMatch -Quiet)) "(u) log names the removed older product $pcOld"
     Assert-Years @('2025', '2026', '2027') '(u) upgraded'
-    Assert-TrayClosed $trayU '(u) upgrade' 'session ending|WM_CLOSE'
+    $null = Assert-TrayClosed $trayU '(u) upgrade' 'session ending|WM_CLOSE'
     Assert-TrayInstalled '(u) upgraded'
     Assert (Test-Path $cacheU) '(u) the tray cache survives the MajorUpgrade'
 
+    # Uninstall the normal way (Settings > Apps: Restart Manager on) with a tray running (delta review B1):
+    # Restart Manager closes it, and its restart at the end finds no exe, so nothing is left running.
     Stop-Trays
     Set-RevitStubs @()
-    Invoke-Msiexec '/x' $uninstallMsi (Join-Path $LogDir 'rst-uninstall-after-upgrade.log') | Out-Null
+    $trayX = Start-Tray @('--startup') '(u) uninstall'
+    $logX = Join-Path $LogDir 'rst-uninstall-after-upgrade.log'
+    $codeX = Invoke-Msiexec '/x' $uninstallMsi $logX
+    Show-LogLines $logX @('RESTART MANAGER', 'RST.Tray.exe')
+    Assert ($codeX -eq 0) "(u) uninstall with a tray running and Restart Manager on needs no reboot (exit $codeX)"
+    $null = Assert-TrayClosed $trayX '(u) uninstall' 'session ending|WM_CLOSE' -NoRestart
+    Assert (-not (Test-Path $TrayExe)) "(u) $TrayExe removed"
     Assert ((Get-Related $UnifiedCode).Count -eq 0) '(u) no RST product after uninstall'
     Assert (-not (Test-Path $TrayCache)) '(u) uninstall removes the tray cache'
     Assert ($null -eq (Get-RunValue)) '(u) HKCU Run value RST removed'
