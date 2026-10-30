@@ -1,0 +1,11 @@
+[
+  { "id": "ID_OBJECTS_WALL", "displayName": "Wall", "origin": "Native", "sourceTab": "Architecture", "sourcePanel": "Build" },
+  { "id": "ID_OBJECTS_DOOR", "displayName": "Door", "origin": "Native", "sourceTab": "Architecture", "sourcePanel": "Build" },
+  { "id": "ID_OBJECTS_LEVEL", "displayName": "Level", "origin": "Native", "sourceTab": "Architecture", "sourcePanel": "Datum" },
+  { "id": "ID_OBJECTS_BEAM", "displayName": "Beam", "origin": "Native", "sourceTab": "Structure", "sourcePanel": "Structure" },
+  { "id": "ID_OBJECTS_COLUMN", "displayName": "Column", "origin": "Native", "sourceTab": "Structure", "sourcePanel": "Structure" },
+  { "id": "Enscape.Start", "displayName": "Enscape", "origin": "ThirdParty", "sourceTab": "Enscape", "sourcePanel": "Enscape", "addinFile": "Enscape.addin" },
+  { "id": "Kinship.Open", "displayName": "Kinship", "origin": "ThirdParty", "sourceTab": "Kinship", "hostTab": "Add-Ins", "literalPanel": "Kinship", "addinFile": "Kinship.addin" },
+  { "id": "Ideate.BIMLink", "displayName": "BIMLink", "origin": "ThirdParty", "sourceTab": "Ideate", "sourcePanel": "Ideate", "addinFile": "Ideate.BIMLink.addin" },
+  { "id": "ID_DYNAMO_PLAYER", "displayName": "Dynamo Player", "origin": "Autodesk", "sourceTab": "Manage", "sourcePanel": "Visual Programming" }
+]

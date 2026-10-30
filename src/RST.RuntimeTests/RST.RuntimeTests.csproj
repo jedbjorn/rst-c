@@ -42,6 +42,8 @@
          shared as source so the view-model tests drive the same seams and compare the same writes. -->
     <Compile Include="..\RST.Tests\Loader\LoaderFakes.cs" Link="Loader\Shared\LoaderFakes.cs" />
     <Compile Include="..\RST.Tests\Loader\V220BridgeReference.cs" Link="Loader\Shared\V220BridgeReference.cs" />
+    <!-- Builder (spec #16, WU4): the v2.2.0 save reference (AC6), shared the same way. -->
+    <Compile Include="..\RST.Tests\Builder\V220BuilderReference.cs" Link="Builder\Shared\V220BuilderReference.cs" />
   </ItemGroup>
 
   <ItemGroup>

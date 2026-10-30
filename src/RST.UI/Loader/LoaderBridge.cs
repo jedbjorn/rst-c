@@ -26,8 +26,6 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using RST.Core.AddIns;
 using RST.Core.Configuration;
 using RST.Core.Loader;
@@ -437,30 +435,8 @@ public class LoaderBridge
     /// PNG-encode the result to <paramref name="destPath"/>. Throws on
     /// any failure — caller decides whether to fall back.
     /// </summary>
-    private static void EncodeAsBranding(string sourcePath, string destPath, int targetSize)
-    {
-        var src = new BitmapImage();
-        src.BeginInit();
-        src.UriSource = new Uri(sourcePath, UriKind.Absolute);
-        // OnLoad detaches the BitmapImage from the source file so we can
-        // safely overwrite destPath even when src and dest are the same
-        // path (re-pick the existing logo).
-        src.CacheOption = BitmapCacheOption.OnLoad;
-        src.EndInit();
-        if (src.CanFreeze) src.Freeze();
-
-        // Non-uniform scale to force exact targetSize × targetSize, mirroring
-        // PIL.Image.resize((48,48)) which distorts non-square inputs.
-        var scaleX = (double)targetSize / Math.Max(1, src.PixelWidth);
-        var scaleY = (double)targetSize / Math.Max(1, src.PixelHeight);
-        var resized = new TransformedBitmap(src, new ScaleTransform(scaleX, scaleY));
-        if (resized.CanFreeze) resized.Freeze();
-
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(resized));
-        using var fs = File.Create(destPath);
-        encoder.Save(fs);
-    }
+    private static void EncodeAsBranding(string sourcePath, string destPath, int targetSize) =>
+        RST.UI.Builder.BrandingLogo.Encode(sourcePath, destPath, targetSize);
 
     /// <summary>
     /// Read the per-machine company branding (logo + URL). Returns

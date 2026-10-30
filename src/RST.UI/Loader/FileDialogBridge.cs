@@ -5,7 +5,8 @@
 // Microsoft.Win32 file dialogs require the WPF UI thread, so we marshal via
 // Application.Current. Returns null on cancel or when no Application is
 // available (e.g. running outside Revit). The native Profile Loader opens its
-// import dialog through IDialogService instead (spec #16, WU3).
+// import dialog through IDialogService instead (spec #16, WU3), and the WPF Builder
+// its logo and export dialogs, with the same titles and filters (WU4).
 
 using System.Windows;
 using Microsoft.Win32;
@@ -19,6 +20,13 @@ internal static class FileDialogBridge
 
     public const string ZipFilter = "RST Profile Package (*.zip)|*.zip|All Files (*.*)|*.*";
 
+    /// <summary>The Builder's logo and export dialogs (kept for the WPF Builder, spec #16 WU4).</summary>
+    public const string LogoTitle = "Choose Logo Image";
+
+    public const string ImageFilter = "Image Files (*.png;*.jpg;*.jpeg;*.svg;*.bmp)|*.png;*.jpg;*.jpeg;*.svg;*.bmp|All Files (*.*)|*.*";
+
+    public const string ExportZipTitle = "Export RST Profile (.zip)";
+
     public static string? OpenImage()
     {
         var app = Application.Current;
@@ -28,8 +36,8 @@ internal static class FileDialogBridge
         {
             var dlg = new OpenFileDialog
             {
-                Title = "Choose Logo Image",
-                Filter = "Image Files (*.png;*.jpg;*.jpeg;*.svg;*.bmp)|*.png;*.jpg;*.jpeg;*.svg;*.bmp|All Files (*.*)|*.*",
+                Title = LogoTitle,
+                Filter = ImageFilter,
                 Multiselect = false,
             };
             return dlg.ShowDialog() == true ? dlg.FileName : null;
@@ -45,7 +53,7 @@ internal static class FileDialogBridge
         {
             var dlg = new SaveFileDialog
             {
-                Title = "Export RST Profile (.zip)",
+                Title = ExportZipTitle,
                 Filter = ZipFilter,
                 FileName = suggestedFileName,
                 DefaultExt = ".zip",
