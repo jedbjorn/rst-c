@@ -54,10 +54,12 @@
          runs right after AppSearch, before RemoveFoldersEx (before
          CostInitialize). -->
     <SetProperty Id="RSTTRAYCACHEDIR" Value="[LocalAppDataFolder]RST\Tray\cache\" After="AppSearch" Sequence="execute" />
-    <!-- F17 WU4: the rest of the tray's non-roaming folder: the updater copy (updater\), msiexec's install logs
-         (logs\) and the self-update result. Removed with the cache on a real uninstall only, so an RST upgrade
-         run BY the updater copy never removes the folder it runs from. -->
+    <!-- BEGIN per-user only (F17 WU4; review N8): the rest of the tray's non-roaming folder, the updater
+         copy (updater\), msiexec's install logs (logs\) and the self-update result. Removed with the cache on a
+         real uninstall only, so an RST upgrade run BY the updater copy never removes the folder it runs from. In a
+         per-machine package this must not exist: an administrator's uninstall would delete THEIR own folder. -->
     <SetProperty Id="RSTTRAYLOCALDIR" Value="[LocalAppDataFolder]RST\Tray\" After="AppSearch" Sequence="execute" />
+    <!-- END per-user only -->
 
     <!-- Only when files can change: a first install or upgrade, a repair,
          an uninstall, or the old version's removal in an upgrade. A no-op
@@ -76,8 +78,10 @@
                        Type="string" Value="&quot;[TrayDir]RST.Tray.exe&quot; --startup" KeyPath="yes" />
         <util:RemoveFolderEx Id="RemoveTrayCache" On="uninstall" Property="RSTTRAYCACHEDIR"
                              Condition="NOT UPGRADINGPRODUCTCODE" />
+        <!-- BEGIN per-user only (F17 WU4; review N8): see RSTTRAYLOCALDIR above. -->
         <util:RemoveFolderEx Id="RemoveTrayLocal" On="uninstall" Property="RSTTRAYLOCALDIR"
                              Condition="NOT UPGRADINGPRODUCTCODE" />
+        <!-- END per-user only -->
       </Component>
     </ComponentGroup>
   </Fragment>

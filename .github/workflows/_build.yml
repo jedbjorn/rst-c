@@ -535,6 +535,9 @@ jobs:
   # verified download and its updater copy (RST.TrayUpdater.exe) take
   # 3.1.90 to 3.1.91, then 3.1.92 with the tray still running (Restart
   # Manager's restart racing the updater's start): one tray, one RST entry.
+  # Then decision #34: RST installed by RST-Setup.exe 3.1.90 is updated with
+  # RST-Setup.exe 3.1.91 (one entry, the bundle's), and the bundle's own
+  # uninstall still removes it.
   tray-selfupdate:
     name: Tray self-update (RST.msi builds)
     needs: [stage, stage-tray]
@@ -569,6 +572,22 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-$v.msi"
           }
+      # Decision #34: RST-Setup.exe at 3.1.90 and 3.1.91 around those RST.msi builds, from a copy of the
+      # companion registry with nothing shippable (as the bundle job's RST-Setup-none.exe), so no companion
+      # download is needed. Same Bundle.wxs, same bundle UpgradeCode.
+      - name: Build RST-Setup.exe at 3.1.90 and 3.1.91 (no companions)
+        shell: pwsh
+        run: |
+          $reg = Get-Content -Raw -Encoding UTF8 companions/companions.json | ConvertFrom-Json
+          foreach ($c in $reg.companions) { $c.status = 'in_development'; $c.release = $null }
+          $none = Join-Path $env:RUNNER_TEMP 'companions-none.json'
+          $reg | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $none
+          foreach ($v in '3.1.90', '3.1.91') {
+            dotnet build installer-bundle/RST.Setup.wixproj -c Release --nologo "-p:RstMsi=$env:RUNNER_TEMP/RST-$v.msi" "-p:RstBundleVersion=$v" "-p:CompanionRegistry=$none" "-p:OutputName=RST-Setup" "-p:IntermediateOutputPath=obj\b$v\"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item installer-bundle/bin/Release/RST-Setup.exe "$env:RUNNER_TEMP/RST-Setup-$v.exe"
+          }
+          Get-ChildItem "$env:RUNNER_TEMP/RST-Setup-*.exe" | ForEach-Object { "{0} {1} {2}" -f $_.Name, $_.Length, $_.VersionInfo.FileVersion }
       - run: dotnet build src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
       - name: Self-update smoke
         shell: pwsh
@@ -577,6 +596,7 @@ jobs:
           -OldMsi "$env:RUNNER_TEMP/RST-3.1.90.msi" -OldVersion 3.1.90
           -NewMsi "$env:RUNNER_TEMP/RST-3.1.91.msi" -NewVersion 3.1.91
           -NewerMsi "$env:RUNNER_TEMP/RST-3.1.92.msi" -NewerVersion 3.1.92
+          -OldBundle "$env:RUNNER_TEMP/RST-Setup-3.1.90.exe" -NewBundle "$env:RUNNER_TEMP/RST-Setup-3.1.91.exe"
       - name: Upload self-update results and msiexec logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -591,5 +611,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tray-selfupdate-msi
-          path: ${{ runner.temp }}/RST-3.1.9*.msi
+          path: |
+            ${{ runner.temp }}/RST-3.1.9*.msi
+            ${{ runner.temp }}/RST-Setup-3.1.9*.exe
           if-no-files-found: ignore

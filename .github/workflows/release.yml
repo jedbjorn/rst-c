@@ -33,6 +33,12 @@ on:
   push:
     tags: ['v*']
 
+# One release run per tag at a time (WU4 review N7): a re-pushed tag waits for the run before it, never
+# overlapping its draft clean-up.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -60,6 +66,10 @@ jobs:
   release:
     name: GitHub Release
     needs: build
+    env:
+      # The release's assets, in ONE place: SHA256SUMS.txt lists them and release-draft.sh attaches them
+      # (with SHA256SUMS.txt). Adding RST-Machine.msi (WU5) is this one line.
+      RELEASE_ASSETS: RST.msi RST-Setup.exe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +88,7 @@ jobs:
       # and checked (names exactly the assets, every hash verifies) before
       # anything is published.
       - name: SHA256SUMS.txt
-        run: build/sha256sums.sh write artifacts RST.msi RST-Setup.exe
+        run: build/sha256sums.sh write artifacts $RELEASE_ASSETS
       # Draft → verify → publish. With immutable releases on (P3) a release's
       # assets and tag lock at publication, so nothing is published until the
       # uploaded assets are proven: a mismatch leaves an unpublished draft
@@ -106,8 +116,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          id="$(build/release-draft.sh create "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" \
-            artifacts/RST.msi artifacts/RST-Setup.exe artifacts/SHA256SUMS.txt)"
+          id="$(build/release-draft.sh create "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" artifacts)"
           echo "draft $id for $GITHUB_REF_NAME"
           echo "id=$id" >> "$GITHUB_OUTPUT"
       # 2. That draft as GitHub holds it: SHA256SUMS.txt lists exactly its

@@ -8,9 +8,11 @@
 #       Refuses (exit 1) when a PUBLISHED release already exists for <tag>: a published release is never touched.
 #       Deletes, by id, every unpublished draft for <tag> that an earlier, failed run left behind. Drafts of other
 #       tags are left alone. Deleting a draft never deletes the tag.
-#   build/release-draft.sh create <repo> <tag> <file>...
-#       gh release create <tag> <file>... --draft --verify-tag --title <tag> --generate-notes [--prerelease for a
-#       hyphenated tag], then prints the id of THE one draft for <tag> (exit 1 when there is not exactly one).
+#   build/release-draft.sh create <repo> <tag> <dir> [<asset>...]
+#       gh release create <tag> <dir>/<asset>... <dir>/SHA256SUMS.txt --draft --verify-tag --title <tag>
+#       --generate-notes [--prerelease for a hyphenated tag], then prints the id of THE one draft for <tag> (exit 1
+#       when there is not exactly one). Without assets it takes $RELEASE_ASSETS, release.yml's one list (adding
+#       RST-Machine.msi is a one-line change there).
 #   build/release-draft.sh verify <repo> <id> <tag> <SHA256SUMS.txt>
 #       That exact release must be a draft for <tag>; then sha256sums.sh check-release against its assets.
 #   build/release-draft.sh publish <repo> <id> <tag>
@@ -47,6 +49,9 @@ cmd_prepare() {
   while IFS=$'\t' read -r id draft; do
     [ -n "$id" ] || continue
     need_id "$id"
+    # Review N7: look again right before the DELETE. An overlapping run may have published it since the list.
+    local now; now="$("$GH" api "repos/$repo/releases/$id" --jq '"\(.draft)\t\(.tag_name)"')"
+    [ "$now" = "true"$'\t'"$tag" ] || die "release $id for $tag is no longer an unpublished draft ($now); not deleted"
     "$GH" api -X DELETE "repos/$repo/releases/$id" > /dev/null
     echo "deleted the unpublished draft $id for $tag (left by an earlier run)"
     deleted=$((deleted + 1))
@@ -65,12 +70,22 @@ cmd_find() {
 }
 
 cmd_create() {
-  local repo="$1" tag="$2"; shift 2
+  local repo="$1" tag="$2" dir="$3"; shift 3
   need_repo "$repo"; need_tag "$tag"
-  [ $# -gt 0 ] || die "create: name the files to attach"
+  [ -d "$dir" ] || die "create: no folder $dir"
+  # The assets: named here, or (release.yml) the one list in $RELEASE_ASSETS. SHA256SUMS.txt is always added.
+  local assets=("$@")
+  if [ ${#assets[@]} -eq 0 ]; then read -r -a assets <<< "${RELEASE_ASSETS:-}"; fi
+  [ ${#assets[@]} -gt 0 ] || die "create: no assets (name them, or set RELEASE_ASSETS)"
+  local files=() a
+  for a in "${assets[@]}" SHA256SUMS.txt; do
+    case "$a" in */* | *\\*) die "create: '$a' is not a file name" ;; esac
+    [ -f "$dir/$a" ] || die "create: missing $dir/$a"
+    files+=("$dir/$a")
+  done
   local prerel=()
   [[ "$tag" == *-* ]] && prerel=(--prerelease)
-  "$GH" release create "$tag" "$@" -R "$repo" --draft --verify-tag --title "$tag" --generate-notes "${prerel[@]}" > /dev/null
+  "$GH" release create "$tag" "${files[@]}" -R "$repo" --draft --verify-tag --title "$tag" --generate-notes "${prerel[@]}" > /dev/null
   cmd_find "$repo" "$tag"
 }
 
@@ -143,7 +158,10 @@ fi
 id="${BASH_REMATCH[1]}"
 jq -e --argjson id "$id" 'any(.[]; .id == $id)' "$state" > /dev/null || { echo "HTTP 404: Not Found" >&2; exit 1; }
 case "$method" in
-  GET) jq -r --argjson id "$id" ".[] | select(.id == \$id) | $jqx" "$state" ;;
+  GET)
+    # The self-test's race: the release is published by someone else just before this GET answers.
+    if [ "${FAKE_GH_PUBLISH_ON_GET:-}" = "$id" ]; then jq --argjson id "$id" 'map(if .id == $id then .draft = false else . end)' "$state" > "$state.new"; mv "$state.new" "$state"; fi
+    jq -r --argjson id "$id" ".[] | select(.id == \$id) | $jqx" "$state" ;;
   DELETE) jq --argjson id "$id" 'map(select(.id != $id))' "$state" > "$state.new"; mv "$state.new" "$state" ;;
   PATCH)
     for f in "${fields[@]}"; do [ "$f" = "draft=false" ] || { echo "fake gh: unsupported field $f" >&2; exit 2; }; done
@@ -170,14 +188,14 @@ cmd_self_test() {
   mkdir -p "$a"
   printf 'msi bytes' > "$a/RST.msi"; printf 'exe bytes' > "$a/RST-Setup.exe"
   "$HERE/sha256sums.sh" write "$a" RST.msi RST-Setup.exe > /dev/null
-  local files=("$a/RST.msi" "$a/RST-Setup.exe" "$a/SHA256SUMS.txt")
+  export RELEASE_ASSETS="RST.msi RST-Setup.exe"   # release.yml's one list of assets
   count() { jq --arg t "$2" "[.[] | select(.tag_name == \$t and ($1))] | length" "$FAKE_GH_STATE"; }
   check() { [ "$1" = "$2" ] || die "self-test: $3 (expected $2, got $1)"; echo "ok  $3"; }
 
   # 1. A clean run: one draft, verified by id, published by id.
   echo '[{"id": 7, "tag_name": "v1.0.0", "draft": false, "prerelease": false, "html_url": "x", "assets": []}]' > "$FAKE_GH_STATE"
   ( cmd_prepare "$repo" "$tag" ) > /dev/null
-  local id; id="$( cmd_create "$repo" "$tag" "${files[@]}" )"
+  local id; id="$( cmd_create "$repo" "$tag" "$a" )"
   ( cmd_verify "$repo" "$id" "$tag" "$a/SHA256SUMS.txt" ) > /dev/null
   ( cmd_publish "$repo" "$id" "$tag" ) > /dev/null
   check "$(count 'true' "$tag")" 1 "a clean run makes one release for the tag"
@@ -190,7 +208,7 @@ cmd_self_test() {
   expect_failure "verifying the stale draft (it lacks assets)" cmd_verify "$repo" "$stale" "$tag" "$a/SHA256SUMS.txt"
   ( cmd_prepare "$repo" "$tag" ) > /dev/null
   grep -q "api -X DELETE repos/$repo/releases/$stale" "$FAKE_GH_LOG" || die "self-test: the stale draft was not deleted by its id"
-  id="$( cmd_create "$repo" "$tag" "${files[@]}" )"
+  id="$( cmd_create "$repo" "$tag" "$a" )"
   [ "$id" != "$stale" ] || die "self-test: the new draft has the stale draft's id"
   check "$(count '.draft == true' "$tag")" 1 "a re-run leaves exactly one draft for the tag"
   ( cmd_verify "$repo" "$id" "$tag" "$a/SHA256SUMS.txt" ) > /dev/null
@@ -207,7 +225,7 @@ cmd_self_test() {
 
   # 4. A re-run after publication: refused, nothing created or deleted.
   echo '[]' > "$FAKE_GH_STATE"
-  id="$( cmd_create "$repo" "$tag" "${files[@]}" )"; ( cmd_publish "$repo" "$id" "$tag" ) > /dev/null
+  id="$( cmd_create "$repo" "$tag" "$a" )"; ( cmd_publish "$repo" "$id" "$tag" ) > /dev/null
   ( "$GH" release create "$tag" "$a/RST.msi" --draft )   # even with a stray draft beside it
   expect_failure "preparing a tag that is already published" cmd_prepare "$repo" "$tag"
   check "$(count 'true' "$tag")" 2 "the published release (and the stray draft) are untouched"
@@ -215,11 +233,26 @@ cmd_self_test() {
   # 5. A second draft appearing between prepare and find: refused, not guessed.
   echo '[]' > "$FAKE_GH_STATE"
   ( "$GH" release create "$tag" "$a/RST.msi" --draft )
-  expect_failure "creating while another draft for the tag exists" cmd_create "$repo" "$tag" "${files[@]}"
+  expect_failure "creating while another draft for the tag exists" cmd_create "$repo" "$tag" "$a"
+
+  # 5b. Review N7: an overlapping run publishes a stale draft between prepare's list and its DELETE.
+  echo '[]' > "$FAKE_GH_STATE"
+  ( "$GH" release create "$tag" "$a/RST.msi" --draft )
+  local racing; racing="$(jq '.[0].id' "$FAKE_GH_STATE")"
+  FAKE_GH_PUBLISH_ON_GET="$racing" expect_failure "deleting a draft that was published meanwhile" cmd_prepare "$repo" "$tag"
+  grep -q "api -X DELETE repos/$repo/releases/$racing" "$FAKE_GH_LOG" && die "self-test: a release published meanwhile was deleted"
+  check "$(count '.draft == false' "$tag")" 1 "the release published meanwhile is untouched"
+
+  # 5c. The assets named explicitly instead of $RELEASE_ASSETS; a missing one is refused before anything is created.
+  echo '[]' > "$FAKE_GH_STATE"
+  expect_failure "an asset file that is missing" cmd_create "$repo" "$tag" "$a" RST.msi RST-Machine.msi
+  check "$(count 'true' "$tag")" 0 "nothing was created"
+  id="$( cmd_create "$repo" "$tag" "$a" RST.msi RST-Setup.exe )"
+  ( cmd_verify "$repo" "$id" "$tag" "$a/SHA256SUMS.txt" ) > /dev/null
 
   # 6. Publish only the draft for this tag.
   echo '[]' > "$FAKE_GH_STATE"
-  id="$( cmd_create "$repo" "$tag" "${files[@]}" )"
+  id="$( cmd_create "$repo" "$tag" "$a" )"
   expect_failure "publishing the draft under another tag" cmd_publish "$repo" "$id" v9.9.7
   ( cmd_publish "$repo" "$id" "$tag" ) > /dev/null
   expect_failure "publishing a release that is no longer a draft" cmd_publish "$repo" "$id" "$tag"
@@ -230,7 +263,7 @@ cmd_self_test() {
 
 case "${1:-}" in
   prepare) shift; [ $# -eq 2 ] || die "usage: $0 prepare <repo> <tag>"; cmd_prepare "$@" ;;
-  create) shift; [ $# -ge 3 ] || die "usage: $0 create <repo> <tag> <file>..."; cmd_create "$@" ;;
+  create) shift; [ $# -ge 3 ] || die "usage: $0 create <repo> <tag> <dir> [<asset>...]"; cmd_create "$@" ;;
   verify) shift; [ $# -eq 4 ] || die "usage: $0 verify <repo> <id> <tag> <SHA256SUMS.txt>"; cmd_verify "$@" ;;
   publish) shift; [ $# -eq 3 ] || die "usage: $0 publish <repo> <id> <tag>"; cmd_publish "$@" ;;
   self-test) shift; cmd_self_test ;;
