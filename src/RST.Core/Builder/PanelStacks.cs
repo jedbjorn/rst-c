@@ -329,17 +329,6 @@ public static class PanelStacks
         return removed;
     }
 
-    /// <summary>The stacks no panel slot refers to, removed. Returns their names in stack order.</summary>
-    public static IReadOnlyList<string> PruneUnreferenced(Profile profile)
-    {
-        ArgumentNullException.ThrowIfNull(profile);
-        var referenced = new HashSet<string>(
-            profile.Panels.SelectMany(p => p.Slots ?? []).Where(IsStack).Select(s => s.Name ?? ""), StringComparer.Ordinal);
-        var orphans = profile.Stacks.Keys.Where(k => !referenced.Contains(k)).ToList();
-        foreach (var name in orphans) profile.Stacks.Remove(name);
-        return orphans;
-    }
-
     /// <summary>
     /// The 4+ refusal (decision #28): a stack slot whose stack holds more than 3 tools blocks Save
     /// with a message naming the panel. Null when every placed stack fits.
@@ -422,8 +411,8 @@ public static class PanelStacks
             }
         }
 
-        // Pass 3: a stack no slot refers to goes.
-        foreach (var orphan in PruneUnreferenced(profile))
+        // Pass 3: a stack no slot refers to goes (the save's own rule, spec #17).
+        foreach (var orphan in ProfileEditing.RemoveOrphanStacks(profile))
             Note($"stack \"{orphan}\" was not on any panel; removed");
         return new StackNormalizeReport(notes.Count > 0, notes);
     }
