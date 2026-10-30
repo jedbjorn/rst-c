@@ -53,10 +53,6 @@
   <data name="Tab_Settings" xml:space="preserve">
     <value>Settings</value>
   </data>
-  <data name="Page_ComingLater" xml:space="preserve">
-    <value>Coming in a later update.</value>
-    <comment>The placeholder line on the pages that arrive later in v3.1.</comment>
-  </data>
   <data name="Updates_Heading" xml:space="preserve">
     <value>Updates</value>
   </data>
@@ -68,12 +64,6 @@
   </data>
   <data name="Apps_Description" xml:space="preserve">
     <value>RST, Gantt-It and Splash-It: which are installed for you on this PC, and the latest version of each.</value>
-  </data>
-  <data name="AddIns_Heading" xml:space="preserve">
-    <value>Add-ins</value>
-  </data>
-  <data name="AddIns_Description" xml:space="preserve">
-    <value>Choose the add-ins Revit loads before you start Revit. Until then, use the Profile Loader in Revit.</value>
   </data>
   <data name="Settings_Appearance" xml:space="preserve">
     <value>Appearance</value>

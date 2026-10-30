@@ -14,11 +14,11 @@ purpose: What the RST tray app is, where it lives, how its update checks work an
 
 From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
-The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). Later v3.1 builds also switch Revit add-ins on or off before you start Revit. Its window has four pages:
+The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [Add-ins page](#add-ins-page)). Its window has four pages:
 
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
 - **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
-- **Add-ins:** says "Coming in a later update".
+- **Add-ins:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [Add-ins page](#add-ins-page).
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
   - **Check for updates automatically:** on by default. The first time the tray starts, a notice explains what this does.
@@ -238,13 +238,13 @@ RST's files are not code-signed yet, so allow them by path or by hash.
 | `RST.msi` (per user) | `%LocalAppData%\Programs\RST\Tray\`, `%AppData%\RST\R<NN>\app\`, `%AppData%\Autodesk\Revit\Addins\<year>\RST.Bootstrap.dll` |
 | `RST-Machine.msi` (per machine) | `C:\Program Files\RST\` (tray, bootstraps and engines) |
 
-Per-machine mode puts every RST program file under Program Files. AppLocker's default rules already allow that path, and users cannot write there. Each release's `SHA256SUMS.txt` gives the installers' hashes ([Release checksums](#release-checksums)). The tray only ever starts `msiexec.exe` from System32 and its own updater copy (later builds), and it talks only to the GitHub hosts listed under [Privacy](#privacy-what-is-sent-and-to-whom).
+Per-machine mode puts every RST program file under Program Files. AppLocker's default rules already allow that path, and users cannot write there. Each release's `SHA256SUMS.txt` gives the installers' hashes ([Release checksums](#release-checksums)). The tray only ever starts `msiexec.exe` from System32 and its own updater copy (`RST.TrayUpdater.exe` in `%LocalAppData%\RST\Tray\updater\`), and it talks only to the GitHub hosts listed under [Privacy](#privacy-what-is-sent-and-to-whom).
 
 ## Uninstalling
 
 Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app and the `RST` Run value. `RST.msi` also removes `%LocalAppData%\RST\Tray\` (the download cache, the updater copy and the install logs). `RST-Machine.msi` leaves each user's `%LocalAppData%\RST\Tray\`, which is per-user data an administrator's uninstall cannot reach and must not delete. The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
 
-A repair or an upgrade also closes a running tray while its files are replaced. If Windows shows a **Files in Use** dialog, the default choice closes the tray, and Windows starts it again, hidden in the notification area, when the install finishes. An installer only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone.
+A repair or an upgrade also closes a running tray while its files are replaced. With `RST.msi`, if Windows shows a **Files in Use** dialog, the default choice closes the tray, and Windows starts it again, hidden in the notification area, when the install finishes. `RST-Machine.msi` does not restart it (see [Installed for everyone on this PC (IT)](#installed-for-everyone-on-this-pc-it)): it comes back at the next sign-in, or when Revit starts it. An installer only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone.
 
 ## For developers
 

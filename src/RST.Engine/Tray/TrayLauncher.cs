@@ -85,11 +85,10 @@ internal interface ITrayLaunchEnvironment
 internal static class TrayLauncher
 {
     /// <summary>
-    /// The per-machine tray folder, <c>C:\Program Files\RST\Tray\</c> (RST-Machine.msi, spec #20 §7). The one place it
-    /// is named here: it becomes <c>TrayPaths.PerMachineInstallDir</c> (F17 WU5, #146) once both are merged.
+    /// The per-machine tray folder, <c>C:\Program Files\RST\Tray\</c> (RST-Machine.msi, spec #20 §7): F17 WU5's
+    /// <see cref="TrayPaths.PerMachineInstallDir"/>, the one place it is named.
     /// </summary>
-    public static string PerMachineInstallDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RST", "Tray");
+    public static string PerMachineInstallDir => TrayPaths.PerMachineInstallDir;
 
     /// <summary>Starts the tray unless it runs, it is not installed, the user switched it off or Revit is elevated. Never throws.</summary>
     public static TrayLaunchResult EnsureRunning(ITrayLaunchEnvironment env)
