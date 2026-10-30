@@ -22,6 +22,7 @@ using RST.Tests.Loader;
 using RST.Tray.AddIns;
 using RST.Tray.Resources;
 using RST.Tray.Windows;
+using RST.UI.Dialogs;
 using RST.UI.Loader;
 using RST.UI.Theming;
 using Xunit;
@@ -655,6 +656,29 @@ public class AddInsPageScreenshotTests
         vm.RestoreAllAsync().GetAwaiter().GetResult();
 
         CaptureDialog(new AddinReportWindow(f.Dialogs.AddinReports.Single()), theme, "report-restore");
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void The_adopt_presets_question_and_a_failed_Apply(UiTheme theme) => Sta(theme, () =>
+    {
+        // Review B2: the Loader's question, exactly as DialogService.Confirm shows it, with the tray's recorded inputs.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        vm.RefreshAsync().GetAwaiter().GetResult();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "Office");
+        f.Dialogs.ConfirmAnswers.Enqueue(true);
+        vm.ApplyAsync().GetAwaiter().GetResult();
+        var (title, message, confirmText, danger, id) = Assert.Single(f.Dialogs.Confirms);
+        CaptureDialog(new MessageDialog(new MessageDialogModel(title, title, message, [], confirmText, HasCancel: true, Danger: danger), id),
+            theme, "adopt-presets");
+
+        // Review B3: a failed Apply (the active profile file locked) stays on the page after it is read again.
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        using (new FileStream(f.Root.Paths.ActiveProfileFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            vm.ApplyAsync().GetAwaiter().GetResult();
+        Capture(vm, theme, "apply-failed", window =>
+            Assert.Contains(Visible(window.AddInsView), t => t.Text.StartsWith(AddInsStrings.ApplyFailed("Failed to write active profile: "), StringComparison.Ordinal)));
     });
 
     [Theory]
