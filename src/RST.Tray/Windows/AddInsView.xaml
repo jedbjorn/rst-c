@@ -115,7 +115,7 @@
             <TextBlock Text="{x:Static res:AddInsStrings.YearsHeading}" Style="{StaticResource SectionText}" FontSize="13" DockPanel.Dock="Left" />
             <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center">
                 <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="Tray.AddIns.Refresh">
-                    <Run Text="{x:Static res:AddInsStrings.Refresh}" />
+                    <Run Text="{x:Static res:AddInsStrings.RefreshLink}" />
                 </Hyperlink>
             </TextBlock>
         </DockPanel>

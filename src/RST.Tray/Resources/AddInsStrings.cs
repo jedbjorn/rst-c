@@ -67,5 +67,5 @@ public static class AddInsStrings
 
     public static string ApplyFailed(object? reason) => Format(nameof(ApplyFailed), reason);
 
-    public static string Refresh => Get(nameof(Refresh));
+    public static string RefreshLink => Get(nameof(RefreshLink));
 }

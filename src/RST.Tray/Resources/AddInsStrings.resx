@@ -92,7 +92,7 @@
   <data name="ApplyFailed" xml:space="preserve">
     <value>The profile was not applied: {0}</value>
   </data>
-  <data name="Refresh" xml:space="preserve">
+  <data name="RefreshLink" xml:space="preserve">
     <value>Refresh</value>
   </data>
 </root>

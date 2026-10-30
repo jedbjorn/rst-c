@@ -232,10 +232,16 @@ public class TrayLaunchWindowsTests
         var nowhere = Path.Combine(Path.GetTempPath(), "rst-no-tray-" + Guid.NewGuid().ToString("N"), "RST.Tray.exe");
         var env = new MachineTrayLaunchEnvironment([nowhere], runValueName: "RST.Test." + Guid.NewGuid().ToString("N"));
 
+        var running = env.MutexExists(TrayPaths.MutexName(env.UserSid));
+
         var result = TrayLauncher.EnsureRunning(env);
 
-        // An elevated CI runner stops at the elevation rule; an unelevated seat at the missing path.
-        Assert.Equal(env.IsElevated ? TrayLaunchOutcome.Elevated : TrayLaunchOutcome.NotInstalled, result.Outcome);
+        // An elevated CI runner stops at the elevation rule; an unelevated seat at the missing path (a seat with a
+        // real tray running stops at its mutex).
+        var expected = running ? TrayLaunchOutcome.AlreadyRunning
+            : env.IsElevated ? TrayLaunchOutcome.Elevated
+            : TrayLaunchOutcome.NotInstalled;
+        Assert.Equal(expected, result.Outcome);
         Assert.Equal(Environment.IsPrivilegedProcess, env.IsElevated);
     }
 
