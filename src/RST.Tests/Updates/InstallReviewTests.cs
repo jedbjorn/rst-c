@@ -333,6 +333,17 @@ public sealed class SelfUpdateApplyTests : IDisposable
         /// <summary>The runner's calls see whether the mutex is held while they run.</summary>
         public bool Held { get; private set; }
 
+        /// <summary>False: the mutex is not free in time (a tray still holds it), so the claim comes back pending (SC-022).</summary>
+        public bool ClaimFree { get; set; } = true;
+
+        /// <summary>The pending claim takes the mutex now: msiexec's Restart Manager has closed the tray (SC-022).</summary>
+        public void TrayLetGo()
+        {
+            if (Held) return;
+            Held = true;
+            Events.Add("taken late");
+        }
+
         public bool WaitForTrayExit(int pid, TimeSpan timeout)
         {
             Waited.Add(pid);
@@ -346,20 +357,29 @@ public sealed class SelfUpdateApplyTests : IDisposable
             return true;
         }
 
-        public IDisposable? ClaimTrayInstance(TimeSpan timeout)
+        public ITrayInstanceClaim? ClaimTrayInstance(TimeSpan timeout)
         {
             Events.Add("claim");
-            Held = true;
-            return new Release(this);
+            Held = ClaimFree;
+            return new Claim(this);
         }
 
-        private sealed class Release(FakeHost host) : IDisposable
+        private sealed class Claim(FakeHost host) : ITrayInstanceClaim
         {
-            public void Dispose()
+            private bool? _released;
+
+            public bool Held => _released is null && host.Held;
+
+            public bool Release()
             {
+                if (_released is { } was) return was;
+                _released = host.Held;
+                host.Events.Add(host.Held ? "release" : "stop waiting");
                 host.Held = false;
-                host.Events.Add("release");
+                return _released.Value;
             }
+
+            public void Dispose() => Release();
         }
     }
 
@@ -371,6 +391,33 @@ public sealed class SelfUpdateApplyTests : IDisposable
         (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
         heldDuringRun.Should().BeTrue("a tray Revit starts during the update must find one running and exit");
         _host.Events.Should().Equal("claim", "release", "start");
+    }
+
+    [Fact]
+    public async Task A_tray_that_does_not_let_go_in_time_is_waited_for_and_the_mutex_taken_once_msiexec_closes_it()
+    {
+        // SC-022: the tray still runs (it was never asked to quit); msiexec's Restart Manager closes it, and the claim
+        // takes the mutex at that moment, so the hand-over is the same as when the tray quit in time.
+        _host.ClaimFree = false;
+        _msiexec.BeforeRun = _ => _host.TrayLetGo();
+        (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
+        _host.Events.Should().Equal("claim", "taken late", "release", "start");
+        _log.Should().Contain(l => l.Contains("was not free within 60 s; going on, and taking it the moment the tray lets it go"));
+        _log.Should().Contain("updater: released the tray's single-instance mutex");
+        _log.Should().NotContain(l => l.Contains("going on without it"));
+    }
+
+    [Fact]
+    public async Task A_claim_that_never_gets_the_mutex_stops_waiting_and_the_started_tray_defers_to_the_running_one()
+    {
+        // SC-022: a tray holds the mutex throughout. The updater still starts the installed tray: that launch's first act
+        // is the single-instance check, so it brings the running tray's window forward and exits; never two trays.
+        _host.ClaimFree = false;
+        (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
+        _host.Events.Should().Equal("claim", "stop waiting", "start");
+        _host.TraysStarted.Should().Be(1);
+        _log.Should().Contain(l => l.Contains("stopped waiting for the tray's single-instance mutex"));
+        _log.Should().NotContain("updater: released the tray's single-instance mutex");
     }
 
     [Fact]
