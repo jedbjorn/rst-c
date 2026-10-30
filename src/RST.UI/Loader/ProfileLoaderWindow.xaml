@@ -16,7 +16,7 @@
         xmlns:core="clr-namespace:RST.Core.Loader;assembly=RST.Core"
         Title="{x:Static res:UiStrings.Loader_WindowTitle}"
         Width="1450" Height="900" MinWidth="900" MinHeight="560"
-        ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}"
