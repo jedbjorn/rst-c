@@ -1,6 +1,7 @@
 // rst-c's own (not vendored): the pack icon images the RibbonPreview (WU3) and the Builder's
 // Pick-icon buttons (WU4) draw, loaded once per file from Assets\icons\pack (spec #16). The
-// preview's stack rows (spec #17) load them at 16 px, as the ribbon's stacked buttons do.
+// preview's stack rows (spec #17) load them at 16 px, as the ribbon's stacked buttons do, and fall
+// back to the ribbon's own default_16.png (Default16), so the preview and the ribbon agree.
 
 using System.Collections.Concurrent;
 using System.IO;
@@ -22,7 +23,17 @@ public static class PackIcons
     {
         ArgumentNullException.ThrowIfNull(value);
         var dir = directory ?? LoaderAssets.IconPackDirectory;
-        var path = Path.Combine(dir, Path.GetFileName(value.RelativePath));
+        return LoadFile(Path.Combine(dir, Path.GetFileName(value.RelativePath)), size);
+    }
+
+    /// <summary>
+    /// The ribbon's 16 px default icon (Assets\icons\default_16.png, shipped by RST.Engine next to
+    /// RST.UI.dll): what a stacked button without a pack icon shows. Null when the file is missing.
+    /// </summary>
+    public static BitmapSource? Default16 => LoadFile(LoaderAssets.DefaultIcon16Path, 16);
+
+    private static BitmapSource? LoadFile(string path, int size)
+    {
         return Cache.GetOrAdd(path + "@" + size, _ =>
         {
             try

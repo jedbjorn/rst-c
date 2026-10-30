@@ -5,9 +5,9 @@
 // as columns of "≡" rows, "Empty" panels and "No panels configured". Builder mode labels tools by
 // name and shows empty stacks as "(empty)". The canvas follows the window theme, not the OS.
 // Stacks (feature #15, spec #17) draw as the ribbon draws them: a row per tool with its 16 px pack
-// icon (or the "≡" glyph) and a one-line label. The Loader draws a stack only when the ribbon
-// would (RibbonLayoutPlanner: 2 or 3 valid tools), with the tools the ribbon draws; the Builder
-// draws every stack being authored, faded when the ribbon would skip it.
+// icon (or the ribbon's own default_16.png) and a one-line label. The Loader draws a stack only
+// when the ribbon would (RibbonLayoutPlanner: 2 or 3 valid tools), with the tools the ribbon draws;
+// the Builder draws every stack in the profile, faded when the ribbon would skip it.
 
 using System.IO;
 using System.Windows;
@@ -280,8 +280,10 @@ public partial class RibbonPreview : UserControl
 
     private Border StackRow(string text, Slot? tool, bool dim)
     {
-        // The tool's pack icon at 16 px, as the ribbon's stacked button; the "≡" glyph without one.
-        var icon = tool is not null && RibbonPreviewRules.PackIcon(tool) is { } pack ? PackIcons.Load(pack, PackDirectory, 16) : null;
+        // A tool: its pack icon at 16 px, else the ribbon's default_16.png, as the stacked button
+        // draws it. The "≡" box only for an empty stack's stub row, or when the default is missing.
+        var icon = tool is null ? null
+            : (RibbonPreviewRules.PackIcon(tool) is { } pack ? PackIcons.Load(pack, PackDirectory, 16) : null) ?? PackIcons.Default16;
         FrameworkElement glyph = icon is not null
             ? new Image
             {

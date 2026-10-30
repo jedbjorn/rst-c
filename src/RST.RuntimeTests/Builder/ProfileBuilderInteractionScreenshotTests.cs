@@ -324,7 +324,10 @@ public class ProfileBuilderInteractionScreenshotTests
             Assert.Equal("RST — Profile Builder", window.Title);
             Assert.Equal("3 tabs hidden  •  Disable Unused: on", h.Model.PresetsSummary);
             Assert.True(window.ConfigurePresets.IsEnabled);
-            Assert.Equal(7, WindowCapture.Descendants<Image>(window.Preview).Count(i => i.Source is not null));
+            // 7 pack icons; the Checks stack's 3 tools have none and draw the default 16 px icon (spec #17).
+            var images = WindowCapture.Descendants<Image>(window.Preview).Where(i => i.Source is not null).ToList();
+            Assert.Equal(7, images.Count(i => !ReferenceEquals(i.Source, PackIcons.Default16)));
+            Assert.Equal(3, images.Count(i => ReferenceEquals(i.Source, PackIcons.Default16)));
         }
         finally
         {

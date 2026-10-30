@@ -186,4 +186,23 @@ public sealed class RibbonItemFactoryTests
         IconAssets.ResolveSlotIcon16("pack:move_fuchsia").Should().BeNull("a missing file falls back to Default16");
         IconAssets.Default16.Should().BeAssignableTo<BitmapSource>().Which.PixelWidth.Should().Be(16);
     }
+
+    private static byte[] Pixels(BitmapSource bitmap)
+    {
+        var converted = new FormatConvertedBitmap(bitmap, System.Windows.Media.PixelFormats.Pbgra32, null, 0);
+        var pixels = new byte[converted.PixelWidth * 4 * converted.PixelHeight];
+        converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+        return pixels;
+    }
+
+    [Fact]
+    public void Default16_has_a_visible_glyph_and_the_previews_draw_the_same_image()
+    {
+        // The VM found default_16.png a blank translucent tile while the previews drew "≡" (spec #17).
+        var ribbon = IconAssets.Default16.Should().BeAssignableTo<BitmapSource>().Subject;
+        Screenshots.DistinctPixels(ribbon).Should().BeGreaterThan(1, "the default carries a glyph, not a blank tile");
+        var preview = RST.UI.Controls.PackIcons.Default16.Should().NotBeNull().And.BeAssignableTo<BitmapSource>().Subject;
+        (preview.PixelWidth, preview.PixelHeight).Should().Be((16, 16));
+        Pixels(preview).Should().Equal(Pixels(ribbon), "the previews draw the ribbon's own default_16.png");
+    }
 }
