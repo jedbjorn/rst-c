@@ -21,6 +21,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
 
@@ -41,9 +42,10 @@ internal static class CompanionRegistryValidator
     private static readonly string[] ReleaseFields =
         { "tag", "asset", "sha256", "upgradeCode", "version" };
 
-    private static readonly Regex KebabId = new(@"^[a-z0-9]+(-[a-z0-9]+)*$");
-    private static readonly Regex Repo = new(@"^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$");
-    private static readonly Regex Sha256 = new(@"^[0-9a-fA-F]{64}$");
+    private static readonly Regex KebabId = new(@"^[a-z0-9]+(-[a-z0-9]+)*\z");
+    private static readonly Regex Repo = new(@"^[A-Za-z0-9-]+/[A-Za-z0-9._-]+\z");
+    // Lowercase only: one canonical form, as sha256sum and GitHub's digest print it.
+    private static readonly Regex Sha256 = new(@"^[0-9a-f]{64}\z");
 
     public static IReadOnlyList<string> Validate(string json, RstIdentities rst)
     {
@@ -201,7 +203,7 @@ internal static class CompanionRegistryValidator
 
         var sha = NonEmptyString(release, "sha256", rat, errors);
         if (sha is not null && !Sha256.IsMatch(sha))
-            errors.Add($"{rat}: sha256 must be 64 hex characters");
+            errors.Add($"{rat}: sha256 must be 64 lowercase hex characters");
 
         if (!release.TryGetProperty("upgradeCode", out var uc) || ParseGuid(uc) is not Guid upgrade)
         {
@@ -256,7 +258,6 @@ public class CompanionRegistryTests
     private const string GanttItClientId = "9920fb42-542b-4ce1-9659-a078489af6b0";
     private const string SplashItClientId = "0b1cc712-e936-4da1-9680-2d9a95f88271";
 
-    private static readonly Regex WxsUpgradeCode = new(@"UpgradeCode=""\{?([0-9A-Fa-f-]{36})\}?""");
     private static readonly Regex AddinClientId = new(@"<ClientId>\s*\{?([0-9A-Fa-f-]{36})\}?\s*</ClientId>");
 
     private static string RepoRoot()
@@ -273,19 +274,42 @@ public class CompanionRegistryTests
     private static string RegistryJson() => File.ReadAllText(RegistryPath());
 
     /// <summary>
-    /// rst-c's identities read from source (every UpgradeCode in an
-    /// installer*/ .wxs, the ClientId in RST.Bootstrap's .addin), plus the
-    /// pinned ones. A later installer (e.g. Phase 2's bundle) is covered
-    /// without editing this test.
+    /// The UpgradeCode attribute of each &lt;Package&gt; or &lt;Bundle&gt; element in
+    /// one .wxs: the product identity the file declares. Other UpgradeCode
+    /// attributes (an &lt;Upgrade&gt; row, a util:ProductSearch that detects a
+    /// companion) name someone else's product and are ignored.
+    /// </summary>
+    private static IEnumerable<Guid> DeclaredUpgradeCodes(string wxsPath) =>
+        XDocument.Load(wxsPath).Descendants()
+            .Where(e => e.Name.LocalName is "Package" or "Bundle")
+            .Select(e => (string?)e.Attribute("UpgradeCode"))
+            .Where(v => v is not null && Guid.TryParse(v, out _))
+            .Select(v => Guid.Parse(v!));
+
+    /// <summary>
+    /// The checked-in .wxs sources of rst-c's installers: every installer*/
+    /// folder at the repo root, skipping build output (bin/, obj/), which is
+    /// generated and never source.
+    /// </summary>
+    private static IEnumerable<string> InstallerSources(string root) =>
+        Directory.GetDirectories(root, "installer*")
+            .SelectMany(dir => Directory.GetFiles(dir, "*.wxs", SearchOption.AllDirectories))
+            .Where(path => !Path.GetRelativePath(root, path)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(part => part is "bin" or "obj"));
+
+    /// <summary>
+    /// rst-c's identities: the pinned ones, plus each installer source's
+    /// declared Package/Bundle UpgradeCode and the ClientId in RST.Bootstrap's
+    /// .addin. A later installer (e.g. Phase 2's bundle) is covered without
+    /// editing this test.
     /// </summary>
     private static RstIdentities Rst()
     {
         var root = RepoRoot();
         var upgradeCodes = new HashSet<Guid> { RstMsiUpgradeCode, RstR27UpgradeCode };
-        foreach (var dir in Directory.GetDirectories(root, "installer*"))
-            foreach (var wxs in Directory.GetFiles(dir, "*.wxs", SearchOption.AllDirectories))
-                foreach (Match m in WxsUpgradeCode.Matches(File.ReadAllText(wxs)))
-                    upgradeCodes.Add(Guid.Parse(m.Groups[1].Value));
+        foreach (var wxs in InstallerSources(root))
+            upgradeCodes.UnionWith(DeclaredUpgradeCodes(wxs));
 
         var clientIds = new HashSet<Guid> { RstAddinClientId };
         foreach (var addin in Directory.GetFiles(Path.Combine(root, "src", "RST.Bootstrap"), "*.addin"))
@@ -328,9 +352,10 @@ public class CompanionRegistryTests
         // Guards the regexes: if the source files moved or changed shape,
         // discovery would quietly find nothing and only the pins would remain.
         var root = RepoRoot();
-        var wxs = File.ReadAllText(Path.Combine(root, "installer", "Product.wxs"));
-        WxsUpgradeCode.Matches(wxs).Select(m => Guid.Parse(m.Groups[1].Value))
-            .Should().Contain(RstMsiUpgradeCode, "installer/Product.wxs carries RST.msi's UpgradeCode");
+        var product = Path.Combine(root, "installer", "Product.wxs");
+        InstallerSources(root).Should().Contain(product);
+        DeclaredUpgradeCodes(product)
+            .Should().Equal(new[] { RstMsiUpgradeCode }, "installer/Product.wxs declares RST.msi's UpgradeCode on <Package>");
 
         var addin = File.ReadAllText(Path.Combine(root, "src", "RST.Bootstrap", "RST.addin"));
         AddinClientId.Matches(addin).Select(m => Guid.Parse(m.Groups[1].Value))
@@ -339,23 +364,55 @@ public class CompanionRegistryTests
 
     // ---- the validator ----------------------------------------------------
 
-    /// <summary>
-    /// A registry in Phase 2's shape: gantt-it shippable with its v1.1.0 pin
-    /// (verified 2026-10-30 with gh release view -R jedbjorn/gantt-it).
-    /// </summary>
+    // The validator cases build on these literals, never on the checked-in
+    // file, so a later edit to companions.json (Phase 2's pins) cannot change
+    // what a case means. Facts verified 2026-10-30 against each repo's
+    // origin/main and gh release view v1.1.0.
+
+    private const string GanttItPin = """
+        { "tag": "v1.1.0", "asset": "GanttIt-1.1.0.msi",
+          "sha256": "06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b",
+          "upgradeCode": "644FCAD5-E631-4441-9A11-75F175565136", "version": "1.1.0" }
+        """;
+
+    private const string SplashItPin = """
+        { "tag": "v1.1.0", "asset": "SplashIt-1.1.0.msi",
+          "sha256": "ac4e71ce8a34be8696565ea9c2d2634f606736c4c8272a2c3475f6b1f6e83c11",
+          "upgradeCode": "080648F4-EEC7-4DB6-A793-683A1C008BFC", "version": "1.1.0" }
+        """;
+
+    /// <summary>Phase 1's shape: both companions in_development, no pins.</summary>
+    private const string Phase1Registry = """
+        {
+          "schemaVersion": 1,
+          "companions": [
+            {
+              "id": "gantt-it", "name": "Gantt-It",
+              "description": "Gantt charts as native Revit legend views",
+              "repo": "jedbjorn/gantt-it", "status": "in_development",
+              "revitYears": [2025, 2026, 2027],
+              "addinClientId": "9920fb42-542b-4ce1-9659-a078489af6b0",
+              "vendorId": "DSOS", "defaultSelected": false, "release": null
+            },
+            {
+              "id": "splash-it", "name": "Splash-It",
+              "description": "Colors Revit view tabs by file",
+              "repo": "jedbjorn/splash-it", "status": "in_development",
+              "revitYears": [2025, 2026, 2027],
+              "addinClientId": "0b1cc712-e936-4da1-9680-2d9a95f88271",
+              "vendorId": "DSOS", "defaultSelected": false, "release": null
+            }
+          ]
+        }
+        """;
+
+    /// <summary>Phase 1's registry with gantt-it shippable at its v1.1.0 pin; splash-it stays unpinned.</summary>
     private static JsonNode ShippableRegistry()
     {
-        var node = JsonNode.Parse(RegistryJson())!;
+        var node = JsonNode.Parse(Phase1Registry)!;
         var gantt = Companion(node, "gantt-it");
         gantt["status"] = "shippable";
-        gantt["release"] = new JsonObject
-        {
-            ["tag"] = "v1.1.0",
-            ["asset"] = "GanttIt-1.1.0.msi",
-            ["sha256"] = "06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b",
-            ["upgradeCode"] = "644FCAD5-E631-4441-9A11-75F175565136",
-            ["version"] = "1.1.0",
-        };
+        gantt["release"] = JsonNode.Parse(GanttItPin);
         return node;
     }
 
@@ -363,9 +420,27 @@ public class CompanionRegistryTests
         registry["companions"]!.AsArray().Single(c => (string?)c!["id"] == id)!.AsObject();
 
     [Fact]
+    public void Phase1_registry_validates()
+    {
+        Validate(Phase1Registry).Should().BeEmpty();
+    }
+
+    [Fact]
     public void A_complete_shippable_entry_validates()
     {
         Validate(ShippableRegistry().ToJsonString()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Phase2_registry_with_both_companions_pinned_validates()
+    {
+        var registry = JsonNode.Parse(Phase1Registry)!;
+        Companion(registry, "gantt-it")["status"] = "shippable";
+        Companion(registry, "gantt-it")["release"] = JsonNode.Parse(GanttItPin);
+        Companion(registry, "splash-it")["status"] = "shippable";
+        Companion(registry, "splash-it")["release"] = JsonNode.Parse(SplashItPin);
+
+        Validate(registry.ToJsonString()).Should().BeEmpty();
     }
 
     [Theory]
@@ -373,7 +448,10 @@ public class CompanionRegistryTests
     [InlineData("id-not-kebab", "id must be kebab-case")]
     [InlineData("shippable-without-release", "shippable requires a complete release")]
     [InlineData("shippable-release-missing-sha256", "missing field 'sha256'")]
-    [InlineData("shippable-sha256-not-64-hex", "sha256 must be 64 hex characters")]
+    [InlineData("shippable-sha256-not-64-hex", "sha256 must be 64 lowercase hex characters")]
+    [InlineData("shippable-sha256-uppercase", "sha256 must be 64 lowercase hex characters")]
+    [InlineData("shippable-sha256-trailing-newline", "sha256 must be 64 lowercase hex characters")]
+    [InlineData("id-trailing-newline", "id must be kebab-case")]
     [InlineData("shippable-upgradecode-not-guid", "upgradeCode must be a GUID")]
     [InlineData("shippable-asset-not-msi", "asset must be an .msi")]
     [InlineData("shippable-without-clientid", "shippable requires addinClientId")]
@@ -389,7 +467,7 @@ public class CompanionRegistryTests
     [InlineData("missing-field", "missing field 'defaultSelected'")]
     [InlineData("schema-version-2", "schemaVersion must be the number 1")]
     [InlineData("revit-year-not-a-year", "not a Revit year")]
-    [InlineData("partial-release-on-in-development", "sha256 must be 64 hex characters")]
+    [InlineData("partial-release-on-in-development", "sha256 must be 64 lowercase hex characters")]
     public void A_broken_registry_fails_validation(string breakage, string expectedError)
     {
         var registry = ShippableRegistry();
@@ -404,6 +482,9 @@ public class CompanionRegistryTests
             case "shippable-without-release": gantt["release"] = null; break;
             case "shippable-release-missing-sha256": release.Remove("sha256"); break;
             case "shippable-sha256-not-64-hex": release["sha256"] = "06f40346"; break;
+            case "shippable-sha256-uppercase": release["sha256"] = ((string)release["sha256"]!).ToUpperInvariant(); break;
+            case "shippable-sha256-trailing-newline": release["sha256"] = (string)release["sha256"]! + "\n"; break;
+            case "id-trailing-newline": splash["id"] = "splash-it\n"; break;
             case "shippable-upgradecode-not-guid": release["upgradeCode"] = "not-a-guid"; break;
             case "shippable-asset-not-msi": release["asset"] = "GanttIt-1.1.0-Revit2027.zip"; break;
             case "shippable-without-clientid": gantt["addinClientId"] = null; break;
@@ -448,9 +529,37 @@ public class CompanionRegistryTests
     public void Each_breakage_is_reported_against_the_entry_it_is_in()
     {
         var registry = ShippableRegistry();
-        Companion(registry, "splash-it")["status"] = "shippable"; // release still null
+        Companion(registry, "splash-it")["status"] = "shippable"; // no pin for splash-it in the literal
 
         Validate(registry.ToJsonString()).Should().Equal(
             "companion 'splash-it': shippable requires a complete release");
+    }
+
+    [Fact]
+    public void Only_the_declared_Package_or_Bundle_UpgradeCode_counts_as_rst_c_own()
+    {
+        // A bundle that detects a companion (util:ProductSearch) or an MSI's
+        // Upgrade row names the companion's code; neither is rst-c's identity.
+        var dir = Directory.CreateTempSubdirectory("rstc-wxs-");
+        try
+        {
+            var wxs = Path.Combine(dir.FullName, "Bundle.wxs");
+            File.WriteAllText(wxs, """
+                <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+                     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+                  <Bundle Name="RST Setup" UpgradeCode="11111111-2222-3333-4444-555555555555">
+                    <util:ProductSearch UpgradeCode="644FCAD5-E631-4441-9A11-75F175565136" Variable="GanttItVersion" />
+                  </Bundle>
+                  <Fragment>
+                    <Upgrade Id="080648F4-EEC7-4DB6-A793-683A1C008BFC" />
+                  </Fragment>
+                </Wix>
+                """);
+            DeclaredUpgradeCodes(wxs).Should().Equal(Guid.Parse("11111111-2222-3333-4444-555555555555"));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
     }
 }
