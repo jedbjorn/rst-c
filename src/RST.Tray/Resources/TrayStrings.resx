@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    rst-c's own (not vendored): the RST tray's user-facing strings (spec #20 §1; F17 WU1), kept apart
+    from RST.UI's UiStrings so the tray and the Revit windows never edit the same resource. English only
+    (spec #16). TrayStrings.cs has one accessor per entry; RuntimeTests' TrayStringsTests checks each resolves.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Tray_Tooltip" xml:space="preserve">
+    <value>RST</value>
+    <comment>The notification-area icon's tooltip.</comment>
+  </data>
+  <data name="Menu_Open" xml:space="preserve">
+    <value>_Open RST</value>
+    <comment>Tray menu; _ marks the access key.</comment>
+  </data>
+  <data name="Menu_CheckForUpdates" xml:space="preserve">
+    <value>Check for _updates</value>
+    <comment>Tray menu. Disabled until update checks arrive (F17 WU3).</comment>
+  </data>
+  <data name="Menu_Settings" xml:space="preserve">
+    <value>_Settings</value>
+  </data>
+  <data name="Menu_Quit" xml:space="preserve">
+    <value>_Quit</value>
+  </data>
+  <data name="Window_Title" xml:space="preserve">
+    <value>RST</value>
+  </data>
+  <data name="Window_Heading" xml:space="preserve">
+    <value>RST</value>
+  </data>
+  <data name="Tab_Updates" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="Tab_Apps" xml:space="preserve">
+    <value>Apps</value>
+  </data>
+  <data name="Tab_AddIns" xml:space="preserve">
+    <value>Add-ins</value>
+  </data>
+  <data name="Tab_Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Page_ComingLater" xml:space="preserve">
+    <value>Coming in a later update.</value>
+    <comment>The placeholder line on the pages that arrive later in v3.1.</comment>
+  </data>
+  <data name="Updates_Heading" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="Updates_Description" xml:space="preserve">
+    <value>RST will check GitHub once a day for new versions of RST, Gantt-It and Splash-It, and install one when you click Install.</value>
+  </data>
+  <data name="Apps_Heading" xml:space="preserve">
+    <value>Apps</value>
+  </data>
+  <data name="Apps_Description" xml:space="preserve">
+    <value>RST, Gantt-It and Splash-It: which are installed, their versions, and a one-click install for the ones you don't have.</value>
+  </data>
+  <data name="AddIns_Heading" xml:space="preserve">
+    <value>Add-ins</value>
+  </data>
+  <data name="AddIns_Description" xml:space="preserve">
+    <value>Choose the add-ins Revit loads before you start Revit. Until then, use the Profile Loader in Revit.</value>
+  </data>
+  <data name="Settings_Appearance" xml:space="preserve">
+    <value>Appearance</value>
+  </data>
+  <data name="Settings_Theme" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="Settings_ThemeSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="Settings_ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="Settings_ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="Settings_ThemeHint" xml:space="preserve">
+    <value>System follows your Windows app theme.</value>
+  </data>
+  <data name="Settings_UpdatesHeading" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="Settings_CheckForUpdates" xml:space="preserve">
+    <value>Check for updates automatically</value>
+  </data>
+  <data name="Settings_CheckForUpdatesHint" xml:space="preserve">
+    <value>Once a day, RST asks GitHub whether a newer RST, Gantt-It or Splash-It is available. It sends nothing about you or your models, and installs nothing until you click.</value>
+  </data>
+  <data name="Settings_CheckForUpdatesLocked" xml:space="preserve">
+    <value>Turned off on this computer by whoever manages its software.</value>
+    <comment>Shown when the UpdateChecks=0 registry preset forces checks off.</comment>
+  </data>
+  <data name="Settings_SaveFailed" xml:space="preserve">
+    <value>Couldn't save the setting. Details are in the log.</value>
+  </data>
+  <data name="Settings_About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Settings_VersionFormat" xml:space="preserve">
+    <value>RST {0}</value>
+    <comment>{0} is the version, e.g. 3.1.0.</comment>
+  </data>
+  <data name="Settings_StartupHint" xml:space="preserve">
+    <value>RST starts when you sign in to Windows. To stop that, turn RST off in Task Manager under Startup apps.</value>
+  </data>
+  <data name="Settings_Logs" xml:space="preserve">
+    <value>Logs</value>
+  </data>
+  <data name="Settings_OpenLogFolder" xml:space="preserve">
+    <value>Open log folder</value>
+  </data>
+  <data name="Footer_RunsInTray" xml:space="preserve">
+    <value>RST keeps running in the notification area. Quit it from the icon's menu.</value>
+  </data>
+  <data name="Footer_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Notice_Title" xml:space="preserve">
+    <value>RST</value>
+  </data>
+  <data name="Notice_Heading" xml:space="preserve">
+    <value>RST checks for updates</value>
+  </data>
+  <data name="Notice_Message" xml:space="preserve">
+    <value>Once a day, the RST tray asks GitHub whether a newer RST, Gantt-It or Splash-It is available, and tells you when one is. It sends nothing about you or your models, and it installs nothing until you click Install.
+
+To turn this off, open RST from the notification area and go to Settings.</value>
+    <comment>The one-time first-run notice (the telemetry ConsentNotice precedent).</comment>
+  </data>
+</root>

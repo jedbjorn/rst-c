@@ -1,0 +1,187 @@
+<!--
+    rst-c's own (not vendored). The RST tray's one window (spec #20 §1; F17 WU1), on RST.UI's family kit
+    (Theme.xaml, the Health window's header-tabs layout): Updates, Apps, Add-ins and Settings / About. In WU1 the
+    first three are placeholders; Settings / About is real. The view-model is TrayViewModel.
+-->
+<Window x:Class="RST.Tray.Windows.TrayWindow" x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:RST.Tray.Resources"
+        Title="{x:Static res:TrayStrings.Window_Title}"
+        Width="720" Height="540" MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterScreen" ResizeMode="CanResize" ShowInTaskbar="True"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}"
+        AutomationProperties.AutomationId="Tray.Window">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="PageDescription" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,6,0,14" />
+            </Style>
+            <Style x:Key="Hint" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,6,0,0" />
+            </Style>
+            <Style x:Key="Page" TargetType="ScrollViewer">
+                <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+                <Setter Property="Padding" Value="22,18,22,12" />
+                <Setter Property="Focusable" Value="False" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- The root carries the window color itself: the screenshot tests render it unclipped by the window. -->
+    <Grid x:Name="Root" Background="{StaticResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header: the title and the page tabs. -->
+        <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1"
+                Padding="18,10,18,0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{x:Static res:TrayStrings.Window_Heading}" Style="{StaticResource HeadingText}"
+                           VerticalAlignment="Center" Margin="0,0,24,10" />
+                <TabControl x:Name="Tabs" SelectedIndex="{Binding PageIndex, Mode=TwoWay}" Padding="0" BorderThickness="0"
+                            VerticalAlignment="Bottom" AutomationProperties.AutomationId="Tray.Tabs">
+                    <TabItem Header="{x:Static res:TrayStrings.Tab_Updates}" AutomationProperties.AutomationId="Tray.TabUpdates" />
+                    <TabItem Header="{x:Static res:TrayStrings.Tab_Apps}" AutomationProperties.AutomationId="Tray.TabApps" />
+                    <TabItem Header="{x:Static res:TrayStrings.Tab_AddIns}" AutomationProperties.AutomationId="Tray.TabAddIns" />
+                    <TabItem Header="{x:Static res:TrayStrings.Tab_Settings}" AutomationProperties.AutomationId="Tray.TabSettings" />
+                </TabControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Updates (WU3 fills it). -->
+        <ScrollViewer x:Name="UpdatesPage" Grid.Row="1" Style="{StaticResource Page}"
+                      Visibility="{Binding IsUpdatesPage, Converter={StaticResource BoolToVisible}}">
+            <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                <TextBlock Text="{x:Static res:TrayStrings.Updates_Heading}" Style="{StaticResource HeadingText}" />
+                <TextBlock Text="{x:Static res:TrayStrings.Updates_Description}" Style="{StaticResource PageDescription}" />
+                <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.UpdatesLater">
+                    <TextBlock Text="{x:Static res:TrayStrings.Page_ComingLater}" TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Apps: RST, Gantt-It and Splash-It (WU3 fills it). -->
+        <ScrollViewer x:Name="AppsPage" Grid.Row="1" Style="{StaticResource Page}"
+                      Visibility="{Binding IsAppsPage, Converter={StaticResource BoolToVisible}}">
+            <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                <TextBlock Text="{x:Static res:TrayStrings.Apps_Heading}" Style="{StaticResource HeadingText}" />
+                <TextBlock Text="{x:Static res:TrayStrings.Apps_Description}" Style="{StaticResource PageDescription}" />
+                <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.AppsLater">
+                    <TextBlock Text="{x:Static res:TrayStrings.Page_ComingLater}" TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Add-ins (WU2 fills it). -->
+        <ScrollViewer x:Name="AddInsPage" Grid.Row="1" Style="{StaticResource Page}"
+                      Visibility="{Binding IsAddInsPage, Converter={StaticResource BoolToVisible}}">
+            <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                <TextBlock Text="{x:Static res:TrayStrings.AddIns_Heading}" Style="{StaticResource HeadingText}" />
+                <TextBlock Text="{x:Static res:TrayStrings.AddIns_Description}" Style="{StaticResource PageDescription}" />
+                <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.AddInsLater">
+                    <TextBlock Text="{x:Static res:TrayStrings.Page_ComingLater}" TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Settings / About. -->
+        <ScrollViewer x:Name="SettingsPage" Grid.Row="1" Style="{StaticResource Page}"
+                      Visibility="{Binding IsSettingsPage, Converter={StaticResource BoolToVisible}}">
+            <StackPanel MaxWidth="640">
+                <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{x:Static res:TrayStrings.Settings_Appearance}" Style="{StaticResource SectionText}" FontSize="13" />
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="{x:Static res:TrayStrings.Settings_Theme}" Style="{StaticResource LabelText}" Margin="0,0,14,0" />
+                            <Border Style="{StaticResource RangePillGroup}" AutomationProperties.AutomationId="Tray.Theme">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="ThemeSystem" Style="{StaticResource RangePill}" GroupName="TrayTheme"
+                                                 Content="{x:Static res:TrayStrings.Settings_ThemeSystem}" IsChecked="{Binding ThemeSystem, Mode=TwoWay}"
+                                                 AutomationProperties.AutomationId="Tray.ThemeSystem" />
+                                    <RadioButton x:Name="ThemeLight" Style="{StaticResource RangePill}" GroupName="TrayTheme"
+                                                 Content="{x:Static res:TrayStrings.Settings_ThemeLight}" IsChecked="{Binding ThemeLight, Mode=TwoWay}"
+                                                 AutomationProperties.AutomationId="Tray.ThemeLight" />
+                                    <RadioButton x:Name="ThemeDark" Style="{StaticResource RangePill}" GroupName="TrayTheme"
+                                                 Content="{x:Static res:TrayStrings.Settings_ThemeDark}" IsChecked="{Binding ThemeDark, Mode=TwoWay}"
+                                                 AutomationProperties.AutomationId="Tray.ThemeDark" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{x:Static res:TrayStrings.Settings_ThemeHint}" Style="{StaticResource Hint}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{x:Static res:TrayStrings.Settings_UpdatesHeading}" Style="{StaticResource SectionText}" FontSize="13" />
+                        <CheckBox x:Name="CheckForUpdatesToggle" Style="{StaticResource ToggleSwitch}" Margin="0,4,0,0"
+                                  Content="{x:Static res:TrayStrings.Settings_CheckForUpdates}"
+                                  IsChecked="{Binding CheckForUpdates, Mode=TwoWay}" IsEnabled="{Binding CanChangeCheckForUpdates}"
+                                  AutomationProperties.AutomationId="Tray.CheckForUpdates" />
+                        <TextBlock Text="{x:Static res:TrayStrings.Settings_CheckForUpdatesHint}" Style="{StaticResource Hint}" />
+                        <Border Style="{StaticResource WarningBanner}" Margin="0,10,0,0" HorizontalAlignment="Left"
+                                Visibility="{Binding IsCheckForUpdatesLocked, Converter={StaticResource BoolToVisible}}"
+                                AutomationProperties.AutomationId="Tray.CheckForUpdatesLocked">
+                            <TextBlock Text="{x:Static res:TrayStrings.Settings_CheckForUpdatesLocked}" TextWrapping="Wrap" />
+                        </Border>
+                        <TextBlock Text="{Binding SaveError}" Style="{StaticResource ErrorText}" Margin="0,8,0,0"
+                                   Visibility="{Binding HasSaveError, Converter={StaticResource BoolToVisible}}"
+                                   AutomationProperties.AutomationId="Tray.SaveError" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{x:Static res:TrayStrings.Settings_About}" Style="{StaticResource SectionText}" FontSize="13" />
+                        <TextBlock Text="{Binding VersionText}" FontWeight="SemiBold" Margin="0,2,0,0"
+                                   AutomationProperties.AutomationId="Tray.Version" />
+                        <TextBlock Text="{x:Static res:TrayStrings.Settings_StartupHint}" Style="{StaticResource Hint}" />
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{x:Static res:TrayStrings.Settings_Logs}" Style="{StaticResource LabelText}" Margin="0,0,14,0" />
+                            <TextBlock Grid.Column="1" Text="{Binding LogFolder}" Style="{StaticResource MutedText}" VerticalAlignment="Center"
+                                       ToolTip="{Binding LogFolder}" AutomationProperties.AutomationId="Tray.LogFolder" />
+                            <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="14,0,0,0">
+                                <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding OpenLogFolderCommand}"
+                                           AutomationProperties.AutomationId="Tray.OpenLogFolder">
+                                    <Run Text="{x:Static res:TrayStrings.Settings_OpenLogFolder}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer: a reminder that the tray keeps running; Close on the right. -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource DividerBrush}"
+                BorderThickness="0,1,0,0" Padding="18,10">
+            <DockPanel LastChildFill="True">
+                <Button x:Name="CloseButton" DockPanel.Dock="Right" Content="{x:Static res:TrayStrings.Footer_Close}"
+                        Command="{Binding CloseCommand}" MinWidth="80" IsCancel="True"
+                        AutomationProperties.AutomationId="Tray.Close" />
+                <TextBlock Text="{x:Static res:TrayStrings.Footer_RunsInTray}" Style="{StaticResource MutedText}"
+                           VerticalAlignment="Center" Margin="0,0,12,0" />
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
