@@ -59,7 +59,7 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet test src/RST.Tests/RST.Tests.csproj -c Release --nologo
 
-  # RuntimeTests invokes the real WPF assemblies (LoaderBridge, IconAssets)
+  # RuntimeTests invokes the real WPF assemblies (the windows, IconAssets)
   # — it can only RUN on Windows. No Revit needed, so windows-latest
   # suffices and the self-hosted Revit runner stays out of the PR gate.
   # R27 leg (feature #11, D5): the same contracts on net10.0-windows.

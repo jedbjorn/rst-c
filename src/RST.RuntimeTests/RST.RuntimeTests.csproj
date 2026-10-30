@@ -2,7 +2,7 @@
 
   <!--
     RST.RuntimeTests — production-path contract tests that must run on a
-    real Windows runtime: they invoke LoaderBridge (RST.UI, WPF) and
+    real Windows runtime: they drive the WPF windows (RST.UI) and
     IconAssets (RST.Engine, WPF) directly, which a Linux test host cannot
     load. Spec #9's bridge/resolver verification gates live here;
     everything that can run platform-agnostic stays in RST.Tests (Core).

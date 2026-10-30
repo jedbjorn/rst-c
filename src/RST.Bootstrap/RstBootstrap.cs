@@ -56,7 +56,7 @@ public sealed class RstBootstrap : IExternalApplication
             // AssemblyDependencyResolver reads RST.Engine.deps.json next to
             // the engine DLL and resolves both managed deps and native libs
             // (runtimes/<rid>/native/*) for every transitive — Serilog,
-            // WebView2 (incl. WebView2Loader.dll), System.Management, etc.
+            // System.Management (its runtime variant), etc.
             var resolver = new AssemblyDependencyResolver(enginePath);
             AssemblyLoadContext.Default.Resolving += (ctx, name) =>
             {
