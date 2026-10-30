@@ -200,8 +200,11 @@ Start-Sleep -Seconds 15
 $trays = Get-Trays
 foreach ($t in $trays) { Write-Host "  tray pid $($t.ProcessId) parent $($t.ParentProcessId) $($t.CommandLine)" }
 Assert ($trays.Count -eq 1) "(3) Restart Manager's restart and the updater's start leave exactly one tray (got $($trays.Count))"
-$second = @($lines | Where-Object { $_ -match 'RST tray already running for this user' })
-Write-Host "OBSERVE: (3) launches that found a tray running and exited: $($second.Count)"
+# Two launches, one tray: whichever came second (Restart Manager's --startup or the updater's) found the first and exited.
+$second = @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match 'RST tray already running for this user' })
+$second | ForEach-Object { Write-Host "  log: $_" }
+Write-Host "OBSERVE: (3) launches that found a tray running and exited: $($second.Count) (1 when Restart Manager restarted the tray as well; 0 when CloseApplication closed it, which nothing restarts)"
+Assert ($second.Count -le 1) '(3) at most one launch found a tray already running'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewerVersion)): installed" }).Count -gt 0 } 30 '(3) the running tray shows the updater''s result'
 Assert (-not (Test-Path (Join-Path $LocalRoot 'selfupdate.json'))) '(3) the result is shown once'
 Assert-OneRst $NewerVersion '(3) after the race'
