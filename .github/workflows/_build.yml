@@ -402,10 +402,10 @@ jobs:
           if-no-files-found: ignore
 
   # SHA256SUMS.txt (feature #17, spec #20 §8): release.yml writes it with
-  # build/sha256sums.sh and checks the published release against it. This
-  # runs the same script on every PR over this build's RST.msi and
-  # RST-Setup.exe: the lines name exactly the assets and verify, and the
-  # release check refuses a wrong digest, a missing or an extra line.
+  # build/sha256sums.sh and checks the DRAFT release against it before it
+  # publishes. This runs the same script on every PR over this build's RST.msi and
+  # RST-Setup.exe: the lines name exactly the assets and verify, and the release
+  # check refuses a wrong or missing digest, a missing or extra line, and a sums asset that differs.
   release-sums:
     name: Release SHA256SUMS.txt
     needs: bundle

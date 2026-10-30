@@ -11,12 +11,14 @@
 #       then checks it: the names are exactly the assets, every line is '<64 hex>  <name>', and every hash
 #       verifies (sha256sum --check --strict).
 #   build/sha256sums.sh check-release <SHA256SUMS.txt> <assets.json>
-#       Checks a published release: <assets.json> is `gh release view <tag> --json assets`. Every asset other
-#       than SHA256SUMS.txt has exactly one line, every line names an asset, and each line's hash equals the
-#       asset's GitHub digest (sha256:<hex>, computed by GitHub on upload).
+#       Checks a release (release.yml runs it on the DRAFT, before publishing): <assets.json> is
+#       `gh release view <tag> --json assets`. Every asset other than SHA256SUMS.txt has exactly one line, every
+#       line names an asset, each line's hash equals the asset's GitHub digest (sha256:<hex>, computed by GitHub
+#       on upload; a missing digest fails), and the release's own SHA256SUMS.txt asset is exactly this file.
 #   build/sha256sums.sh self-test <dir> <asset>...
 #       CI on every PR: `write`, then `check-release` against an assets list built from the same files, then the
-#       same check against a wrong digest, a missing line and an extra line, each of which must fail.
+#       same check against a wrong digest, a missing or extra line, a malformed line, a release SHA256SUMS.txt
+#       that differs, none at all, and a missing digest, each of which must fail.
 set -euo pipefail
 
 die() { echo "sha256sums: $*" >&2; exit 1; }
@@ -67,7 +69,15 @@ cmd_check_release() {
     fi
   done < "$sums"
   [ "$bad" -eq 0 ] || die "check-release: digests do not match"
-  echo "SHA256SUMS.txt matches every published asset and its GitHub digest"
+
+  # The release's own SHA256SUMS.txt must be exactly the file checked here (what the tray will download).
+  local own mine
+  own="$(jq -r '[.assets[] | select(.name == "SHA256SUMS.txt")] | if length == 1 then .[0].digest // "" else "missing" end' "$assets")"
+  mine="sha256:$(sha256sum -- "$sums" | cut -d' ' -f1)"
+  [ "$own" != "missing" ] || die "check-release: the release has no single SHA256SUMS.txt asset"
+  [ "$own" = "$mine" ] || die "check-release: the release's SHA256SUMS.txt (digest '${own:-none}') is not the file checked ($mine)"
+  echo "ok  SHA256SUMS.txt  ${mine#sha256:}"
+  echo "SHA256SUMS.txt matches every asset and its GitHub digest"
 }
 
 # An assets list in `gh release view --json assets` shape, from the files themselves.
@@ -103,6 +113,12 @@ cmd_self_test() {
   expect_failure "a line for an asset the release does not have" cmd_check_release "$tmp/extra-line.txt" "$tmp/assets.json"
   sed 's/  / /' "$dir/SHA256SUMS.txt" > "$tmp/one-space.txt"
   expect_failure "a malformed line" cmd_check_release "$tmp/one-space.txt" "$tmp/assets.json"
+  jq '(.assets[] | select(.name == "SHA256SUMS.txt") | .digest) = "sha256:" + ("3" * 64)' "$tmp/assets.json" > "$tmp/other-sums.json"
+  expect_failure "a release SHA256SUMS.txt that is not the file checked" cmd_check_release "$dir/SHA256SUMS.txt" "$tmp/other-sums.json"
+  jq '.assets |= map(select(.name != "SHA256SUMS.txt"))' "$tmp/assets.json" > "$tmp/no-sums.json"
+  expect_failure "a release without SHA256SUMS.txt" cmd_check_release "$dir/SHA256SUMS.txt" "$tmp/no-sums.json"
+  jq '.assets[0].digest = null' "$tmp/assets.json" > "$tmp/no-digest.json"
+  expect_failure "an asset GitHub has no digest for" cmd_check_release "$dir/SHA256SUMS.txt" "$tmp/no-digest.json"
   expect_failure "a missing asset file" cmd_write "$dir" "$@" Missing.msi
   # write refuses before it writes, so the good file is still there.
   cmd_check_release "$dir/SHA256SUMS.txt" "$tmp/assets.json" > /dev/null
