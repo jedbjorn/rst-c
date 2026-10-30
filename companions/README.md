@@ -4,7 +4,7 @@ Designs/OS builds other Revit add-ins beside rst-c. Each one lives in its own re
 
 The setup bundle (`RST-Setup.exe`, feature #13 Phase 2) is generated from this file. It always installs rst-c, and offers each `shippable` companion as a checkbox. Ticking one runs that companion's own MSI silently. After that, every product is a stock install: its own Add/Remove Programs entry, its own upgrades, no runtime link to rst-c. Uninstalling rst-c leaves the companions installed.
 
-This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a runtime lookup the Builder uses for download links on a profile's required add-ins. This registry is used at build time only; rst-c never reads it at runtime.
+This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a runtime lookup the Builder uses for download links on a profile's required add-ins. This registry is used at build time. From v3.1 one part of it is also used at runtime: RST.Core embeds the file when it is built, and the RST tray reads only each shippable companion's identity fields (`id`, `name`, `description`, `repo`, `release.upgradeCode`, `addinClientId`) to detect it and check its latest release ([`docs/tray.md`](../docs/tray.md#updates)). The pins (`tag`, `asset`, `sha256`, `version`) stay build-time only: the bundle installs the pinned release, and the tray follows each repo's latest full release.
 
 | Companion | Repo | Status | Pin |
 |---|---|---|---|
