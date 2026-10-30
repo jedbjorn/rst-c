@@ -49,12 +49,13 @@
 
   <!-- The fixture companion is its own project (fixture/), and theme/ holds
        the BA theme templates, which are payloads, not bundle sources or
-       bundle localization. Keep both out of the SDK's default globs. -->
-  <ItemGroup>
-    <Compile Remove="fixture\**" />
-    <EmbeddedResource Remove="theme\**;fixture\**" />
-    <None Remove="fixture\**" />
-  </ItemGroup>
+       bundle localization. Keep both out of the SDK's default globs (a
+       property, not <Compile Remove>: the SDK adds its **\*.wxs and
+       **\*.wxl items in its .targets, after this file). payload\ holds
+       only MSIs. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);fixture\**;theme\**;payload\**</DefaultItemExcludes>
+  </PropertyGroup>
 
   <!-- WixStandardBootstrapperApplication. Version pinned centrally in
        Directory.Packages.props (CPM). -->
