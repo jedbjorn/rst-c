@@ -33,6 +33,11 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
+  <!-- RST.RuntimeTests drives EngineDependencyResolver (decision #27) on the Windows CI leg. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="RST.RuntimeTests" />
+  </ItemGroup>
+
   <!-- Revit 2025 -->
   <ItemGroup Condition="'$(RevitVersion)' == '2025'">
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.0.2" PrivateAssets="all" VersionOverride="2025.0.2" />
