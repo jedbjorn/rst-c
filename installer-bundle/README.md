@@ -85,7 +85,9 @@ Observed on CI (`ci-bundle-smoke.ps1 -Mode BareMsiFirst`, first in PR #134, run 
    - Ticked companions install normally.
 3. Uninstalling the bundle (Settings → Apps → the bundle's "RST", or `RST-Setup.exe /uninstall /quiet`): Burn plans `RST` as `execute: Uninstall`. **The adopted RST.msi is removed**: no RST product, no RST files, and no "RST" entry left. Companions stay, as always.
 
-So after `RST.msi` then `RST-Setup.exe`, there is one product behind two entries, and removing either one removes rst-c. Uninstalling the MSI entry directly leaves the bundle's entry behind, pointing at an rst-c that is gone; that path is not covered by the smoke. This is Burn's default for a package it did not install. No workaround is applied; it was returned to the Planner (PLN1) as the spec asks.
+4. The other way out (recorded, not asserted): bare `RST.msi`, then the bundle, then the MSI's own entry removed (`msiexec /x`). rst-c is removed, but **the bundle's "RST" entry stays behind** with nothing under it. Uninstalling that leftover entry succeeds (Burn plans `RST` as `state: Absent, execute: None`) and removes it.
+
+So after `RST.msi` then `RST-Setup.exe`, there is one product behind two entries, and removing either one removes rst-c. Removing the MSI's entry leaves an empty bundle entry to remove as well. This is Burn's default for a package it did not install. No workaround is applied; it was returned to the Planner (PLN1) as the spec asks.
 
 ## Build
 

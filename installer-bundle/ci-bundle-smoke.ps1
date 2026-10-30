@@ -245,7 +245,8 @@ function Assert-Fixture([string]$Version, [string]$Label, [string]$ProductCode) 
   }
 }
 function Remove-Fixture([string]$Label) {
-  foreach ($p in Get-Related $FixtureCode) { Invoke-Msiexec '/x' $p.ProductCode "fixture-remove-$Label" }
+  $rel = Get-Related $FixtureCode   # assign first: foreach over the call would see one empty array
+  foreach ($p in $rel) { Invoke-Msiexec '/x' $p.ProductCode "fixture-remove-$Label" }
   Assert-Fixture $null "$Label cleanup"
 }
 
@@ -415,7 +416,8 @@ if ($Mode -eq 'BareMsiFirst') {
     Observe "orphaned bundle uninstall plan: $((Select-String -Path $log -Pattern 'Planned package: RST,' -SimpleMatch | Select-Object -First 1).Line)"
     Observe "after the orphaned bundle's uninstall: RST products $((Get-Related $RstCode).Count), bundle entries $((Get-BundleArp).Count)"
   }
-  foreach ($p in Get-Related $RstCode) { Invoke-Msiexec '/x' $p.ProductCode 'bare-rst-2-cleanup' }
+  $rel = Get-Related $RstCode
+  foreach ($p in $rel) { Invoke-Msiexec '/x' $p.ProductCode 'bare-rst-2-cleanup' }
   Assert-Rst $false 'final cleanup'
   exit 0
 }
@@ -481,7 +483,8 @@ foreach ($c in $companions) { Assert-Companion $c $true 'bundle uninstalled' }
 
 # C4: each uninstalls silently with exit 0; nothing left.
 foreach ($c in $companions) {
-  foreach ($p in Get-Related "{$($c.release.upgradeCode)}") { Invoke-Msiexec '/x' $p.ProductCode "$($c.id)-remove" }
+  $rel = Get-Related "{$($c.release.upgradeCode)}"
+  foreach ($p in $rel) { Invoke-Msiexec '/x' $p.ProductCode "$($c.id)-remove" }
   Assert-Companion $c $false 'removed'
 }
 
