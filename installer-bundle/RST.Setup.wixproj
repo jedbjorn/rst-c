@@ -19,7 +19,7 @@
                            (filled by fetch-companions.ps1).
       RstBundleVersion     the bundle version: the numeric a.b.c of the
                            rst-c tag, the same value release.yml stamps into
-                           RST.msi. Empty -> the RST.msi fallback (2.99.0).
+                           RST.msi. Empty -> the RST.msi fallback (3.0.99).
 
     Windows only, like every WiX build here (gen-companions.ps1 runs under
     powershell.exe).
@@ -28,8 +28,8 @@
   <PropertyGroup>
     <RstBundleVersionEffective>$(RstBundleVersion)</RstBundleVersionEffective>
     <!-- Same fallback as installer/RST.Installer.wixproj: between the
-         latest release (v2.2.0) and the next (v3.0.0). -->
-    <RstBundleVersionEffective Condition="'$(RstBundleVersionEffective)' == ''">2.99.0</RstBundleVersionEffective>
+         latest release (v3.0.0) and the next (v3.1.0). -->
+    <RstBundleVersionEffective Condition="'$(RstBundleVersionEffective)' == ''">3.0.99</RstBundleVersionEffective>
     <RstMsi Condition="'$(RstMsi)' == ''">$(MSBuildProjectDirectory)\..\installer\bin\$(Configuration)\RST.msi</RstMsi>
     <CompanionRegistry Condition="'$(CompanionRegistry)' == ''">$(MSBuildProjectDirectory)\..\companions\companions.json</CompanionRegistry>
     <CompanionPayloadDir Condition="'$(CompanionPayloadDir)' == ''">$(MSBuildProjectDirectory)\payload</CompanionPayloadDir>
