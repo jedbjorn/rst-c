@@ -1,13 +1,14 @@
 // rst-c's own (not vendored): the Profile Builder's view-model (spec #16, WU4), a port of
-// profile_builder.html's script (1361-3453) without drag and drop, the icon picker and the two
-// Configure modals (WU5): boot, the profile dropdown (startFresh / loadIntoProfile), the
-// machine-wide branding, the catalogue tree and filter, double-click to add, the panels list
-// (add, select, rename, ▲ ▼ ×), the slot rows (rename, ▲ ▼ ×), the Properties pane (Min Revit,
-// opacity, the selected panel's name and color, the URL button editor, the Presets and Cleanup
-// summaries), the live preview, Save (rename-as-copy, required add-ins, the auto-reload of the
+// profile_builder.html's script (1361-3453): boot, the profile dropdown (startFresh /
+// loadIntoProfile), the machine-wide branding, the catalogue tree and filter, double-click to add,
+// the panels list (add, select, rename, ▲ ▼ ×), the slot rows (rename, ▲ ▼ ×), drag and drop (the
+// four kinds, WU5), the icon picker (WU5), the Properties pane (Min Revit, opacity, the selected
+// panel's name and color, the URL button editor, RST Presets and Junk Cleanup with their Configure
+// modals, WU5), the live preview, Save (rename-as-copy, required add-ins, the auto-reload of the
 // active profile), Export ZIP and Exit. Every toast keeps its text.
 // Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
-// (Planner default 3), and the panel delete confirm is the family's destructive MessageDialog.
+// (Planner default 3), the panel delete confirm is the family's destructive MessageDialog, and the
+// Cleanup modal's Cancel reverts (Planner default 4).
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -16,6 +17,7 @@ using RST.Core.Builder;
 using RST.Core.Colors;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Ribbon;
 using RST.UI.Controls;
 using RST.UI.Dialogs;
 using RST.UI.Loader;
@@ -43,7 +45,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private readonly IProfileBuilderBackend _backend;
     private readonly IDialogService _dialogs;
+    private readonly IBuilderDialogs _builderDialogs;
     private readonly Action<Action> _post;
+    private IReadOnlyList<IconPackEntry>? _iconPack;
+    private IconPickerViewModel? _iconPicker;
+    private BuilderDrag? _drag;
 
     private IReadOnlyList<CatalogCommand> _catalog = [];
     private CatalogTree _tree = CatalogTree.Build([]);
@@ -83,14 +89,17 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// Runs an action after the current input event: the dropdown's snap-back, the switch after the
     /// unsaved prompt, and Save &amp; Exit from the title-bar ✕ (after the Closing event). Null uses the dispatcher.
     /// </param>
+    /// <param name="builderDialogs">The RST Presets and Junk Cleanup modals; null cancels both (tests that do not open them).</param>
     public ProfileBuilderViewModel(
         IProfileBuilderBackend backend,
         IDialogService dialogs,
         Func<TimeSpan, Action, IDisposable>? schedule = null,
-        Action<Action>? post = null)
+        Action<Action>? post = null,
+        IBuilderDialogs? builderDialogs = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _builderDialogs = builderDialogs ?? NoBuilderDialogs.Instance;
         _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
         Toast = new TransientMessage(schedule);
 
@@ -107,9 +116,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         OpenUrlEditorCommand = new RelayCommand(OpenUrlEditor, () => IsIdle && SelectedPanel is not null);
         CancelUrlEditorCommand = new RelayCommand(() => IsUrlEditorOpen = false);
         AddUrlCommand = new RelayCommand(AddUrlButton, () => IsIdle && SelectedPanel is not null);
-        // The RST Presets and Junk Cleanup modals arrive with WU5; the buttons are shown, disabled.
-        ConfigurePresetsCommand = new RelayCommand(() => { }, () => false);
-        ConfigureCleanupCommand = new RelayCommand(() => { }, () => false);
+        ConfigurePresetsCommand = new RelayCommand(ConfigurePresets, () => IsIdle);
+        ConfigureCleanupCommand = new RelayCommand(ConfigureCleanup, () => IsIdle);
     }
 
     /// <summary>Raised when the window should close (Exit, or after the unsaved-changes prompt allowed it).</summary>
@@ -277,6 +285,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private void ProfileChanged()
     {
         IsUrlEditorOpen = false;
+        IconPicker = null;
         RenderCanvas();
         OnPropertyChanged(nameof(ProfileName));
         OnPropertyChanged(nameof(ProfileTab));
@@ -381,7 +390,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private void PickLogo()
     {
-        var path = _dialogs.OpenFile(FileDialogBridge.LogoTitle, FileDialogBridge.ImageFilter);
+        var path = _dialogs.OpenFile(FileDialogTexts.LogoTitle, FileDialogTexts.ImageFilter);
         if (string.IsNullOrEmpty(path)) return; // cancelled: no toast
         var result = Safe(() => _backend.StoreLogo(path), LogoOutcome.Fail("unknown"), "pick_logo_file");
         if (!result.Ok)
@@ -543,9 +552,35 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         RenderCanvas();
     }
 
-    /// <summary>The Pick-icon button. The icon picker arrives with WU5; until then the click is logged only.</summary>
-    internal void PickIcon(SlotRowViewModel slot) =>
-        Log.Information("Builder: pick icon for {Slot} (the icon picker arrives in WU5)", slot.Name);
+    /// <summary>The icon picker while it is open (the window shows it over everything), else null.</summary>
+    public IconPickerViewModel? IconPicker
+    {
+        get => _iconPicker;
+        private set
+        {
+            if (SetField(ref _iconPicker, value)) OnPropertyChanged(nameof(IsIconPickerOpen));
+        }
+    }
+
+    public bool IsIconPickerOpen => _iconPicker is not null;
+
+    /// <summary>
+    /// The Pick-icon button: opens the picker on the slot's current value (the pack list is read
+    /// once). Only a variant or None changes the slot; Cancel, Escape and an outside click do not.
+    /// </summary>
+    internal void PickIcon(SlotRowViewModel slot)
+    {
+        _iconPack ??= Safe(_backend.GetIconPack, [], "list_iconpack");
+        IconPicker = new IconPickerViewModel(_iconPack, slot.Model.IconFile, PackDirectory, outcome =>
+        {
+            IconPicker = null;
+            if (!outcome.Committed) return;
+            slot.Model.IconFile = outcome.Value;
+            Log.Information("Builder: icon for {Slot} → {Icon}", slot.Name, outcome.Value ?? "(none)");
+            slot.IconChanged();
+            PreviewChanged();
+        });
+    }
 
     /// <summary>renderCanvas: the cards and rows again from the profile; the URL editor closes, the preview redraws.</summary>
     private void RenderCanvas()
@@ -665,11 +700,123 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     public string CleanupSummary => BuilderRules.CleanupSummary(_profile.CleanupTargets);
 
-    /// <summary>RST Presets → Configure (WU5).</summary>
+    /// <summary>RST Presets → Configure.</summary>
     public ICommand ConfigurePresetsCommand { get; }
 
-    /// <summary>Junk Cleanup → Configure (WU5).</summary>
+    /// <summary>Junk Cleanup → Configure.</summary>
     public ICommand ConfigureCleanupCommand { get; }
+
+    /// <summary>The RST Presets modal: Apply replaces the profile's presets; Cancel changes nothing.</summary>
+    private void ConfigurePresets()
+    {
+        var model = new PresetsViewModel(_backend.AllTabs, _profile.Presets, _profile.Tab);
+        if (!_builderDialogs.EditPresets(model)) return;
+        _profile.Presets = model.Result();
+        Log.Information("Builder: presets updated (hiddenTabs={Hidden}, disableUnused={Disable})",
+            _profile.Presets.HiddenTabs.Count, _profile.Presets.DisableUnusedAddins);
+        OnPropertyChanged(nameof(PresetsSummary));
+    }
+
+    /// <summary>The Junk Cleanup modal over a copy: Apply keeps the non-blank rows; Cancel reverts (Planner default 4).</summary>
+    private void ConfigureCleanup()
+    {
+        var model = new CleanupViewModel(_profile.CleanupTargets);
+        if (!_builderDialogs.EditCleanup(model)) return;
+        _profile.CleanupTargets = model.Result();
+        Log.Information("Builder: cleanup targets saved (count={Count}, enabled={Enabled})",
+            _profile.CleanupTargets.Count, _profile.CleanupTargets.Count(t => t.Enabled));
+        OnPropertyChanged(nameof(CleanupSummary));
+    }
+
+    // ---- drag and drop ------------------------------------------------------------------------
+
+    /// <summary>What is being dragged, or null.</summary>
+    public BuilderDrag? CurrentDrag => _drag;
+
+    /// <summary>A drag starts: a catalogue command, a slot row (drawn faded) or a panel header.</summary>
+    public void BeginDrag(BuilderDrag drag)
+    {
+        _drag = drag ?? throw new ArgumentNullException(nameof(drag));
+        if (drag.Kind == DragKind.Slot && Slot(drag.PanelIndex, drag.SlotIndex) is { } row) row.IsDragSource = true;
+    }
+
+    /// <summary>The drag ended (dropped or cancelled): every marker clears.</summary>
+    public void EndDrag()
+    {
+        _drag = null;
+        ClearDropMarkers();
+        foreach (var row in Panels.SelectMany(p => p.Slots)) row.IsDragSource = false;
+    }
+
+    /// <summary>The pointer is over a panel card (not over one of its slots). True when the card accepts the drag.</summary>
+    public bool DragOverPanel(int panelIndex, bool upperHalf)
+    {
+        var marker = PanelDrops.CardMarker(_drag, panelIndex, upperHalf);
+        SetMarker(panelIndex, null, marker);
+        return marker != DropMarker.None;
+    }
+
+    /// <summary>The pointer is over a slot row. True when the row accepts the drag.</summary>
+    public bool DragOverSlot(int panelIndex, int slotIndex, bool upperHalf)
+    {
+        var marker = PanelDrops.SlotMarker(_drag, upperHalf);
+        SetMarker(panelIndex, slotIndex, marker);
+        return marker != DropMarker.None;
+    }
+
+    /// <summary>The pointer left a target: its marker clears.</summary>
+    public void ClearDropMarkers()
+    {
+        foreach (var card in Panels)
+        {
+            card.DropMarker = DropMarker.None;
+            foreach (var row in card.Slots) row.DropMarker = DropMarker.None;
+        }
+    }
+
+    /// <summary>A drop on a panel card (panel reorder, command append, slot move to the end).</summary>
+    public void DropOnPanel(int panelIndex, bool upperHalf)
+    {
+        if (_drag is null) return;
+        var selected = PanelDrops.DropOnPanel(_profile, _drag, panelIndex, upperHalf);
+        AfterDrop(selected);
+    }
+
+    /// <summary>A drop on a slot row (command insert, slot reorder or move across panels).</summary>
+    public void DropOnSlot(int panelIndex, int slotIndex, bool upperHalf)
+    {
+        if (_drag is null) return;
+        var selected = PanelDrops.DropOnSlot(_profile, _drag, panelIndex, slotIndex, upperHalf);
+        AfterDrop(selected);
+    }
+
+    private void AfterDrop(int? selected)
+    {
+        _drag = null;
+        if (selected is null)
+        {
+            EndDrag();
+            return;
+        }
+        _selectedPanelIndex = selected.Value;
+        RenderCanvas();
+    }
+
+    private void SetMarker(int panelIndex, int? slotIndex, DropMarker marker)
+    {
+        // One target is marked at a time, as the page's dragleave cleared the previous one.
+        foreach (var card in Panels)
+        {
+            card.DropMarker = slotIndex is null && card.Index == panelIndex ? marker : DropMarker.None;
+            foreach (var row in card.Slots)
+                row.DropMarker = slotIndex is { } s && card.Index == panelIndex && row.Index == s ? marker : DropMarker.None;
+        }
+    }
+
+    private SlotRowViewModel? Slot(int panelIndex, int slotIndex) =>
+        panelIndex >= 0 && panelIndex < Panels.Count && slotIndex >= 0 && slotIndex < Panels[panelIndex].Slots.Count
+            ? Panels[panelIndex].Slots[slotIndex]
+            : null;
 
     // ---- the live preview ---------------------------------------------------------------------
 
@@ -774,7 +921,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             ShowToast(UiStrings.Builder_NameRequired, BannerKind.Error);
             return;
         }
-        var path = _dialogs.SaveFile(FileDialogBridge.ExportZipTitle, FileDialogBridge.ZipFilter, ProfileSaveService.SuggestedExportName(_profile));
+        var path = _dialogs.SaveFile(FileDialogTexts.ExportZipTitle, FileDialogTexts.ZipFilter, ProfileSaveService.SuggestedExportName(_profile));
         if (string.IsNullOrEmpty(path))
         {
             Log.Information("Builder: export cancelled");
@@ -844,6 +991,16 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     // ---- helpers ------------------------------------------------------------------------------
+
+    /// <summary>No modal host: both modals answer Cancel.</summary>
+    private sealed class NoBuilderDialogs : IBuilderDialogs
+    {
+        public static readonly NoBuilderDialogs Instance = new();
+
+        public bool EditPresets(PresetsViewModel model) => false;
+
+        public bool EditCleanup(CleanupViewModel model) => false;
+    }
 
     private void ShowToast(string text, BannerKind kind) => Toast.Show(text, kind, TransientMessage.ToastDuration);
 

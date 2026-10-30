@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the company logo pick, moved out of LoaderBridge.PickLogoFile
 // (LB:626-697) for the WPF Builder (spec #16, WU4) with unchanged behavior and messages. The
-// WebView2 Builder's bridge calls the same code until WU5 retires it.
+// bridge is retired (WU5); this is the only copy.
 
 using System.IO;
 using System.Windows.Media;

@@ -419,7 +419,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject
 
     private void Import()
     {
-        var path = _dialogs.OpenFile(UiStrings.Loader_ImportDialogTitle, FileDialogBridge.ZipFilter);
+        var path = _dialogs.OpenFile(UiStrings.Loader_ImportDialogTitle, FileDialogTexts.ZipFilter);
         if (string.IsNullOrEmpty(path)) return;
         ImportOutcome result;
         try

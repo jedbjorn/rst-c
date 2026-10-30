@@ -603,4 +603,48 @@ public static class UiStrings
     public static string Builder_LabelRequired => Get(nameof(Builder_LabelRequired));
 
     public static string Builder_UrlRequired => Get(nameof(Builder_UrlRequired));
+
+    // The Profile Builder's modals and icon picker (spec #16, WU5).
+
+    public static string Builder_Apply => Get(nameof(Builder_Apply));
+
+    public static string Builder_PresetsTitle => Get(nameof(Builder_PresetsTitle));
+
+    public static string Builder_PresetsBody => Get(nameof(Builder_PresetsBody));
+
+    public static string Builder_PresetsHideTabs => Get(nameof(Builder_PresetsHideTabs));
+
+    public static string Builder_PresetsNoTabs => Get(nameof(Builder_PresetsNoTabs));
+
+    public static string Builder_PresetsDisableUnused => Get(nameof(Builder_PresetsDisableUnused));
+
+    public static string Builder_PresetsDisableUnusedHelp => Get(nameof(Builder_PresetsDisableUnusedHelp));
+
+    public static string Builder_CleanupTitle => Get(nameof(Builder_CleanupTitle));
+
+    public static string Builder_CleanupModalHelp => Get(nameof(Builder_CleanupModalHelp));
+
+    public static string Builder_CleanupEmpty => Get(nameof(Builder_CleanupEmpty));
+
+    public static string Builder_CleanupEnableTip => Get(nameof(Builder_CleanupEnableTip));
+
+    public static string Builder_CleanupNamePlaceholder => Get(nameof(Builder_CleanupNamePlaceholder));
+
+    public static string Builder_CleanupPathTip => Get(nameof(Builder_CleanupPathTip));
+
+    public static string Builder_CleanupRemoveTip => Get(nameof(Builder_CleanupRemoveTip));
+
+    public static string Builder_RestoreDefaults => Get(nameof(Builder_RestoreDefaults));
+
+    public static string Builder_RestoreDefaultsTip => Get(nameof(Builder_RestoreDefaultsTip));
+
+    public static string Builder_IconPickerTitle => Get(nameof(Builder_IconPickerTitle));
+
+    public static string Builder_IconNone => Get(nameof(Builder_IconNone));
+
+    public static string Builder_IconNoneGlyph => Get(nameof(Builder_IconNoneGlyph));
+
+    public static string Builder_IconNoneTip => Get(nameof(Builder_IconNoneTip));
+
+    public static string Builder_IconVariantTip(object? arg0, object? arg1) => Format(nameof(Builder_IconVariantTip), arg0, arg1);
 }

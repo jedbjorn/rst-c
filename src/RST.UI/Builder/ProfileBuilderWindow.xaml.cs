@@ -3,13 +3,19 @@
 // The Profile Builder window (spec #16, WU4). All behavior is in ProfileBuilderViewModel; the
 // code here is view plumbing: the title-bar ✕ asks the view-model first (Planner default 3), the
 // Branding popover commits its URL box when it closes and does not reopen from the click that
-// dismissed it, and the URL editor's label box takes focus when the editor opens.
+// dismissed it, the URL editor's label box takes focus when the editor opens, and drag and drop
+// (WU5): DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel
+// headers and the slot rows; the cards and rows report the cursor's half to the view-model, which
+// owns the markers and the index arithmetic (RST.Core PanelDrops).
 
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
+using RST.Core.Builder;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
 
@@ -73,4 +79,96 @@ public partial class ProfileBuilderWindow : Window
         _brandingClosedAt = Environment.TickCount64;
         BrandingUrlBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
     }
+
+    // ---- drag and drop ------------------------------------------------------------------------
+
+    private Point _dragStart;
+    private BuilderDrag? _pendingDrag;
+
+    /// <summary>The drag a source element would start, from its row's view-model.</summary>
+    internal static BuilderDrag? DragFor(object? dataContext) => dataContext switch
+    {
+        CatalogNodeViewModel { Command: { } command } => BuilderDrag.FromCatalog(command),
+        PanelCardViewModel card => BuilderDrag.FromPanel(card.Index),
+        SlotRowViewModel slot => BuilderDrag.FromSlot(slot.Panel.Index, slot.Index),
+        _ => null,
+    };
+
+    private void OnDragSourceDown(object sender, MouseButtonEventArgs e)
+    {
+        _pendingDrag = null;
+        // Typing in a name box or clicking a button never starts a drag.
+        if (IsInteractive(e.OriginalSource as DependencyObject, sender as DependencyObject)) return;
+        _pendingDrag = DragFor((sender as FrameworkElement)?.DataContext);
+        _dragStart = e.GetPosition(this);
+    }
+
+    private void OnDragSourceMove(object sender, MouseEventArgs e)
+    {
+        if (_pendingDrag is null || e.LeftButton != MouseButtonState.Pressed || !Model.IsIdle) return;
+        var p = e.GetPosition(this);
+        if (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var drag = _pendingDrag;
+        _pendingDrag = null;
+        Model.BeginDrag(drag);
+        try
+        {
+            var effects = drag.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+            DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
+        }
+        finally
+        {
+            Model.EndDrag();
+        }
+    }
+
+    private static bool IsInteractive(DependencyObject? source, DependencyObject? stop)
+    {
+        for (var d = source; d is not null && !ReferenceEquals(d, stop); d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d is TextBoxBase or ButtonBase) return true;
+        return false;
+    }
+
+    private static bool UpperHalf(DragEventArgs e, FrameworkElement target) => e.GetPosition(target).Y < target.ActualHeight / 2;
+
+    private DragDropEffects DropEffect(bool accepted) =>
+        !accepted ? DragDropEffects.None : Model.CurrentDrag?.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+
+    private void OnPanelDragOver(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PanelCardViewModel card } target)
+            e.Effects = DropEffect(Model.DragOverPanel(card.Index, UpperHalf(e, target)));
+        e.Handled = true;
+    }
+
+    private void OnPanelDrop(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PanelCardViewModel card } target)
+            Model.DropOnPanel(card.Index, UpperHalf(e, target));
+        e.Handled = true;
+    }
+
+    // The slot handlers mark their events handled, so the card under them does not act too
+    // (the page's stopPropagation).
+    private void OnSlotDragOver(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: SlotRowViewModel slot } target)
+        {
+            var accepted = Model.DragOverSlot(slot.Panel.Index, slot.Index, UpperHalf(e, target));
+            if (!accepted) return; // a panel drag falls through to the card
+            e.Effects = DropEffect(true);
+        }
+        e.Handled = true;
+    }
+
+    private void OnSlotDrop(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: SlotRowViewModel slot } target) return;
+        if (Model.CurrentDrag?.Kind == DragKind.Panel) return; // falls through to the card
+        Model.DropOnSlot(slot.Panel.Index, slot.Index, UpperHalf(e, target));
+        e.Handled = true;
+    }
+
+    private void OnDragLeave(object sender, DragEventArgs e) => Model.ClearDropMarkers();
 }
