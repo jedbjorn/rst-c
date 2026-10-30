@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.IO;
 using RST.Core.Tray;
 using RST.Core.Updates;
+using RST.Tray.Shell;
 using Serilog;
 
 namespace RST.Tray.Updates;
@@ -38,6 +39,9 @@ internal sealed class SelfUpdater : ISelfUpdater
     /// <summary>The tray runs from Program Files: a per-machine RST, which this per-user tray never updates.</summary>
     public bool PerMachineTray => IsUnder(_sourceDir, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles))
                                   || IsUnder(_sourceDir, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86));
+
+    /// <summary>RST-Setup.exe installed RST: its per-user registration is present (decision #34).</summary>
+    public bool InstalledByBundle => BundleRegistration.RstBundleInstalled(_log);
 
     public string? Start(string msiPath)
     {
@@ -85,6 +89,103 @@ internal sealed class SelfUpdater : ISelfUpdater
     }
 }
 
+/// <summary>
+/// Whether RST-Setup.exe installed RST for this user (decision #34): Burn registers a per-user bundle under
+/// HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{bundle id}, with a BundleUpgradeCode value (REG_MULTI_SZ)
+/// holding the bundle's UpgradeCode. A failed read counts as "not found" (logged): RST.msi then updates it.
+/// </summary>
+internal static class BundleRegistration
+{
+    private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+
+    public static bool RstBundleInstalled(Action<string>? log = null)
+    {
+        var code = "{" + ProductCatalog.RstBundleUpgradeCode + "}";
+        try
+        {
+            using var root = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(UninstallKey);
+            if (root is null) return false;
+            foreach (var name in root.GetSubKeyNames())
+            {
+                using var key = root.OpenSubKey(name);
+                var value = key?.GetValue("BundleUpgradeCode");
+                var codes = value switch
+                {
+                    string[] many => many,
+                    string one => new[] { one },
+                    _ => Array.Empty<string>(),
+                };
+                if (codes.Any(c => string.Equals(c.Trim(), code, StringComparison.OrdinalIgnoreCase)))
+                {
+                    log?.Invoke($"self-update: RST-Setup.exe's registration found (HKCU\\{UninstallKey}\\{name})");
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            log?.Invoke("self-update: the bundle registration could not be read: " + ex.Message);
+            return false;
+        }
+    }
+}
+
+/// <summary>
+/// The updater holding the tray's single-instance mutex (<c>Local\RST.Tray.&lt;UserSid&gt;</c>, the same
+/// TrayPaths.MutexName the tray claims) while it replaces RST's files. A Mutex belongs to the thread that took it,
+/// and the updater's work is async, so one dedicated thread takes it, holds it, and releases it when disposed.
+/// </summary>
+internal sealed class TrayInstanceClaim : IDisposable
+{
+    private readonly ManualResetEventSlim _release = new();
+    private Thread? _owner;
+    private int _disposed;
+
+    private TrayInstanceClaim()
+    {
+    }
+
+    /// <summary>The claim, or null when the mutex was not free within <paramref name="timeout"/>.</summary>
+    public static TrayInstanceClaim? TryClaim(string userSid, TimeSpan timeout)
+    {
+        var claim = new TrayInstanceClaim();
+        var decided = new ManualResetEventSlim();
+        var taken = false;
+        var name = TrayPaths.MutexName(userSid);
+        claim._owner = new Thread(() =>
+        {
+            using var mutex = new Mutex(false, name);
+            try
+            {
+                taken = mutex.WaitOne(timeout);
+            }
+            catch (AbandonedMutexException)
+            {
+                taken = true; // the old tray ended without releasing it: ours now
+            }
+            decided.Set();
+            if (!taken) return;
+            claim._release.Wait();
+            mutex.ReleaseMutex();
+        })
+        { IsBackground = true, Name = "RST tray instance claim" };
+        claim._owner.Start();
+        decided.Wait();
+        if (taken) return claim;
+        claim._owner.Join();
+        return null;
+    }
+
+    /// <summary>Releases the mutex (and waits until it is released, so a tray started next can take it).</summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _release.Set();
+        _owner?.Join(TimeSpan.FromSeconds(10));
+    }
+}
+
 /// <summary>The updater's Windows: wait for the old tray, start the new one.</summary>
 internal sealed class UpdaterHost : ISelfUpdateHost
 {
@@ -106,6 +207,8 @@ internal sealed class UpdaterHost : ISelfUpdateHost
             return true; // already gone
         }
     }
+
+    public IDisposable? ClaimTrayInstance(TimeSpan timeout) => TrayInstanceClaim.TryClaim(SingleInstance.CurrentUserSid(), timeout);
 
     public bool StartTray()
     {
@@ -132,7 +235,8 @@ internal static class Updater
         }
         Log.Information("RST updater (pid {Pid}) applying {Msi}", Environment.ProcessId, args.ApplyMsi);
         var paths = new InstallPaths(TrayPaths.CacheDir, TrayPaths.InstallLogsDir, TrayPaths.SelfUpdateResultFile);
-        var code = SelfUpdateApply.RunAsync(args.ApplyMsi!, args.WaitPid, paths, new MsiDatabase(), new Msiexec(), new UpdaterHost(),
+        var code = SelfUpdateApply.RunAsync(args.ApplyMsi!, args.WaitPid, paths, new MsiDatabase(), new BundleReader(), new Msiexec(),
+                                            new RevitWatch(log: m => Log.Information("{Message}", m)), new UpdaterHost(),
                                             TimeProvider.System, m => Log.Information("{Message}", m)).GetAwaiter().GetResult();
         Log.Information("RST updater exits {Code}", code);
         return code;

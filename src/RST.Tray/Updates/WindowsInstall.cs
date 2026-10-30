@@ -34,6 +34,39 @@ internal sealed class Msiexec : IMsiexec
         await process.WaitForExitAsync(cancel).ConfigureAwait(false);
         return process.ExitCode;
     }
+
+    /// <summary>
+    /// RST-Setup.exe /quiet /norestart /log &lt;log&gt; (decision #34): per user, no companion switches, so the bundle
+    /// installs RST only (companions it installed before are Permanent and stay). Burn's own process is waited on by
+    /// its handle; it returns when its engine has finished.
+    /// </summary>
+    public async Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel)
+    {
+        var start = new ProcessStartInfo(exePath)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(exePath)!,
+        };
+        foreach (var arg in new[] { "/quiet", "/norestart", "/log", logPath })
+            start.ArgumentList.Add(arg);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("RST-Setup.exe did not start");
+        await process.WaitForExitAsync(cancel).ConfigureAwait(false);
+        return process.ExitCode;
+    }
+}
+
+/// <summary>RST-Setup.exe's version resource (Burn writes the bundle's Version and Name into it).</summary>
+internal sealed class BundleReader : IBundleReader
+{
+    public BundleIdentity Read(string exePath)
+    {
+        var info = FileVersionInfo.GetVersionInfo(exePath);
+        var version = info.FileMajorPart == 0 && info.FileMinorPart == 0 && info.FileBuildPart == 0 && info.FilePrivatePart == 0
+            ? info.FileVersion
+            : $"{info.FileMajorPart}.{info.FileMinorPart}.{info.FileBuildPart}.{info.FilePrivatePart}";
+        return new BundleIdentity(version, info.ProductName);
+    }
 }
 
 internal sealed class RevitWatch : IRevitWatch

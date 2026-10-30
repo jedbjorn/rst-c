@@ -220,6 +220,12 @@ public static class TrayStrings
 
     public static string Install_RetryLater(string app, string version) => Format(nameof(Install_RetryLater), app, version);
 
+    public static string Install_Queued(string app, string version) => Format(nameof(Install_Queued), app, version);
+
+    public static string Install_QueuedRst(string app, string version) => Format(nameof(Install_QueuedRst), app, version);
+
+    public static string App_ReinstallPreviousWhenRevitCloses(string version) => Format(nameof(App_ReinstallPreviousWhenRevitCloses), version);
+
     public static string Install_HandingOff(string app, string version) => Format(nameof(Install_HandingOff), app, version);
 
     public static string Install_Done(string app, string version) => Format(nameof(Install_Done), app, version);

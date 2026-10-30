@@ -289,6 +289,10 @@ To turn this off, open RST from the notification area and go to Settings.</value
     <value>Reinstall previous version ({0})</value>
     <comment>After a failed upgrade left the app uninstalled (spec #20 §5). {0} is the previous version, e.g. 1.1.0.</comment>
   </data>
+  <data name="App_ReinstallPreviousWhenRevitCloses" xml:space="preserve">
+    <value>Reinstall {0} when Revit closes</value>
+    <comment>The reinstall button while Revit runs (the reinstall waits for Revit too). {0} is the previous version.</comment>
+  </data>
   <data name="App_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
@@ -339,6 +343,13 @@ To turn this off, open RST from the notification area and go to Settings.</value
   <data name="Install_Installing" xml:space="preserve">
     <value>Installing {0} {1}…</value>
   </data>
+  <data name="Install_Queued" xml:space="preserve">
+    <value>Waiting its turn: {0} {1} installs when the installation before it has finished.</value>
+    <comment>F17 WU4 review B1: one install at a time.</comment>
+  </data>
+  <data name="Install_QueuedRst" xml:space="preserve">
+    <value>RST {1} updates once the other installs have finished, so none of them is lost when RST restarts.</value>
+  </data>
   <data name="Install_RetryLater" xml:space="preserve">
     <value>Another installation is running. RST tries {0} {1} again in a few minutes.</value>
   </data>
@@ -359,7 +370,7 @@ To turn this off, open RST from the notification area and go to Settings.</value
     <value>Couldn't install {0} {1}: Windows Installer stopped with error {2}. The log has the details.</value>
   </data>
   <data name="Install_FailedGone" xml:space="preserve">
-    <value>Couldn't update {0} to {1}: Windows Installer stopped with error {2}, and {0} is no longer installed. Reinstall the previous version, or try the update again later.</value>
+    <value>Couldn't update {0} to {1}: Windows Installer stopped with error {2}, and {0} is no longer installed. Reinstall the previous version to get it back; the log has the details.</value>
   </data>
   <data name="Install_Busy" xml:space="preserve">
     <value>Another installation kept running, so {0} {1} wasn't installed. Try again later.</value>
@@ -430,6 +441,9 @@ To turn this off, open RST from the notification area and go to Settings.</value
   </data>
   <data name="Problem_Cancelled" xml:space="preserve">
     <value>it was cancelled</value>
+  </data>
+  <data name="Problem_RevitRunning" xml:space="preserve">
+    <value>Revit was open</value>
   </data>
   <data name="Net_Offline" xml:space="preserve">
     <value>couldn't reach GitHub</value>

@@ -181,7 +181,9 @@ internal sealed class ProductRowViewModel
         get
         {
             if (!IsKnown || Progress.IsBusy || !Status.Product.IsInstallable) return null;
-            if (ReinstallVersion is { } previous) return TrayStrings.App_ReinstallPrevious(previous.ToString());
+            if (ReinstallVersion is { } previous)
+                return RevitRunning ? TrayStrings.App_ReinstallPreviousWhenRevitCloses(previous.ToString())
+                                    : TrayStrings.App_ReinstallPrevious(previous.ToString());
             return State switch
             {
                 ProductState.UpdateAvailable when !IsForEveryone =>
@@ -199,7 +201,8 @@ internal sealed class ProductRowViewModel
     public bool CanAct => HasAction;
 
     /// <summary>Cancel: while it downloads, waits for Revit, or waits to retry (never once msiexec runs).</summary>
-    public bool CanCancel => Progress.Phase is InstallPhase.Downloading or InstallPhase.WaitingForRevit or InstallPhase.RetryLater;
+    public bool CanCancel => Progress.Phase is InstallPhase.Downloading or InstallPhase.WaitingForRevit or InstallPhase.Queued
+                             or InstallPhase.RetryLater;
 
     /// <summary>The right-hand column shows a button.</summary>
     public bool HasButtons => HasAction || CanCancel;
@@ -218,6 +221,8 @@ internal sealed class ProductRowViewModel
             {
                 case InstallPhase.Downloading: return TrayStrings.Install_Downloading(name, version);
                 case InstallPhase.WaitingForRevit: return TrayStrings.Install_WaitingForRevit(name, version);
+                case InstallPhase.Queued:
+                    return Status.Product.IsRst ? TrayStrings.Install_QueuedRst(name, version) : TrayStrings.Install_Queued(name, version);
                 case InstallPhase.Installing: return TrayStrings.Install_Installing(name, version);
                 case InstallPhase.RetryLater: return TrayStrings.Install_RetryLater(name, version);
                 case InstallPhase.HandingOff: return TrayStrings.Install_HandingOff(name, version);

@@ -29,6 +29,7 @@ using RST.Core.Updates;
 using RST.RuntimeTests.Support;
 using RST.Tests.Updates;
 using RST.Tray.Resources;
+using RST.Tray.Shell;
 using RST.Tray.Updates;
 using RST.Tray.Windows;
 using RST.UI.Theming;
@@ -92,6 +93,15 @@ internal static class InstallScenarios
             case "handoff":
                 host.Installs = new Dictionary<string, InstallProgress> { ["rst"] = new(InstallPhase.HandingOff, V311) };
                 break;
+            case "queue":
+                // Review B1: one install at a time; RST's self-update goes last.
+                host.Installs = new Dictionary<string, InstallProgress>
+                {
+                    ["rst"] = new(InstallPhase.Queued, V311),
+                    ["gantt-it"] = new(InstallPhase.Installing, V120),
+                    ["splash-it"] = new(InstallPhase.Queued, V110),
+                };
+                break;
         }
         return host;
     }
@@ -109,7 +119,7 @@ internal static class InstallScenarios
         foreach (var problem in Enum.GetValues<InstallProblem>())
         {
             if (problem is InstallProblem.None or InstallProblem.Network or InstallProblem.PerMachine or InstallProblem.InstallFailed
-                or InstallProblem.InstallerBusy or InstallProblem.UpdaterFailed) continue;
+                or InstallProblem.InstallerBusy or InstallProblem.UpdaterFailed or InstallProblem.RevitRunning) continue;
             Add("Refused: " + problem, new InstallProgress(InstallPhase.Refused, V120, problem));
         }
         foreach (var net in Enum.GetValues<NetFailure>())
@@ -171,7 +181,7 @@ public class TrayInstallScreenshotTests
     public static TheoryData<string, UiTheme> AppsScenarios()
     {
         var data = new TheoryData<string, UiTheme>();
-        foreach (var s in new[] { "revit", "progress", "done", "permachine" })
+        foreach (var s in new[] { "revit", "progress", "queue", "done", "permachine" })
             foreach (var t in new[] { UiTheme.Light, UiTheme.Dark })
                 data.Add(s, t);
         return data;
@@ -250,12 +260,21 @@ public class TrayInstallScreenshotTests
                 case "done":
                     Assert.Contains("RST 3.1.1 is installed. Restart Windows to finish; RST never restarts it for you.", texts);
                     Assert.Contains("Gantt-It 1.2.0 is installed.", texts);
-                    Assert.Contains(texts, t => t.StartsWith("Couldn't update Splash-It to 1.1.0: Windows Installer stopped with error 1603, and Splash-It is no longer installed.", StringComparison.Ordinal));
+                    // Review N5: the wording offers only what the page offers (Reinstall), nothing else.
+                    Assert.Contains("Couldn't update Splash-It to 1.1.0: Windows Installer stopped with error 1603, and Splash-It is no longer installed. Reinstall the previous version to get it back; the log has the details.", texts);
                     var reinstall = Button(window, "Tray.App.splash-it.Action");
                     Assert.Equal("Reinstall previous version (1.0.0)", reinstall.Content);
                     reinstall.Command.Execute(window.ViewModel.Updates.Rows[2]);
                     Assert.Equal("reinstall:splash-it", host.Calls[^1]);
                     Assert.Equal(3, texts.Count(t => t == "Open log")); // each finished install links its msiexec log
+                    break;
+                case "queue":
+                    Assert.Contains("RST 3.1.1 updates once the other installs have finished, so none of them is lost when RST restarts.", texts);
+                    Assert.Contains("Installing Gantt-It 1.2.0…", texts);
+                    Assert.Contains("Waiting its turn: Splash-It 1.1.0 installs when the installation before it has finished.", texts);
+                    Assert.True(Button(window, "Tray.App.splash-it.Cancel").IsVisible, "a queued install can be cancelled");
+                    Assert.True(Button(window, "Tray.App.rst.Cancel").IsVisible);
+                    Assert.False(Button(window, "Tray.App.gantt-it.Cancel").IsVisible);
                     break;
                 case "permachine":
                     Assert.Contains("RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here.", texts);
@@ -337,8 +356,75 @@ public class TrayInstallScreenshotTests
     });
 }
 
+/// <summary>Review N1 on Windows, where FileShare is enforced: a held package can be read (msiexec, the bundle) but not written.</summary>
+public class HeldPackageTests
+{
+    [Fact]
+    public void A_held_package_can_be_read_but_not_written_replaced_or_deleted()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "RST-Held-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "GanttIt-1.2.0.msi");
+            File.WriteAllText(path, "the verified bytes");
+            var sha = InstallCache.Sha256Of(path);
+            Assert.Null(InstallCache.HoldVerified(path, new string('0', 64))); // changed since: refused
+            using (var hold = InstallCache.HoldVerified(path, sha))
+            {
+                Assert.NotNull(hold);
+                using (var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    Assert.Equal((int)'t', reader.ReadByte()); // a reader such as msiexec opens it
+                Assert.ThrowsAny<IOException>(() => File.AppendAllText(path, "swapped"));
+                Assert.ThrowsAny<Exception>(() => File.Delete(path));
+                Assert.ThrowsAny<Exception>(() => File.Move(path, path + ".old"));
+            }
+            File.AppendAllText(path, " released"); // writable again once the install has finished
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+}
+
+/// <summary>
+/// The updater holds the tray's single-instance mutex while it replaces RST (Planner, from #149's review): a tray
+/// started meanwhile (Revit, WU2) finds "a tray runs" and exits; once released, the next tray takes it.
+/// </summary>
+public class TrayInstanceClaimTests
+{
+    [Fact]
+    public void While_the_updater_holds_the_mutex_a_tray_cannot_start_and_after_the_hand_over_one_can()
+    {
+        const string sid = "S-1-5-21-0-0-0-424242"; // a test-only name, never a real user's tray
+        var claim = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromSeconds(5));
+        Assert.NotNull(claim);
+        try
+        {
+            Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { })); // a tray started now exits
+            Assert.Null(TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(200)));  // nor can a second updater take it
+        }
+        finally
+        {
+            claim!.Dispose();
+        }
+        using var tray = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
+        Assert.NotNull(tray); // the new tray takes it after the hand-over
+    }
+}
+
 public class TrayInstallWordingTests
 {
+    [Fact]
+    public void The_reinstall_button_says_when_Revit_closes_while_Revit_runs()
+    {
+        var host = InstallScenarios.Host("done");
+        host.RevitRunning = true;
+        var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
+        Assert.Equal("Reinstall 1.0.0 when Revit closes", vm.Rows[2].ActionText);
+    }
+
     [Fact]
     public void Every_problem_and_network_failure_has_plain_wording()
     {
@@ -491,6 +577,12 @@ public sealed class TrayInstallFixtureTests : IDisposable
             Interlocked.Increment(ref Runs);
             return inner.InstallAsync(msiPath, logPath, cancel);
         }
+
+        public Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel)
+        {
+            Interlocked.Increment(ref Runs);
+            return inner.RunBundleAsync(exePath, logPath, cancel);
+        }
     }
 
     [TrayInstallFixtureFact]
@@ -507,7 +599,7 @@ public sealed class TrayInstallFixtureTests : IDisposable
         var revit = new RevitWatch("Revit", Log);
         var paths = new InstallPaths(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
         using var http = TrayHttp.CreateClient(github);
-        using var installs = new InstallCoordinator(new[] { Fixture }, http, new MsiProducts(Log), new MsiDatabase(), msiexec, revit,
+        using var installs = new InstallCoordinator(new[] { Fixture }, http, new MsiProducts(Log), new MsiDatabase(), new BundleReader(), msiexec, revit,
             new FakeSelfUpdater(), paths, TimeProvider.System, a => a(), Log, () => { }, () => { });
         Assert.False(revit.AnyRunning(), "no Revit.exe on the runner");
 
@@ -700,24 +792,36 @@ public sealed class TraySelfUpdateFixtureTests
             _output.WriteLine(m);
         }
 
+        // Decision #34: how RST was installed decides the package. The script says which install it made; the tray's
+        // own detection (the bundle's per-user registration) must agree.
+        var expectBundle = Environment.GetEnvironmentVariable("RST_SELFUPDATE_EXPECT_BUNDLE") == "1";
+        using var tray = Process.GetProcessById(trayPid);
+        Assert.Equal("RST.Tray", tray.ProcessName);
+        var waitFor = race ? Environment.ProcessId : trayPid; // race: nothing to wait for, msiexec meets the running tray
+        var self = new SelfUpdater(TrayPaths.PerUserInstallDir, TrayPaths.UpdaterDir, waitFor, Log);
+        Assert.False(self.PerMachineTray);
+        Assert.Equal(expectBundle, self.InstalledByBundle);
+        var kind = self.InstalledByBundle ? PackageKind.Bundle : PackageKind.Msi;
+
         var github = new FakeGitHub();
-        github.Add(ProductCatalog.RstRepo, version.Tag, "RST.msi", File.ReadAllBytes(msi));
+        github.Add(ProductCatalog.RstRepo, version.Tag, kind == PackageKind.Bundle ? ProductCatalog.RstBundleAsset : ProductCatalog.RstAsset,
+                   File.ReadAllBytes(msi));
         var installed = ProductDetection.Query(new MsiProducts(Log), ProductCatalog.RstProduct, Log);
         var current = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<InstalledProduct>>(installed));
         Assert.Equal(InstallContext.User, current.Context);
         Assert.True(version > current.Version!.Value, $"{version} must be newer than the installed {current.VersionText}");
 
         using var http = TrayHttp.CreateClient(github);
-        var verified = await new VerifiedDownload(http, new MsiDatabase(), TrayPaths.CacheDir, Log)
-            .RunAsync(ProductCatalog.RstProduct, version, current.Version, CancellationToken.None);
+        var verified = await new VerifiedDownload(http, new MsiDatabase(), TrayPaths.CacheDir, Log, bundles: new BundleReader())
+            .RunAsync(ProductCatalog.RstProduct, version, current.Version, CancellationToken.None, kind);
         Assert.True(verified.Ok, verified.Problem + ": " + verified.Detail);
-        Assert.StartsWith(Path.Combine(TrayPaths.CacheDir, "rst", version.ToString()), verified.Msi!.Path);
-
-        using var tray = Process.GetProcessById(trayPid);
-        Assert.Equal("RST.Tray", tray.ProcessName);
-        var waitFor = race ? Environment.ProcessId : trayPid; // race: nothing to wait for, msiexec meets the running tray
-        var self = new SelfUpdater(TrayPaths.PerUserInstallDir, TrayPaths.UpdaterDir, waitFor, Log);
-        Assert.False(self.PerMachineTray);
+        Assert.Equal(Path.Combine(TrayPaths.CacheDir, "rst", version.ToString(),
+                                  kind == PackageKind.Bundle ? ProductCatalog.RstBundleAsset : ProductCatalog.RstAsset), verified.Msi!.Path);
+        if (kind == PackageKind.Bundle)
+        {
+            var identity = new BundleReader().Read(verified.Msi.Path);
+            Log($"RST-Setup.exe version resource: FileVersion {identity.FileVersion}, ProductName {identity.ProductName}");
+        }
         Assert.Null(self.Start(verified.Msi.Path));
         Assert.True(File.Exists(Path.Combine(TrayPaths.UpdaterDir, TrayPaths.UpdaterExeName)));
         Assert.False(File.Exists(Path.Combine(TrayPaths.UpdaterDir, TrayPaths.ExeName)), "the copy never runs as RST.Tray.exe");
@@ -734,6 +838,7 @@ public sealed class TraySelfUpdateFixtureTests
             File.WriteAllText(result, JsonSerializer.Serialize(new
             {
                 mode = race ? "race" : "close",
+                kind = kind.ToString(),
                 installedBefore = current.VersionText,
                 version = version.ToString(),
                 verified.Msi.Path,

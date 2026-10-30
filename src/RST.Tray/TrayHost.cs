@@ -205,6 +205,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _http,
             new MsiProducts(m => Log.Warning("{Message}", m)),
             new MsiDatabase(),
+            new BundleReader(),
             new Msiexec(),
             _revit,
             _selfUpdater,
@@ -215,8 +216,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             quitForSelfUpdate: () => Quit("self-update: the updater installs RST"),
             installsChanged: () => _ = _updates?.RefreshInstalledAsync());
         _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
-        if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed)
+        if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed or InstallPhase.Refused)
             _ = _updates.RefreshInstalledAsync(); // the updater just ran: show what is installed now
+        // The updater found Revit open (review B2): this tray waits for Revit and hands over again.
+        _ = _installs.ResumeDeferredSelfUpdateAsync();
 
         _updates.Start();
         if (_updates.Loop.NextDueUtc is { } due)
