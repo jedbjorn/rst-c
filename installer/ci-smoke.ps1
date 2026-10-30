@@ -6,7 +6,11 @@
       Permanent install/uninstall smoke (D6, AC3). Seeds a user-data probe,
       installs RST.msi silently, asserts the six per-major trees and their
       key DLLs, uninstalls, then asserts the trees are gone and the probe
-      survived.
+      survived. With -SameVersionMsi (a second build of the same commit:
+      same ProductVersion, new ProductCode, i.e. the rc -> final case), it
+      installs that over the first, asserts exactly one RST product
+      (AllowSameVersionUpgrades), runs the same file again (a repeated
+      install), asserts one product again, then uninstalls it.
 
   -Mode Migrate -From Preview|Unified -OldMsi <v2.2.0 asset>
       Upgrade from the last two-MSI release.
@@ -24,7 +28,8 @@ param(
   [string]$Msi = 'installer/bin/Release/RST.msi',
   [ValidateSet('Preview', 'Unified')][string]$From,
   [string]$OldMsi,
-  [string]$StagedR27 = 'build/R27'
+  [string]$StagedR27 = 'build/R27',
+  [string]$SameVersionMsi
 )
 
 $ErrorActionPreference = 'Stop'
@@ -154,7 +159,29 @@ if ($Mode -eq 'Install') {
         ForEach-Object { $_.FullName.Substring($AppData.Length + 1) }
   Write-Host "R27 System.Management.dll: $($sm -join ', ')"
 
-  Invoke-Msiexec '/x' $Msi (Join-Path $LogDir 'rst-uninstall.log')
+  $uninstallMsi = $Msi
+  if ($SameVersionMsi) {
+    $SameVersionMsi = (Resolve-Path $SameVersionMsi).Path
+    $v2 = Get-MsiProperty $SameVersionMsi 'ProductVersion'
+    $pc2 = Get-MsiProperty $SameVersionMsi 'ProductCode'
+    Write-Host "Same-version MSI: ProductVersion=$v2 ProductCode=$pc2"
+    Assert ($v2 -eq $newVersion -and $pc2 -ne $newProductCode) 'second build has the same ProductVersion and a new ProductCode'
+    $log2 = Join-Path $LogDir 'rst-install-samever.log'
+    Invoke-Msiexec '/i' $SameVersionMsi $log2
+    Show-Related 'after same-version install'
+    Show-LogLines $log2 @($newProductCode)
+    $r = Get-Related $UnifiedCode
+    Assert ($r.Count -eq 1 -and $r[0].ProductCode -eq $pc2 -and $r[0].Version -eq $v2) "exactly one RST product after same-version install ($pc2 at $v2)"
+    Assert-TreesPresent
+
+    Invoke-Msiexec '/i' $SameVersionMsi (Join-Path $LogDir 'rst-install-repeat.log')
+    Show-Related 'after repeated install'
+    $r = Get-Related $UnifiedCode
+    Assert ($r.Count -eq 1 -and $r[0].ProductCode -eq $pc2) 'exactly one RST product after installing the same MSI again'
+    $uninstallMsi = $SameVersionMsi
+  }
+
+  Invoke-Msiexec '/x' $uninstallMsi (Join-Path $LogDir 'rst-uninstall.log')
   Show-Related 'after uninstall'
   Assert ((Get-Related $UnifiedCode).Count -eq 0) 'no RST product after uninstall'
   foreach ($t in $Trees.Keys) {

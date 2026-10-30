@@ -147,11 +147,21 @@ jobs:
           name: stage-R27
           path: build/R27/
       - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
+      # Rebuild the same commit: same ProductVersion, new ProductCode. That
+      # is the rc -> final case (release.yml strips -rc.N) the smoke below
+      # checks against AllowSameVersionUpgrades. The rebuilt RST.msi is the
+      # one uploaded.
+      - name: Same-version rebuild
+        shell: pwsh
+        run: |
+          Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-first.msi"
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstMsiVersion=${{ inputs.product_version }}
       # Permanent install/uninstall smoke (feature #11, D6): all six trees
-      # land, uninstall removes them, user data survives.
+      # land, a same-version build and a repeated install leave one product,
+      # uninstall removes the trees, user data survives.
       - name: Install / uninstall smoke
         shell: pwsh
-        run: installer/ci-smoke.ps1 -Mode Install -Msi installer/bin/Release/RST.msi
+        run: installer/ci-smoke.ps1 -Mode Install -Msi "$env:RUNNER_TEMP/RST-first.msi" -SameVersionMsi installer/bin/Release/RST.msi
       - uses: actions/upload-artifact@v4
         with:
           name: RST.msi

@@ -56,8 +56,15 @@
     <!-- Replace any prior install of the same product family in place.
          The default schedule (afterInstallValidate) removes old products
          before any file is installed, inside the install transaction:
-         a failed install rolls back and restores what was there. -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+         a failed install rolls back and restores what was there.
+         AllowSameVersionUpgrades: release.yml strips "-rc.N" from the tag,
+         so an rc and its final release (and dev builds of one commit)
+         share a ProductVersion with different ProductCodes. Without it
+         the later one installs side by side as a second "RST" instead of
+         replacing the first. Family convention (gantt-it, splash-it).
+         Downgrades stay blocked. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
     <!-- R27 preview migration (feature #11, Option B).
          02BE4399-A563-4B15-BD12-ECF5D8486FB3 is the UpgradeCode of the
