@@ -423,6 +423,10 @@ public static class HealthScanner
     /// only when it has no class entry of its own (so a remote display adapter never takes the physical
     /// card's VRAM).
     /// </summary>
+    /// <summary>A software-enumerated display device (instance ID <c>SWD\…</c>), not a physical adapter.</summary>
+    internal static bool IsSoftwareDevice(HealthNative.PresentDevice device) =>
+        device.InstanceId.StartsWith(@"SWD\", StringComparison.OrdinalIgnoreCase);
+
     internal static List<Gpu> ComposeGpus(
         IReadOnlyList<HealthNative.PresentDevice> devices,
         IReadOnlyList<HealthNative.Adapter> outputs,
@@ -432,8 +436,13 @@ public static class HealthScanner
 
         if (devices.Count > 0)
         {
+            // The primary first; then physical devices, then software-enumerated ones (SWD\, such as
+            // the remote display adapter), so with no primary match (over RDP) a remote adapter never
+            // becomes the legacy single Gpu field. setupapi's own order is kept within each group.
             var primary = HealthNative.PrimaryIndex(devices, outputs);
-            var order = Enumerable.Range(0, devices.Count).OrderBy(i => i == primary ? 0 : 1).ThenBy(i => i);
+            var order = Enumerable.Range(0, devices.Count)
+                .OrderBy(i => i == primary ? 0 : IsSoftwareDevice(devices[i]) ? 2 : 1)
+                .ThenBy(i => i);
             return order.Select(i => new Gpu
             {
                 Name = devices[i].Name,

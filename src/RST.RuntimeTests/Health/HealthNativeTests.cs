@@ -97,6 +97,22 @@ public class HealthNativeTests
     }
 
     [Fact]
+    public void Over_rdp_a_remote_adapter_listed_first_by_setupapi_still_sorts_after_the_physical_gpus()
+    {
+        // Review D1: setupapi's order is undocumented. With no primary match, SWD\ devices go last, so the
+        // legacy single Gpu field (the first row) is a physical card.
+        var outputs = new[] { new HealthNative.Adapter("Microsoft Remote Display Adapter", "", Primary: true) };
+
+        var gpus = HealthScanner.ComposeGpus(new[] { Rdp, Rtx, Intel }, outputs, []);
+
+        Assert.Equal(
+            "NVIDIA RTX A2000 8GB Laptop GPU 31.0.15.3742 8192 | Intel(R) Iris(R) Xe Graphics 31.0.101.4502 128 | Microsoft Remote Display Adapter 10.0.22621.1 —",
+            Rows(gpus));
+        Assert.True(HealthScanner.IsSoftwareDevice(Rdp));
+        Assert.False(HealthScanner.IsSoftwareDevice(Rtx));
+    }
+
+    [Fact]
     public void On_a_hybrid_laptop_both_gpus_are_listed_with_the_one_driving_the_screen_first()
     {
         // Only the iGPU drives an output; the discrete GPU renders but has none.
