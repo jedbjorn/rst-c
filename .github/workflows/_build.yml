@@ -20,6 +20,8 @@ name: _build (reusable)
 #                    major is a hard gate: an R27 failure fails the
 #                    workflow and blocks a release (feature #11, D7: no
 #                    skip-R27 switch).
+#   • stage-tray   — build/stage.sh tray: RST.Tray.exe once, not per major
+#                    (feature #17), uploaded as stage-Tray.
 #   • msi-unified  — Windows runner. Downloads R25 + R26 + R27 artifacts,
 #                    runs installer/RST.Installer.wixproj → RST.msi (all
 #                    three majors in one MSI; each installs only when that
@@ -171,9 +173,30 @@ jobs:
           path: build/${{ matrix.major }}/
           if-no-files-found: error
 
+  # RST tray (feature #17, spec #20 §1): RST.Tray.exe is built once, not per
+  # Revit year (net8.0-windows, RollForward=Major), by build/stage.sh tray
+  # into build/Tray/. RST.msi's Main feature installs it; the version stamp
+  # is the release's a.b.c (0.0.0-dev on push/PR builds).
+  stage-tray:
+    name: Stage Tray
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: build/stage.sh tray Release
+        env:
+          RST_VERSION: ${{ inputs.product_version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-Tray
+          path: build/Tray/
+          if-no-files-found: error
+
   msi-unified:
     name: MSI (R25 + R26 + R27)
-    needs: stage
+    needs: [stage, stage-tray]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -194,6 +217,10 @@ jobs:
         with:
           name: stage-R27
           path: build/R27/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-Tray
+          path: build/Tray/
       - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
       # Rebuild the same commit: same ProductVersion, new ProductCode. That
       # is the rc -> final case (release.yml strips -rc.N) the smoke below

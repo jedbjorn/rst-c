@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tray.wxs — the RST tray in RST.msi (feature #17, spec #20 §1; F17 WU1).
+
+  RST.Tray.exe is built once, not per Revit year (build/stage.sh tray ->
+  build/Tray/), and installs with the Main feature whatever Revit years are
+  detected (the launch condition already needs one):
+
+    %LocalAppData%\Programs\RST\Tray\       RST.Tray.exe and its files
+                                            (ComponentGroup TrayFiles, generated
+                                            by gen-tray.ps1 from build/Tray/)
+    HKMU\Software\Microsoft\Windows\CurrentVersion\Run
+        RST = "<TrayDir>RST.Tray.exe" plus the startup switch
+                                            starts the tray at sign-in; HKMU is
+                                            HKCU in this per-user package. Windows
+                                            Installer removes it on uninstall.
+                                            Task Manager's Startup toggle
+                                            (StartupApproved) is Windows' own and
+                                            is respected as is.
+
+  On uninstall and upgrade a running tray is closed first: util:CloseApplication
+  sends WM_CLOSE to RST.Tray.exe's top-level windows (the tray keeps a hidden
+  one and exits cleanly on it), waits up to Timeout seconds, then ends the
+  process rather than ask for a reboot. util:RemoveFolderEx removes the tray's
+  download cache %LocalAppData%\RST\Tray\cache\ on a real uninstall (not when
+  an upgrade removes the old version). The tray's settings and log are user
+  data under %AppData%\RST\ and stay, like the rest of RST's user data.
+
+  The per-Revit-year components, the Revit detection (decision #10) and the
+  MajorUpgrade settings in Product.wxs are unchanged by this file.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Fragment>
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="LocalProgramsFolder" Name="Programs">
+        <Directory Id="ProgramsRstFolder" Name="RST">
+          <Directory Id="TrayDir" Name="Tray" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- The cache folder for RemoveFolderEx, which takes a property (not a
+         directory id). LocalAppDataFolder is known from the start, so this
+         runs right after AppSearch, before RemoveFoldersEx (before
+         CostInitialize). -->
+    <SetProperty Id="RSTTRAYCACHEDIR" Value="[LocalAppDataFolder]RST\Tray\cache\" After="AppSearch" Sequence="execute" />
+
+    <util:CloseApplication Id="CloseRstTray" Target="RST.Tray.exe"
+                           CloseMessage="yes" RebootPrompt="no" Timeout="10" TerminateProcess="1"
+                           Description="RST is closing its tray app." />
+
+    <ComponentGroup Id="Tray">
+      <ComponentGroupRef Id="TrayFiles" />
+      <Component Id="TrayStartup" Directory="TrayDir" Guid="25F3A510-0393-43BC-9462-5E60E225F27B">
+        <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="RST"
+                       Type="string" Value="&quot;[TrayDir]RST.Tray.exe&quot; --startup" KeyPath="yes" />
+        <util:RemoveFolderEx Id="RemoveTrayCache" On="uninstall" Property="RSTTRAYCACHEDIR"
+                             Condition="NOT UPGRADINGPRODUCTCODE" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+</Wix>

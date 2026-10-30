@@ -24,6 +24,18 @@
           the first -> exactly one RST product with all six trees; the same
           file again -> still one product
       (e) stubs removed, uninstall -> every tree gone, probe survives
+      The tray (feature #17, spec #20 AC1), alongside:
+      (a) RST.Tray.exe installed and the HKCU Run value RST = "<exe>" --startup
+      (t) --startup starts hidden; a second launch exits 0 and the first shows
+          its window; a second --startup exits 0; one RST.Tray process
+      (d) the repair closes that running tray (CloseApplication, clean exit 0)
+      (e) uninstall with a tray running: it exits cleanly (WM_CLOSE, exit 0),
+          the Run value, %LocalAppData%\Programs\RST and the cache
+          (RemoveFolderEx) are gone; the settings and log under %AppData%\RST
+          (user data) stay
+      The package checks also cover the tray's components (unconditional, one
+      per staged build/Tray file), the Run value, CloseApplication and
+      RemoveFolderEx rows.
 
   -Mode Migrate -From Preview|Unified -OldMsi <released asset>
       Upgrade from a public release, with all three Revit stubs.
@@ -58,6 +70,17 @@ $Msi = (Resolve-Path $Msi).Path
 $LaunchConditionText = 'Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND'
 $LaunchMessage = 'RST needs Revit 2025, 2026 or 2027, and none was found on this computer.'
 $Transitive = 64   # msidbComponentAttributesTransitive
+
+# The RST tray (feature #17, spec #20 §1, AC1).
+$TrayDirId = 'TrayDir'
+$RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run'
+$RunValueName = 'RST'
+$TrayDir = Join-Path $env:LOCALAPPDATA 'Programs\RST\Tray'
+$TrayExe = Join-Path $TrayDir 'RST.Tray.exe'
+$TrayCache = Join-Path $env:LOCALAPPDATA 'RST\Tray\cache'
+$TraySettings = Join-Path $AppData 'RST\tray_settings.json'
+$UserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$TrayMutex = "Local\RST.Tray.$UserSid"
 
 # Revit year -> engine major, and the key files of each year's two trees.
 $Years = [ordered]@{ '2025' = 'R25'; '2026' = 'R26'; '2027' = 'R27' }
@@ -113,6 +136,21 @@ function Get-MsiQuery([string]$Path, [string]$Sql, [int]$Cols = 1) {
   }
   Invoke-ComMethod $view 'Close' | Out-Null
   # Release the read-only handle so msiexec can open the package.
+  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($view)
+  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($db)
+  return , $rows
+}
+function Get-MsiRows([string]$Path, [string]$Table) {
+  $db = Invoke-ComMethod $Installer 'OpenDatabase' @($Path, 0)
+  $view = Invoke-ComMethod $db 'OpenView' @("SELECT * FROM ``$Table``")
+  Invoke-ComMethod $view 'Execute' | Out-Null
+  $rows = @()
+  while ($rec = Invoke-ComMethod $view 'Fetch') {
+    $n = Get-ComProp $rec 'FieldCount'
+    $row = @(); for ($c = 1; $c -le $n; $c++) { $row += Get-ComProp $rec 'StringData' @($c) }
+    $rows += , $row
+  }
+  Invoke-ComMethod $view 'Close' | Out-Null
   [void][Runtime.InteropServices.Marshal]::ReleaseComObject($view)
   [void][Runtime.InteropServices.Marshal]::ReleaseComObject($db)
   return , $rows
@@ -200,6 +238,88 @@ function Assert-Probe([string]$Probe, [string]$Label) {
   Assert ((Test-Path $Probe) -and (Get-Content $Probe -Raw) -eq 'rst-c ci probe') "[$Label] user data probe survives"
 }
 
+# ---- The tray (feature #17, AC1)
+function Get-RunValue {
+  $k = Get-ItemProperty -Path "HKCU:\$RunKey" -Name $RunValueName -ErrorAction SilentlyContinue
+  if ($k) { return $k.$RunValueName } else { return $null }
+}
+function Assert-TrayInstalled([string]$Label) {
+  Assert (Test-Path $TrayExe -PathType Leaf) "[$Label] $TrayExe present"
+  $run = Get-RunValue
+  Assert ($run -eq "`"$TrayExe`" --startup") "[$Label] HKCU Run value RST = `"$TrayExe`" --startup (got '$run')"
+}
+function Test-TrayMutex {
+  $m = $null
+  $open = [Threading.Mutex]::TryOpenExisting($TrayMutex, [ref]$m)
+  if ($m) { $m.Dispose() }
+  return $open
+}
+# Seeds the tray's settings so the one-time update-check notice does not open a window of its own.
+function Seed-TraySettings {
+  New-Item -ItemType Directory -Force (Split-Path $TraySettings) | Out-Null
+  Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+}
+# Starts the installed tray and waits until it holds its single-instance mutex.
+function Start-Tray([string[]]$TrayArgs, [string]$Label) {
+  $p = if ($TrayArgs) { Start-Process $TrayExe -ArgumentList $TrayArgs -PassThru } else { Start-Process $TrayExe -PassThru }
+  $null = $p.Handle   # keep a handle so ExitCode is readable after the process exits
+  $deadline = (Get-Date).AddSeconds(45)
+  while (-not (Test-TrayMutex)) {
+    if ($p.HasExited) { Show-TrayLog; throw "FAIL: [$Label] tray exited ($($p.ExitCode)) before taking its mutex" }
+    if ((Get-Date) -gt $deadline) { Show-TrayLog; throw "FAIL: [$Label] tray did not take $TrayMutex within 45 s" }
+    Start-Sleep -Milliseconds 250
+  }
+  Write-Host "[$Label] tray pid $($p.Id) holds $TrayMutex"
+  return $p
+}
+function Wait-MainWindow($Proc, [int]$Seconds) {
+  $deadline = (Get-Date).AddSeconds($Seconds)
+  do {
+    $Proc.Refresh()
+    if ($Proc.MainWindowHandle -ne [IntPtr]::Zero) { return $true }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $deadline -and -not $Proc.HasExited)
+  return $false
+}
+function Show-TrayLog {
+  Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "---- $($_.Name)"
+    Get-Content $_.FullName | Write-Host
+  }
+  Write-Host '----'
+}
+# Single instance (AC1): a second launch exits 0 and the first, started hidden, shows its window.
+function Test-TraySingleInstance([string]$Label) {
+  Seed-TraySettings
+  $first = Start-Tray @('--startup') "$Label first"
+  Start-Sleep -Seconds 2
+  $first.Refresh()
+  Assert ($first.MainWindowHandle -eq [IntPtr]::Zero) "[$Label] --startup starts hidden (no main window)"
+
+  $second = Start-Process $TrayExe -PassThru
+  $null = $second.Handle
+  Assert ($second.WaitForExit(30000)) "[$Label] a second launch exits"
+  Assert ($second.ExitCode -eq 0) "[$Label] the second launch exits with 0 (got $($second.ExitCode))"
+  Assert (-not $first.HasExited) "[$Label] the first tray is still running"
+  Assert (Wait-MainWindow $first 20) "[$Label] the second launch showed the first tray's window"
+  Assert ($first.MainWindowTitle -eq 'RST') "[$Label] the shown window is 'RST' (got '$($first.MainWindowTitle)')"
+  Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 1) "[$Label] exactly one RST.Tray process"
+
+  $third = Start-Process $TrayExe -ArgumentList '--startup' -PassThru
+  $null = $third.Handle
+  Assert ($third.WaitForExit(30000) -and $third.ExitCode -eq 0) "[$Label] a second --startup launch exits with 0"
+  return $first
+}
+# A running tray is closed by Windows Installer's CloseApplication (WM_CLOSE) and exits cleanly (code 0, not
+# CloseApplication's TerminateProcess code 1).
+function Assert-TrayClosed($Proc, [string]$Label) {
+  $exited = $Proc.WaitForExit(30000)
+  if (-not $exited) { Show-TrayLog }
+  Assert $exited "[$Label] the running tray (pid $($Proc.Id)) was closed"
+  Assert ($Proc.ExitCode -eq 0) "[$Label] it exited cleanly on WM_CLOSE (exit $($Proc.ExitCode))"
+  Assert (-not (Test-TrayMutex)) "[$Label] its mutex is released"
+}
+
 # ---- Package checks (every mode)
 $newVersion = Get-MsiProperty $Msi 'ProductVersion'
 $newProductCode = Get-MsiProperty $Msi 'ProductCode'
@@ -222,26 +342,56 @@ $parent = @{}
 foreach ($row in (Get-MsiQuery $Msi 'SELECT `Directory`, `Directory_Parent` FROM `Directory`' 2)) { $parent[$row[0]] = $row[1] }
 $perYear = @{ '2025' = 0; '2026' = 0; '2027' = 0 }
 $bad = @()
+$trayComponents = @()
 $components = Get-MsiQuery $Msi 'SELECT `Component`, `Directory_`, `Attributes`, `Condition` FROM `Component`' 4
 foreach ($c in $components) {
-  $d = $c[1]; $year = $null
-  while ($d) { if ($roots.ContainsKey($d)) { $year = $roots[$d]; break }; $d = $parent[$d] }
+  $d = $c[1]; $year = $null; $isTray = $false
+  while ($d) { if ($d -eq $TrayDirId) { $isTray = $true; break }; if ($roots.ContainsKey($d)) { $year = $roots[$d]; break }; $d = $parent[$d] }
+  # The tray (feature #17) is not per Revit year: unconditional, not Transitive.
+  if ($isTray) {
+    if ($c[3]) { $bad += "$($c[0]) (tray) has condition '$($c[3])', expected none" }
+    $trayComponents += , $c
+    continue
+  }
   if (-not $year) { $bad += "$($c[0]) in $($c[1]) is outside every Revit year's trees"; continue }
   $want = "REVIT${year}FOUND OR REMOVE~=`"ALL`""
   if ($c[3] -ne $want) { $bad += "$($c[0]) ($year) has condition '$($c[3])', expected '$want'" }
   if (([int]$c[2] -band $Transitive) -eq 0) { $bad += "$($c[0]) ($year) is not Transitive (attributes $($c[2]))" }
   $perYear[$year]++
 }
-Write-Host "Components: $($components.Count) (2025=$($perYear['2025']) 2026=$($perYear['2026']) 2027=$($perYear['2027'])); problems: $($bad.Count)"
+Write-Host "Components: $($components.Count) (2025=$($perYear['2025']) 2026=$($perYear['2026']) 2027=$($perYear['2027']) tray=$($trayComponents.Count)); problems: $($bad.Count)"
 $bad | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
-Assert ($components.Count -gt 0 -and $bad.Count -eq 0) "every component carries 'REVIT<year>FOUND OR REMOVE~=`"ALL`"' for its year and is Transitive"
+Assert ($components.Count -gt 0 -and $bad.Count -eq 0) "every Revit-year component carries 'REVIT<year>FOUND OR REMOVE~=`"ALL`"' for its year and is Transitive; tray components are unconditional"
 if ($StagedRoot) {
   foreach ($y in $Years.Keys) {
     $nn = $Years[$y]
     $staged = @(Get-ChildItem (Join-Path $StagedRoot "$nn\addins"), (Join-Path $StagedRoot "$nn\app") -Recurse -File).Count
     Assert ($perYear[$y] -eq $staged) "Revit $y components ($($perYear[$y])) = staged $nn files ($staged)"
   }
+  # One component per staged tray file, plus TrayStartup (the Run value and the cache's RemoveFolderEx).
+  $stagedTray = @(Get-ChildItem (Join-Path $StagedRoot 'Tray') -Recurse -File).Count
+  Assert ($trayComponents.Count -eq $stagedTray + 1) "tray components ($($trayComponents.Count)) = staged Tray files ($stagedTray) + TrayStartup"
 }
+
+# The tray's package rows (feature #17, AC1): the HKMU Run value, CloseApplication with WM_CLOSE and no
+# reboot prompt, RemoveFolderEx on the cache folder.
+$runRows = Get-MsiQuery $Msi 'SELECT `Root`, `Key`, `Name`, `Value`, `Component_` FROM `Registry`' 5
+$run = @($runRows | Where-Object { $_[1] -eq $RunKey -and $_[2] -eq $RunValueName })
+Assert ($run.Count -eq 1 -and $run[0][0] -eq '-1' -and $run[0][3] -eq '"[TrayDir]RST.Tray.exe" --startup') "Registry table: HKMU Run value RST = `"[TrayDir]RST.Tray.exe`" --startup (got $(if ($run.Count) { "root $($run[0][0]) '$($run[0][3])'" } else { 'none' }))"
+# The util extension's tables are found by name (Wix4CloseApplication / Wix4RemoveFolderEx in WiX v4+) and
+# read whole; the uninstall below proves the behavior (a clean WM_CLOSE exit, the cache gone).
+$utilTables = @((Get-MsiQuery $Msi 'SELECT `Name` FROM `_Tables`') | ForEach-Object { $_[0] } | Where-Object { $_ -match 'CloseApplication|RemoveFolderEx' })
+Write-Host "util tables: $($utilTables -join ', ')"
+$closeTable = @($utilTables | Where-Object { $_ -match 'CloseApplication' })
+Assert ($closeTable.Count -eq 1) 'the package has a CloseApplication table'
+$close = Get-MsiRows $Msi $closeTable[0]
+$close | ForEach-Object { Write-Host "  $($closeTable[0]): $($_ -join ' | ')" }
+Assert (@($close | Where-Object { $_ -contains 'RST.Tray.exe' }).Count -eq 1) 'CloseApplication targets RST.Tray.exe'
+$rmfTable = @($utilTables | Where-Object { $_ -match 'RemoveFolderEx' })
+Assert ($rmfTable.Count -eq 1) 'the package has a RemoveFolderEx table'
+$rmf = Get-MsiRows $Msi $rmfTable[0]
+$rmf | ForEach-Object { Write-Host "  $($rmfTable[0]): $($_ -join ' | ')" }
+Assert (@($rmf | Where-Object { $_ -contains 'RSTTRAYCACHEDIR' }).Count -eq 1) 'RemoveFolderEx removes RSTTRAYCACHEDIR (the tray cache)'
 $launch = Get-MsiQuery $Msi 'SELECT `Condition`, `Description` FROM `LaunchCondition`' 2
 Assert (@($launch | Where-Object { $_[0] -eq $LaunchConditionText -and $_[1] -eq $LaunchMessage }).Count -eq 1) 'LaunchCondition table holds the "none was found" check'
 $secure = Get-MsiProperty $Msi 'SecureCustomProperties'
@@ -270,6 +420,9 @@ if ($Mode -eq 'Install') {
   Show-LogLines $logA
   Assert-OneProduct $newProductCode $newVersion '(a)'
   Assert-Years @('2026', '2027') '(a)'
+  # (t) the tray (feature #17, AC1): installed with the Run value; one per user.
+  Assert-TrayInstalled '(a)'
+  $trayA = Test-TraySingleInstance '(t)'
   $sm = Get-ChildItem (Join-Path $AppData 'RST\R27\app') -Recurse -Filter System.Management.dll |
         ForEach-Object { $_.FullName.Substring($AppData.Length + 1) }
   Write-Host "R27 System.Management.dll: $($sm -join ', ')"
@@ -279,9 +432,12 @@ if ($Mode -eq 'Install') {
   Set-RevitStubs @('2025', '2026', '2027')
   $logD = Join-Path $LogDir 'rst-repair-add-2025.log'
   Invoke-Msiexec '/fa' $Msi $logD | Out-Null
-  Show-LogLines $logD
+  Show-LogLines $logD @('CloseApplication', 'RST.Tray.exe')
   Assert-OneProduct $newProductCode $newVersion '(d) repair'
   Assert-Years @('2025', '2026', '2027') '(d) repair added 2025'
+  # The repair replaced the tray's files: CloseApplication closed the window-showing tray from (t) first.
+  Assert-TrayClosed $trayA '(d) repair'
+  Assert-TrayInstalled '(d) repair'
 
   Set-RevitStubs @('2025', '2027')
   Invoke-Msiexec '/fa' $Msi (Join-Path $LogDir 'rst-repair-drop-2026.log') | Out-Null
@@ -313,9 +469,16 @@ if ($Mode -eq 'Install') {
     $uninstallMsi = $SameVersionMsi
   }
 
-  # (e) Revit gone, then uninstall: everything is removed.
+  Assert-TrayInstalled '(b)'
+
+  # (e) Revit gone, a tray running, then uninstall: everything is removed and the tray is closed.
   Set-RevitStubs @()
-  Invoke-Msiexec '/x' $uninstallMsi (Join-Path $LogDir 'rst-uninstall.log') | Out-Null
+  $trayE = Start-Tray @('--startup') '(e)'
+  New-Item -ItemType Directory -Force $TrayCache | Out-Null
+  Set-Content -Path (Join-Path $TrayCache 'probe.msi') -Value 'rst-c ci cache probe' -NoNewline
+  $logE = Join-Path $LogDir 'rst-uninstall.log'
+  Invoke-Msiexec '/x' $uninstallMsi $logE | Out-Null
+  Show-LogLines $logE @('CloseApplication', 'RST.Tray.exe', 'RemoveFolder')
   Show-Related '(e) after uninstall'
   Assert ((Get-Related $UnifiedCode).Count -eq 0) '(e) no RST product after uninstall'
   foreach ($y in $Years.Keys) {
@@ -324,6 +487,23 @@ if ($Mode -eq 'Install') {
     }
   }
   Assert-Probe $probe '(e)'
+
+  # AC1: uninstall closed the running tray, removed the Run value, its files and its cache; only user data
+  # under %AppData%\RST (settings, log) remains.
+  Assert-TrayClosed $trayE '(e) uninstall'
+  Assert ($null -eq (Get-RunValue)) '(e) HKCU Run value RST removed'
+  Assert (-not (Test-Path $TrayDir)) "(e) $TrayDir removed"
+  Assert (-not (Test-Path (Split-Path $TrayDir))) "(e) $(Split-Path $TrayDir) removed"
+  Assert (-not (Test-Path $TrayCache)) "(e) $TrayCache removed (RemoveFolderEx)"
+  $left = @(foreach ($d in (Join-Path $env:LOCALAPPDATA 'Programs'), (Join-Path $env:LOCALAPPDATA 'RST\Tray')) {
+              if (Test-Path $d) { Get-ChildItem $d -Recurse -File -Force -ErrorAction SilentlyContinue |
+                                  Where-Object { $_.Name -like 'RST.Tray*' -or $_.FullName -like (Join-Path $env:LOCALAPPDATA 'RST\Tray\*') } } })
+  $left | ForEach-Object { Write-Host "  left: $($_.FullName)" }
+  Assert ($left.Count -eq 0) '(e) no tray file left under %LocalAppData%\Programs or %LocalAppData%\RST\Tray'
+  Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 0) '(e) no RST.Tray process running'
+  Assert (Test-Path $TraySettings) '(e) the tray settings (user data) survive under %AppData%\RST'
+  Assert (@(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log').Count -ge 1) '(e) the tray log (user data) survives under %AppData%\RST\logs'
+  Show-TrayLog
   exit 0
 }
 
