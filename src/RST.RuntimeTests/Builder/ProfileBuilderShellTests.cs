@@ -187,4 +187,60 @@ public sealed class ProfileBuilderShellTests : IDisposable
         again.Model.CleanupRows.Select(r => r.Name).Should().Equal("Temp", "Package Cache", "Journals", "Collaboration Cache", "Recent File List");
         again.Model.CleanupRows.Select(r => r.Enabled).Should().Equal(true, true, true, false, true);
     }
+
+    // ── a profile read from a file with no id (WU1 review F6) ────────────────
+
+    [Fact]
+    public async Task Saving_a_profile_read_from_an_id_less_file_replaces_that_file()
+    {
+        var backend = RealBackend();
+        var legacy = ProfileEditing.ForEditing(LoaderFixtures.Structure());
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        using (var fs = File.Create(Path.Combine(ProfilesDir, "Legacy_2024-05-01.json")))
+            ProfileSerializer.Write(legacy, fs);
+
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Model.Profile.Id.Should().BeNullOrEmpty();
+        h.Model.MinVersion = "3.1.0";
+        (await h.Model.SaveAsync()).Should().BeTrue();
+
+        Files().Should().HaveCount(3).And.NotContain("Legacy_2024-05-01.json", "the id-less original is replaced, not kept beside the copy");
+        var saved = Read(Path.Combine(ProfilesDir, Files().Single(f => f.StartsWith("Legacy_", StringComparison.Ordinal))));
+        saved.Id.Should().NotBeNullOrEmpty().And.Be(h.Model.Profile.Id);
+        h.Model.ProfileOptions.Count(o => o.Display == "Legacy").Should().Be(1, "listed once");
+        h.Model.Toast.Kind.Should().Be(BannerKind.Success);
+
+        // Saved again: the profile has its id now; nothing else is removed.
+        h.Model.MinVersion = "3.2.0";
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        Files().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task A_failed_removal_of_the_id_less_file_warns_and_keeps_the_save()
+    {
+        var backend = BuilderFixtures.Backend();
+        var legacy = LoaderFixtures.Structure();
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        backend.Library.Add(new ProfileEntry("Legacy.json", legacy));
+        backend.RemoveResult = OpResult.Fail("The file is in use");
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Model.MinVersion = "3.1.0";
+
+        (await h.Model.SaveAsync()).Should().BeTrue("the save stands");
+        h.Backend.Removed.Should().Equal("Legacy.json");
+        h.Model.IsDirty.Should().BeFalse();
+        h.Model.Toast.Kind.Should().Be(BannerKind.Warning);
+        h.Model.Toast.Text.Should().Be("Saved as Legacy_new-1.json, but the old file Legacy.json could not be removed (The file is in use). Delete it to avoid a duplicate.");
+
+        // A profile that had an id from the start never removes anything.
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.MinVersion = "3.1.0";
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        h.Backend.Removed.Should().ContainSingle();
+    }
 }

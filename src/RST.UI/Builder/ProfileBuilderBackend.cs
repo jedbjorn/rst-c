@@ -43,6 +43,9 @@ public interface IProfileBuilderBackend
 
     SaveOutcome Save(Profile profile);
 
+    /// <summary>After the first save of a profile read from a file with no id: removes that file (WU1 review F6).</summary>
+    OpResult RemoveSupersededFile(string fileName);
+
     OpResult Export(Profile profile, string path);
 
     BrandingState LoadBranding();
@@ -110,6 +113,8 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     public IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup() => _lookup.Read();
 
     public SaveOutcome Save(Profile profile) => _save.Save(profile);
+
+    public OpResult RemoveSupersededFile(string fileName) => _save.RemoveSupersededFile(fileName);
 
     public OpResult Export(Profile profile, string path) => _save.Export(profile, path);
 

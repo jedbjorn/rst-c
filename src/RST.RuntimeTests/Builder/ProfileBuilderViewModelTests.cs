@@ -855,6 +855,7 @@ public class ProfileBuilderViewModelTests
         public ActiveProfile GetActiveProfile() => throw new InvalidOperationException();
         public IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup() => throw new InvalidOperationException();
         public SaveOutcome Save(Profile profile) => throw new InvalidOperationException();
+        public OpResult RemoveSupersededFile(string fileName) => throw new InvalidOperationException();
         public OpResult Export(Profile profile, string path) => throw new InvalidOperationException();
         public BrandingState LoadBranding() => throw new InvalidOperationException();
         public OpResult SaveBrandingUrl(string url) => throw new InvalidOperationException();

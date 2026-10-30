@@ -83,6 +83,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private IReadOnlyList<PresetTabViewModel> _presetTabs = [];
 
+    // The file a profile with no id was read from: its first save writes it under a new id and a
+    // new file name, and then removes this one (WU1 review F6), so it is not listed twice.
+    private string? _supersededFile;
+
     private int _previewRevision;
     private bool _isWorking;
     private bool _closeApproved;
@@ -263,13 +267,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             return;
         }
         Log.Information("Builder: profile menu → load existing {Name} ({Id})", target.Entry.Profile.ProfileName, target.Entry.Profile.Id);
-        LoadIntoEditor(target.Entry.Profile);
+        LoadIntoEditor(target.Entry.Profile, target.Entry.FileName);
     }
 
     /// <summary>startFresh: a blank profile with one panel ("Panel 1"), new mode, a clean baseline.</summary>
     private void StartFresh()
     {
         _profile = ProfileEditing.NewProfile();
+        _supersededFile = null;
         _selectedPanelIndex = -1;
         _editMode = false;
         _originalName = "";
@@ -279,8 +284,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     /// <summary>loadIntoProfile + the dropdown handler: edit mode, panel 0 selected, a clean baseline.</summary>
-    private void LoadIntoEditor(Profile source)
+    /// <param name="source">The saved profile.</param>
+    /// <param name="fileName">Its file; kept when the profile has no id, for the first save to replace (WU1 review F6).</param>
+    private void LoadIntoEditor(Profile source, string? fileName = null)
     {
+        _supersededFile = string.IsNullOrEmpty(source.Id) ? fileName : null;
         _profile = ProfileEditing.ForEditing(source);
         _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
         _editMode = true;
@@ -980,12 +988,19 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEditMode));
         OnPropertyChanged(nameof(IsLoadedProfile));
         var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
+        var oldFileKept = RemoveSupersededFile(result.FileName);
 
         _library = Safe(_backend.GetProfiles, _library, "get_profiles");
         PopulateOptions(_profile.Id);
         SnapshotPristine();
 
-        if (!savedIsActive)
+        if (oldFileKept is { } kept)
+        {
+            // The save stands; the user is told the old file is still there (listed twice until removed).
+            ShowToast(UiStrings.Builder_SavedOldFileKept(result.FileName, kept.File, kept.Error), BannerKind.Warning);
+            if (!savedIsActive) return true;
+        }
+        else if (!savedIsActive)
         {
             ShowToast(UiStrings.Builder_SavedAs(result.FileName), BannerKind.Success);
             return true;
@@ -1072,6 +1087,26 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// After a save: the id-less file the profile was read from is removed (WU1 review F6). A
+    /// failure is logged and returned for a warning; it never fails the save. Null when there was
+    /// nothing to remove or it was removed.
+    /// </summary>
+    private (string File, string Error)? RemoveSupersededFile(string? savedFileName)
+    {
+        if (_supersededFile is not { } old) return null;
+        _supersededFile = null;
+        if (string.Equals(old, savedFileName, StringComparison.OrdinalIgnoreCase)) return null;
+        var removed = Safe(() => _backend.RemoveSupersededFile(old), OpResult.Fail("unknown"), "remove_superseded_file");
+        if (removed.Ok)
+        {
+            Log.Information("Builder: {Old} replaced by {New} (the profile had no id)", old, savedFileName);
+            return null;
+        }
+        Log.Warning("Builder: saved as {New}, but {Old} could not be removed: {Error}", savedFileName, old, removed.Error);
+        return (old, removed.Error ?? "unknown");
     }
 
     private async Task SaveThenCloseAsync()
