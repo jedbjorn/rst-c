@@ -273,6 +273,20 @@ function Get-RunValue {
   $k = Get-ItemProperty -Path "HKCU:\$RunKey" -Name $RunValueName -ErrorAction SilentlyContinue
   if ($k) { return $k.$RunValueName } else { return $null }
 }
+# Decision #33: the installed app trees and the tray hold only RST's own DLLs. After an upgrade this
+# also proves the old release's Serilog*, System.Management and System.Text.Json DLLs are gone.
+function Assert-NoForeignDlls([string[]]$Majors, [string]$Label) {
+  $trees = @($Majors | ForEach-Object { Join-Path $AppData "RST\$_\app" }) + @($TrayDir)
+  foreach ($tree in $trees) {
+    $dlls = @(Get-ChildItem $tree -Recurse -Filter *.dll -ErrorAction SilentlyContinue)
+    $foreign = @($dlls | Where-Object { $_.Name -notmatch '^RST(\..+)?\.dll$' } | ForEach-Object { $_.FullName.Substring($tree.Length + 1) })
+    Write-Host "$Label $tree DLLs: $(($dlls | ForEach-Object { $_.Name }) -join ', ')"
+    Assert ($dlls.Count -gt 0 -and $foreign.Count -eq 0) "$Label $tree ships no third-party DLL (decision #33)$(if ($foreign) { ': ' + ($foreign -join ', ') })"
+    foreach ($old in @('Serilog.dll', 'Serilog.Sinks.File.dll', 'System.Management.dll', 'System.Text.Json.dll')) {
+      Assert (@($dlls | Where-Object { $_.Name -eq $old }).Count -eq 0) "$Label no $old under $tree"
+    }
+  }
+}
 function Assert-TrayInstalled([string]$Label) {
   Assert (Test-Path $TrayExe -PathType Leaf) "[$Label] $TrayExe present"
   $run = Get-RunValue
@@ -502,13 +516,7 @@ if ($Mode -eq 'Install') {
   # (t) the tray (feature #17, AC1): installed with the Run value; one per user.
   Assert-TrayInstalled '(a)'
   $trayA = Test-TraySingleInstance '(t)'
-  # Decision #33: the installed app trees and the tray hold only RST's own DLLs.
-  foreach ($tree in @((Join-Path $AppData 'RST\R26\app'), (Join-Path $AppData 'RST\R27\app'), $TrayDir)) {
-    $dlls = @(Get-ChildItem $tree -Recurse -Filter *.dll)
-    $foreign = @($dlls | Where-Object { $_.Name -notmatch '^RST(\..+)?\.dll$' } | ForEach-Object { $_.FullName.Substring($tree.Length + 1) })
-    Write-Host "$tree DLLs: $(($dlls | ForEach-Object { $_.Name }) -join ', ')"
-    Assert ($dlls.Count -gt 0 -and $foreign.Count -eq 0) "(a) $tree ships no third-party DLL (decision #33)$(if ($foreign) { ': ' + ($foreign -join ', ') })"
-  }
+  Assert-NoForeignDlls @('R26', 'R27') '(a)'
 
   # (d) Revit 2025 installed later: Repair adds it. Then 2026 removed:
   # Repair drops it. Then 2026 back: Repair restores it.
@@ -667,6 +675,10 @@ Invoke-Msiexec '/i' $OldMsi (Join-Path $LogDir 'old-install.log') | Out-Null
 Show-Related 'before'
 $before = Get-Related $oldCode
 Assert ($before.Count -eq 1 -and $before[0].ProductCode -eq $oldPC) "old product $oldPC installed"
+foreach ($nn in 'R25', 'R26', 'R27') {
+  $p = Join-Path $AppData "RST\$nn\app"
+  if (Test-Path $p) { Write-Host "before upgrade $p DLLs: $((Get-ChildItem $p -Recurse -Filter *.dll | ForEach-Object { $_.FullName.Substring($p.Length + 1) }) -join ', ')" }
+}
 
 $engine27 = Join-Path $AppData 'RST\R27\app\RST.Engine.dll'
 $stagedHash = (Get-FileHash (Join-Path $StagedR27 'app\RST.Engine.dll') -Algorithm SHA256).Hash
@@ -700,4 +712,6 @@ Write-Host "R27 RST.Engine.dll after:  $newHash"
 Assert ($newHash -eq $stagedHash) 'installed R27 engine equals the newly staged engine'
 Assert-Probe $probe 'after upgrade'
 Assert-TrayInstalled 'after upgrade'
+# Review N1: the old release's Serilog*, System.Management and System.Text.Json DLLs are gone.
+Assert-NoForeignDlls @('R25', 'R26', 'R27') '(after upgrade)'
 exit 0
