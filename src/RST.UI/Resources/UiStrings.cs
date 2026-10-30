@@ -648,43 +648,7 @@ public static class UiStrings
 
     public static string Builder_IconVariantTip(object? arg0, object? arg1) => Format(nameof(Builder_IconVariantTip), arg0, arg1);
 
-    // Stacks (feature #15, spec #17).
-
-    public static string Builder_Stacks => Get(nameof(Builder_Stacks));
-
-    public static string Builder_StacksHelp => Get(nameof(Builder_StacksHelp));
-
-    public static string Builder_AddStack => Get(nameof(Builder_AddStack));
-
-    public static string Builder_StacksEmpty => Get(nameof(Builder_StacksEmpty));
-
-    public static string Builder_StackDropHere => Get(nameof(Builder_StackDropHere));
-
-    public static string Builder_StackName => Get(nameof(Builder_StackName));
-
-    public static string Builder_PlaceStack => Get(nameof(Builder_PlaceStack));
-
-    public static string Builder_PlaceStackTip => Get(nameof(Builder_PlaceStackTip));
-
-    public static string Builder_DeleteStackTip => Get(nameof(Builder_DeleteStackTip));
-
-    public static string Builder_DeleteStackTitle(object? arg0) => Format(nameof(Builder_DeleteStackTitle), arg0);
-
-    public static string Builder_DeleteStackText => Get(nameof(Builder_DeleteStackText));
-
-    public static string Builder_StackExists(object? arg0) => Format(nameof(Builder_StackExists), arg0);
-
-    public static string Builder_StackFull(object? arg0) => Format(nameof(Builder_StackFull), arg0);
-
-    public static string Builder_StackNeedsTools(object? arg0) => Format(nameof(Builder_StackNeedsTools), arg0);
-
-    public static string Builder_StackUnderfilled => Get(nameof(Builder_StackUnderfilled));
-
-    public static string Builder_StackUnplaced => Get(nameof(Builder_StackUnplaced));
-
-    public static string Builder_StackCount(object? arg0) => Format(nameof(Builder_StackCount), arg0);
-
-    public static string Builder_RemoveStackToolTip => Get(nameof(Builder_RemoveStackToolTip));
+    // Stacks (feature #15, spec #17): kept and drawn, not authored in the Builder yet (feature #18).
 
     public static string Builder_StackSlotNameTip => Get(nameof(Builder_StackSlotNameTip));
 

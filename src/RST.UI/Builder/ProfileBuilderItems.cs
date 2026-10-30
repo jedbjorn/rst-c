@@ -3,8 +3,8 @@
 // which children show), the panel cards and their slot rows. Panel and slot edits write straight
 // into the profile, as the page's inputs did, and tell the window's view-model so the live
 // preview redraws. Cards and rows carry their drag-and-drop markers (WU5).
-// Stacks (feature #15, spec #17): the Stacks section's cards and their tool rows. A stack slot's
-// name in a panel card is read-only: it is the link to the stack, renamed only on the stack card.
+// Stacks (feature #15, spec #17): a stack slot's name is read-only, because it is the only link
+// to profile.stacks. Stack authoring is feature #18 (decision #19).
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -276,19 +276,8 @@ public sealed class PanelCardViewModel : ObservableObject
     public bool IsSelected
     {
         get => _isSelected;
-        internal set
-        {
-            if (SetField(ref _isSelected, value)) OnPropertyChanged(nameof(ShowsRing));
-        }
+        internal set => SetField(ref _isSelected, value);
     }
-
-    /// <summary>
-    /// The accent ring: the selected panel, unless a stack is selected (spec #17, review N6: one ring
-    /// at a time, on whatever a double-click adds to). The panel stays the target of "+ Panel".
-    /// </summary>
-    public bool ShowsRing => _isSelected && !_owner.HasSelectedStack;
-
-    internal void RingChanged() => OnPropertyChanged(nameof(ShowsRing));
 
     /// <summary>The drag feedback on the card: a line above or below it (panels), or the whole card (commands, slots).</summary>
     public DropMarker DropMarker
@@ -345,13 +334,13 @@ public sealed class SlotRowViewModel : ObservableObject
     /// <summary>Tool slots get the Pick-icon button; other types show their type tag.</summary>
     public bool IsTool => Model.SlotType == "tool";
 
-    /// <summary>A stack slot: its name is the link to the stack, so the row shows it read-only (spec #17).</summary>
-    public bool IsStack => Model.SlotType == "stack";
-
     /// <summary>The type tag (<c>slot.type || 'tool'</c>).</summary>
     public string TypeTag => string.IsNullOrEmpty(Model.SlotType) ? "tool" : Model.SlotType;
 
-    /// <summary>The name box's tooltip: a stack is renamed on its card in the Stacks section.</summary>
+    /// <summary>A stack slot: its name is the link to the stack, so the row shows it read-only (spec #17).</summary>
+    public bool IsStack => Model.SlotType == "stack";
+
+    /// <summary>The name box's tooltip on a stack slot.</summary>
     public string? NameToolTip => IsStack ? UiStrings.Builder_StackSlotNameTip : null;
 
     /// <summary>The slot's name (the ribbon label). A stack slot's name cannot be edited here.</summary>
@@ -372,9 +361,6 @@ public sealed class SlotRowViewModel : ObservableObject
             _owner.PreviewChanged();
         }
     }
-
-    /// <summary>After the stack it refers to was renamed.</summary>
-    internal void NameChanged() => OnPropertyChanged(nameof(Name));
 
     /// <summary>A tool slot with a command id shows it shortened, with the full id as the tooltip.</summary>
     public bool ShowsCommandId => IsTool && !string.IsNullOrEmpty(Model.CommandId);
@@ -418,159 +404,6 @@ public sealed class SlotRowViewModel : ObservableObject
     private bool _isDragSource;
 
     /// <summary>After the slot's icon changed (the icon picker).</summary>
-    internal void IconChanged()
-    {
-        OnPropertyChanged(nameof(IconLabel));
-        OnPropertyChanged(nameof(IconThumbnail));
-        OnPropertyChanged(nameof(HasIconThumbnail));
-    }
-
-    public override string ToString() => Name;
-}
-
-/// <summary>
-/// One card in the Stacks section (spec #17): the name (rename on Enter or when the box loses focus),
-/// "+ Panel", ×, the 2-3 tools, and its flags: fewer than 2 tools (blocks Save), not on any panel
-/// (removed on save). A catalogue command dropped on the card, or double-clicked while it is
-/// selected, joins the stack; the card's header drags onto a panel to place the stack.
-/// </summary>
-public sealed class StackCardViewModel : ObservableObject
-{
-    private readonly ProfileBuilderViewModel _owner;
-    private string _name;
-    private bool _isSelected;
-    private DropMarker _dropMarker;
-
-    internal StackCardViewModel(string name, Stack model, ProfileBuilderViewModel owner)
-    {
-        _name = name;
-        Model = model;
-        _owner = owner;
-        Tools = new ObservableCollection<StackToolRowViewModel>(BuildTools());
-        SelectCommand = new RelayCommand(() => _owner.SelectStack(this));
-        PlaceCommand = new RelayCommand(() => _owner.PlaceStack(this), () => _owner.IsIdle);
-        DeleteCommand = new RelayCommand(() => _owner.DeleteStack(this), () => _owner.IsIdle);
-    }
-
-    public Stack Model { get; }
-
-    /// <summary>The stack's name. Setting it renames the stack (a duplicate is refused) and the slots that place it.</summary>
-    public string Name
-    {
-        get => _name;
-        set => _owner.RenameStack(this, value);
-    }
-
-    /// <summary>The name as committed (after a rename, or to snap the box back after a refused one).</summary>
-    internal void SetName(string name)
-    {
-        _name = name;
-        OnPropertyChanged(nameof(Name));
-    }
-
-    internal void RaiseName() => OnPropertyChanged(nameof(Name));
-
-    public ObservableCollection<StackToolRowViewModel> Tools { get; }
-
-    public bool HasTools => Tools.Count > 0;
-
-    /// <summary>"2 of 3".</summary>
-    public string ToolCount => UiStrings.Builder_StackCount(Model.Tools.Count);
-
-    /// <summary>Fewer than 2 tools: flagged, and Save is blocked until it has 2 or 3.</summary>
-    public bool IsUnderfilled => StackEditing.IsUnderfilled(Model);
-
-    /// <summary>3 tools: a fourth drop is refused.</summary>
-    public bool IsFull => StackEditing.IsFull(Model);
-
-    /// <summary>No panel slot places the stack: it is removed when the profile is saved.</summary>
-    public bool IsUnplaced => !_owner.IsStackPlaced(_name);
-
-    public bool IsSelected
-    {
-        get => _isSelected;
-        internal set => SetField(ref _isSelected, value);
-    }
-
-    /// <summary>A catalogue command over the card (<see cref="Core.Builder.DropMarker.Over"/>).</summary>
-    public DropMarker DropMarker
-    {
-        get => _dropMarker;
-        internal set => SetField(ref _dropMarker, value);
-    }
-
-    public ICommand SelectCommand { get; }
-
-    /// <summary>"+ Panel": places the stack at the end of the selected panel.</summary>
-    public ICommand PlaceCommand { get; }
-
-    public ICommand DeleteCommand { get; }
-
-    /// <summary>After the tools changed: the rows again, the count and the flags.</summary>
-    internal void ToolsChanged()
-    {
-        Tools.Clear();
-        foreach (var row in BuildTools()) Tools.Add(row);
-        OnPropertyChanged(nameof(HasTools));
-        OnPropertyChanged(nameof(ToolCount));
-        OnPropertyChanged(nameof(IsUnderfilled));
-        OnPropertyChanged(nameof(IsFull));
-    }
-
-    /// <summary>After the panels changed (a stack slot placed, moved or removed).</summary>
-    internal void PlacementChanged() => OnPropertyChanged(nameof(IsUnplaced));
-
-    private IEnumerable<StackToolRowViewModel> BuildTools() =>
-        Model.Tools.Select((t, i) => new StackToolRowViewModel(t, i, this, _owner)).ToList();
-
-    public override string ToString() => Name;
-}
-
-/// <summary>One tool in a stack card: the Pick-icon button, the name, the short command id, ▲ ▼ ×.</summary>
-public sealed class StackToolRowViewModel : ObservableObject
-{
-    private readonly ProfileBuilderViewModel _owner;
-
-    internal StackToolRowViewModel(Slot model, int index, StackCardViewModel stack, ProfileBuilderViewModel owner)
-    {
-        Model = model;
-        Index = index;
-        Stack = stack;
-        _owner = owner;
-        MoveUpCommand = new RelayCommand(() => _owner.MoveStackTool(Stack, Index, -1), () => _owner.IsIdle);
-        MoveDownCommand = new RelayCommand(() => _owner.MoveStackTool(Stack, Index, +1), () => _owner.IsIdle);
-        RemoveCommand = new RelayCommand(() => _owner.RemoveStackTool(Stack, Index), () => _owner.IsIdle);
-        PickIconCommand = new RelayCommand(() => _owner.PickIcon(this), () => _owner.IsIdle);
-    }
-
-    public Slot Model { get; }
-
-    public int Index { get; }
-
-    public StackCardViewModel Stack { get; }
-
-    public string Name => Model.Name ?? "";
-
-    public string ShortCommandId => BuilderRules.ShortId(Model.CommandId);
-
-    public string? CommandId => Model.CommandId;
-
-    /// <summary>The Pick-icon button's tooltip: the icon's design name, or "Pick icon".</summary>
-    public string IconLabel => BuilderRules.IconButtonLabel(Model);
-
-    /// <summary>The 14 px thumbnail of the tool's pack icon (null: the button shows "+").</summary>
-    public ImageSource? IconThumbnail => PackIcons.ForIconFile(Model.IconFile, _owner.PackDirectory);
-
-    public bool HasIconThumbnail => IconThumbnail is not null;
-
-    public ICommand MoveUpCommand { get; }
-
-    public ICommand MoveDownCommand { get; }
-
-    public ICommand RemoveCommand { get; }
-
-    public ICommand PickIconCommand { get; }
-
     internal void IconChanged()
     {
         OnPropertyChanged(nameof(IconLabel));
