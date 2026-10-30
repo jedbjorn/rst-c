@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Adapted from splash-it src/SplashIt.UI/Resources/UiStrings.resx (splash-it commit ba86a71),
+    MIT, same owner; splash-it took these entries word for word from gantt-it
+    src/GanttIt.Revit/Resources/Strings.resx (gantt-it commit a96d0a1).
+    Changes: only the kit's entries (Common_, Dialog_, Edit_, Color_, Pick_); splash-it's
+    Settings_, Status_ and Preview_ entries are left out.
+
+    RST.UI's user-facing strings: the vendored color picker and dialogs, and the
+    windows' own text as they are ported. English only (spec #16). UiStrings.cs has one
+    accessor per entry; the runtime test UiStringsTests checks every accessor resolves here.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Common_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Dialog_Items" xml:space="preserve">
+    <value>Items</value>
+  </data>
+  <data name="Edit_Cut" xml:space="preserve">
+    <value>Cu_t</value>
+    <comment>Text box context menu; _ marks the access key.</comment>
+  </data>
+  <data name="Edit_Copy" xml:space="preserve">
+    <value>_Copy</value>
+  </data>
+  <data name="Edit_Paste" xml:space="preserve">
+    <value>_Paste</value>
+  </data>
+  <data name="Color_DialogTitle" xml:space="preserve">
+    <value>Color</value>
+    <comment>Default picker title; a caller may pass a more specific one.</comment>
+  </data>
+  <data name="Color_Palette" xml:space="preserve">
+    <value>Palette</value>
+  </data>
+  <data name="Color_Recent" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="Color_Hex" xml:space="preserve">
+    <value>Hex</value>
+  </data>
+  <data name="Color_HexName" xml:space="preserve">
+    <value>Hex color</value>
+  </data>
+  <data name="Color_CurrentTip" xml:space="preserve">
+    <value>Current color</value>
+  </data>
+  <data name="Color_Apply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="Color_PickTip" xml:space="preserve">
+    <value>Pick from screen: click any pixel on any monitor (Esc cancels). Picks the color as displayed.</value>
+  </data>
+  <data name="Color_PickName" xml:space="preserve">
+    <value>Pick from screen</value>
+  </data>
+  <data name="Color_More" xml:space="preserve">
+    <value>More…</value>
+  </data>
+  <data name="Color_MoreName" xml:space="preserve">
+    <value>More colors</value>
+  </data>
+  <data name="Color_HexError" xml:space="preserve">
+    <value>Enter a color as #RRGGBB, for example #4F8EF7.</value>
+  </data>
+  <data name="Color_PickFailed" xml:space="preserve">
+    <value>Couldn't pick from the screen: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Pick_WindowTitle" xml:space="preserve">
+    <value>Pick a color</value>
+  </data>
+  <data name="Pick_Hint" xml:space="preserve">
+    <value>Click to pick · Esc to cancel</value>
+  </data>
+  <data name="Pick_ListFailed" xml:space="preserve">
+    <value>Windows did not list the monitors.</value>
+  </data>
+  <data name="Pick_AreaTooLarge" xml:space="preserve">
+    <value>The screen area {0} × {1} can't be captured.</value>
+    <comment>{0} width, {1} height in pixels.</comment>
+  </data>
+  <data name="Pick_NoAccess" xml:space="preserve">
+    <value>Windows did not give access to the screen.</value>
+  </data>
+  <data name="Pick_CopyRefused" xml:space="preserve">
+    <value>Windows refused to copy the screen.</value>
+  </data>
+  <data name="Pick_PointerFailed" xml:space="preserve">
+    <value>The pointer position could not be read.</value>
+  </data>
+  <data name="Pick_NoMonitors" xml:space="preserve">
+    <value>Windows reported no monitors.</value>
+  </data>
+</root>

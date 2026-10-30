@@ -66,6 +66,23 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - run: dotnet test src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
+      # Spec #16 screenshot pipeline: the runtime tests write PNGs (and a
+      # capture-environment .txt) under TestResults/screenshots. Uploaded even
+      # when a test fails, so a broken render can be looked at. One upload per
+      # run: if this job becomes a per-major matrix (feature #11), only the
+      # R25 leg uploads, so the fixed artifact name never collides.
+      - name: List screenshots
+        if: always() && matrix.major != 'R27'
+        shell: bash
+        run: find TestResults/screenshots -type f -exec ls -l {} + || true
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.major != 'R27'
+        with:
+          name: RST-screenshots
+          path: |
+            TestResults/screenshots/*.png
+            TestResults/screenshots/*.txt
+          if-no-files-found: error
 
   stage:
     name: Stage ${{ matrix.major }}

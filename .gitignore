@@ -96,3 +96,6 @@ sign/
 /.sc-state/map.db-shm
 /.sc-state/db_backups/
 # <<< subfloor managed ignores <<<
+
+## Runtime-test screenshots (spec #16; uploaded by CI as RST-screenshots)
+TestResults/

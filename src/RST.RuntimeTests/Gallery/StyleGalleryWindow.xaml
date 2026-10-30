@@ -1,0 +1,315 @@
+<!--
+    rst-c's own (not vendored). The style gallery (spec #16 WU1, AC3): one window showing every
+    Theme.xaml style, the kit's and rst-c's additions, rendered light and dark by
+    StyleGalleryScreenshotTests. Test-only; it never ships.
+-->
+<Window x:Class="RST.RuntimeTests.Gallery.StyleGalleryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mvvm="clr-namespace:RST.UI.Mvvm;assembly=RST.UI"
+        xmlns:controls="clr-namespace:RST.UI.Controls;assembly=RST.UI"
+        xmlns:swatches="clr-namespace:RST.UI.Swatches;assembly=RST.UI"
+        Title="RST — Style gallery"
+        SizeToContent="WidthAndHeight" ResizeMode="NoResize" ShowInTaskbar="False"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="Cell" TargetType="StackPanel">
+                <Setter Property="Margin" Value="0,0,0,14" />
+            </Style>
+            <Style x:Key="Row" TargetType="WrapPanel">
+                <Setter Property="Orientation" Value="Horizontal" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- The root carries the window color itself: the tests render it unclipped by the window. -->
+    <Grid x:Name="Root" Background="{StaticResource WindowBrush}">
+        <DockPanel Margin="16,12,16,16">
+            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                <TextBlock x:Name="Heading" Text="RST style gallery" Style="{StaticResource HeadingText}" />
+                <TextBlock x:Name="Subheading" Style="{StaticResource MutedText}" Margin="0,2,0,0"
+                           Text="Every Theme.xaml style: the family kit and rst-c's additions." />
+            </StackPanel>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="340" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="350" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Column 1: buttons, text, fields, check boxes, switches, slider, pills -->
+                <StackPanel Grid.Column="0">
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Buttons" Style="{StaticResource SectionText}" />
+                        <WrapPanel Style="{StaticResource Row}">
+                            <Button Content="Button" Margin="0,0,6,6" />
+                            <Button Content="Primary" Style="{StaticResource PrimaryButton}" Margin="0,0,6,6" />
+                            <Button Content="Danger" Style="{StaticResource DangerButton}" Margin="0,0,6,6" />
+                            <Button Content="Danger filled" Style="{StaticResource DangerFilledButton}" Margin="0,0,6,6" />
+                            <Button Style="{StaticResource IconButton}" Margin="0,0,6,6" ToolTip="Icon button">
+                                <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                            </Button>
+                            <Button Content="Disabled" IsEnabled="False" Margin="0,0,6,6" />
+                            <Button Content="Primary disabled" Style="{StaticResource PrimaryButton}" IsEnabled="False" Margin="0,0,6,6" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Text" Style="{StaticResource SectionText}" />
+                        <TextBlock Text="HeadingText" Style="{StaticResource HeadingText}" />
+                        <TextBlock Text="SectionText" Style="{StaticResource SectionText}" Margin="0,2,0,2" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="LabelText" Style="{StaticResource LabelText}" />
+                            <TextBlock Text="MutedText" Style="{StaticResource MutedText}" Margin="0,0,8,0" />
+                            <TextBlock Text="ColumnHeaderText" Style="{StaticResource ColumnHeaderText}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Text="● Loaded" Style="{StaticResource SuccessText}" />
+                        </StackPanel>
+                        <TextBlock Text="ErrorText: a validation message." Style="{StaticResource ErrorText}" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Fields" Style="{StaticResource SectionText}" />
+                        <TextBox Text="Architecture" Margin="0,0,0,6" />
+                        <TextBox Text="Name required" mvvm:Behaviors.HasError="True" Margin="0,0,0,6" />
+                        <ComboBox SelectedIndex="0" Margin="0,0,0,6">
+                            <ComboBoxItem Content="Architecture (loaded)" />
+                            <ComboBoxItem Content="Structure" />
+                            <ComboBoxItem Content="+ New Profile" />
+                        </ComboBox>
+                        <TextBox Text="Disabled field" IsEnabled="False" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Check boxes and switches" Style="{StaticResource SectionText}" />
+                        <WrapPanel Style="{StaticResource Row}">
+                            <CheckBox Content="Off" Margin="0,0,12,6" />
+                            <CheckBox Content="On" IsChecked="True" Margin="0,0,12,6" />
+                            <CheckBox Content="Mixed" IsThreeState="True" IsChecked="{x:Null}" Margin="0,0,12,6" />
+                            <CheckBox Content="Disabled" IsChecked="True" IsEnabled="False" Margin="0,0,12,6" />
+                        </WrapPanel>
+                        <WrapPanel Style="{StaticResource Row}">
+                            <CheckBox x:Name="SwitchOff" Style="{StaticResource ToggleSwitch}" Content="Off" Margin="0,0,12,6" />
+                            <CheckBox x:Name="SwitchOn" Style="{StaticResource ToggleSwitch}" Content="On" IsChecked="True" Margin="0,0,12,6" />
+                            <CheckBox Style="{StaticResource ToggleSwitch}" Content="Disabled off" IsEnabled="False" Margin="0,0,12,6" />
+                            <CheckBox Style="{StaticResource ToggleSwitch}" Content="Disabled on" IsChecked="True" IsEnabled="False" Margin="0,0,12,6" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Slider" Style="{StaticResource SectionText}" />
+                        <Slider Minimum="0" Maximum="100" Value="40" Margin="0,0,0,4" />
+                        <Slider Minimum="0" Maximum="100" Value="70" IsEnabled="False" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Pills" Style="{StaticResource SectionText}" />
+                        <WrapPanel Style="{StaticResource Row}">
+                            <ContentControl Style="{StaticResource Pill}" Content="12" Margin="0,0,6,0" />
+                            <ContentControl Style="{StaticResource Pill}" Content="Native" Margin="0,0,6,0" />
+                            <ContentControl Style="{StaticResource InfoPill}" Content="Installed" Margin="0,0,6,0" />
+                            <ContentControl x:Name="PillSuccess" Style="{StaticResource SuccessPill}" Content="Loaded" Margin="0,0,6,0" />
+                            <ContentControl Style="{StaticResource WarningPill}" Content="Disabled" Margin="0,0,6,0" />
+                            <ContentControl Style="{StaticResource ErrorPill}" Content="Not Found" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <StackPanel>
+                        <TextBlock Text="Panel" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource Panel}">
+                            <TextBlock Text="A Panel border groups a section on the surface color." TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Column 2: tabs, tree, cards, splitter -->
+                <StackPanel Grid.Column="2">
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Tabs" Style="{StaticResource SectionText}" />
+                        <TabControl x:Name="Tabs" Height="86" SelectedIndex="0">
+                            <TabItem x:Name="TabSelected" Header="Health">
+                                <TextBlock Text="The selected tab: body text and an accent underline." Style="{StaticResource MutedText}" />
+                            </TabItem>
+                            <TabItem Header="Activity">
+                                <TextBlock Text="Activity" />
+                            </TabItem>
+                            <TabItem Header="Disabled" IsEnabled="False" />
+                        </TabControl>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Tree (virtualizing)" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource Panel}" Padding="4">
+                            <TreeView x:Name="Tree" Height="196">
+                                <TreeViewItem IsExpanded="True">
+                                    <TreeViewItem.Header>
+                                        <DockPanel>
+                                            <ContentControl Style="{StaticResource Pill}" Content="5" DockPanel.Dock="Right" />
+                                            <TextBlock Text="Autodesk Native" FontWeight="SemiBold" />
+                                        </DockPanel>
+                                    </TreeViewItem.Header>
+                                    <TreeViewItem IsExpanded="True">
+                                        <TreeViewItem.Header>
+                                            <DockPanel>
+                                                <ContentControl Style="{StaticResource Pill}" Content="3" DockPanel.Dock="Right" />
+                                                <TextBlock Text="Modify" />
+                                            </DockPanel>
+                                        </TreeViewItem.Header>
+                                        <TreeViewItem Header="Align" />
+                                        <TreeViewItem x:Name="TreeSelected" Header="Move" IsSelected="True" />
+                                        <TreeViewItem Header="Copy" />
+                                    </TreeViewItem>
+                                    <TreeViewItem Header="Annotate">
+                                        <TreeViewItem Header="Dimension" />
+                                    </TreeViewItem>
+                                </TreeViewItem>
+                                <TreeViewItem Header="pyRevit" IsExpanded="True">
+                                    <TreeViewItem Header="Tools">
+                                        <TreeViewItem Header="Sync" />
+                                    </TreeViewItem>
+                                    <TreeViewItem Header="Selection" />
+                                    <TreeViewItem Header="Drawing" />
+                                    <TreeViewItem Header="Modelling" />
+                                </TreeViewItem>
+                                <TreeViewItem Header="Enscape" />
+                            </TreeView>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Cards: normal, selected, active" Style="{StaticResource SectionText}" />
+                        <ListBox x:Name="Cards" Style="{StaticResource CardListBox}">
+                            <ListBoxItem x:Name="CardNormal">
+                                <StackPanel>
+                                    <TextBlock Text="Structure" FontWeight="SemiBold" />
+                                    <TextBlock Text="Tab RST-S · Min Revit 2025+ · 4 panels" Style="{StaticResource MutedText}" />
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem x:Name="CardSelected" IsSelected="True">
+                                <StackPanel>
+                                    <TextBlock Text="MEP" FontWeight="SemiBold" />
+                                    <TextBlock Text="Selected: accent border" Style="{StaticResource MutedText}" />
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem x:Name="CardActive" controls:CardState.IsActive="True">
+                                <DockPanel>
+                                    <TextBlock Text="● Loaded" Style="{StaticResource SuccessText}" DockPanel.Dock="Right" />
+                                    <StackPanel>
+                                        <TextBlock Text="Architecture" FontWeight="SemiBold" />
+                                        <TextBlock Text="Active: success border" Style="{StaticResource MutedText}" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </ListBoxItem>
+                        </ListBox>
+                    </StackPanel>
+
+                    <StackPanel>
+                        <TextBlock Text="Splitters" Style="{StaticResource SectionText}" />
+                        <Grid Height="64">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.RowSpan="3" Style="{StaticResource Panel}" Padding="6">
+                                <TextBlock Text="Left pane" Style="{StaticResource MutedText}" />
+                            </Border>
+                            <GridSplitter Grid.Column="1" Grid.RowSpan="3" Style="{StaticResource VerticalGridSplitter}" />
+                            <Border Grid.Column="2" Style="{StaticResource Panel}" Padding="6">
+                                <TextBlock Text="Top pane" Style="{StaticResource MutedText}" />
+                            </Border>
+                            <GridSplitter Grid.Column="2" Grid.Row="1" Style="{StaticResource HorizontalGridSplitter}" />
+                            <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource Panel}" Padding="6">
+                                <TextBlock Text="Bottom pane" Style="{StaticResource MutedText}" />
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Column 3: banners, busy, color picker, message dialog (composed in by the test) -->
+                <StackPanel Grid.Column="4" Width="700">
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Banners" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource InfoBanner}" Margin="0,0,0,4">
+                            <TextBlock Text="InfoBanner: a note about this window." TextWrapping="Wrap" />
+                        </Border>
+                        <Border Style="{StaticResource SuccessBanner}" Margin="0,0,0,4">
+                            <TextBlock Text="SuccessBanner: saved and reloaded." TextWrapping="Wrap" />
+                        </Border>
+                        <Border Style="{StaticResource WarningBanner}" Margin="0,0,0,4">
+                            <TextBlock Text="WarningBanner: restart Revit to apply." TextWrapping="Wrap" />
+                        </Border>
+                        <Border Style="{StaticResource ErrorBanner}">
+                            <TextBlock Text="ErrorBanner: the profile could not be read." TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Transient banners (toasts)" Style="{StaticResource SectionText}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ContentControl x:Name="ToastInfo" Style="{StaticResource TransientBanner}" Margin="0,0,6,8" HorizontalAlignment="Stretch" />
+                            <ContentControl x:Name="ToastSuccess" Grid.Column="1" Style="{StaticResource TransientBanner}" Margin="6,0,0,8" HorizontalAlignment="Stretch" />
+                            <ContentControl x:Name="ToastWarning" Grid.Row="1" Style="{StaticResource TransientBanner}" Margin="0,0,6,6" HorizontalAlignment="Stretch" />
+                            <ContentControl x:Name="ToastError" Grid.Row="1" Grid.Column="1" Style="{StaticResource TransientBanner}" Margin="6,0,0,6" HorizontalAlignment="Stretch" />
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource Cell}">
+                        <TextBlock Text="Busy" Style="{StaticResource SectionText}" />
+                        <DockPanel Margin="0,0,0,8">
+                            <ProgressBar x:Name="Spinner" Style="{StaticResource BusySpinner}" Margin="0,0,10,0" />
+                            <Button Style="{StaticResource PrimaryButton}" IsEnabled="False" Margin="0,0,10,0" DockPanel.Dock="Right">
+                                <StackPanel Orientation="Horizontal">
+                                    <ProgressBar Style="{StaticResource BusySpinner}" Foreground="{StaticResource OnAccentBrush}" Margin="0,0,6,0" />
+                                    <TextBlock Text="Scanning…" />
+                                </StackPanel>
+                            </Button>
+                            <ProgressBar x:Name="Bar" Style="{StaticResource BusyIndicator}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        </DockPanel>
+                        <Grid Height="112">
+                            <Border Style="{StaticResource Panel}">
+                                <TextBlock Text="Window content under the busy overlay." />
+                            </Border>
+                            <ContentControl x:Name="Overlay" Style="{StaticResource BusyOverlay}" />
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="ColorPicker" Style="{StaticResource SectionText}" />
+                            <Border Style="{StaticResource Panel}">
+                                <swatches:ColorPicker x:Name="Picker" />
+                            </Border>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="MessageDialog" Style="{StaticResource SectionText}" />
+                            <!-- The test sizes this to the real dialog's capture and draws the capture here. -->
+                            <Border x:Name="DialogSlot" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</Window>
