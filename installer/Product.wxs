@@ -219,7 +219,7 @@
       <?endforeach?>
     </Property>
     <Launch Condition="Installed OR NOT RSTUSERCOPY"
-            Message="RST is already installed just for you, in your Windows account ([RSTUSERCOPY]). That copy would be used instead of this one. Remove &quot;RST&quot; in Settings &gt; Apps, then run RST-Machine.msi again. Or run RST-Setup.exe and choose &quot;Everyone on this PC&quot;, which removes it for you." />
+            Message="RST is already installed just for you, in your Windows account ([RSTUSERCOPY]). That copy would be used instead of this one. Remove &quot;RST&quot; in Settings &gt; Apps (or delete that file, if RST was copied there by hand), then run RST-Machine.msi again. Or run RST-Setup.exe and choose &quot;Everyone on this PC&quot;, which removes it for you." />
 
     <!-- Detect files in use, never close or restart applications: a tray
          Restart Manager restarted from this elevated install would run

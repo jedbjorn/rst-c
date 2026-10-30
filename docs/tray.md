@@ -3,7 +3,7 @@ title: RST tray
 tags: [rst-c, tray, startup, updates, installer]
 date: 2026-10-30
 project: rst-c
-purpose: What the RST tray app is, where it lives, how its update checks work and what they send, and how to quit it, stop it starting, or preset update checks off
+purpose: What the RST tray app is, where it lives, how its update checks work and what they send, how to quit it, stop it starting, or preset update checks off, and what changes when RST is installed for everyone on the PC
 ---
 
 # RST tray
@@ -12,7 +12,7 @@ purpose: What the RST tray app is, where it lives, how its update checks work an
 
 ## Overview
 
-From v3.1, `RST.msi` also installs **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
+From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
 The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). Later v3.1 builds also switch Revit add-ins on or off before you start Revit. Its window has four pages:
 
@@ -30,14 +30,14 @@ Click the icon to open the window. Right-click it for the menu: **Open RST**, **
 
 | What | Where |
 |---|---|
-| The app | `%LocalAppData%\Programs\RST\Tray\RST.Tray.exe` |
-| Start at sign-in | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `RST` = `"…\RST.Tray.exe" --startup` |
+| The app | `%LocalAppData%\Programs\RST\Tray\RST.Tray.exe` (`RST.msi`, just for you); `C:\Program Files\RST\Tray\RST.Tray.exe` (`RST-Machine.msi`, everyone on this PC) |
+| Start at sign-in | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`RST.msi`) or `HKLM\…\Run` (`RST-Machine.msi`), value `RST` = `"…\RST.Tray.exe" --startup` |
 | Settings | `%AppData%\RST\tray_settings.json` |
 | Log | `%AppData%\RST\logs\tray_<yyyyMMdd>.log` (the newest 10 files are kept) |
 | Last update check | `%AppData%\RST\tray_updates.json`: the latest versions found and the ones already announced |
 | Download cache (later updates) | `%LocalAppData%\RST\Tray\cache\` |
 
-Each Windows user has their own tray, settings and log. Only one tray runs per user and sign-in session: starting `RST.Tray.exe` again brings the running tray's window to the front.
+Each Windows user has their own tray, settings and log, whichever MSI installed it: a per-machine install shares only the program files. Only one tray runs per user and sign-in session: starting `RST.Tray.exe` again brings the running tray's window to the front.
 
 The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own ten files, and neither one's automatic clean-up deletes the other's. Health's **RST Logs** clean-up, which you start yourself, clears both, except the log the tray has open.
 
@@ -85,6 +85,7 @@ From v3.1 each rst-c release on GitHub includes `SHA256SUMS.txt`, one line per f
 
 ```text
 <64 hex digits: the SHA256 of RST.msi>  RST.msi
+<64 hex digits: the SHA256 of RST-Machine.msi>  RST-Machine.msi
 <64 hex digits: the SHA256 of RST-Setup.exe>  RST-Setup.exe
 ```
 
@@ -179,6 +180,34 @@ From `cmd`, use `start /wait msiexec /i RST.msi /qn /norestart`.
 A deployment tool that runs the install inside a job object that ends its processes when the job closes will end the restarted tray too. The tray then comes back at the user's next sign-in.
 
 Run per-user `RST.msi` as the user, not from an elevated prompt, so that the restarted tray runs with the user's normal rights.
+
+## Installed for everyone on this PC (IT)
+
+`RST-Machine.msi` (or `RST-Setup.exe`, "Everyone on this PC") installs the tray once, in `C:\Program Files\RST\Tray\`, and the `HKLM` Run value starts it for every user at sign-in. Each user still gets their own tray process, settings, log and add-in choices. Details of the package are in [installer/README.md](../installer/README.md#per-machine-install-rst-machinemsi).
+
+```powershell
+# elevated prompt, or the deployment tool's system account
+msiexec /i RST-Machine.msi /qn /norestart /l*v "%TEMP%\RST-Machine.log"
+RST-Setup.exe /quiet /norestart InstallScope=machine
+```
+
+- **When the tray starts:** the installer never starts it. A tray started by an elevated installer would run elevated, and its icon would not come back after Explorer restarts. Each user's tray starts at their next sign-in, or when Revit starts it. A repair or upgrade asks a running tray on the installer's desktop to exit, and does not restart it, for the same reason. It comes back at the next sign-in, or with Revit.
+- **Updates are an administrator's job.** A user's tray tells them a newer RST is out, but it does not install a per-machine RST, because that needs an administrator. Deploy the new `RST-Machine.msi`; it upgrades in place. Companions stay per user, so each user's tray keeps them up to date for that user.
+- **Update checks:** to turn them off for every user, set `HKLM\Software\Designs-OS\RST\Tray` `UpdateChecks` = `0` ([below](#turning-update-checks-off-for-everyone-it)).
+- **Signed-in users during an upgrade:** an installer asks each tray on its own desktop to exit. Other users' trays in other sessions keep running, and the installer may wait up to 10 seconds for each one. Their open files can then make the upgrade need a restart (exit code `3010`). Upgrade when users are signed out, or schedule the restart.
+- **Installed twice:** a user who also has their own `RST.msi` runs their own copy. Revit lets a per-user add-in of the same name win. RST logs it at every Revit start, and the tray tells that user once: "RST is installed twice … To use the shared one, remove "RST" in Settings > Apps, and keep "RST (all users)"." Their profiles and settings stay. `RST-Machine.msi` refuses to install while the installing administrator has their own copy, and `RST-Setup.exe`'s "Everyone on this PC" removes it for them first.
+- **Going back to per user** is uninstall, then install: remove "RST (all users)", then install `RST.msi`.
+
+## Allowlisting (AppLocker, antivirus)
+
+RST's files are not code-signed yet, so allow them by path or by hash.
+
+| Install | Paths |
+|---|---|
+| `RST.msi` (per user) | `%LocalAppData%\Programs\RST\Tray\`, `%AppData%\RST\R<NN>\app\`, `%AppData%\Autodesk\Revit\Addins\<year>\RST.Bootstrap.dll` |
+| `RST-Machine.msi` (per machine) | `C:\Program Files\RST\` (tray, bootstraps and engines) |
+
+Per-machine mode puts every RST program file under Program Files. AppLocker's default rules already allow that path, and users cannot write there. Each release's `SHA256SUMS.txt` gives the installers' hashes ([Release checksums](#release-checksums)). The tray only ever starts `msiexec.exe` from System32 and its own updater copy (later builds), and it talks only to the GitHub hosts listed under [Privacy](#privacy-what-is-sent-and-to-whom).
 
 ## Uninstalling
 
