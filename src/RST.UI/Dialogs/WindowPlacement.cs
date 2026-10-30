@@ -67,8 +67,9 @@ public static class WindowPlacement
         if (top < area.Top) top = area.Top;
         if (left + b.Width > area.Right) left = area.Right - b.Width;
         if (left < area.Left) left = area.Left;
-        if (Math.Abs(top - b.Top) > 0.5) window.Top = top;
-        if (Math.Abs(left - b.Left) > 0.5) window.Left = left;
+        // Always assigned: a centred window's Left/Top can lag behind where Windows actually put it.
+        window.Top = top;
+        window.Left = left;
     }
 
     /// <summary>The window's on-screen bounds in DIPs (from Win32), or null before it has a handle.</summary>
