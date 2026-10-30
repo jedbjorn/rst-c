@@ -3,9 +3,12 @@
 //
 //   06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b  GanttIt-1.1.0.msi
 //
-// 64 hex digits, two spaces (or a space and `*`, sha256sum's binary marker), a bare file name. Strict and fail
-// closed, because WU4 installs only what this file vouches for: any line that is not that shape, a name with a
-// path in it, or a name listed twice makes the whole file unreadable. Blank lines and CRLF endings are allowed.
+// Exactly the form build/sha256sums.sh writes (`sha256sum` text mode, as the sister repos publish too): 64
+// LOWER-CASE hex digits, TWO spaces, a bare file name with no path separator and no control character. Strict and
+// fail closed, because WU4 installs only what this file vouches for: any line that is not that shape (upper-case
+// hex and sha256sum's ` *` binary marker included), a name with a path in it, or a name listed twice makes the
+// whole file unreadable. Blank lines and CRLF endings are allowed. MaxLength counts characters: WU4 caps the
+// download in bytes before decoding it.
 
 using System;
 using System.Collections.Generic;
@@ -19,7 +22,7 @@ public sealed class Sha256Sums
     /// <summary>A file larger than this is refused unread (a real one is a few hundred bytes).</summary>
     public const int MaxLength = 64 * 1024;
 
-    private static readonly Regex LinePattern = new(@"^([0-9A-Fa-f]{64}) [ *]([^\s/\\][^/\\]*)\z",
+    private static readonly Regex LinePattern = new(@"^([0-9a-f]{64})  ([^\s/\\\p{Cc}][^/\\\p{Cc}]*)\z",
         RegexOptions.CultureInvariant);
 
     private readonly Dictionary<string, string> _byName;

@@ -168,15 +168,15 @@ public class Sha256SumsTests
     [Fact]
     public void The_sha256sum_format_is_read()
     {
-        // The sister repos' file as published (gantt-it v1.1.0), plus a binary-marker line and a CRLF.
+        // The sister repos' file as published (gantt-it v1.1.0), plus a CRLF line and a trailing blank line.
         var text = $"53f9704fba2da63573e34e6e58e95d4ec8dc5edb7f312374f217b692bb52f64c  GanttIt-1.1.0-Revit2025.zip\n"
                  + $"{GanttHash}  GanttIt-1.1.0.msi\r\n"
-                 + $"{Other.ToUpperInvariant()} *RST-Setup.exe\n\n";
+                 + $"{Other}  RST-Setup.exe\n\n";
         var sums = Sha256Sums.TryParse(text, out var error);
         error.Should().BeNull();
         sums!.Count.Should().Be(3);
         sums.HashOf("GanttIt-1.1.0.msi").Should().Be(GanttHash);
-        sums.HashOf("RST-Setup.exe").Should().Be(Other, "hashes are lower-cased");
+        sums.HashOf("RST-Setup.exe").Should().Be(Other);
         sums.HashOf("ganttit-1.1.0.msi").Should().BeNull("names match exactly");
         sums.HashOf("RST.msi").Should().BeNull();
     }
@@ -192,6 +192,11 @@ public class Sha256SumsTests
     [InlineData("06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b   RST.msi", "line 1")] // name starts with a space
     [InlineData("06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b  RST.msi ", "ends in a space")]
     [InlineData("# comment", "line 1")]
+    // Only the form build/sha256sums.sh writes: no upper-case hex, no binary marker, no control characters.
+    [InlineData("06F403468AE484526DC7E8DDC9251BF2B34715DDCB14D668049B63C74D1EB18B  RST.msi", "line 1")]
+    [InlineData("06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b *RST.msi", "line 1")]
+    [InlineData("06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b  RST\t.msi", "line 1")]
+    [InlineData("06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b  RST\u0007.msi", "line 1")]
     public void A_malformed_file_is_refused_whole(string text, string reason)
     {
         Sha256Sums.TryParse(text, out var error).Should().BeNull();
@@ -361,11 +366,18 @@ public sealed class ProductDetectionTests : IDisposable
     }
 
     [Fact]
-    public void A_source_that_throws_is_logged_and_reads_as_nothing()
+    public void An_unreadable_Windows_Installer_is_Unknown_never_not_installed_or_manual()
     {
         var logged = new List<string>();
-        ProductDetection.Query(new ThrowingProducts(), Gantt, logged.Add).Should().BeEmpty();
+        var found = ProductDetection.Query(new ThrowingProducts(), Gantt, logged.Add);
+        found.Should().BeNull("couldn't tell is not the same as none");
         logged.Should().ContainSingle().Which.Should().Contain("Gantt-It");
+
+        // Even with Gantt-It's .addin present, an unreadable Windows Installer is Unknown, not "installed manually".
+        var install = ProductDetection.Decide(Gantt, found, new Dictionary<string, string> { [Gantt.AddinClientId!] = @"C:\x.addin" });
+        install.Kind.Should().Be(InstallKind.Unknown);
+        ProductStatus.Compute(install, V("9.9.9")).Should().Be(ProductState.Unknown);
+        new UpdateState().ToNotify(new[] { new ProductStatus(Gantt, install, V("9.9.9"), false) }).Should().BeEmpty();
     }
 
     private sealed class ThrowingProducts : IInstalledProducts
@@ -382,12 +394,24 @@ public sealed class ProductDetectionTests : IDisposable
     [InlineData(InstallKind.Installer, "3.1.1", "3.1.1", ProductState.UpToDate)]
     [InlineData(InstallKind.Installer, "3.2.0", "3.1.1", ProductState.UpToDate)] // a newer local build is never "downgrade available"
     [InlineData(InstallKind.Installer, "0.0.0-dev", "3.1.1", ProductState.Installed)]
+    [InlineData(InstallKind.Unknown, null, "3.1.1", ProductState.Unknown)]
     public void The_page_state(InstallKind kind, string? installed, string? latest, ProductState expected)
     {
         var install = kind == InstallKind.Installer
             ? new ProductInstallation(kind, new InstalledProduct("{X}", installed!, InstallContext.User))
             : new ProductInstallation(kind);
         ProductStatus.Compute(install, latest is null ? null : V(latest)).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("3.1.1", "3.1.1", ProductState.Installed)]       // "up to date" would be stale after a failed check
+    [InlineData("3.2.0", "3.1.1", ProductState.Installed)]
+    [InlineData("3.1.0", "3.1.1", ProductState.UpdateAvailable)] // a known newer version stays true
+    public void After_a_failed_check_up_to_date_is_never_claimed(string installed, string lastKnown, ProductState expected)
+    {
+        var install = new ProductInstallation(InstallKind.Installer, new InstalledProduct("{X}", installed, InstallContext.User));
+        ProductStatus.Compute(install, V(lastKnown), latestFailed: true).Should().Be(expected);
+        new ProductStatus(ProductCatalog.Default.Rst, install, V(lastKnown), LatestFailed: true).State.Should().Be(expected);
     }
 
     private string Write(string relative, string clientId, bool disabled = false)
@@ -559,7 +583,14 @@ public sealed class UpdateCheckLoopTests
         await first;
         runs.Should().Be(1);
         await loop.CheckNowAsync();
+        runs.Should().Be(1, "within 30 s of the last check, Check now shows its result and asks nothing");
+        time.Advance(TimeSpan.FromSeconds(29));
+        await loop.CheckNowAsync();
+        runs.Should().Be(1);
+        time.Advance(TimeSpan.FromSeconds(2));
+        await loop.CheckNowAsync();
         runs.Should().Be(2);
+        loop.LastRunEndedUtc.Should().Be(time.GetUtcNow());
     }
 
     [Fact]
@@ -634,6 +665,19 @@ public sealed class UpdateStateTests : IDisposable
         state.ToNotify(day1).Should().BeEmpty("the same version is not announced every 24 hours");
         var day3 = new[] { Status("rst", "3.1.0", "3.1.2"), Status("gantt-it", "1.1.0", "1.2.0"), Status("splash-it", null, "1.2.0", InstallKind.Manual) };
         state.ToNotify(day3).Select(s => s.Product.Id).Should().Equal("rst", "gantt-it");
+    }
+
+    [Fact]
+    public void No_release_is_remembered_apart_from_never_checked()
+    {
+        var state = new UpdateState();
+        state.SetNoRelease("splash-it", true);
+        state.Write(PathIn).Should().BeTrue();
+        var read = UpdateState.Read(PathIn);
+        read.NoRelease("splash-it").Should().BeTrue();
+        read.NoRelease("rst").Should().BeFalse();
+        read.Latest("splash-it").Should().BeNull();
+        File.ReadAllText(PathIn).Should().Contain("\"noRelease\": true").And.NotContain("\"noRelease\": null");
     }
 
     [Fact]

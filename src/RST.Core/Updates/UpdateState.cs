@@ -2,10 +2,12 @@
 // %AppData%\RST\tray_updates.json, beside tray_settings.json (user data; it survives an uninstall):
 //
 //   { "lastCheckedUtc": "2026-10-30T09:14:02+00:00",
-//     "products": { "rst": { "latest": "v3.1.1", "notified": "v3.1.1" } } }
+//     "products": { "rst": { "latest": "v3.1.1", "notified": "v3.1.1", "noRelease": false } } }
 //
-//   latest    the latest full release the last good check found, so the pages show it before the next check
-//   notified  the newest version a notification was shown for: each version is announced ONCE, not every day
+//   lastCheckedUtc  the last SUCCESSFUL check (every product answered); a failed check never moves it
+//   latest          the latest full release the last good check found, so the pages show it before the next check
+//   notified        the newest version a notification was SHOWN for: each version is announced ONCE, not every day
+//   noRelease       the last good check found no full release ("No release yet", not "Not checked yet")
 //
 // A missing or damaged file is an empty state (the worst case is one repeated notification). Written atomically
 // (TrayAtomicFile). The rules that turn statuses into notifications are pure, for RST.Tests.
@@ -26,8 +28,14 @@ public sealed class UpdateState
 
     private readonly Dictionary<string, ProductMemory> _products = new(StringComparer.Ordinal);
 
-    /// <summary>When the last check finished, whatever it found.</summary>
+    /// <summary>When the last successful check finished (every product answered). A failed check leaves it alone.</summary>
     public DateTimeOffset? LastCheckedUtc { get; set; }
+
+    /// <summary>The last good check found no full release for <paramref name="productId"/>.</summary>
+    public bool NoRelease(string productId) =>
+        _products.TryGetValue(productId, out var m) && m.NoRelease;
+
+    public void SetNoRelease(string productId, bool noRelease) => Memory(productId).NoRelease = noRelease;
 
     /// <summary>The last known latest full release of <paramref name="productId"/>.</summary>
     public ReleaseVersion? Latest(string productId) =>
@@ -88,6 +96,7 @@ public sealed class UpdateState
                 var memory = state.Memory(id);
                 memory.Latest = ReleaseVersion.TryParseTag(product.Latest);
                 memory.Notified = ReleaseVersion.TryParseTag(product.Notified);
+                memory.NoRelease = product.NoRelease == true && memory.Latest is null;
             }
         }
         catch (Exception ex)
@@ -118,7 +127,12 @@ public sealed class UpdateState
         LastCheckedUtc = LastCheckedUtc,
         Products = _products.ToDictionary(
             p => p.Key,
-            p => new ProductDto { Latest = p.Value.Latest?.Tag, Notified = p.Value.Notified?.Tag },
+            p => new ProductDto
+            {
+                Latest = p.Value.Latest?.Tag,
+                Notified = p.Value.Notified?.Tag,
+                NoRelease = p.Value.NoRelease ? true : null,
+            },
             StringComparer.Ordinal),
     }, JsonOptions);
 
@@ -140,6 +154,8 @@ public sealed class UpdateState
         public ReleaseVersion? Latest { get; set; }
 
         public ReleaseVersion? Notified { get; set; }
+
+        public bool NoRelease { get; set; }
     }
 
     private sealed class StateDto
@@ -158,28 +174,37 @@ public sealed class UpdateState
 
         [JsonPropertyName("notified")]
         public string? Notified { get; set; }
+
+        [JsonPropertyName("noRelease")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? NoRelease { get; set; }
     }
 }
 
 /// <summary>Everything the Updates and Apps pages show, at one moment. Immutable.</summary>
 /// <param name="Products">RST first, then the companions.</param>
-/// <param name="LastCheckedUtc">When the last check finished (null: never).</param>
+/// <param name="LastCheckedUtc">When the last SUCCESSFUL check finished (null: never). A failed check never moves it.</param>
 /// <param name="Checking">A check is running.</param>
 /// <param name="AutomaticChecks">Automatic checks are on (the setting and the preset).</param>
 /// <param name="Detected">Installed products have been detected at least once (false: still looking).</param>
+/// <param name="FailureReason">Why the last check failed (null: it did not), for "Couldn't check: …".</param>
 public sealed record UpdateSnapshot(
     IReadOnlyList<ProductStatus> Products,
     DateTimeOffset? LastCheckedUtc,
     bool Checking,
     bool AutomaticChecks,
-    bool Detected)
+    bool Detected,
+    string? FailureReason = null)
 {
     public ProductStatus? Rst => Products.FirstOrDefault(p => p.Product.IsRst);
 
     public IEnumerable<ProductStatus> Companions => Products.Where(p => !p.Product.IsRst);
 
     /// <summary>The last check failed for at least one product.</summary>
-    public bool LastCheckFailed => Products.Any(p => p.LatestFailed);
+    public bool LastCheckFailed => FailureReason is not null || Products.Any(p => p.LatestFailed);
+
+    /// <summary>Windows Installer could not be read for at least one product.</summary>
+    public bool DetectionFailed => Products.Any(p => p.Installation.Kind == InstallKind.Unknown);
 
     /// <summary>A snapshot before anything is known: every product not installed, never checked.</summary>
     public static UpdateSnapshot Empty(ProductCatalog catalog, bool automaticChecks)

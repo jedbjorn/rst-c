@@ -12,7 +12,8 @@
 // One timer, re-armed for the next slot: no polling. Time comes from a TimeProvider, so RST.Tests and
 // RuntimeTests run 48 simulated hours in milliseconds. Windows timers pause while a PC sleeps; Resync() (the
 // tray calls it on resume) catches up a slot that came due during sleep. One run at a time: a Check now during
-// a running check joins it.
+// a running check joins it, and a Check now within CheckNowMinGap (30 s) of the last run's end makes no request
+// (the pages already show that run's result), so repeated clicks never become repeated requests.
 
 using System;
 using System.Threading;
@@ -36,6 +37,9 @@ public sealed class UpdateCheckLoop : IDisposable
     public static readonly TimeSpan FirstDelayMin = TimeSpan.FromMinutes(2);
     public static readonly TimeSpan FirstDelayMax = TimeSpan.FromMinutes(10);
 
+    /// <summary>A Check now this soon after the last run ended shows that run's result instead of asking again.</summary>
+    public static readonly TimeSpan CheckNowMinGap = TimeSpan.FromSeconds(30);
+
     private readonly TimeProvider _time;
     private readonly Func<bool> _automaticChecksOn;
     private readonly Func<UpdateCheckTrigger, CancellationToken, Task> _check;
@@ -46,6 +50,7 @@ public sealed class UpdateCheckLoop : IDisposable
     private ITimer? _timer;
     private Task? _running;
     private DateTimeOffset? _nextDue;
+    private DateTimeOffset? _lastRunEnded;
     private bool _offLogged;
     private bool _disposed;
 
@@ -120,8 +125,30 @@ public sealed class UpdateCheckLoop : IDisposable
         }
     }
 
-    /// <summary>Checks now, whatever the setting (the user asked). Joins a check already running.</summary>
-    public Task CheckNowAsync() => Run(UpdateCheckTrigger.User);
+    /// <summary>
+    /// Checks now, whatever the setting (the user asked). Joins a check already running. Within
+    /// <see cref="CheckNowMinGap"/> of the last run's end it makes no request (completed task; the last result stands).
+    /// </summary>
+    public Task CheckNowAsync()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return Task.CompletedTask;
+            if (_running is { IsCompleted: false } running) return running;
+            if (_lastRunEnded is { } ended && _time.GetUtcNow() - ended < CheckNowMinGap)
+            {
+                _log($"update checks: Check now {(_time.GetUtcNow() - ended).TotalSeconds:0} s after the last check; showing its result, no request made");
+                return Task.CompletedTask;
+            }
+        }
+        return Run(UpdateCheckTrigger.User);
+    }
+
+    /// <summary>When the last run ended (null: none yet).</summary>
+    public DateTimeOffset? LastRunEndedUtc
+    {
+        get { lock (_gate) return _lastRunEnded; }
+    }
 
     public void Dispose()
     {
@@ -208,6 +235,10 @@ public sealed class UpdateCheckLoop : IDisposable
         catch (Exception ex)
         {
             _log("update checks: the check failed unexpectedly: " + ex.Message);
+        }
+        finally
+        {
+            lock (_gate) _lastRunEnded = _time.GetUtcNow();
         }
     }
 

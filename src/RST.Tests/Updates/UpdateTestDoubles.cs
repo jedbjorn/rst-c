@@ -143,9 +143,13 @@ internal sealed class FakeInstalledProducts : RST.Core.Updates.IInstalledProduct
         return this;
     }
 
+    /// <summary>Windows Installer cannot be read (as MsiProducts throws when msi.dll fails).</summary>
+    public bool Unreadable { get; set; }
+
     public IReadOnlyList<RST.Core.Updates.InstalledProduct> Related(string upgradeCode)
     {
         Queries++;
+        if (Unreadable) throw new InvalidOperationException("MsiEnumRelatedProducts returned 1610");
         return ByUpgradeCode.TryGetValue(upgradeCode, out var list) ? list : new List<RST.Core.Updates.InstalledProduct>();
     }
 }

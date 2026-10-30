@@ -46,7 +46,10 @@ public sealed record InstalledProduct(string ProductCode, string VersionText, In
 /// <summary>Finds installed products by UpgradeCode. RST.Tray's MsiProducts is the real one; tests fake it.</summary>
 public interface IInstalledProducts
 {
-    /// <summary>Every installed instance for <paramref name="upgradeCode"/> this user can see. Never throws.</summary>
+    /// <summary>
+    /// Every installed instance for <paramref name="upgradeCode"/> this user can see. Throws when Windows Installer
+    /// cannot be asked (msi.dll missing, an unexpected error code): "none" must never stand in for "couldn't tell".
+    /// </summary>
     IReadOnlyList<InstalledProduct> Related(string upgradeCode);
 }
 
@@ -60,6 +63,9 @@ public enum InstallKind
 
     /// <summary>Only its .addin was found: copied by hand, not managed by Windows Installer or RST.</summary>
     Manual,
+
+    /// <summary>Windows Installer could not be read: nothing is claimed (never "not installed" or "manual").</summary>
+    Unknown,
 }
 
 /// <param name="Kind">How it is present.</param>
@@ -68,6 +74,8 @@ public enum InstallKind
 public sealed record ProductInstallation(InstallKind Kind, InstalledProduct? Installed = null, string? ManifestPath = null)
 {
     public static ProductInstallation None { get; } = new(InstallKind.NotInstalled);
+
+    public static ProductInstallation CouldNotRead { get; } = new(InstallKind.Unknown);
 
     public ReleaseVersion? Version => Installed?.Version;
 }
@@ -86,29 +94,41 @@ public enum ProductState
 
     /// <summary>Installed by hand: updates not managed by RST.</summary>
     InstalledManually,
+
+    /// <summary>Windows Installer could not be read ("Unknown (couldn't read installed apps)").</summary>
+    Unknown,
 }
 
 /// <param name="Product">The product.</param>
 /// <param name="Installation">What is installed.</param>
 /// <param name="Latest">The latest full release, when the last check found one.</param>
-/// <param name="LatestFailed">The last check for this product failed ("couldn't check").</param>
-public sealed record ProductStatus(ProductInfo Product, ProductInstallation Installation, ReleaseVersion? Latest, bool LatestFailed)
+/// <param name="LatestFailed">The last check for this product failed ("couldn't check"); <paramref name="Latest"/> is then the last known one.</param>
+/// <param name="NoRelease">The last good check found no full release for the repo ("No release yet").</param>
+public sealed record ProductStatus(
+    ProductInfo Product, ProductInstallation Installation, ReleaseVersion? Latest, bool LatestFailed, bool NoRelease = false)
 {
-    public ProductState State => Compute(Installation, Latest);
+    public ProductState State => Compute(Installation, Latest, LatestFailed);
 
-    /// <summary>The state rule. Manual wins over everything; an Installer version that is not a.b.c counts as unknown.</summary>
-    public static ProductState Compute(ProductInstallation installation, ReleaseVersion? latest)
+    /// <summary>
+    /// The state rule. Unknown (Windows Installer unreadable) and Manual win over everything; an Installer version
+    /// that is not a.b.c counts as unknown. After a FAILED check "up to date" is never claimed (it would be stale):
+    /// the state is Installed. A known newer version stays "update available", which no failure can make untrue.
+    /// </summary>
+    public static ProductState Compute(ProductInstallation installation, ReleaseVersion? latest, bool latestFailed = false)
     {
         ArgumentNullException.ThrowIfNull(installation);
         switch (installation.Kind)
         {
+            case InstallKind.Unknown:
+                return ProductState.Unknown;
             case InstallKind.Manual:
                 return ProductState.InstalledManually;
             case InstallKind.NotInstalled:
                 return ProductState.NotInstalled;
         }
         if (latest is not { } newest || installation.Version is not { } current) return ProductState.Installed;
-        return newest > current ? ProductState.UpdateAvailable : ProductState.UpToDate;
+        if (newest > current) return ProductState.UpdateAvailable;
+        return latestFailed ? ProductState.Installed : ProductState.UpToDate;
     }
 }
 
@@ -119,16 +139,18 @@ public static class ProductDetection
 
     /// <summary>
     /// Decides how <paramref name="product"/> is present from what Windows Installer reports
-    /// (<paramref name="installed"/>, for its UpgradeCodes) and the ClientIds found in manifests.
+    /// (<paramref name="installed"/>, for its UpgradeCodes; null when it could not be read) and the ClientIds
+    /// found in manifests. Unreadable is <see cref="InstallKind.Unknown"/>, whatever the manifests say: a product
+    /// Windows Installer manages must never be shown as "installed manually" because msi.dll failed.
     /// </summary>
     public static ProductInstallation Decide(
         ProductInfo product,
-        IReadOnlyList<InstalledProduct> installed,
+        IReadOnlyList<InstalledProduct>? installed,
         IReadOnlyDictionary<string, string> manifestClientIds)
     {
         ArgumentNullException.ThrowIfNull(product);
-        ArgumentNullException.ThrowIfNull(installed);
         ArgumentNullException.ThrowIfNull(manifestClientIds);
+        if (installed is null) return ProductInstallation.CouldNotRead;
         if (installed.Count > 0)
         {
             var shown = installed
@@ -142,8 +164,11 @@ public static class ProductDetection
         return ProductInstallation.None;
     }
 
-    /// <summary>Every instance for every UpgradeCode of <paramref name="product"/>. Never throws.</summary>
-    public static IReadOnlyList<InstalledProduct> Query(IInstalledProducts source, ProductInfo product, Action<string>? log = null)
+    /// <summary>
+    /// Every instance for every UpgradeCode of <paramref name="product"/>, or null when Windows Installer could not
+    /// be read for any of them (logged). Never throws.
+    /// </summary>
+    public static IReadOnlyList<InstalledProduct>? Query(IInstalledProducts source, ProductInfo product, Action<string>? log = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(product);
@@ -156,7 +181,8 @@ public static class ProductDetection
             }
             catch (Exception ex)
             {
-                Log(log, $"detection: {product.Name} ({code}) not readable: {ex.Message}");
+                Log(log, $"detection: {product.Name} ({code}) not readable, shown as unknown: {ex.Message}");
+                return null;
             }
         }
         return found;
