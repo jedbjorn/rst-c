@@ -1,10 +1,11 @@
-// FileDialogBridge.cs — UI-thread-safe wrapper around OpenFileDialog.
+// FileDialogBridge.cs — UI-thread-safe wrapper around the Windows file dialogs.
 //
-// LoaderBridge.AddProfile is invoked from a WebView2 host-object call,
-// which dispatches on a worker thread. Microsoft.Win32.OpenFileDialog
-// requires the WPF UI thread, so we marshal via Application.Current.
-// Returns null on cancel or when no Application is available (e.g.
-// running outside Revit).
+// LoaderBridge's Builder methods (pick_logo_file, export_profile) are invoked
+// from a WebView2 host-object call, which dispatches on a worker thread.
+// Microsoft.Win32 file dialogs require the WPF UI thread, so we marshal via
+// Application.Current. Returns null on cancel or when no Application is
+// available (e.g. running outside Revit). The native Profile Loader opens its
+// import dialog through IDialogService instead (spec #16, WU3).
 
 using System.Windows;
 using Microsoft.Win32;
@@ -13,22 +14,10 @@ namespace RST.UI.Loader;
 
 internal static class FileDialogBridge
 {
-    public static string? OpenJson()
-    {
-        var app = Application.Current;
-        if (app is null) return null;
+    /// <summary>The Profile Loader's import dialog title and filter (kept for the WPF Loader).</summary>
+    public const string ImportZipTitle = "Import RST Profile (.zip)";
 
-        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
-        {
-            var dlg = new OpenFileDialog
-            {
-                Title = "Import RST Profile",
-                Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
-                Multiselect = false,
-            };
-            return dlg.ShowDialog() == true ? dlg.FileName : null;
-        }));
-    }
+    public const string ZipFilter = "RST Profile Package (*.zip)|*.zip|All Files (*.*)|*.*";
 
     public static string? OpenImage()
     {
@@ -47,43 +36,6 @@ internal static class FileDialogBridge
         }));
     }
 
-    public static string? SaveJson(string suggestedFileName)
-    {
-        var app = Application.Current;
-        if (app is null) return null;
-
-        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
-        {
-            var dlg = new SaveFileDialog
-            {
-                Title = "Export RST Profile",
-                Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
-                FileName = suggestedFileName,
-                DefaultExt = ".json",
-                AddExtension = true,
-                OverwritePrompt = true,
-            };
-            return dlg.ShowDialog() == true ? dlg.FileName : null;
-        }));
-    }
-
-    public static string? OpenZip()
-    {
-        var app = Application.Current;
-        if (app is null) return null;
-
-        return (string?)app.Dispatcher.Invoke(new System.Func<string?>(() =>
-        {
-            var dlg = new OpenFileDialog
-            {
-                Title = "Import RST Profile (.zip)",
-                Filter = "RST Profile Package (*.zip)|*.zip|All Files (*.*)|*.*",
-                Multiselect = false,
-            };
-            return dlg.ShowDialog() == true ? dlg.FileName : null;
-        }));
-    }
-
     public static string? SaveZip(string suggestedFileName)
     {
         var app = Application.Current;
@@ -94,7 +46,7 @@ internal static class FileDialogBridge
             var dlg = new SaveFileDialog
             {
                 Title = "Export RST Profile (.zip)",
-                Filter = "RST Profile Package (*.zip)|*.zip|All Files (*.*)|*.*",
+                Filter = ZipFilter,
                 FileName = suggestedFileName,
                 DefaultExt = ".zip",
                 AddExtension = true,

@@ -1,0 +1,43 @@
+<!--
+    rst-c's own (not vendored). The ribbon preview shared by the Loader and the Builder (spec #16,
+    Shared controls): the tab pill and a top-bar slot for the page's own controls, over a canvas in
+    Revit's ribbon color (the window theme's: dark #2D2D30, light #E1E1E1) that scrolls
+    horizontally. The panels are drawn in code (RibbonPreview.xaml.cs) from the profile.
+-->
+<UserControl x:Class="RST.UI.Controls.RibbonPreview"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Self"
+             AutomationProperties.AutomationId="RibbonPreview">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"
+            Background="{StaticResource SurfaceBrush}" SnapsToDevicePixels="True">
+        <DockPanel>
+            <Border DockPanel.Dock="Top" Padding="10,6" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1">
+                <DockPanel LastChildFill="False">
+                    <Border x:Name="TabPill" DockPanel.Dock="Left" CornerRadius="3" Padding="10,3"
+                            Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource AccentForegroundBrush}"
+                            BorderThickness="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="TabPillText" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold"
+                                   AutomationProperties.AutomationId="RibbonPreview.Tab" />
+                    </Border>
+                    <ContentPresenter DockPanel.Dock="Right" VerticalAlignment="Center"
+                                      Content="{Binding TopBarContent, ElementName=Self}" />
+                </DockPanel>
+            </Border>
+            <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          Focusable="False" AutomationProperties.AutomationId="RibbonPreview.Scroller">
+                <Border x:Name="CanvasBorder" Padding="12,10,12,12" MinHeight="96" CornerRadius="0,0,3,3">
+                    <StackPanel x:Name="PanelsHost" Orientation="Horizontal" VerticalAlignment="Top"
+                                AutomationProperties.AutomationId="RibbonPreview.Panels" />
+                </Border>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

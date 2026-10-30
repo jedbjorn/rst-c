@@ -1,8 +1,9 @@
 // LoaderCommand.cs — IExternalCommand wired to the "Loader" ribbon button.
 //
-// Opens the WebView2-hosted profile selector modally on the Revit UI
-// thread. Hand-off lives in RST.UI.Loader.LoaderHost so the Engine
-// project doesn't take a hard dependency on WebView2 types.
+// Opens the native WPF Profile Loader (spec #16, WU3) modally on the Revit UI
+// thread, owned by Revit's main window and in Revit's theme. The hand-off
+// lives in RST.UI.Loader.ProfileLoaderLauncher, so RST.UI stays Revit-free:
+// Revit is reached only through the switch scheduler and the captured data.
 
 using System.Diagnostics;
 using Autodesk.Revit.Attributes;
@@ -10,6 +11,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
+using RST.Engine.Theming;
 using RST.UI.Loader;
 using Serilog;
 
@@ -31,7 +33,8 @@ public sealed class LoaderCommand : IExternalCommand
             var catalog = RstApplication.GetOrBuildCatalog(revitVersion);
             var scheduler = RstApplication.GetSwitchScheduler();
             var allTabs = RibbonTabEnumerator.Enumerate();
-            LoaderHost.ShowModal(revitVersion, catalog, scheduler, allTabs);
+            RevitThemeDetector.ApplyToWindows();
+            ProfileLoaderLauncher.Show(commandData.Application.MainWindowHandle, revitVersion, catalog, scheduler, allTabs);
             Log.Information("=== Loader session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }

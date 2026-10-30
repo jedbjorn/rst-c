@@ -1,0 +1,21 @@
+{
+  "profiles": {
+    "1f0c6a52-6b0e-4d6f-9a3e-2c8d4b7e9a10": {
+      "hiddenTabs": [
+        "Analyze",
+        "Collaborate"
+      ],
+      "disableUnusedAddins": false,
+      "presetsAdopted": true,
+      "panelOpacityOverride": 55
+    },
+    "7b2e9d14-3c5a-4f81-b6d0-8e1a2f4c6b38": {
+      "hiddenTabs": [
+        "Massing \u0026 Site",
+        "Collaborate"
+      ],
+      "disableUnusedAddins": true,
+      "presetsAdopted": true
+    }
+  }
+}

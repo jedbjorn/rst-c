@@ -1,6 +1,7 @@
-// LoaderHost.cs — entry point used by RST.Engine's LoaderCommand to open
-// the loader UI without the Engine taking a direct dependency on WPF
-// classes at the call site.
+// LoaderHost.cs — entry point used by RST.Engine's BuilderCommand to open
+// the WebView2 Profile Builder without the Engine taking a direct dependency
+// on WPF classes at the call site. The Profile Loader opens through
+// ProfileLoaderLauncher (native WPF, spec #16 WU3).
 
 using System.Collections.Generic;
 using RST.Core.Profiles;
@@ -11,47 +12,27 @@ namespace RST.UI.Loader;
 public static class LoaderHost
 {
     /// <summary>
-    /// Open the loader window modally. Blocks until the user closes it.
-    /// Must be called on the Revit UI thread.
+    /// Open the WebView2 host modally on the profile builder page. Wired
+    /// to the dedicated Builder ribbon button so the user can edit/create
+    /// profiles. Blocks until the user closes it; call on the Revit UI
+    /// thread.
     /// </summary>
     /// <param name="revitVersion">Revit major version (e.g. "2026").</param>
     /// <param name="catalog">Pre-built command catalog for the builder's
     /// tool picker. Pass an empty list when running outside a Revit
     /// session — the builder degrades to URL-only / hand-typed slots.</param>
-    /// <param name="switchScheduler">Live profile-switch scheduler. The
-    /// bridge calls Schedule() after writing active_profile.json so the
-    /// ribbon rebuilds in place once the modal closes — no Revit
-    /// restart. Pass null to fall back to legacy restart-required
-    /// behavior (e.g. when running outside Revit).</param>
+    /// <param name="switchScheduler">Live profile-switch scheduler, used
+    /// by the Builder's auto-reload of the active profile after a save.
+    /// Pass null to fall back to restart-required behavior.</param>
     /// <param name="allTabs">Snapshot of distinct non-contextual ribbon
-    /// tab titles for the RSTify "Hide These Tabs" picker. Caller
-    /// computes via RST.Engine.Scanning.RibbonTabEnumerator so this
-    /// project stays independent of AdWindows. Empty list disables the
-    /// picker (renders blank — same as the pre-RST-009 stub).</param>
-    public static void ShowModal(string revitVersion,
-                                 IReadOnlyList<ScannedCommand> catalog,
-                                 IProfileSwitchScheduler? switchScheduler = null,
-                                 IReadOnlyList<string>? allTabs = null)
-    {
-        var window = new LoaderWindow(revitVersion, catalog, switchScheduler,
-                                      LoaderInitialPage.Loader, allTabs);
-        window.ShowDialog();
-    }
-
-    /// <summary>
-    /// Open the WebView2 host modally and land directly on the profile
-    /// builder page. Same window class as <see cref="ShowModal"/> —
-    /// only the initial URL differs. Wired to the dedicated Builder
-    /// ribbon button so the user can edit/create profiles without going
-    /// through the loader picker first.
-    /// </summary>
+    /// tab titles (RST.Engine.Scanning.RibbonTabEnumerator), so this
+    /// project stays independent of AdWindows.</param>
     public static void ShowModalToBuilder(string revitVersion,
                                           IReadOnlyList<ScannedCommand> catalog,
                                           IProfileSwitchScheduler? switchScheduler = null,
                                           IReadOnlyList<string>? allTabs = null)
     {
-        var window = new LoaderWindow(revitVersion, catalog, switchScheduler,
-                                      LoaderInitialPage.Builder, allTabs);
+        var window = new LoaderWindow(revitVersion, catalog, switchScheduler, allTabs);
         window.ShowDialog();
     }
 }

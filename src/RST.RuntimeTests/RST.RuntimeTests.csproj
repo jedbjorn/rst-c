@@ -38,6 +38,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Loader (spec #16, WU3): the Core tests' Loader fakes and the v2.2.0 bridge reference (AC6),
+         shared as source so the view-model tests drive the same seams and compare the same writes. -->
+    <Compile Include="..\RST.Tests\Loader\LoaderFakes.cs" Link="Loader\Shared\LoaderFakes.cs" />
+    <Compile Include="..\RST.Tests\Loader\V220BridgeReference.cs" Link="Loader\Shared\V220BridgeReference.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
     <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
     <ProjectReference Include="..\RST.Engine\RST.Engine.csproj" />

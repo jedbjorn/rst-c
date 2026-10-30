@@ -307,6 +307,8 @@ public static class UiPalette
         new(ScrollGlyph, ScrollTrack, 3, "scroll bar arrows"),
         .. RstRequirements,
         .. HealthRequirements,
+        // Loader (spec #16, WU3): the Profile Loader's link text on its panes and dialogs.
+        .. Text4(AccentForeground, [Window, Surface], "Loader links (info ↗, download ↗)"),
     ];
 
     private static IEnumerable<ContrastRequirement> NonText3(string foreground, string[] backgrounds, string use) =>

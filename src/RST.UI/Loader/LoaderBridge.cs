@@ -12,12 +12,13 @@
 // get_profiles, etc.) MUST be declared zero-arg in C# too, not
 // `(string _)` as a placeholder. Don't add unused parameters here.
 //
-// Coverage:
-//   live    — get_profiles, get_active_profile, load_profile, add_profile,
-//             remove_profile, unload_profile, close_window, get_revit_version,
-//             get_catalog, save_profile, export_profile (RST-006: builder)
-//   stubbed — get_user_config (returns empty/safe default; lands in a
-//             later flag)
+// Coverage: the Builder page only (spec #16, WU3). The Loader page moved to
+// the native ProfileLoaderWindow; its methods (add/remove/unload profile,
+// prefs, disable preview, restore, loaded add-ins, user config) went with it.
+// The shared logic lives in the RST.Core.Loader services, which this bridge
+// and the WPF Loader both call: get_profiles / get_active_profile
+// (ProfileLibraryService), load_profile (ProfileLoadService, the Builder's
+// auto-reload), get_addin_lookup (AddinLookupService).
 
 using System;
 using System.Collections.Generic;
@@ -29,6 +30,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using RST.Core.AddIns;
 using RST.Core.Configuration;
+using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Ribbon;
 using RST.Core.Scanning;
@@ -45,6 +47,9 @@ public class LoaderBridge
     private readonly IReadOnlyList<string> _allTabs;
     private readonly Action _closeRequested;
     private readonly IProfileSwitchScheduler? _switchScheduler;
+    private readonly ProfileLibraryService _library;
+    private readonly ProfileLoadService _load;
+    private readonly AddinLookupService _lookup;
 
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -63,6 +68,11 @@ public class LoaderBridge
         _allTabs = allTabs ?? Array.Empty<string>();
         _closeRequested = closeRequested ?? (() => { });
         _switchScheduler = switchScheduler;
+        var paths = LoaderPaths.Default;
+        var log = SerilogLoaderLog.Instance;
+        _library = new ProfileLibraryService(paths, log);
+        _load = new ProfileLoadService(paths, _allTabs, _switchScheduler, new FileSystemAddinPasses(_revitVersion), log);
+        _lookup = new AddinLookupService(LoaderAssets.LookupPath, log);
         try { BrandingDefaults.EnsureSeeded(); }
         catch (Exception ex) { Log.Warning(ex, "BrandingDefaults.EnsureSeeded failed (non-fatal)"); }
         Log.Information("LoaderBridge ready: revit={RevitVersion}, catalog={CatalogCount} commands, tabs={TabCount}, liveSwitch={LiveSwitch}",
@@ -74,18 +84,14 @@ public class LoaderBridge
     public string GetProfiles()
     {
         LogEntry(nameof(GetProfiles));
-        var entries = ProfileStore.List(onSkip: (path, ex) =>
-            Log.Warning(ex, "Bridge.get_profiles: skipped unreadable profile {Path}", path));
-        var dtos = entries.Select(e => ToProfileDto(e.FileName, e.Profile)).ToArray();
-        Log.Information("Bridge.get_profiles → {Count} profiles from {Dir}",
-                        dtos.Length, AppDataPaths.ProfilesDir);
+        var dtos = _library.List().Select(e => ToProfileDto(e.FileName, e.Profile)).ToArray();
         return Serialize(dtos);
     }
 
     public string GetActiveProfile()
     {
         LogEntry(nameof(GetActiveProfile));
-        var ap = ActiveProfile.Read();
+        var ap = _library.GetActive();
         if (ap.IsBlank)
         {
             Log.Debug("Bridge.get_active_profile → blank");
@@ -120,267 +126,27 @@ public class LoaderBridge
         var hiddenTabs = Deserialize<string[]>(hiddenTabsJson) ?? Array.Empty<string>();
         var profileId = Deserialize<string?>(profileIdJson);
 
-        var entry = ProfileStore.Resolve(profileName, profileId);
-        if (entry is null)
+        var result = _load.Load(new LoadRequest(profileName, profileId, disableNonRequired, hiddenTabs));
+        if (!result.Ok)
         {
-            Log.Warning("Bridge.load_profile: profile not found name={Name} id={Id}", profileName, profileId);
-            return Serialize(new { ok = false, warnings = new[] { "Profile not found: " + profileName }, restart_needed = false, failed_disables = Array.Empty<object>() });
+            return Serialize(new { ok = false, warnings = result.Warnings, restart_needed = false, failed_disables = Array.Empty<object>() });
         }
-
-        var ap = ActiveProfile.FromProfile(entry.Profile, entry.FileName, hiddenTabs, disableNonRequired);
-        try { ap.Write(); }
-        catch (IOException ex)
-        {
-            Log.Error(ex, "Bridge.load_profile: failed writing active profile {Name}", profileName);
-            return Serialize(new { ok = false, warnings = new[] { "Failed to write active profile: " + ex.Message }, restart_needed = false, failed_disables = Array.Empty<object>() });
-        }
-
-        // Persist this profile's RSTify + disable-unused state to the
-        // per-profile user prefs file so switching profiles in the
-        // picker swaps in *this* profile's saved selections rather
-        // than carrying over from active_profile.json. Don't reset
-        // the presetsAdopted flag here — the picker manages that on
-        // first card selection.
-        if (!string.IsNullOrEmpty(entry.Profile.Id))
-        {
-            try
-            {
-                var prefs = UserProfilePrefs.Read();
-                prefs.Set(entry.Profile.Id!, hiddenTabs, disableNonRequired);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Bridge.load_profile: failed writing user_profile_prefs for {Name}", profileName);
-            }
-        }
-
-        Log.Information("Bridge.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs}",
-                        profileName, profileId, disableNonRequired, hiddenTabs.Length);
-
-        // QA: classify required-addin status for THIS profile before
-        // anything else fires. Auto-restore any InstalledDisabled
-        // entries (rename .RSTdisabled → .addin) so the next Revit
-        // launch picks them up. Surface NotInstalled entries so the
-        // UI can show the user a download link. Anything restored
-        // forces restart_needed=true (DLLs already resident this
-        // session don't hot-reload).
-        var qaRestored = new List<object>();
-        var qaNotInstalled = new List<object>();
-        bool qaForcedRestart = false;
-        try
-        {
-            var qa = RequiredAddinQa.Classify(_revitVersion, entry.Profile.RequiredAddins, _allTabs);
-            int activeCount = 0, disabledCount = 0, missingCount = 0;
-            var disabledMatches = new List<RequiredAddin>();
-            foreach (var r in qa)
-            {
-                switch (r.Status)
-                {
-                    case RequiredAddinStatus.InstalledActive:
-                        activeCount++;
-                        break;
-                    case RequiredAddinStatus.InstalledDisabled:
-                        disabledCount++;
-                        disabledMatches.Add(r.Required);
-                        qaRestored.Add(new
-                        {
-                            tabName = r.Required.TabName,
-                            addinFile = r.MatchedManifest?.FileName ?? r.Required.AddinFile,
-                        });
-                        break;
-                    case RequiredAddinStatus.NotInstalled:
-                        missingCount++;
-                        qaNotInstalled.Add(new
-                        {
-                            tabName = r.Required.TabName,
-                            addinFile = r.Required.AddinFile,
-                            url = r.Required.Url ?? "",
-                        });
-                        break;
-                }
-            }
-            Log.Information("Bridge.load_profile QA: active={Active} disabled={Disabled} missing={Missing}",
-                            activeCount, disabledCount, missingCount);
-
-            if (disabledMatches.Count > 0)
-            {
-                var restoreResult = AddinDisabler.RestoreRequired(
-                    _revitVersion,
-                    disabledMatches,
-                    onError: (path, ex) => Log.Warning(ex, "AddinDisabler.RestoreRequired: rename failed for {Path}", path));
-                Log.Information("Bridge.load_profile QA: auto-restored {Count} required addins, failed={Failed}",
-                                restoreResult.RestoredCount, restoreResult.Failed);
-                if (restoreResult.RestoredCount > 0) qaForcedRestart = true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Bridge.load_profile: QA classification threw — proceeding without auto-restore");
-        }
-
-        // Disable non-required addins by renaming .addin → .addin.RSTdisabled.
-        // Effective on the next Revit launch — already-loaded DLLs stay
-        // resident this session, so any disable forces restart_needed=true
-        // regardless of live-switch availability.
-        var failedDisables = new List<object>();
-        bool disableForcedRestart = false;
-        if (disableNonRequired)
-        {
-            try
-            {
-                var result = AddinDisabler.DisableNonRequired(
-                    _revitVersion,
-                    entry.Profile.RequiredAddins,
-                    onError: (path, ex) => Log.Warning(ex, "AddinDisabler: rename failed for {Path}", path));
-                Log.Information("Bridge.load_profile: disabled {Count} addins, skippedReadOnly={ReadOnly}, alreadyDisabled={Already}, failed={Failed}",
-                                result.DisabledCount, result.SkippedReadOnly, result.SkippedAlreadyDisabled, result.Failed);
-                foreach (var fname in result.FailedFiles)
-                    failedDisables.Add(new { fileName = fname });
-                if (result.DisabledCount > 0) disableForcedRestart = true;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Bridge.load_profile: AddinDisabler threw for {Name}", profileName);
-                failedDisables.Add(new { fileName = "(disable subsystem failure)", error = ex.Message });
-                disableForcedRestart = true;   // be conservative — assume DLLs need a restart
-            }
-        }
-
-        // RST-020: schedule a live ribbon rebuild on the Revit UI thread.
-        // The ExternalEvent fires after the modal Loader window closes
-        // (Revit's main loop resumes pumping then). When no scheduler is
-        // wired (e.g. running outside Revit), we fall back to the legacy
-        // restart-required behavior so the UI can still surface that.
-        bool restartNeeded = true;
-        if (_switchScheduler is not null)
-        {
-            try
-            {
-                _switchScheduler.Schedule(entry.Profile);
-                restartNeeded = false;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Bridge.load_profile: switch scheduler failed; falling back to restart-required for {Name}", profileName);
-                restartNeeded = true;
-            }
-        }
-        if (disableForcedRestart) restartNeeded = true;
-        if (qaForcedRestart) restartNeeded = true;
-
+        var qa = result.Qa ?? QaCheck.Clear;
         return Serialize(new
         {
             ok = true,
             warnings = Array.Empty<string>(),
-            restart_needed = restartNeeded,
-            failed_disables = failedDisables,
+            restart_needed = result.RestartNeeded,
+            failed_disables = result.FailedDisables
+                .Select(f => f.Error is null ? (object)new { fileName = f.FileName } : new { fileName = f.FileName, error = f.Error })
+                .ToArray(),
             qa_check = new
             {
-                restored = qaRestored,
-                not_installed = qaNotInstalled,
-                all_clear = qaRestored.Count == 0 && qaNotInstalled.Count == 0,
+                restored = qa.Restored.Select(r => new { tabName = r.TabName, addinFile = r.AddinFile }).ToArray(),
+                not_installed = qa.NotInstalled.Select(n => new { tabName = n.TabName, addinFile = n.AddinFile, url = n.Url }).ToArray(),
+                all_clear = qa.AllClear,
             },
         });
-    }
-
-    public string AddProfile()
-    {
-        LogEntry(nameof(AddProfile));
-        // File-dialog import. Marshalled to UI thread by the host window.
-        // RST-019: zip-only — the package carries profile.json + bundled
-        // assets (branding logo) so the receiver gets a true copy.
-        var path = FileDialogBridge.OpenZip();
-        if (string.IsNullOrEmpty(path))
-        {
-            Log.Information("Bridge.add_profile: dialog cancelled");
-            return Serialize(new { ok = false, error = "cancelled" });
-        }
-
-        ProfilePackage package;
-        try
-        {
-            using var fs = File.OpenRead(path!);
-            package = ProfileZip.Unpack(fs);
-        }
-        catch (InvalidDataException ex)
-        {
-            Log.Warning(ex, "Bridge.add_profile: not a valid profile package: {Path}", path);
-            return Serialize(new { ok = false, error = "Not a valid RST profile package: " + ex.Message });
-        }
-        catch (ProfileLoadException ex)
-        {
-            Log.Warning(ex, "Bridge.add_profile: profile.json load failed: {Path}", path);
-            return Serialize(new { ok = false, error = ex.Message });
-        }
-        catch (IOException ex)
-        {
-            Log.Error(ex, "Bridge.add_profile: read failed for {Path}", path);
-            return Serialize(new { ok = false, error = "Read failed: " + ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            Log.Error(ex, "Bridge.add_profile: access denied reading {Path}", path);
-            return Serialize(new { ok = false, error = "Access denied: " + ex.Message });
-        }
-
-        try
-        {
-            var fileName = ProfileZip.Install(package);
-            Log.Information("Bridge.add_profile OK: imported {Source} (logo={HasLogo}) → {FileName}",
-                            path, package.LogoBytes is not null, fileName);
-            return Serialize(new { ok = true, profile = ToProfileDto(fileName, package.Profile) });
-        }
-        catch (IOException ex)
-        {
-            Log.Error(ex, "Bridge.add_profile: install failed for {Path}", path);
-            return Serialize(new { ok = false, error = "Install failed: " + ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            Log.Error(ex, "Bridge.add_profile: access denied installing {Path}", path);
-            return Serialize(new { ok = false, error = "Install failed (access denied): " + ex.Message });
-        }
-    }
-
-    public string RemoveProfile(string profileNameJson, string profileIdJson)
-    {
-        LogEntry(nameof(RemoveProfile), ("name", profileNameJson), ("id", profileIdJson));
-        var profileName = Deserialize<string>(profileNameJson) ?? "";
-        var profileId = Deserialize<string?>(profileIdJson);
-
-        var entry = ProfileStore.Resolve(profileName, profileId);
-        if (entry is null)
-        {
-            Log.Warning("Bridge.remove_profile: not found name={Name} id={Id}", profileName, profileId);
-            return Serialize(new { ok = false, error = "Profile not found" });
-        }
-
-        ProfileStore.Delete(entry.FileName);
-
-        // If the deleted profile was active, fall back to the blank stub.
-        var ap = ActiveProfile.Read();
-        var wasActive = !ap.IsBlank && (
-            string.Equals(ap.ProfileId, entry.Profile.Id, StringComparison.Ordinal) ||
-            string.Equals(ap.ProfileName, entry.Profile.ProfileName, StringComparison.Ordinal));
-        if (wasActive) ActiveProfile.WriteBlank();
-        Log.Information("Bridge.remove_profile OK: {FileName} (wasActive={WasActive})", entry.FileName, wasActive);
-        return Serialize(new { ok = true });
-    }
-
-    public string UnloadProfile()
-    {
-        LogEntry(nameof(UnloadProfile));
-        ActiveProfile.WriteBlank();
-        // RST-020: tear down the live profile tab too. Schedule(null) is
-        // the agreed-upon "unload" signal — ProfileTabBuilder removes its
-        // panels and our created tab without rebuilding.
-        if (_switchScheduler is not null)
-        {
-            try { _switchScheduler.Schedule(null); }
-            catch (Exception ex) { Log.Error(ex, "Bridge.unload_profile: switch scheduler failed"); }
-        }
-        Log.Information("Bridge.unload_profile OK");
-        return Serialize(new { ok = true });
     }
 
     public string GetRevitVersion()
@@ -805,67 +571,13 @@ public class LoaderBridge
     public string GetAddinLookup()
     {
         LogEntry(nameof(GetAddinLookup));
-        try
-        {
-            var assetsDir = Path.Combine(
-                Path.GetDirectoryName(typeof(LoaderBridge).Assembly.Location)!,
-                "Assets", "lookup");
-            var path = Path.Combine(assetsDir, "addin_lookup.json");
-            if (!File.Exists(path))
-            {
-                Log.Warning("Bridge.get_addin_lookup: {Path} missing — returning empty dict", path);
-                return Serialize(new Dictionary<string, object>());
-            }
-            // Pass through verbatim — the JSON is already in the shape the
-            // JS expects ({key: {displayName, file, url}, ...}). Parsing
-            // and re-serializing would lose nothing but cost a round-trip.
-            var raw = File.ReadAllText(path);
-            Log.Information("Bridge.get_addin_lookup: {Bytes} bytes from {Path}", raw.Length, path);
-            return raw;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Bridge.get_addin_lookup: read failed; returning empty dict");
-            return Serialize(new Dictionary<string, object>());
-        }
-    }
-
-    /// <summary>
-    /// Surface every .addin (and .addin.RSTdisabled) we can find under
-    /// the running Revit version's addin search paths. The UI uses this
-    /// for the "available add-ins" picker in the Builder and for the
-    /// required-addins matching display. Each entry exposes the canonical
-    /// file name, the first AddInId/Assembly we parsed out, and a flag
-    /// indicating whether it's currently disabled on disk.
-    /// </summary>
-    public string GetLoadedAddins()
-    {
-        LogEntry(nameof(GetLoadedAddins));
-        var manifests = AddinDirectoryScanner.Scan(_revitVersion,
-            onSkip: (p, ex) => Log.Debug(ex, "AddinDirectoryScanner: skipped {Path}", p));
-        var dtos = manifests.Select(m =>
-        {
-            var first = m.Entries.Count > 0 ? m.Entries[0] : null;
-            return new
-            {
-                fileName = m.FileName,
-                filePath = m.FilePath,
-                isDisabled = m.IsDisabled,
-                displayName = !string.IsNullOrWhiteSpace(first?.Name)
-                    ? first!.Name
-                    : Path.GetFileNameWithoutExtension(m.FileName),
-                addinId = first?.AddinId,
-                assembly = first?.AssemblyPath,
-            };
-        }).ToArray();
-        Log.Information("Bridge.get_loaded_addins → {Count} manifests scanned for Revit {Ver}", dtos.Length, _revitVersion);
-        return Serialize(dtos);
+        return _lookup.ReadRawJson();
     }
 
     /// <summary>
     /// Distinct non-contextual ribbon tab titles, snapshotted when the
-    /// loader window opened. Drives the RSTify "Hide These Tabs" picker
-    /// (profile_loader.html:971 renderTabToggles). Snapshot is fine
+    /// window opened. Drives the Builder's RST Presets tab toggles
+    /// and its required-add-in detection. Snapshot is fine
     /// because the modal blocks the UI thread, so the ribbon can't
     /// change while the picker is shown.
     /// </summary>
@@ -874,217 +586,6 @@ public class LoaderBridge
         LogEntry(nameof(GetAllTabs));
         return Serialize(_allTabs);
     }
-
-    /// <summary>
-    /// User-config knobs (per-addin overrides etc). Phase-2 follow-up.
-    /// Returns the upstream-expected shape so the loader UI doesn't
-    /// throw when destructuring `addins`.
-    /// </summary>
-    public string GetUserConfig()
-    {
-        LogEntry(nameof(GetUserConfig));
-        return Serialize(new { addins = new Dictionary<string, object>() });
-    }
-
-    /// <summary>
-    /// Per-profile RSTify + disable-unused user prefs, keyed by profile
-    /// id. Loader's selectCard reads this to seed the picker / footer
-    /// toggle when the user picks a profile. See UserProfilePrefs.cs
-    /// for the design rationale (separate from active_profile.json).
-    /// </summary>
-    public string GetUserProfilePrefs()
-    {
-        LogEntry(nameof(GetUserProfilePrefs));
-        try
-        {
-            var prefs = UserProfilePrefs.Read();
-            // One-time migration: if the currently-active profile has
-            // hidden_tabs / disable_non_required in active_profile.json
-            // but no entry in user_profile_prefs (pre-RST-026 install),
-            // seed an entry so the user doesn't lose their existing
-            // state on first selection. presetsAdopted=true so the
-            // adopt prompt doesn't fire over data the user already
-            // explicitly configured.
-            try
-            {
-                var ap = ActiveProfile.Read();
-                if (!ap.IsBlank && !string.IsNullOrEmpty(ap.ProfileId)
-                    && prefs.Get(ap.ProfileId!) is null
-                    && ((ap.HiddenTabs?.Length ?? 0) > 0 || ap.DisableNonRequired))
-                {
-                    prefs.Set(ap.ProfileId!, ap.HiddenTabs ?? Array.Empty<string>(),
-                              ap.DisableNonRequired, presetsAdopted: true);
-                    Log.Information("Bridge.get_user_profile_prefs: migrated active profile {Id} into user prefs",
-                                    ap.ProfileId);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex, "Bridge.get_user_profile_prefs: active-profile migration skipped (non-fatal)");
-            }
-            return Serialize(prefs);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Bridge.get_user_profile_prefs: read failed");
-            return Serialize(new UserProfilePrefs());
-        }
-    }
-
-    /// <summary>
-    /// Upsert the prefs entry for one profile id. Used by the Loader's
-    /// adopt-presets prompt — so the user's "yes" or "no" answer is
-    /// persisted before they ever click Load Profile, ensuring the
-    /// prompt doesn't fire again on the next selection.
-    /// </summary>
-    public string RecordUserProfilePrefs(string profileIdJson, string hiddenTabsJson, string disableUnusedJson, string presetsAdoptedJson)
-    {
-        LogEntry(nameof(RecordUserProfilePrefs),
-                 ("id", profileIdJson), ("hiddenTabs", hiddenTabsJson),
-                 ("disableUnused", disableUnusedJson), ("presetsAdopted", presetsAdoptedJson));
-        var profileId = Deserialize<string>(profileIdJson) ?? "";
-        if (string.IsNullOrEmpty(profileId))
-            return Serialize(new { ok = false, error = "profileId required" });
-
-        var hiddenTabs = Deserialize<string[]>(hiddenTabsJson) ?? Array.Empty<string>();
-        var disableUnused = Deserialize<bool>(disableUnusedJson);
-        var presetsAdopted = Deserialize<bool>(presetsAdoptedJson);
-        try
-        {
-            var prefs = UserProfilePrefs.Read();
-            prefs.Set(profileId, hiddenTabs, disableUnused, presetsAdopted);
-            Log.Information("Bridge.record_user_profile_prefs OK: id={Id} hidden={Hidden} disableUnused={D} adopted={A}",
-                            profileId, hiddenTabs.Length, disableUnused, presetsAdopted);
-            return Serialize(new { ok = true });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Bridge.record_user_profile_prefs: write failed for {Id}", profileId);
-            return Serialize(new { ok = false, error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Upsert the user's panel-opacity override for one profile id.
-    /// JS payload: opacityJson is an int (10-100) to set or null to
-    /// clear. The override REPLACES <c>profile.PanelOpacity</c> at
-    /// ribbon-build time (see ProfileTabBuilder). Persists in the
-    /// same user_profile_prefs.json entry as RSTify state but on a
-    /// separate field, so the slider write path doesn't disturb
-    /// hidden-tabs or disable-unused.
-    /// </summary>
-    public string RecordPanelOpacityOverride(string profileIdJson, string opacityJson)
-    {
-        LogEntry(nameof(RecordPanelOpacityOverride),
-                 ("id", profileIdJson), ("opacity", opacityJson));
-        var profileId = Deserialize<string>(profileIdJson) ?? "";
-        if (string.IsNullOrEmpty(profileId))
-            return Serialize(new { ok = false, error = "profileId required" });
-
-        int? opacity = Deserialize<int?>(opacityJson);
-        if (opacity.HasValue)
-        {
-            // Clamp at the boundary — slider only emits 10-100, but
-            // defensive against bad JS payloads.
-            opacity = Math.Max(10, Math.Min(100, opacity.Value));
-        }
-
-        try
-        {
-            var prefs = UserProfilePrefs.Read();
-            prefs.SetPanelOpacityOverride(profileId, opacity);
-            Log.Information("Bridge.record_panel_opacity_override OK: id={Id} opacity={Opacity}",
-                            profileId, opacity?.ToString() ?? "null");
-            return Serialize(new { ok = true });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Bridge.record_panel_opacity_override: write failed for {Id}", profileId);
-            return Serialize(new { ok = false, error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Compute the disable-preview classification for the named profile:
-    /// staying (required), disabling (writeable + non-required),
-    /// tryDisable (read-only + non-required — Revit install dir),
-    /// skipped (already .addin.RSTdisabled). Pure — no rename happens
-    /// here.
-    /// </summary>
-    public string GetDisablePreview(string profileNameJson)
-    {
-        LogEntry(nameof(GetDisablePreview), ("name", profileNameJson));
-        var profileName = Deserialize<string>(profileNameJson) ?? "";
-        var entry = ProfileStore.Resolve(profileName, id: null);
-        if (entry is null)
-        {
-            Log.Warning("Bridge.get_disable_preview: profile not found {Name}", profileName);
-            return Serialize(new
-            {
-                error = "Profile not found: " + profileName,
-                staying = Array.Empty<object>(),
-                disabling = Array.Empty<object>(),
-                tryDisable = Array.Empty<object>(),
-                skipped = Array.Empty<object>(),
-            });
-        }
-
-        var preview = DisablePreviewBuilder.Build(_revitVersion, entry.Profile.RequiredAddins);
-        Log.Information("Bridge.get_disable_preview: name={Name} staying={S} disabling={D} tryDisable={T} skipped={Sk}",
-                        profileName, preview.Staying.Count, preview.Disabling.Count, preview.TryDisable.Count, preview.Skipped.Count);
-
-        return Serialize(new
-        {
-            staying = preview.Staying.Select(ToPreviewDto).ToArray(),
-            disabling = preview.Disabling.Select(ToPreviewDto).ToArray(),
-            tryDisable = preview.TryDisable.Select(ToPreviewDto).ToArray(),
-            skipped = preview.Skipped.Select(ToPreviewDto).ToArray(),
-        });
-    }
-
-    /// <summary>
-    /// Walk every search path for the running Revit version and rename
-    /// any .addin.RSTdisabled back to .addin. Effective on the next
-    /// Revit launch (DLLs already loaded stay resident this session,
-    /// so restart_needed=true whenever anything was actually restored).
-    /// </summary>
-    public string RestoreAddins()
-    {
-        LogEntry(nameof(RestoreAddins));
-        try
-        {
-            var result = AddinDisabler.RestoreAll(_revitVersion,
-                onError: (path, ex) => Log.Warning(ex, "AddinDisabler.Restore: rename failed for {Path}", path));
-            Log.Information("Bridge.restore_addins → restored={Restored}, failed={Failed}",
-                            result.RestoredCount, result.Failed);
-            return Serialize(new
-            {
-                ok = true,
-                restart_needed = result.RestoredCount > 0,
-                restored = result.RestoredFiles,
-                failed = result.FailedFiles,
-            });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Bridge.restore_addins: AddinDisabler.RestoreAll threw");
-            return Serialize(new { ok = false, error = ex.Message, restart_needed = false });
-        }
-    }
-
-    private static object ToPreviewDto(AddinPreviewEntry e) => new
-    {
-        // The loader's confirm-overlay reads `displayName` (with `tabName`
-        // as a fallback). We synthesise displayName from filename so the
-        // user sees something meaningful when no <Name> is set on the
-        // first AddIn entry.
-        displayName = Path.GetFileNameWithoutExtension(e.FileName),
-        fileName = e.FileName,
-        filePath = e.FilePath,
-        addinId = e.FirstAddinId,
-        assembly = e.FirstAssemblyPath,
-        sourceKind = e.SourceKind.ToString(),
-    };
 
     // ---- helpers -------------------------------------------------------
 
