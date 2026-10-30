@@ -9,6 +9,7 @@ using RST.Core.Configuration;
 using RST.Core.Health;
 using RST.Core.Profiles;
 using RST.Core.Telemetry;
+using RST.UI.Resources;
 using Serilog;
 
 namespace RST.UI.Health;
@@ -40,6 +41,47 @@ public interface IHealthService
 
     /// <summary>Saves the collection choice and reconciles this process's collector.</summary>
     TelemetryToggleResult SetTelemetryEnabled(bool enabled);
+
+    /// <summary>A scan or clean is running in this process, possibly started by a Health window that has since closed.</summary>
+    bool IsWorkRunning { get; }
+
+    /// <summary>Raised (on the worker thread) when the running scan or clean ends.</summary>
+    event EventHandler? WorkFinished;
+}
+
+/// <summary>
+/// The process-wide "a scan or clean is running" flag. A Health window can close while its scan or
+/// clean finishes in the background; a window reopened meanwhile must not start a second one (two
+/// writers of health_scan.json, or two cleans over the same targets). One piece of work at a time.
+/// </summary>
+public static class HealthWork
+{
+    private static int _running;
+
+    public static bool IsRunning => Volatile.Read(ref _running) != 0;
+
+    /// <summary>Raised on the worker thread when the work ends.</summary>
+    public static event EventHandler? Finished;
+
+    /// <summary>Marks work as running until the result is disposed. Throws when work is already running.</summary>
+    public static IDisposable Begin()
+    {
+        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+            throw new InvalidOperationException(UiStrings.Health_WorkRunning);
+        return new End();
+    }
+
+    private sealed class End : IDisposable
+    {
+        private int _done;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) != 0) return;
+            Volatile.Write(ref _running, 0);
+            Finished?.Invoke(null, EventArgs.Empty);
+        }
+    }
 }
 
 /// <summary>The production <see cref="IHealthService"/>.</summary>
@@ -81,8 +123,17 @@ public sealed class HealthService : IHealthService
         return snap;
     }
 
+    public bool IsWorkRunning => HealthWork.IsRunning;
+
+    public event EventHandler? WorkFinished
+    {
+        add => HealthWork.Finished += value;
+        remove => HealthWork.Finished -= value;
+    }
+
     public HealthSnapshot RunScan()
     {
+        using var work = HealthWork.Begin();
         Log.Information("Health: scan started");
         try
         {
@@ -119,12 +170,23 @@ public sealed class HealthService : IHealthService
 
     public CleanResult Clean(IReadOnlyCollection<string> targetIds)
     {
+        using var work = HealthWork.Begin();
         Log.Information("Health: clean {Ids}", string.Join(",", targetIds));
+        return HealthCleaner.Run(SelectTargets(ResolveActiveTargets(), targetIds));
+    }
+
+    /// <summary>
+    /// The targets a clean may touch: the enabled ones of <paramref name="allowed"/> (the active
+    /// profile's list) whose id (or name, when the id is empty) is in <paramref name="targetIds"/>,
+    /// case-insensitively. An id that names no allowed target is ignored, so the window can never
+    /// add a path of its own.
+    /// </summary>
+    public static CleanupTarget[] SelectTargets(IEnumerable<CleanupTarget> allowed, IEnumerable<string> targetIds)
+    {
         var idSet = new HashSet<string>(targetIds, StringComparer.OrdinalIgnoreCase);
-        var targets = ResolveActiveTargets()
+        return allowed
             .Where(t => t.Enabled && idSet.Contains(string.IsNullOrEmpty(t.Id) ? t.Name : t.Id))
             .ToArray();
-        return HealthCleaner.Run(targets);
     }
 
     public ActivityData GetActivity(int rangeDays)

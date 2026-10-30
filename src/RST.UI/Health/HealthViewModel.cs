@@ -72,6 +72,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
     private int _rangeDays = ActivityRanges.Default;
     private bool _telemetryEnabled;
     private string _telemetryStatusLine = HealthFormat.Missing;
+    private readonly SynchronizationContext? _context;
     private IDisposable? _ticker;
     private int _tickerGeneration;
 
@@ -106,11 +107,15 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
         SyncChart = new ChartCard(UiStrings.Health_ChartSync);
         Charts = [SessionChart, OpenChart, SyncChart];
 
-        ScanCommand = new RelayCommand(() => _ = ScanAsync(), () => IsIdle);
-        CleanCommand = new RelayCommand(OpenJunk, () => IsIdle);
+        ScanCommand = new RelayCommand(() => _ = ScanAsync(), () => CanStartWork);
+        CleanCommand = new RelayCommand(OpenJunk, () => CanStartWork);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty), () => IsIdle);
         JunkCancelCommand = new RelayCommand(CancelJunk, () => IsIdle);
-        JunkRunCommand = new RelayCommand(() => _ = RunJunkAsync(), () => IsIdle);
+        JunkRunCommand = new RelayCommand(() => _ = RunJunkAsync(), () => CanStartWork);
+
+        // A scan or clean left running by a closed window keeps Scan and Clean disabled here until it ends.
+        _context = SynchronizationContext.Current;
+        _service.WorkFinished += OnWorkFinished;
 
         Render(null);
     }
@@ -273,6 +278,9 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
     /// <summary>Nothing is running: commands and inputs are enabled.</summary>
     public bool IsIdle => !IsBusy;
 
+    /// <summary>Scan and Clean may start: this window is idle and no scan or clean runs elsewhere in the process.</summary>
+    public bool CanStartWork => IsIdle && !_service.IsWorkRunning;
+
     /// <summary>The window's content takes input (no modal overlay over it), so the keyboard cannot reach what the overlay covers.</summary>
     public bool IsMainEnabled => !IsJunkOpen && !Busy.IsBusy;
 
@@ -290,19 +298,19 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
         {
             Log.Warning(ex, "Health: reading the snapshot failed");
         }
-        Render(snap);
+        RenderOrFallback(snap);
     }
 
     /// <summary>Scan System: scans off the UI thread, then re-renders, or toasts "Scan failed".</summary>
     public async Task ScanAsync()
     {
-        if (IsBusy) return;
+        if (!CanStartWork) return;
         IsScanning = true;
         try
         {
             HealthSnapshot? snap = null;
             await _options.RunInBackground(() => snap = _service.RunScan());
-            Render(snap);
+            RenderOrFallback(snap);
         }
         catch (Exception ex)
         {
@@ -317,7 +325,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
     /// <summary>Clean Junk Files: lists the cleanup targets in the Junk modal, every toggle on.</summary>
     public void OpenJunk()
     {
-        if (IsBusy) return;
+        if (!CanStartWork) return;
         IReadOnlyList<RST.Core.Profiles.CleanupTarget> targets;
         try
         {
@@ -346,7 +354,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
     /// </summary>
     public async Task RunJunkAsync()
     {
-        if (IsBusy) return;
+        if (!CanStartWork) return;
         var selected = JunkTargets.Where(t => t.IsSelected && t.Id.Length > 0).ToList();
         IsJunkOpen = false;
 
@@ -411,11 +419,36 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _service.WorkFinished -= OnWorkFinished;
         StopTicker();
         Toast.Dismiss();
     }
 
     // ── rendering ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Renders <paramref name="snap"/>; a readable but malformed snapshot (a hand-edited or foreign
+    /// health_scan.json) renders as no snapshot, every value "—", as the HTML's load() fell back to
+    /// render(null), instead of stopping the window opening (spec #16, Beyond Intention).
+    /// </summary>
+    private void RenderOrFallback(HealthSnapshot? snap)
+    {
+        try
+        {
+            Render(snap);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Health: the snapshot could not be shown; showing no snapshot");
+            Render(null);
+        }
+    }
+
+    private void OnWorkFinished(object? sender, EventArgs e)
+    {
+        if (_context is null) OnBusyChanged();
+        else _context.Post(_ => OnBusyChanged(), null);
+    }
 
     private void Render(HealthSnapshot? snap)
     {
@@ -577,6 +610,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsIdle));
+        OnPropertyChanged(nameof(CanStartWork));
         OnPropertyChanged(nameof(IsMainEnabled));
         CommandManager.InvalidateRequerySuggested();
     }
@@ -596,5 +630,5 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
 
     /// <summary>A date tick: JS <c>toLocaleDateString(undefined, { month: 'short', day: 'numeric' })</c>.</summary>
     private string TickLabel(double ms) =>
-        LocalTime(DateTimeOffset.FromUnixTimeMilliseconds((long)ms)).ToString("MMM d", _culture);
+        HealthFormat.ShortMonthDay(LocalTime(DateTimeOffset.FromUnixTimeMilliseconds((long)ms)), _culture);
 }

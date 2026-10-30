@@ -252,6 +252,25 @@ public class ActivityChartTests
     }
 
     [Fact]
+    public void Layout_SevenPoints_TickIndicesRoundHalvesUp()
+    {
+        // JS Math.round(t * 6 / 4): 0, 1.5 → 2, 3, 4.5 → 5, 6. Math.Round (banker's) would give 0, 2, 3, 4, 6.
+        var points = Enumerable.Range(0, 7).Select(i => new ActivityChartPoint(i, 1, "")).ToList();
+        var layout = ActivityChartLayout.Build(points, v => "", x => x.ToString(CultureInfo.InvariantCulture));
+        Assert.Equal(["0", "2", "3", "5", "6"], layout.Ticks.Select(t => t.Label));
+    }
+
+    [Fact]
+    public void TickDate_UsesTheCulturesMonthDayOrder_WithTheShortMonth()
+    {
+        var day = new DateTimeOffset(2026, 10, 28, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal("Oct 28", HealthFormat.ShortMonthDay(day, CultureInfo.GetCultureInfo("en-US")));
+        var de = HealthFormat.ShortMonthDay(day, CultureInfo.GetCultureInfo("de-DE"));
+        Assert.StartsWith("28.", de, StringComparison.Ordinal);
+        Assert.Contains("Okt", de, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Layout_ThreePoints_TickEveryPoint()
     {
         var layout = ActivityChartLayout.Build([new(0, 1, "a"), new(10, 2, "b"), new(20, 3, "c")], v => "", x => x.ToString(CultureInfo.InvariantCulture));

@@ -406,4 +406,7 @@
   <data name="Health_ActivityFailedTitle" xml:space="preserve">
     <value>Could not load activity</value>
   </data>
+  <data name="Health_WorkRunning" xml:space="preserve">
+    <value>A scan or cleanup is still running. Try again when it finishes.</value>
+  </data>
 </root>

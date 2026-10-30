@@ -509,4 +509,76 @@ public class HealthViewModelTests
         vm.CloseCommand.Execute(null);
         Assert.Equal(1, closed);
     });
+
+    /// <summary>A readable but malformed health_scan.json: null entries a scan never writes.</summary>
+    private static HealthSnapshot Malformed()
+    {
+        var s = HealthSamples.Snapshot();
+        s.Gpus = [null!];
+        s.Cleanup!.Targets = [null!];
+        return s;
+    }
+
+    [Fact]
+    public void Open_MalformedSnapshot_FallsBackToEveryValueADash() => Sta(() =>
+    {
+        // Review N1 (spec #16, Beyond Intention): the window still opens, as the HTML's render(null).
+        var h = new Harness();
+        h.Service.Snapshot = Malformed();
+        var vm = h.Build();
+        vm.Load();
+        Assert.Equal("—", vm.Device);
+        Assert.Equal(4, vm.Sections.Count);
+        Assert.True(Row(vm, "Hardware", "RAM").IsMissing);
+        Assert.False(vm.Toast.IsOpen);
+    });
+
+    [Fact]
+    public void Scan_MalformedResult_FallsBackToEveryValueADash() => Sta(() =>
+    {
+        var h = new Harness();
+        h.Service.Snapshot = HealthSamples.Snapshot();
+        h.Service.ScanResult = Malformed();
+        var vm = h.Build();
+        vm.Load();
+        vm.ScanAsync().GetAwaiter().GetResult();
+        Assert.Equal("—", vm.Device);
+        Assert.False(vm.IsScanning);
+    });
+
+    [Fact]
+    public void WorkLeftRunningByAClosedWindow_DisablesScanAndClean_UntilItEnds() => Sta(() =>
+    {
+        // Review N2: a window reopened while the last one's scan or clean still runs cannot start another.
+        var h = new Harness();
+        h.Service.Targets = HealthSamples.Targets();
+        h.Service.IsWorkRunning = true;
+        var vm = h.Build();
+
+        Assert.False(vm.CanStartWork);
+        Assert.False(vm.ScanCommand.CanExecute(null));
+        Assert.False(vm.CleanCommand.CanExecute(null));
+        Assert.False(vm.JunkRunCommand.CanExecute(null));
+        Assert.True(vm.CloseCommand.CanExecute(null));
+        Assert.True(vm.IsIdle);
+        vm.ScanAsync().GetAwaiter().GetResult();
+        vm.OpenJunk();
+        Assert.Equal(0, h.Service.ScanCalls);
+        Assert.False(vm.IsJunkOpen);
+
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        h.Service.FinishWork();
+        Assert.Contains(nameof(HealthViewModel.CanStartWork), changed);
+        Assert.True(vm.CanStartWork);
+        Assert.True(vm.ScanCommand.CanExecute(null));
+        vm.ScanAsync().GetAwaiter().GetResult();
+        Assert.Equal(1, h.Service.ScanCalls);
+
+        // Closing the window unsubscribes.
+        vm.Dispose();
+        changed.Clear();
+        h.Service.FinishWork();
+        Assert.Empty(changed);
+    });
 }

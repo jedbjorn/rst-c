@@ -72,6 +72,18 @@ public static class HealthFormat
     }
 
     /// <summary>
+    /// A chart tick's date: JS <c>toLocaleDateString(undefined, { month: 'short', day: 'numeric' })</c>,
+    /// the culture's month-day pattern with the abbreviated month ("Oct 28" in en-US, "28. Okt." in de-DE).
+    /// </summary>
+    public static string ShortMonthDay(DateTimeOffset date, CultureInfo? culture = null)
+    {
+        var c = culture ?? CultureInfo.CurrentCulture;
+        var pattern = c.DateTimeFormat.MonthDayPattern;
+        pattern = pattern.Contains("MMMM", StringComparison.Ordinal) ? pattern.Replace("MMMM", "MMM", StringComparison.Ordinal) : "MMM d";
+        return date.ToString(pattern, c);
+    }
+
+    /// <summary>
     /// <c>fmtDur</c>: a duration in seconds. Under 90 s: "5.3s" (one decimal under 10) or "45s";
     /// under 90 minutes: "1m 30s"; otherwise "1h 30m".
     /// </summary>

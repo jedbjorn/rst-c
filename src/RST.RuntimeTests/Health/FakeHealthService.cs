@@ -40,6 +40,18 @@ public sealed class FakeHealthService : IHealthService
 
     public List<bool> ToggleCalls { get; } = [];
 
+    /// <summary>Work started by another (closed) window is running.</summary>
+    public bool IsWorkRunning { get; set; }
+
+    public event EventHandler? WorkFinished;
+
+    /// <summary>Ends the other window's work.</summary>
+    public void FinishWork()
+    {
+        IsWorkRunning = false;
+        WorkFinished?.Invoke(this, EventArgs.Empty);
+    }
+
     public HealthSnapshot? LoadSnapshot() => Snapshot;
 
     public HealthSnapshot RunScan()

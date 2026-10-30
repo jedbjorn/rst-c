@@ -265,4 +265,6 @@ public static class UiStrings
     public static string Health_NotEnoughHistory => Get(nameof(Health_NotEnoughHistory));
 
     public static string Health_ActivityFailedTitle => Get(nameof(Health_ActivityFailedTitle));
+
+    public static string Health_WorkRunning => Get(nameof(Health_WorkRunning));
 }
