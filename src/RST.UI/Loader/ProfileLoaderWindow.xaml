@@ -80,7 +80,7 @@
                                        VerticalAlignment="Center" />
                         </DockPanel>
                         <Grid>
-                            <ListBox x:Name="Cards" Style="{StaticResource CardListBox}" ItemsSource="{Binding Profiles}"
+                            <ListBox x:Name="Cards" Style="{StaticResource LoaderCardList}" ItemsSource="{Binding Profiles}"
                                      SelectedItem="{Binding SelectedCard, Mode=TwoWay}" Padding="12,0,12,12"
                                      Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisible}}"
                                      AutomationProperties.AutomationId="Loader.Profiles"

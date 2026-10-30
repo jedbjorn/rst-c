@@ -1574,6 +1574,28 @@
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
     </Style>
 
+    <!--
+        The profile card list: CardListBox with a plain template, so it keeps its pane color when
+        disabled under the busy overlay (the Windows ListBox template paints the system control
+        color then).
+    -->
+    <Style x:Key="LoaderCardList" TargetType="ListBox" BasedOn="{StaticResource CardListBox}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBox">
+                    <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                        <ScrollViewer Padding="{TemplateBinding Padding}" Focusable="False"
+                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                      VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                            <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- A row in the RSTify and Required Add-ins lists: a 1 px divider under each. -->
     <Style x:Key="LoaderRow" TargetType="Border">
         <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />

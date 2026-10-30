@@ -110,12 +110,16 @@ public class ProfileLoaderScreenshotTests
     public void Main_view_renders_with_an_active_and_a_selected_profile(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
+        // Planner defaults 1 and 2: the title and the size (before Windows caps a shown window at the CI desktop).
+        var unshown = new ProfileLoaderWindow(new ProfileLoaderViewModel(new FakeLoaderBackend(), new LoaderTestDialogs(), new LoaderTestDialogs()));
+        Assert.Equal("RST — Profile Loader", unshown.Title);
+        Assert.Equal(1450, unshown.Width);
+        Assert.Equal(900, unshown.Height);
+        Assert.Equal(WindowStartupLocation.CenterOwner, unshown.WindowStartupLocation);
+
         var opened = Open(LoaderFixtures.Backend(), (vm, _) => vm.SelectedCard = vm.Profiles.Single(c => c.Name == "Structure"));
         try
         {
-            Assert.Equal("RST — Profile Loader", opened.Window.Title);
-            Assert.Equal(1450, opened.Window.Width);
-            Assert.Equal(900, opened.Window.Height);
             var bitmap = CaptureLoader(opened, theme, "loader-main");
             var root = opened.Window.Root;
 
@@ -187,7 +191,9 @@ public class ProfileLoaderScreenshotTests
             Assert.False(opened.Window.Body.IsEnabled);
             // The scrim covers the whole window.
             var palette = UiPalette.For(theme);
-            CaptureLoader(opened, theme, "loader-busy", ToColor(palette[UiPalette.Scrim].Over(palette[UiPalette.Window])));
+            var bitmap = CaptureLoader(opened, theme, "loader-busy", ToColor(palette[UiPalette.Scrim].Over(palette[UiPalette.Window])));
+            // The disabled card list keeps its pane color under the scrim.
+            AssertColor(ToColor(palette[UiPalette.Scrim].Over(palette[UiPalette.SurfaceAlt])), Screenshots.PixelAt(bitmap, 150, 850), "card list pane under the scrim");
         }
         finally
         {
@@ -232,8 +238,16 @@ public class ProfileLoaderScreenshotTests
 
         // Without Try Disable entries the column is gone and "None" fills an empty column.
         var plain = new ConfirmAddinChangesWindow(new ConfirmAddinChangesModel(["Kinship"], [], []));
-        Assert.Equal(Visibility.Collapsed, ((FrameworkElement)plain.FindName("TryPanel")).Visibility);
-        plain.Close();
+        WindowCapture.ShowOffScreen(plain);
+        try
+        {
+            Assert.Equal(Visibility.Collapsed, ((FrameworkElement)plain.FindName("TryPanel")).Visibility);
+            Assert.Contains(WindowCapture.Descendants<TextBlock>(plain), t => t.Text == "None" && t.IsVisible);
+        }
+        finally
+        {
+            plain.Close();
+        }
     });
 
     [Theory]
