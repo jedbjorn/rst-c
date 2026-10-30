@@ -21,6 +21,10 @@
     <Configurations>Debug R25;Debug R26;Debug R27;Release R25;Release R26;Release R27</Configurations>
     <!-- Allow Linux CI stage jobs to build (not run) the windows TFM. -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Spec #16 screenshot pipeline: the tests build and render WPF windows off-screen
+         (Support/Screenshots, Support/WindowCapture) to TestResults/screenshots/*.png,
+         or $RST_SCREENSHOTS; CI uploads them as the RST-screenshots artifact. -->
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>
