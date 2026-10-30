@@ -111,6 +111,8 @@ While Revit is running, the button reads **Install when Revit closes** (or **Upd
 
 ### How it installs
 
+Installs run one at a time: an app asked for while another installs says it is waiting its turn. Right before it runs, the tray checks the file's SHA256 and identity once more, and what is installed (no downgrade), and keeps the file open so nothing can change it until the install has finished.
+
 The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file> /qn /norestart`, and keeps its log in `%LocalAppData%\RST\Tray\logs\install-<app>-<date>-<time>.log` (**Open log** on the row).
 
 - **Installed:** the row says so.
@@ -122,7 +124,13 @@ The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\
 
 ### RST updating itself
 
-`RST.msi` contains the tray, which is running, so the tray copies itself to `%LocalAppData%\RST\Tray\updater\` as **RST.TrayUpdater.exe**, starts that copy, and closes. The copy checks the file again, waits for the tray to close, runs `msiexec`, and starts the new tray, whose window says how it went. The installer closes running copies of `RST.Tray.exe` by name; the updater's different name keeps it out of that.
+RST is updated the way it was installed (decision #34):
+- **Installed with `RST-Setup.exe`** (the recommended way): the tray downloads that release's `RST-Setup.exe` and runs it with `/quiet /norestart` and no companion choices. Settings → Apps keeps its one **RST** entry, and uninstalling that entry still removes RST. The download is checked the same way: its SHA256 against `SHA256SUMS.txt` and GitHub's digest, its exact name, and its version resource equal to the release. (The bundle's UpgradeCode sits inside the bundle's attached container, which the tray does not unpack; the two hashes and immutable releases vouch for the file.)
+- **Installed with `RST.msi`**: the tray updates with that release's `RST.msi`.
+
+Either package contains the tray, which is running, so the tray copies itself to `%LocalAppData%\RST\Tray\updater\` as **RST.TrayUpdater.exe**, starts that copy, and closes. The copy checks the file again, waits for the tray to close, checks for Revit once more, runs the package, and starts the new tray, whose window says how it went. While it works it holds the tray's single-instance lock, so a tray started meanwhile (by Revit, say) exits at once instead of running from the folder being replaced; it lets go right before it starts the new tray. If Revit was opened in the meantime, the copy installs nothing and starts the tray again, which waits for Revit to close and then tries again. The installer closes running copies of `RST.Tray.exe` by name; the updater's different name keeps it out of that.
+
+The tray hands over only when no other install is running, waiting or queued: those finish first, and their results are recorded, so closing the tray never loses one.
 
 ### Installed for everyone on this PC
 
