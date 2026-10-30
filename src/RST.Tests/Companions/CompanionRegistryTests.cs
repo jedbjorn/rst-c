@@ -362,6 +362,30 @@ public class CompanionRegistryTests
             .Should().Contain(RstAddinClientId, "src/RST.Bootstrap/RST.addin carries rst-c's ClientId");
     }
 
+    [Fact]
+    public void Every_installer_identity_is_a_literal_guid_and_the_bundle_code_is_pinned()
+    {
+        // Phase 2 (RST-Setup.exe): DeclaredUpgradeCodes skips a value that is
+        // not a GUID, so a `$(var.X)` UpgradeCode would drop out of rst-c's
+        // identities unnoticed. Every <Package>/<Bundle> UpgradeCode under
+        // installer*/ must therefore be a literal GUID, and the bundle's
+        // never-change code (installer-bundle/README.md) and the test-only
+        // fixture's are pinned here.
+        var root = RepoRoot();
+        var declared = InstallerSources(root)
+            .SelectMany(wxs => XDocument.Load(wxs).Descendants()
+                .Where(e => e.Name.LocalName is "Package" or "Bundle")
+                .Select(e => (File: Path.GetRelativePath(root, wxs), Code: (string?)e.Attribute("UpgradeCode"))))
+            .ToList();
+        declared.Where(d => !Guid.TryParseExact(d.Code, "D", out _))
+            .Should().BeEmpty("every installer UpgradeCode is a literal GUID");
+
+        DeclaredUpgradeCodes(Path.Combine(root, "installer-bundle", "Bundle.wxs"))
+            .Should().Equal(new[] { Guid.Parse("2BE2BE5D-9203-4344-A70D-E735D3B041A3") }, "RST-Setup.exe's UpgradeCode never changes");
+        DeclaredUpgradeCodes(Path.Combine(root, "installer-bundle", "fixture", "Product.wxs"))
+            .Should().Equal(new[] { Guid.Parse("A0E85F7A-BF17-4052-AB6A-010781D8CF6D") }, "the test fixture's UpgradeCode is fixed");
+    }
+
     // ---- the validator ----------------------------------------------------
 
     // The validator cases build on these literals, never on the checked-in

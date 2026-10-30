@@ -1,0 +1,143 @@
+<#
+  gen-companions.ps1 - generate RST-Setup.exe's companion chain and BA theme
+  from the companion registry (feature #13 Phase 2, spec #15).
+
+  For every companion whose status is "shippable" (in registry order):
+    - a Burn variable  Install<Id>  (numeric, 1 if defaultSelected else 0,
+      overridable from the command line: RST-Setup.exe /quiet InstallGanttIt=1)
+    - an MsiPackage    <Id>, the pinned MSI from -PayloadDir under its exact
+      asset name, embedded, Permanent="yes" (never removed by the bundle),
+      Visible="yes" (keeps its own Add/Remove Programs entry), Vital="no" (a
+      failed companion never rolls back RST), InstallCondition
+      "Install<Id> = 1". Nothing else: no MSI properties, no transforms.
+    - a Checkbox named Install<Id> on the theme's Install page, with the
+      companion's name, Revit years and one-line description.
+  <Id> is the registry id in PascalCase: gantt-it -> GanttIt -> InstallGanttIt.
+
+  "= 1" and not the bare variable: a command-line value arrives as a
+  string, and Burn treats any non-empty string as true, so a bare
+  "InstallGanttIt" condition would install on InstallGanttIt=0.
+
+  Every payload's sha256 is checked against its pin before anything is
+  written; a missing payload or a mismatch fails the build. With zero
+  shippable companions the chain is empty and the theme has no checkboxes.
+
+  Writes (into -OutDir, normally obj\gen\, never committed):
+    Companions.g.wxs   PackageGroup "RstCompanions" + the variables
+    thm.xml            theme\RstTheme.xml with its @...@ markers filled
+
+  Runs under Windows PowerShell 5.1 and PowerShell 7.
+#>
+param(
+  [Parameter(Mandatory)][string]$Registry,
+  [Parameter(Mandatory)][string]$PayloadDir,
+  [Parameter(Mandatory)][string]$ThemeTemplate,
+  [Parameter(Mandatory)][string]$OutDir
+)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+function Esc([string]$s) { [Security.SecurityElement]::Escape($s) }
+# .NET, not Get-FileHash: MSBuild starts this under powershell.exe 5.1, and
+# when the build itself runs from pwsh 7 the inherited PSModulePath hides
+# 5.1's Microsoft.PowerShell.Utility (Get-FileHash "not recognized").
+function Get-Sha256([string]$Path) {
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $fs = [IO.File]::OpenRead($Path)
+  try { return (-join ($sha.ComputeHash($fs) | ForEach-Object { $_.ToString('x2') })) } finally { $fs.Dispose(); $sha.Dispose() }
+}
+function PascalId([string]$id) { -join ($id -split '-' | ForEach-Object { $_.Substring(0, 1).ToUpperInvariant() + $_.Substring(1) }) }
+
+$reg = Get-Content -Raw -Encoding UTF8 -Path $Registry | ConvertFrom-Json
+if ($reg.schemaVersion -ne 1) { throw "gen-companions: $Registry has schemaVersion $($reg.schemaVersion), expected 1" }
+
+$shippable = @($reg.companions | Where-Object { $_.status -eq 'shippable' })
+$skipped = @($reg.companions | Where-Object { $_.status -ne 'shippable' } | ForEach-Object { "$($_.id) ($($_.status))" })
+Write-Host "gen-companions: $Registry -> $($shippable.Count) shippable; not shipped: $(if ($skipped) { $skipped -join ', ' } else { '(none)' })"
+
+$items = @()
+foreach ($c in $shippable) {
+  if ($c.id -notmatch '^[a-z0-9]+(-[a-z0-9]+)*$') { throw "gen-companions: id '$($c.id)' is not kebab-case" }
+  $r = $c.release
+  if ($null -eq $r) { throw "gen-companions: companion '$($c.id)' is shippable but has no release" }
+  foreach ($f in 'tag', 'asset', 'sha256', 'upgradeCode', 'version') {
+    if (-not ($r.PSObject.Properties.Name -contains $f) -or [string]::IsNullOrWhiteSpace([string]$r.$f)) { throw "gen-companions: companion '$($c.id)' release has no $f" }
+  }
+  foreach ($text in $c.name, $c.description) {
+    # Theme text is a Burn formatted string ([Var] expands) and & is a mnemonic.
+    if ($text -match '[\[\]&]') { throw "gen-companions: companion '$($c.id)' name/description must not contain [ ] or &: '$text'" }
+  }
+  $msi = Join-Path $PayloadDir $r.asset
+  if (-not (Test-Path $msi -PathType Leaf)) { throw "gen-companions: payload missing for '$($c.id)': $msi (run fetch-companions.ps1)" }
+  $msi = (Resolve-Path $msi).Path
+  $actual = Get-Sha256 $msi
+  if ($actual -ne $r.sha256.ToLowerInvariant()) { throw "gen-companions: sha256 mismatch for '$($c.id)' $($r.asset): pinned $($r.sha256), payload $actual" }
+
+  $pid_ = PascalId $c.id
+  $items += [pscustomobject]@{
+    Id = $pid_; Var = "Install$pid_"; Msi = $msi; Asset = $r.asset
+    Default = $(if ($c.defaultSelected) { 1 } else { 0 })
+    Label = "$($c.name) $($r.version) (Revit $(@($c.revitYears) -join ', '))"
+    Description = [string]$c.description
+  }
+  Write-Host "gen-companions: $($c.id) -> MsiPackage $pid_ ($($r.asset), sha256 ok), variable Install$pid_ (default $(if ($c.defaultSelected) { 1 } else { 0 }))"
+}
+
+# ---- Companions.g.wxs
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.AppendLine('<?xml version="1.0" encoding="utf-8"?>')
+[void]$sb.AppendLine("<!-- GENERATED by installer-bundle/gen-companions.ps1 from $(Esc $Registry). Do not edit. -->")
+[void]$sb.AppendLine('<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">')
+[void]$sb.AppendLine('  <Fragment>')
+foreach ($i in $items) {
+  [void]$sb.AppendLine("    <Variable Name=`"$($i.Var)`" Type=`"numeric`" Value=`"$($i.Default)`" bal:Overridable=`"yes`" />")
+}
+[void]$sb.AppendLine('    <PackageGroup Id="RstCompanions">')
+foreach ($i in $items) {
+  [void]$sb.AppendLine("      <MsiPackage Id=`"$($i.Id)`" Name=`"$(Esc $i.Asset)`" SourceFile=`"$(Esc $i.Msi)`" Permanent=`"yes`" Visible=`"yes`" Vital=`"no`" InstallCondition=`"$($i.Var) = 1`" />")
+}
+[void]$sb.AppendLine('    </PackageGroup>')
+[void]$sb.AppendLine('  </Fragment>')
+[void]$sb.AppendLine('</Wix>')
+
+# ---- thm.xml
+# Install page, from the bottom up: buttons (11-34 px from the bottom), the
+# license checkbox (41-58), then one 40 px row per companion (checkbox over
+# its gray description), then a two-line header, then the license box.
+$n = $items.Count
+$companions = New-Object System.Text.StringBuilder
+$success = ''
+if ($n -eq 0) {
+  $windowHeight = 300; $eulaHeight = -70
+} else {
+  $windowHeight = 312 + 40 * $n; $eulaHeight = -(112 + 40 * $n)
+  [void]$companions.AppendLine("            <Label X=`"11`" Y=`"$(-(70 + 40 * $n))`" Width=`"-11`" Height=`"34`" FontId=`"3`" DisablePrefix=`"yes`">#(loc.CompanionsHeader)</Label>")
+  for ($row = 0; $row -lt $n; $row++) {
+    $i = $items[$row]; $k = $n - 1 - $row
+    [void]$companions.AppendLine("            <Checkbox Name=`"$($i.Var)`" X=`"11`" Y=`"$(-(85 + 40 * $k))`" Width=`"-11`" Height=`"17`" TabStop=`"yes`" FontId=`"3`">$(Esc $i.Label)</Checkbox>")
+    [void]$companions.AppendLine("            <Label X=`"29`" Y=`"$(-(66 + 40 * $k))`" Width=`"-11`" Height=`"17`" FontId=`"4`" DisablePrefix=`"yes`">$(Esc $i.Description)</Label>")
+  }
+  $success = @'
+            <Label X="11" Y="121" Width="-11" Height="51" FontId="3" DisablePrefix="yes" VisibleCondition="WixBundleAction = 3 OR WixBundleAction = 4 OR WixBundleAction = 6 OR WixBundleAction = 7 OR WixBundleAction = 8">
+                <Text>#(loc.SuccessCompanionsInstallText)</Text>
+                <Text Condition="WixBundleAction = 3">#(loc.SuccessCompanionsUninstallText)</Text>
+                <Text Condition="WixBundleAction = 4">#(loc.SuccessCompanionsUninstallText)</Text>
+            </Label>
+'@ + "`n"
+}
+
+$theme = Get-Content -Raw -Encoding UTF8 -Path $ThemeTemplate
+foreach ($marker in '@WINDOW_HEIGHT@', '@EULA_HEIGHT@', '<!--@COMPANIONS@-->', '<!--@SUCCESS_NOTE@-->') {
+  if (-not $theme.Contains($marker)) { throw "gen-companions: theme template $ThemeTemplate has no $marker" }
+}
+$theme = $theme.Replace('@WINDOW_HEIGHT@', [string]$windowHeight).Replace('@EULA_HEIGHT@', [string]$eulaHeight)
+$theme = $theme.Replace("<!--@COMPANIONS@-->`r`n", $companions.ToString()).Replace("<!--@COMPANIONS@-->`n", $companions.ToString())
+$theme = $theme.Replace("<!--@SUCCESS_NOTE@-->`r`n", $success).Replace("<!--@SUCCESS_NOTE@-->`n", $success)
+$null = [xml]$theme   # fail here, not in the BA at run time, if the result is not well-formed
+
+if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Force $OutDir | Out-Null }
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText((Join-Path $OutDir 'Companions.g.wxs'), $sb.ToString(), $utf8)
+[IO.File]::WriteAllText((Join-Path $OutDir 'thm.xml'), $theme, $utf8)
+Write-Host "gen-companions: wrote $(Join-Path $OutDir 'Companions.g.wxs') and thm.xml ($n checkbox(es), window height $windowHeight)"

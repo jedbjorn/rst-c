@@ -99,3 +99,6 @@ sign/
 
 ## Runtime-test screenshots (spec #16; uploaded by CI as RST-screenshots)
 TestResults/
+
+## Setup bundle: downloaded companion payloads (fetch-companions.ps1)
+installer-bundle/payload/

@@ -9,6 +9,11 @@ name: release
 #   3. Creates a GitHub Release with RST.msi attached, auto-generated
 #      release notes, and pre-release flag set when the tag carries a
 #      hyphenated suffix (alpha/beta/rc).
+#   4. Also attaches RST-Setup.exe (feature #13): the setup bundle, RST.msi
+#      plus the opt-in companion add-ins pinned in companions/companions.json.
+#      Its bundle version is the same numeric a.b.c; a same-version bundle
+#      (rc -> final) replaces the installed one (Burn treats an equal
+#      version as an upgrade).
 #
 # Tag → Release. Nothing else triggers a release; pushes to main do not
 # auto-tag.
@@ -59,6 +64,11 @@ jobs:
         with:
           name: RST.msi
           path: ./artifacts/
+      # The setup bundle (feature #13): RST.msi + opt-in companion add-ins.
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: ./artifacts/
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,9 +79,11 @@ jobs:
           if [[ "$tag" == *-* ]]; then
             prerel=(--prerelease)
           fi
-          # Attach RST.msi by name so a stray artifact can never ship.
+          # Attach RST.msi and RST-Setup.exe by name so a stray artifact can
+          # never ship.
           gh release create "$tag" \
             artifacts/RST.msi \
+            artifacts/RST-Setup.exe \
             --title "$tag" \
             --generate-notes \
             "${prerel[@]}"

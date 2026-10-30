@@ -1,0 +1,39 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+
+  <!--
+    RST Companion Fixture: a TEST-ONLY companion MSI for the bundle smoke
+    (feature #13 Phase 2, spec #15). NEVER shipped and never in
+    companions/companions.json: the smoke writes its own test registry that
+    marks this fixture shippable and builds a test bundle from it.
+
+    It meets the companion contract the way a real companion does (per-user,
+    stable UpgradeCode, MajorUpgrade with a downgrade block, clean silent
+    install/uninstall) but needs no Revit: it installs one text file,
+    %AppData%\RST-CompanionFixture\fixture.txt, whose content names the
+    version, so the smoke can tell which build is installed.
+
+      dotnet build installer-bundle\fixture\RST.CompanionFixture.wixproj -c Release -p:FixtureVersion=1.1.0
+      -> bin\Release\RST-CompanionFixture-1.1.0.msi
+
+    Each build gets a new ProductCode. The smoke builds 1.0.0 (older),
+    1.1.0 (the one the test bundle embeds) and 2.0.0 (newer).
+  -->
+
+  <PropertyGroup>
+    <FixtureVersion Condition="'$(FixtureVersion)' == ''">1.1.0</FixtureVersion>
+    <OutputName>RST-CompanionFixture-$(FixtureVersion)</OutputName>
+    <OutputType>Package</OutputType>
+    <Configurations>Debug;Release</Configurations>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <FixtureTxt>$(MSBuildProjectDirectory)\obj\gen\$(FixtureVersion)\fixture.txt</FixtureTxt>
+    <DefineConstants>$(DefineConstants);FixtureVersion=$(FixtureVersion);FixtureTxt=$(FixtureTxt)</DefineConstants>
+    <!-- Same per-user ICE suppressions as installer/RST.Installer.wixproj
+         (wixtoolset/issues#8633). -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+  </PropertyGroup>
+
+  <Target Name="FixtureWriteText" BeforeTargets="CoreCompile">
+    <WriteLinesToFile File="$(FixtureTxt)" Lines="RST Companion Fixture $(FixtureVersion)" Overwrite="true" />
+  </Target>
+
+</Project>

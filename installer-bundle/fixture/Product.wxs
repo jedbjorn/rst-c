@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST Companion Fixture: TEST-ONLY, never shipped (see the .wixproj).
+
+  UpgradeCode is the fixture's own stable identity, distinct from every
+  rst-c and companion code. It stays a literal GUID so the companion
+  registry test counts it as rst-c's own (a real companion can never reuse
+  it).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="RST Companion Fixture"
+           Manufacturer="Designs/OS"
+           Version="$(var.FixtureVersion)"
+           UpgradeCode="A0E85F7A-BF17-4052-AB6A-010781D8CF6D"
+           Scope="perUser"
+           Compressed="yes">
+
+    <SummaryInformation Description="Test-only companion fixture for the RST-Setup.exe bundle smoke. Never shipped." />
+
+    <!-- C3: older versions are upgraded in place; a newer installed version
+         blocks this one. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="AppDataFolder">
+      <Directory Id="FixtureDir" Name="RST-CompanionFixture" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="RST Companion Fixture" Level="1">
+      <Component Directory="FixtureDir">
+        <File Id="FixtureTxt" Name="fixture.txt" Source="$(var.FixtureTxt)" />
+      </Component>
+    </Feature>
+
+  </Package>
+
+</Wix>
