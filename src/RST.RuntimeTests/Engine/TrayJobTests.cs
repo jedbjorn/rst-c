@@ -20,6 +20,25 @@ public class TrayJobTests
 
     public TrayJobTests(ITestOutputHelper output) => _output = output;
 
+    /// <summary>
+    /// The observation, to the test output and to tray-job-route.txt beside the screenshots (CI uploads it with
+    /// RST-screenshots), so whether the seat could model the job case is on record either way.
+    /// </summary>
+    private void Note(string line)
+    {
+        _output.WriteLine(line);
+        try
+        {
+            Directory.CreateDirectory(RST.RuntimeTests.Support.Screenshots.Folder);
+            File.AppendAllText(Path.Combine(RST.RuntimeTests.Support.Screenshots.Folder, "tray-job-route.txt"),
+                $"net{Environment.Version.Major}: {line}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+            // The note is evidence, not the test.
+        }
+    }
+
     private static string? Pwsh()
     {
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
@@ -43,13 +62,13 @@ public class TrayJobTests
         // PowerShell 7 runs on .NET 8 or later: it can load the net8 engine (the R25 leg), not the net10 one.
         if (Environment.Version.Major != 8)
         {
-            _output.WriteLine("Modelled on the net8 leg only (PowerShell 7 cannot load a net10 RST.Engine).");
+            Note("not modelled: net8 leg only (PowerShell 7 cannot load a net10 RST.Engine)");
             return;
         }
         var pwsh = Pwsh();
         if (pwsh is null)
         {
-            _output.WriteLine("No pwsh.exe on PATH: not modelled here.");
+            Note("not modelled: no pwsh.exe on PATH");
             return;
         }
 
@@ -102,7 +121,7 @@ public class TrayJobTests
             Thread.Sleep(200);
             var parts = File.ReadAllText(result).Trim().Split('|');
             var route = parts[0];
-            _output.WriteLine($"route: {route}; pid: {parts[1]}; PowerShell in a job: {parts[2]}");
+            Note($"route: {route}; pid: {parts[1]}; PowerShell in a job: {parts[2]}");
             Assert.Equal("True", parts[2]);
 
             // Close the job: KILL_ON_JOB_CLOSE ends PowerShell and anything still in the job.
@@ -113,7 +132,7 @@ public class TrayJobTests
 
             if (route.StartsWith("the shell, inside Revit's job", StringComparison.Ordinal))
             {
-                _output.WriteLine("This seat allows no breakaway and has no desktop shell: the job case cannot be modelled here.");
+                Note("not modelled: this seat allows no breakaway and has no desktop shell");
                 return;
             }
 
@@ -126,6 +145,7 @@ public class TrayJobTests
                 Assert.Contains(survivors, p => p.Id == pid);
             else
                 Assert.NotEmpty(survivors); // the desktop shell does not say which process it started
+            Note($"modelled: the started process survived the job's close ({survivors.Count} running)");
             foreach (var p in survivors)
             {
                 try { p.Kill(); }
