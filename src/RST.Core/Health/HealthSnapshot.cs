@@ -1,8 +1,8 @@
 // HealthSnapshot.cs — JSON shape for the system health snapshot.
 //
 // Schema mirrors the upstream Python tool exactly (RST/app/health_scanner.py)
-// so a snapshot written here renders without changes in the existing
-// health_viewer.html UI. Field names are camelCase to match the on-disk
+// so a snapshot written by any version reads back unchanged (the Health
+// window's HealthReport renders it). Field names are camelCase to match the on-disk
 // JSON; null is the explicit "not available" marker for every measurement.
 
 using System.Collections.Generic;

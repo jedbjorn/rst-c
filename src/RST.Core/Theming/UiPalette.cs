@@ -1,5 +1,5 @@
 // Adapted from splash-it src/SplashIt.Core/Theming/UiPalette.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Core/Theming/UiPalette.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); doc comments name RST; rst-c additions: Success/SuccessSoft/SuccessBorder and Scrim keys and their contrast requirements (card "active" border, Loaded badge, success banner, busy overlay), and the requirements for the new ToggleSwitch, TabItem, TreeViewItem, card ListBoxItem, GridSplitter, busy indicator and transient banner styles.
+// Changes: namespaces (SplashIt.* to RST.*); doc comments name RST; rst-c additions: Success/SuccessSoft/SuccessBorder and Scrim keys and their contrast requirements (card "active" border, Loaded badge, success banner, busy overlay), and the requirements for the new ToggleSwitch, TabItem, TreeViewItem, card ListBoxItem, GridSplitter, busy indicator and transient banner styles; the Health window's CautionText key and HealthRequirements (severity colors, range pills).
 
 using System.Globalization;
 
@@ -127,6 +127,11 @@ public static class UiPalette
     /// <summary>The translucent wash behind a window's busy overlay (decorative; never under text).</summary>
     public const string Scrim = "ScrimBrush";
 
+    // Health window additions (spec #16, WU2).
+
+    /// <summary>The Health tab's soft-warning severity (warn-soft): text, dots and sub-lines, between OK and WarningText.</summary>
+    public const string CautionText = "CautionTextBrush";
+
     /// <summary>
     /// Light: gantt-it's original palette. Accent and danger keep one hue for fills
     /// and for text; tooltips and scroll bars keep the Windows (Aero2) colors they had.
@@ -177,7 +182,9 @@ public static class UiPalette
         (Success, "#187534"),
         (SuccessSoft, "#EAF6EE"),
         (SuccessBorder, "#9CD1AC"),
-        (Scrim, "#59000000"));
+        (Scrim, "#59000000"),
+        // Health window additions.
+        (CautionText, "#716500"));
 
     /// <summary>
     /// Dark: neutral blue-greys that sit with Revit's dark frame. Filled accent and
@@ -231,7 +238,9 @@ public static class UiPalette
         (Success, "#5CC98A"),
         (SuccessSoft, "#1F3A2B"),
         (SuccessBorder, "#3C7A55"),
-        (Scrim, "#8C000000"));
+        (Scrim, "#8C000000"),
+        // Health window additions.
+        (CautionText, "#DDC650"));
 
     /// <summary>The palette for <paramref name="theme"/>: resource key to color.</summary>
     public static IReadOnlyDictionary<string, UiColor> For(UiTheme theme) =>
@@ -255,6 +264,19 @@ public static class UiPalette
         .. NonText3(CheckFill, [Window, SurfaceAlt, Hover], "toggle switch track when on"),
         .. NonText3(CheckFillHover, [Window, SurfaceAlt, Hover], "toggle switch track when on, under the pointer"),
         .. NonText3(AccentForeground, [Hover, SurfaceAlt], "selected tab underline, selected card border, busy indicator"),
+    ];
+
+    /// <summary>
+    /// Health window additions (spec #16, WU2; declared before <see cref="Requirements"/>, which includes
+    /// them): the severity colors on the section rows, stat cards and section headers (dots, also under
+    /// the pointer), and the range pills' selected state.
+    /// </summary>
+    public static IReadOnlyList<ContrastRequirement> HealthRequirements { get; } =
+    [
+        .. Text4(CautionText, [Window, Surface, SurfaceAlt, Hover], "soft-warning values and sub-lines, severity dot"),
+        .. NonText3(WarningText, [Hover], "warning severity dot in a section header under the pointer"),
+        .. NonText3(Error, [Hover], "danger severity dot in a section header under the pointer"),
+        .. NonText3(AccentForeground, [AccentSoft], "selected range pill outline"),
     ];
 
     /// <summary>
@@ -284,6 +306,7 @@ public static class UiPalette
         new(CheckMark, CheckFillHover, 3, "check mark under the pointer"),
         new(ScrollGlyph, ScrollTrack, 3, "scroll bar arrows"),
         .. RstRequirements,
+        .. HealthRequirements,
     ];
 
     private static IEnumerable<ContrastRequirement> NonText3(string foreground, string[] backgrounds, string use) =>
