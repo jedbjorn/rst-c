@@ -139,13 +139,33 @@ If RST, or Gantt-It or Splash-It, is installed for everyone on the PC, a tray ru
 
 ## Quitting it
 
-Right-click the RST icon in the notification area and choose **Quit**. It starts again the next time you sign in.
+Right-click the RST icon in the notification area and choose **Quit**. Quitting lasts until Revit next starts, or until you next sign in: either one starts the tray again. To stop it for good, switch RST off in Task Manager (see the next section); Revit respects that switch too.
 
 Nothing in Revit depends on the tray. RST in Revit, including the Profile Loader, works the same with the tray closed.
 
 ## Stopping it starting at sign-in
 
-Open **Task Manager**, go to **Startup apps**, select **RST** and choose **Disable**. Windows remembers that choice. Choose **Enable** to undo it.
+Open **Task Manager**, go to **Startup apps**, select **RST** and choose **Disable**. Windows remembers that choice, and Revit then no longer starts the tray either. Choose **Enable** to undo it.
+
+## Revit starts the tray
+
+When Revit 2025 or later starts with RST, RST checks once whether your tray is running and starts it if not, in the background, without waiting for it and without delaying Revit. One line in RST's session log says what happened (`Tray: …`). It does not start the tray when:
+
+- the tray already runs for you;
+- RST is switched off in Task Manager's Startup apps (the switch of the install that is there: per-user or for everyone);
+- Revit was run as administrator: the tray never runs elevated;
+- the tray is not installed at its fixed place, `%LocalAppData%\Programs\RST\Tray\` or `C:\Program Files\RST\Tray\`. RST never takes that path from a profile, a setting or the registry.
+
+**IT note (job objects).** When Revit runs inside a Windows job object (a deployment launcher, an app-virtualisation wrapper, a sandbox), RST starts the tray outside that job if the job allows it, with your normal environment rather than Revit's. If the job forbids that, Explorer starts it instead. So closing the job does not end the tray. Only with neither available does the tray start inside the job, and the log line says so.
+
+## Add-ins page
+
+The **Add-ins** page switches your profile and add-ins before you start Revit, with the Profile Loader's own switching: the same plan in **Confirm Add-in Changes**, the same report, the same record of what RST switched off, and the Loader's **Adopt RSTify Presets?** question the first time a profile with presets is used. Per installed Revit year it lists what RST switched off and what it can't switch back on. **Restore All Add-ins** switches back on only what RST switched off. Every change applies the next time that Revit starts. If a Revit is open, the report says so: restart it to see the change.
+
+Things to know when Revits of several years are open:
+
+- The active profile is one file for all years. An open Revit keeps the profile tab it built until it restarts, but its RSTify button reads the hidden tabs of the profile you just applied.
+- Revit writes its add-in settings file while it starts. An Apply made while a Revit of that year is starting can be overwritten by it, even though the report says it was done. Apply again once that Revit is up. The Profile Loader in another year behaves the same.
 
 ## Turning update checks off for everyone (IT)
 
