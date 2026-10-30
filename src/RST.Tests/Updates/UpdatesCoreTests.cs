@@ -315,7 +315,11 @@ public class ProductCatalogTests
         var good = catalog.Find("good")!;
         good.UpgradeCodes.Should().Equal("11111111-2222-3333-4444-555555555555");
         good.AddinClientId.Should().Be("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "braces stripped, lower-cased");
-        logged.Should().HaveCount(6, "each unidentifiable shippable entry is logged; in_development and retired are silent");
+        // F17 WU4: "good" has no pinned asset and no hard-coded pattern for its id, so it is detected and checked but
+        // never installed (logged once more).
+        good.IsInstallable.Should().BeFalse();
+        logged.Should().HaveCount(7, "each unidentifiable shippable entry is logged; in_development and retired are silent");
+        logged.Should().ContainSingle(l => l.Contains("good has no known asset name"));
     }
 
     [Theory]
