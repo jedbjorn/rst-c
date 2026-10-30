@@ -53,6 +53,16 @@ public sealed class ProfileSaveService
             return SaveOutcome.Fail("Tab name required");
         }
 
+        // Feature #18 (decision #28): a stack no panel slot refers to is not written, and a placed
+        // stack of 4+ tools refuses the save with a message naming its panel.
+        foreach (var orphan in PanelStacks.PruneUnreferenced(profile))
+            _log.Warning(null, "Builder.save_profile: stack {Stack} is not on any panel; not written for {Name}", orphan, profile.ProfileName);
+        if (PanelStacks.SaveBlocker(profile) is { } blocker)
+        {
+            _log.Warning(null, "Builder.save_profile: {Name} refused: {Blocker}", profile.ProfileName, blocker);
+            return SaveOutcome.Fail(blocker);
+        }
+
         if (string.IsNullOrEmpty(profile.Id)) profile.Id = Guid.NewGuid().ToString();
         if (string.IsNullOrEmpty(profile.ExportDate)) profile.ExportDate = _utcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
