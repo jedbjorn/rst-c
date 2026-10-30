@@ -2,12 +2,13 @@
 // the Loader, WU4 in the Builder). Ports profile_loader.html renderTabPreview (1173-1217) and
 // profile_builder.html renderPreview (2255-2307): panels tinted with the profile color at the
 // effective opacity, tool slots with their pack icon (Planner default 9, both pages) or ⬜, stacks
-// as columns of "≡" rows, "Empty" panels and "No panels configured". Builder mode labels tools by
+// as columns of rows, "Empty" panels and "No panels configured". Builder mode labels tools by
 // name and shows empty stacks as "(empty)". The canvas follows the window theme, not the OS.
 // Stacks (feature #15, spec #17) draw as the ribbon draws them: a row per tool with its 16 px pack
 // icon (or the ribbon's own default_16.png) and a one-line label. The Loader draws a stack only
 // when the ribbon would (RibbonLayoutPlanner: 2 or 3 valid tools), with the tools the ribbon draws;
-// the Builder draws every stack in the profile, faded when the ribbon would skip it.
+// the Builder draws each stack's tools as the profile holds them (it only opens profiles that pass
+// validation, which applies the planner's rules, so the two agree).
 
 using System.IO;
 using System.Windows;
@@ -269,12 +270,6 @@ public partial class RibbonPreview : UserControl
         }
         foreach (var tool in tools)
             if (tool is not null) column.Children.Add(StackRow(RibbonLayoutPlanner.SingleLine(tool.Name), tool, dim: false));
-        if (planned is null)
-        {
-            // Being authored, but the ribbon would skip it (fewer than 2 or more than 3 valid tools).
-            column.Opacity = 0.55;
-            column.ToolTip = UiStrings.Preview_StackNotDrawn;
-        }
         return column;
     }
 

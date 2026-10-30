@@ -313,8 +313,8 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   `OverrideOpacity`, `Mode` (`Loader` or `Builder`: tool labels by name, "(empty)" stacks,
   "No panels configured.") and `TopBarContent`; bump `Revision` or call `Refresh()` after editing
   the profile in place. Stack rows draw the tools' pack icons at 16 px. The Loader draws a stack
-  only when the ribbon would (`RibbonLayoutPlanner.PlanStack`); the Builder draws every stack,
-  faded when the ribbon would skip it.
+  only when the ribbon would (`RibbonLayoutPlanner.PlanStack`); the Builder draws each stack's
+  tools as the profile holds them (it only opens profiles that pass validation).
 - **Theme.xaml "Loader" block:** `LoaderLink` (Hyperlink: accent text, underlined on hover; its
   contrast is in `UiPalette.Requirements`), `LoaderStrip` (header and footer strips), `LoaderRow`
   (list rows with a divider).
@@ -474,9 +474,11 @@ feature #18 (decision #19); the authoring built for #15 is recorded for it at co
   ignores edits), because the name is the only link to `profile.stacks`. Deleting a stack slot
   leaves an orphan, which `ProfileSaveService` drops from the file and the view-model then drops
   from the editor. The Live Preview draws the stacks (`RibbonPreview`).
-- **The default 16 px icon:** `Assets/icons/default_16.png` (RST.Engine) is the 32 px default's
-  translucent tile with a ≡ glyph. `IconAssets.Default16` uses it on the ribbon and
-  `PackIcons.Default16` loads the same file for the previews' stack rows, so they agree.
+- **The default icons:** `Assets/icons/default_16.png` and `default_32.png` (RST.Engine) are the
+  icon pack's opaque `#D9D9D9` tile with `#3C3C3C` ≡ bars, readable on any panel colour, opacity
+  and theme. `IconAssets.Default16`/`Default32` use them on the ribbon, and `PackIcons.Default16`
+  loads the same 16 px file for the previews' stack rows, so they agree. (The previews still draw
+  a large tool without an icon as ⬜.)
 - **Tests:** `RST.Tests` (`RibbonLayoutPlannerTests`, `StackValidationTests` with
   `Fixtures/Profiles/stacks.json`) and `RST.RuntimeTests` (`RibbonItemFactoryTests`,
   `ProfileBuilderStackTests` over the real backend, `ProfileBuilderStackWindowTests`, and the

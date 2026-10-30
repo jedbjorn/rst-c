@@ -1002,7 +1002,4 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_StackSlotNameTip" xml:space="preserve">
     <value>A stack's name links this row to the stack, so it can't be changed here.</value>
   </data>
-  <data name="Preview_StackNotDrawn" xml:space="preserve">
-    <value>Not drawn on the ribbon: a stack needs 2 or 3 tools.</value>
-  </data>
 </root>

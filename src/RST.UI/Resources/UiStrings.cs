@@ -651,6 +651,4 @@ public static class UiStrings
     // Stacks (feature #15, spec #17): kept and drawn, not authored in the Builder yet (feature #18).
 
     public static string Builder_StackSlotNameTip => Get(nameof(Builder_StackSlotNameTip));
-
-    public static string Preview_StackNotDrawn => Get(nameof(Preview_StackNotDrawn));
 }
