@@ -1,15 +1,16 @@
 // rst-c's own (not vendored): what the Profile Builder view-model reads and writes (spec #16,
-// WU4), in place of the Builder's LoaderBridge calls: get_catalog, get_profiles,
+// WU4), replacing the retired LoaderBridge's Builder calls: get_catalog, get_profiles,
 // get_active_profile, get_revit_version, get_addin_lookup, get_all_tabs, save_profile,
-// export_profile, load_profile (the auto-reload), and the machine-wide branding
+// export_profile, load_profile (the auto-reload), list_iconpack, and the machine-wide branding
 // (load_default_branding, save_default_branding_url, pick_logo_file, clear_default_logo).
-// The real backend composes the same RST.Core services the bridge and the WPF Loader call.
+// The real backend composes the same RST.Core services the WPF Loader calls.
 
 using System.IO;
 using RST.Core.Builder;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Ribbon;
 using RST.Core.Scanning;
 using RST.UI.Loader;
 using Serilog;
@@ -59,6 +60,9 @@ public interface IProfileBuilderBackend
 
     /// <summary>The auto-reload after saving the active profile. The add-in renames run off the calling (UI) thread.</summary>
     Task<LoadResult> LoadAsync(LoadRequest request);
+
+    /// <summary>The icon pack catalogue (one entry per design with a complete color set); empty when the pack is missing.</summary>
+    IReadOnlyList<IconPackEntry> GetIconPack();
 }
 
 /// <summary>The real backend: %AppData%\RST, the shipped lookup, and the running Revit's add-in folders.</summary>
@@ -157,6 +161,12 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
         }
     }
 
+    /// <summary>
+    /// list_iconpack (LB:465-505): the shipped pack's catalogue. A missing folder gives an empty
+    /// list (logged); a design without a complete color set is left out (logged).
+    /// </summary>
+    public IReadOnlyList<IconPackEntry> GetIconPack() => IconPackSource.Read(LoaderAssets.IconPackDirectory);
+
     public async Task<LoadResult> LoadAsync(LoadRequest request)
     {
         // As the Loader (spec #16, Planner default 8): files on the UI thread, the .addin renames
@@ -165,5 +175,31 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
         if (start.Failure is not null) return start.Failure;
         var passes = await Task.Run(() => _load.RunAddinPasses(start));
         return _load.Finish(start, passes);
+    }
+}
+
+/// <summary>The icon pack catalogue as the picker reads it (LoaderBridge.ListIconpackCore without the JSON).</summary>
+public static class IconPackSource
+{
+    public static IReadOnlyList<IconPackEntry> Read(string dir)
+    {
+        try
+        {
+            var catalogue = IconPack.BuildCatalogue(dir);
+            if (!catalogue.DirectoryExists)
+            {
+                Log.Warning("Builder.list_iconpack: missing pack dir {Dir}", dir);
+                return [];
+            }
+            foreach (var name in catalogue.IncompleteNames)
+                Log.Warning("Builder.list_iconpack: {Name} omitted — incomplete color-variant set in {Dir}", name, dir);
+            Log.Information("Builder.list_iconpack OK: {Count} icons from {Dir}", catalogue.Entries.Count, dir);
+            return catalogue.Entries;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Builder.list_iconpack threw");
+            return [];
+        }
     }
 }

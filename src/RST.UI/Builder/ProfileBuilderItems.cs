@@ -2,7 +2,7 @@
 // dropdown's options, the catalogue tree's nodes (built once; a filter only updates counts and
 // which children show), the panel cards and their slot rows. Panel and slot edits write straight
 // into the profile, as the page's inputs did, and tell the window's view-model so the live
-// preview redraws.
+// preview redraws. Cards and rows carry their drag-and-drop markers (WU5).
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -277,6 +277,15 @@ public sealed class PanelCardViewModel : ObservableObject
         internal set => SetField(ref _isSelected, value);
     }
 
+    /// <summary>The drag feedback on the card: a line above or below it (panels), or the whole card (commands, slots).</summary>
+    public DropMarker DropMarker
+    {
+        get => _dropMarker;
+        internal set => SetField(ref _dropMarker, value);
+    }
+
+    private DropMarker _dropMarker;
+
     public ICommand SelectCommand { get; }
 
     public ICommand MoveUpCommand { get; }
@@ -361,7 +370,25 @@ public sealed class SlotRowViewModel : ObservableObject
 
     public ICommand PickIconCommand { get; }
 
-    /// <summary>After the slot's icon changed (the icon picker, WU5).</summary>
+    /// <summary>The drag feedback on the row: a line above or below it.</summary>
+    public DropMarker DropMarker
+    {
+        get => _dropMarker;
+        internal set => SetField(ref _dropMarker, value);
+    }
+
+    private DropMarker _dropMarker;
+
+    /// <summary>The row being dragged (drawn faded, <c>.drag-source</c>).</summary>
+    public bool IsDragSource
+    {
+        get => _isDragSource;
+        internal set => SetField(ref _isDragSource, value);
+    }
+
+    private bool _isDragSource;
+
+    /// <summary>After the slot's icon changed (the icon picker).</summary>
     internal void IconChanged()
     {
         OnPropertyChanged(nameof(IconLabel));

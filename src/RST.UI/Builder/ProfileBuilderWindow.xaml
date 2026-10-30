@@ -5,7 +5,9 @@
     the header (profile dropdown, "Profile Builder", Branding ▾ with its popover, Name, Tab, Export ZIP,
     Save, Exit), three panes (the 340 px Commands tree with its count and filter, the Panels list with
     + Add Panel and the panel cards, the 340 px Properties pane), the Live Preview strip at the bottom,
-    and the toast on top.
+    and the toast on top. WU5 adds drag and drop (catalogue → panel or slot, slot reorder and move,
+    panel reorder, with the drop-before / drop-after / drag-over markers), the icon picker overlay,
+    and the RST Presets and Junk Cleanup modals behind the Configure buttons.
 -->
 <Window x:Class="RST.UI.Builder.ProfileBuilderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -14,7 +16,7 @@
         xmlns:controls="clr-namespace:RST.UI.Controls"
         xmlns:mvvm="clr-namespace:RST.UI.Mvvm"
         xmlns:builder="clr-namespace:RST.UI.Builder"
-        xmlns:core="clr-namespace:RST.Core.Loader;assembly=RST.Core"
+        xmlns:core="clr-namespace:RST.Core.Builder;assembly=RST.Core"
         Title="{x:Static res:UiStrings.Builder_WindowTitle}"
         Width="1450" Height="900" MinWidth="1100" MinHeight="600"
         ResizeMode="CanResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
@@ -37,6 +39,49 @@
                 <Style.Triggers>
                     <Trigger Property="Tag" Value="">
                         <Setter Property="Visibility" Value="Visible" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- The Branding ▾ toggle: the kit's Button look (flat, bordered, hover, pressed); checked while the popover is open. -->
+            <Style x:Key="BrandingToggle" TargetType="ToggleButton">
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="12,4" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="MinWidth" Value="28" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="Chrome" CornerRadius="3" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                    SnapsToDevicePixels="True">
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                  RecognizesAccessKey="True" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="{StaticResource PressedBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter Property="Background" Value="{StaticResource PressedBrush}" />
                     </Trigger>
                 </Style.Triggers>
             </Style>
@@ -93,6 +138,32 @@
                 </Setter>
             </Style>
 
+            <!--
+                A drop marker over a card or a slot row (the page's drop-before / drop-after / drag-over
+                classes): a 2 px success-colored line above or below the target, or around it. It is an
+                overlay, so the layout never shifts (gantt-it's row-border approach).
+            -->
+            <Style x:Key="DropMarkerBorder" TargetType="Border">
+                <Setter Property="IsHitTestVisible" Value="False" />
+                <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Before}">
+                        <Setter Property="BorderThickness" Value="0,2,0,0" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.After}">
+                        <Setter Property="BorderThickness" Value="0,0,0,2" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Over}">
+                        <Setter Property="BorderThickness" Value="2" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
             <!-- A catalogue node: groups (native group, tab, panel) with a count pill; commands with their short id. -->
             <HierarchicalDataTemplate x:Key="CatalogNodeTemplate" DataType="{x:Type builder:CatalogNodeViewModel}"
                                       ItemsSource="{Binding Children}">
@@ -105,7 +176,8 @@
                         <TextBlock x:Name="GroupLabel" Text="{Binding Label}" FontWeight="SemiBold" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" />
                     </DockPanel>
-                    <DockPanel x:Name="CommandRow" Background="Transparent" Visibility="Collapsed" ToolTip="{Binding ToolTip}">
+                    <DockPanel x:Name="CommandRow" Background="Transparent" Visibility="Collapsed" ToolTip="{Binding ToolTip}"
+                               PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove">
                         <DockPanel.InputBindings>
                             <MouseBinding Gesture="LeftDoubleClick"
                                           Command="{Binding DataContext.AddCatalogCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -154,9 +226,16 @@
                         <Rectangle Width="1" Height="20" Fill="{StaticResource DividerBrush}" Margin="16,0" />
 
                         <!-- Branding ▾ and its popover (machine-wide branding, not part of the profile). -->
-                        <Button x:Name="BrandingButton" Command="{Binding ToggleBrandingCommand}" PreviewMouseLeftButtonDown="OnBrandingButtonDown"
-                                ToolTip="{x:Static res:UiStrings.Builder_BrandingTip}" AutomationProperties.AutomationId="Builder.Branding"
-                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_Branding}">
+                        <!--
+                            The standard WPF pattern for a button that opens a StaysOpen=False popup: a ToggleButton
+                            checked with the popup, and not hit-testable while it is open, so the click that
+                            dismisses the popup cannot reach the button and reopen it (VM finding D2).
+                        -->
+                        <ToggleButton x:Name="BrandingButton" Style="{StaticResource BrandingToggle}"
+                                      IsChecked="{Binding IsOpen, ElementName=BrandingPopup, Mode=TwoWay}"
+                                      IsHitTestVisible="{Binding IsOpen, ElementName=BrandingPopup, Converter={StaticResource InverseBool}}"
+                                      ToolTip="{x:Static res:UiStrings.Builder_BrandingTip}" AutomationProperties.AutomationId="Builder.Branding"
+                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_Branding}">
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse x:Name="BrandingDot" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
                                          StrokeThickness="1" AutomationProperties.AutomationId="Builder.BrandingDot">
@@ -176,9 +255,10 @@
                                 <TextBlock Text="{x:Static res:UiStrings.Builder_Branding}" VerticalAlignment="Center" />
                                 <TextBlock Text="▾" Margin="6,0,0,0" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                             </StackPanel>
-                        </Button>
+                        </ToggleButton>
                         <Popup x:Name="BrandingPopup" PlacementTarget="{Binding ElementName=BrandingButton}" Placement="Bottom"
                                VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" Closed="OnBrandingClosed"
+                               PreviewKeyDown="OnBrandingPopoverKey"
                                IsOpen="{Binding IsBrandingOpen, Mode=TwoWay}">
                             <Border x:Name="BrandingPopover" Width="320" Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1" CornerRadius="5" Padding="16,14"
@@ -331,7 +411,8 @@
                                           AutomationProperties.Name="{x:Static res:UiStrings.Builder_Panels}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type builder:PanelCardViewModel}">
-                                        <Grid Margin="0,0,0,14" AutomationProperties.Name="{Binding Name}">
+                                        <Grid x:Name="CardRoot" Margin="0,0,0,14" AutomationProperties.Name="{Binding Name}" AllowDrop="True"
+                                              DragOver="OnPanelDragOver" DragLeave="OnDragLeave" Drop="OnPanelDrop">
                                             <Border x:Name="Card" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                                                     BorderThickness="1" CornerRadius="6" SnapsToDevicePixels="True">
                                                 <Border.InputBindings>
@@ -341,7 +422,9 @@
                                                     <Border Height="3" Background="{Binding ColorBrush}" CornerRadius="5,5,0,0"
                                                             AutomationProperties.AutomationId="Builder.PanelStripe" />
                                                     <Border Background="{StaticResource SurfaceAltBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                                            BorderThickness="0,0,0,1" Padding="12,8">
+                                                            BorderThickness="0,0,0,1" Padding="12,8" Cursor="SizeAll"
+                                                            PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove"
+                                                            AutomationProperties.AutomationId="Builder.PanelHeader">
                                                         <DockPanel>
                                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                                 <TextBlock Text="{Binding SlotCount}" Style="{StaticResource MutedText}" FontSize="11"
@@ -357,6 +440,7 @@
                                                                         AutomationProperties.Name="{x:Static res:UiStrings.Builder_DeletePanelTip}" />
                                                             </StackPanel>
                                                             <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" FontWeight="SemiBold" FontSize="13"
+                                                                     PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
                                                                      AutomationProperties.AutomationId="Builder.PanelName"
                                                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
                                                         </DockPanel>
@@ -369,8 +453,11 @@
                                                             <ItemsControl ItemsSource="{Binding Slots}" Focusable="False">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type builder:SlotRowViewModel}">
+                                                                        <Grid x:Name="SlotRow" Margin="0,0,0,6" AllowDrop="True" Background="Transparent"
+                                                                              DragOver="OnSlotDragOver" DragLeave="OnDragLeave" Drop="OnSlotDrop"
+                                                                              PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove">
                                                                         <Border Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                                                                BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,6"
+                                                                                BorderThickness="1" CornerRadius="4" Padding="8,4"
                                                                                 AutomationProperties.Name="{Binding Name}">
                                                                             <DockPanel>
                                                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -411,10 +498,19 @@
                                                                                     <TextBlock Text="{Binding TypeTag}" Style="{StaticResource MutedText}" FontSize="10" />
                                                                                 </Border>
                                                                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                                         PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
                                                                                          AutomationProperties.AutomationId="Builder.SlotName"
                                                                                          AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
                                                                             </DockPanel>
                                                                         </Border>
+                                                                        <Border Style="{StaticResource DropMarkerBorder}" CornerRadius="4"
+                                                                                AutomationProperties.AutomationId="Builder.SlotDropMarker" />
+                                                                        </Grid>
+                                                                        <DataTemplate.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsDragSource}" Value="True">
+                                                                                <Setter TargetName="SlotRow" Property="Opacity" Value="0.4" />
+                                                                            </DataTrigger>
+                                                                        </DataTemplate.Triggers>
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
                                                             </ItemsControl>
@@ -425,6 +521,8 @@
                                             <!-- The selected card's ring, over the border (no layout shift). -->
                                             <Border x:Name="Ring" BorderBrush="{StaticResource AccentForegroundBrush}" BorderThickness="2" CornerRadius="6"
                                                     IsHitTestVisible="False" Visibility="Collapsed" AutomationProperties.AutomationId="Builder.PanelRing" />
+                                            <Border Style="{StaticResource DropMarkerBorder}" CornerRadius="6"
+                                                    AutomationProperties.AutomationId="Builder.PanelDropMarker" />
                                         </Grid>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
@@ -534,7 +632,7 @@
                                         <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsHelp}" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding PresetsSummary}" Margin="0,6,0,0" TextWrapping="Wrap"
                                                    AutomationProperties.AutomationId="Builder.PresetsSummary" />
-                                        <Button Content="{x:Static res:UiStrings.Builder_Configure}" Command="{Binding ConfigurePresetsCommand}"
+                                        <Button x:Name="ConfigurePresets" Content="{x:Static res:UiStrings.Builder_Configure}" Command="{Binding ConfigurePresetsCommand}"
                                                 HorizontalAlignment="Left" Margin="0,10,0,0" AutomationProperties.AutomationId="Builder.ConfigurePresets" />
                                     </StackPanel>
                                 </Border>
@@ -570,6 +668,8 @@
             </Border>
         </Grid>
 
+        <controls:IconPicker x:Name="IconPickerOverlay" DataContext="{Binding IconPicker}"
+                             Visibility="{Binding DataContext.IsIconPickerOpen, ElementName=Root, Converter={StaticResource BoolToVisible}}" />
         <ContentControl Style="{StaticResource TransientBanner}" Content="{Binding Toast}" />
     </Grid>
 </Window>

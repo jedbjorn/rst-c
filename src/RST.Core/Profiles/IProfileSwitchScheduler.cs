@@ -1,7 +1,7 @@
-// IProfileSwitchScheduler.cs — abstraction so the WebView2 bridge can
-// trigger a live ribbon rebuild without RST.UI taking a Revit API
+// IProfileSwitchScheduler.cs — abstraction so the WPF Loader and Builder
+// can trigger a live ribbon rebuild without RST.UI taking a Revit API
 // dependency. The Revit-bound implementation lives in RST.Engine
-// (ProfileSwitchScheduler), wired up at LoaderCommand.Execute time.
+// (ProfileSwitchScheduler), handed over by LoaderCommand / BuilderCommand.
 
 namespace RST.Core.Profiles;
 

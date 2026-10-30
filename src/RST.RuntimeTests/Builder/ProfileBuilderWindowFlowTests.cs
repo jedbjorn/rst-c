@@ -104,6 +104,13 @@ public class ProfileBuilderWindowFlowTests
             Assert.False(o.Closed);
             Assert.True(o.Window.IsVisible);
             Assert.Equal("Tab name required.", o.Window.Model.Toast.Text);
+
+            // Nothing was approved: a second ✕ asks again (WU4 re-review nit).
+            o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Cancel);
+            o.Window.Close();
+            Settle();
+            Assert.Equal(2, o.Dialogs.ChooseCalls.Count);
+            Assert.False(o.Closed);
         }
         finally
         {
@@ -223,6 +230,117 @@ public class ProfileBuilderWindowFlowTests
         }
         finally
         {
+            Cleanup(o);
+        }
+    });
+
+    // ── the Branding popover (VM finding D2: the ToggleButton pattern; the Pick… note, WU5) ──
+
+    /// <summary>Branding ▾ toggled the way a click or Space does (the ToggleButton's own toggle).</summary>
+    private static void ToggleBranding(ProfileBuilderWindow w)
+    {
+        var peer = new System.Windows.Automation.Peers.ToggleButtonAutomationPeer(w.BrandingButton);
+        ((System.Windows.Automation.Provider.IToggleProvider)peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle)).Toggle();
+        Settle();
+    }
+
+    /// <summary>What a mouse press at the button's centre would hit (null when nothing hit-testable is there).</summary>
+    private static DependencyObject? HitAtBrandingButton(ProfileBuilderWindow w)
+    {
+        var centre = w.BrandingButton.TranslatePoint(new Point(w.BrandingButton.ActualWidth / 2, w.BrandingButton.ActualHeight / 2), w);
+        return w.InputHitTest(centre) as DependencyObject;
+    }
+
+    private static bool IsUnder(DependencyObject? hit, DependencyObject ancestor)
+    {
+        for (var d = hit; d is not null; d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+            if (ReferenceEquals(d, ancestor)) return true;
+        return false;
+    }
+
+    [Fact]
+    public void Branding_toggle_follows_the_popup_and_ignores_the_mouse_while_it_is_open() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var w = o.Window;
+            Assert.True(IsUnder(HitAtBrandingButton(w), w.BrandingButton), "closed: a press at the button reaches it");
+
+            ToggleBranding(w);
+            Assert.True(w.BrandingPopup.IsOpen, "the toggle opens the popover");
+            Assert.True(w.BrandingButton.IsChecked);
+            Assert.True(w.Model.IsBrandingOpen);
+            Assert.False(w.BrandingButton.IsHitTestVisible, "while open the button ignores the mouse");
+            Assert.False(IsUnder(HitAtBrandingButton(w), w.BrandingButton),
+                "a press at the button cannot reach it, so the press that dismisses the popup cannot reopen it (D2)");
+
+            // That press is an outside click for the StaysOpen=False popup, which closes itself: everything follows.
+            w.BrandingPopup.IsOpen = false;
+            Settle();
+            Assert.False(w.BrandingButton.IsChecked);
+            Assert.False(w.Model.IsBrandingOpen);
+            Assert.True(w.BrandingButton.IsHitTestVisible);
+            Assert.True(IsUnder(HitAtBrandingButton(w), w.BrandingButton));
+
+            // Keyboard (Space / Enter on the focused toggle) opens and closes it too.
+            ToggleBranding(w);
+            Assert.True(w.BrandingPopup.IsOpen);
+            ToggleBranding(w);
+            Assert.False(w.BrandingPopup.IsOpen);
+            Assert.False(w.Model.IsBrandingOpen);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_in_the_popover_closes_it() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var w = o.Window;
+            ToggleBranding(w);
+            Assert.True(w.BrandingPopup.IsOpen);
+            var args = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(w.BrandingUrlBox) ?? PresentationSource.FromVisual(w)!, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+            };
+            w.BrandingUrlBox.RaiseEvent(args);
+            Settle();
+            Assert.True(args.Handled);
+            Assert.False(w.BrandingPopup.IsOpen);
+            Assert.False(w.BrandingButton.IsChecked);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
+    public void The_popover_reopens_after_the_logo_file_dialog() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            ToggleBranding(o.Window);
+            Assert.True(o.Window.BrandingPopup.IsOpen);
+            o.Dialogs.OpenResult = @"C:\logo.png";
+            o.Dialogs.DuringOpen = () => o.Window.BrandingPopup.IsOpen = false; // the dialog takes the focus
+            o.Window.Model.PickLogoCommand.Execute(null);
+            Settle();
+            Assert.True(o.Window.BrandingPopup.IsOpen, "the popover is back for the URL");
+            Assert.True(o.Window.BrandingButton.IsChecked, "the toggle follows the popup");
+            Assert.Equal("branding.png", o.Window.LogoName.Text);
+        }
+        finally
+        {
+            o.Window.Model.IsBrandingOpen = false;
             Cleanup(o);
         }
     });

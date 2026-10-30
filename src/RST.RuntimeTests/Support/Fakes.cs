@@ -1,6 +1,6 @@
 // Adapted from splash-it tests/SplashIt.RuntimeTests/Support/Fakes.cs (splash-it commit ba86a71), MIT, same owner.
 // Changes: namespaces (SplashIt.* to RST.*); FakeDialogs and TempFolder only (splash-it's FakeHost fakes its settings host, which rst-c does not have);
-// FakeDialogs answers Choose (the three-way prompt).
+// FakeDialogs answers Choose (the three-way prompt) and can act while the Open dialog shows.
 
 using System.IO;
 using RST.Core.Colors;
@@ -54,9 +54,13 @@ public sealed class FakeDialogs : IDialogService
         return PickResults.Count > 0 ? PickResults.Dequeue() : null;
     }
 
+    /// <summary>Runs while the Open dialog is "showing" (e.g. what the dialog does to the window behind it).</summary>
+    public Action? DuringOpen { get; set; }
+
     public string? OpenFile(string title, string filter)
     {
         OpenCalls++;
+        DuringOpen?.Invoke();
         return OpenResult;
     }
 

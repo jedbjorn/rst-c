@@ -1,13 +1,12 @@
 // ProfileSwitchScheduler.cs — IExternalEvent shim that drives a live
 // profile rebuild on Revit's UI thread.
 //
-// Why an ExternalEvent: WebView2 bridge callbacks run on whatever
-// thread the COM marshaller picks; AdWindows mutations require the
-// Revit UI thread. ExternalEvent.Raise() is the blessed mechanism for
-// "do this on the UI thread when Revit's main loop is pumping" — it
-// queues the work and fires the handler on the next idle tick after
-// the modal Loader window closes (LoaderBridge calls Schedule before
-// the UI returns to JS, JS then closes the window).
+// Why an ExternalEvent: the Loader and Builder windows are modal, and
+// AdWindows mutations must run on the Revit UI thread when Revit's main
+// loop is pumping. ExternalEvent.Raise() is the blessed mechanism for
+// that — it queues the work and fires the handler on the next idle tick
+// after the modal window closes (the window's view-model calls Schedule,
+// then the window closes).
 //
 // Lifetime: one instance per Revit session, created at OnStartup and
 // disposed at OnShutdown. NOT scoped to a single LoaderCommand

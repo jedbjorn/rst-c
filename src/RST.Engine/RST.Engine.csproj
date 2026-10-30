@@ -17,7 +17,7 @@
     <AssemblyName>RST.Engine</AssemblyName>
     <IsPackable>false</IsPackable>
     <PlatformTarget>x64</PlatformTarget>
-    <!-- RST-004: Engine ships Serilog + WebView2 + UI assemblies into the
+    <!-- RST-004: Engine ships Serilog + UI assemblies into the
          addin folder. Revit doesn't resolve transitive packages from a
          shared cache, so they must travel with the install. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
