@@ -30,6 +30,8 @@ rst-c (Revit Standardization Tool) is a native Revit add-in that gives admins a 
 
 It ships as a single managed add-in for Revit 2025 through 2027, installs into the standard per-user add-in directory, and runs without pyRevit, Python, or any other external runtime. Its windows are native WPF: they open over Revit, belong to it, and follow Revit's light or dark theme.
 
+**Runtime model:** the add-in runs inside Revit, plus one small tray app (`RST.Tray.exe`, from v3.1) in the notification area for updates and add-in switching outside Revit. There is no second runtime: both use the .NET that Revit already installs. **[Tray docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/tray.md)**
+
 ### Download
 
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
@@ -43,7 +45,7 @@ Per-user install; no admin rights required. Run either one, then launch Revit �
 
 Revit's native ribbon assumes every user wants every tool, and every add-in vendor assumes their tab is the most important one. The result, on a real machine with five or six add-ins installed, is a ribbon dense enough that finding the right command is itself a task.
 
-rst-c treats the ribbon as a curated surface. An admin assembles a profile — a tab full of panels full of tools, drawn from anywhere in Revit's command catalogue — and an end user loads that profile to get exactly that surface and nothing else. Profiles are JSON, profiles are shareable, profiles can be swapped live without restarting Revit, and everything that runs runs in-process inside Revit's own .NET host. There is no IPC, no second runtime, no GitHub clone step on the user's machine.
+rst-c treats the ribbon as a curated surface. An admin assembles a profile — a tab full of panels full of tools, drawn from anywhere in Revit's command catalogue — and an end user loads that profile to get exactly that surface and nothing else. Profiles are JSON, profiles are shareable, profiles can be swapped live without restarting Revit, and everything that touches Revit runs in-process inside Revit's own .NET host. There is no IPC, no GitHub clone step on the user's machine.
 
 The port from the original pyRevit-based RST enables this: a single managed assembly can be code-signed, installed by an MSI, and shipped through normal IT channels. Since v3.0 the windows are native WPF too, with no embedded browser runtime to install or keep up to date.
 
