@@ -173,9 +173,26 @@ function Get-MsiProperty([string]$Path, [string]$Name) {
 }
 
 # Runs msiexec; returns the exit code. Throws on failure unless -ExpectFail.
+# Waits on msiexec itself, never on its process tree: PowerShell 7's Start-Process -Wait waits for every
+# descendant, and Restart Manager starts the RST tray again from msiexec's tree at the end of an install
+# (RegisterApplicationRestart), so -Wait would never return while the restarted tray runs. A hard timeout
+# dumps the verbose log and the process list, ends msiexec and fails, so CI cannot hang.
+$MsiexecTimeoutSeconds = 300
+$script:LastMsiexecEnd = $null
 function Invoke-Msiexec([string]$Verb, [string]$Path, [string]$Log, [switch]$ExpectFail, [string]$Extra = '') {
   Write-Host "msiexec $Verb $Path $Extra (log: $Log)"
-  $p = Start-Process msiexec.exe -ArgumentList "$Verb `"$Path`" /qn /l*v `"$Log`" $Extra" -Wait -PassThru
+  $p = Start-Process msiexec.exe -ArgumentList "$Verb `"$Path`" /qn /l*v `"$Log`" $Extra" -PassThru
+  $null = $p.Handle   # keep a handle so ExitCode is readable after the process exits
+  if (-not $p.WaitForExit($MsiexecTimeoutSeconds * 1000)) {
+    Write-Host "TIMEOUT: msiexec $Verb did not finish in $MsiexecTimeoutSeconds s; processes:"
+    Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'msiexec|RST' } |
+      ForEach-Object { Write-Host "  $($_.ProcessId) parent $($_.ParentProcessId) $($_.Name) $($_.CommandLine)" }
+    if (Test-Path $Log) { Write-Host "---- last 200 lines of $Log"; Get-Content $Log -Tail 200 | Write-Host }
+    Show-TrayLog
+    $p | Stop-Process -Force -ErrorAction SilentlyContinue
+    throw "FAIL: msiexec $Verb timed out after $MsiexecTimeoutSeconds s"
+  }
+  $script:LastMsiexecEnd = Get-Date
   Write-Host "  exit $($p.ExitCode)"
   if (-not $ExpectFail -and $p.ExitCode -notin 0, 3010) {
     if (Test-Path $Log) { Get-Content $Log -Tail 60 | Write-Host }
@@ -360,7 +377,15 @@ function Assert-TrayClosed($Proc, [string]$Label, [string]$How, [switch]$NoResta
     Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 0) "[$Label] no RST.Tray process running"
   } else {
     $again = Wait-TrayRestart $Proc.Id 20
-    Write-Host "OBSERVE: [$Label] Restart Manager restart of the tray: $(if ($again) { "yes, pid $($again.Id), args '$((Get-CimInstance Win32_Process -Filter "ProcessId=$($again.Id)").CommandLine)'" } else { 'none within 20 s' })"
+    if ($again) {
+      $w = Get-CimInstance Win32_Process -Filter "ProcessId=$($again.Id)"
+      $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($w.ParentProcessId)" -ErrorAction SilentlyContinue
+      $when = if ($script:LastMsiexecEnd) { "{0:N1} s after msiexec exited" -f ($again.StartTime - $script:LastMsiexecEnd).TotalSeconds } else { 'n/a' }
+      Write-Host "OBSERVE: [$Label] Restart Manager restarted the tray: pid $($again.Id), started $($again.StartTime.ToString('HH:mm:ss.fff')) ($when), parent $($w.ParentProcessId) $(if ($parent) { $parent.Name }), args '$($w.CommandLine)'"
+      Assert ($w.CommandLine -match '--startup') "[$Label] the restarted tray runs hidden (--startup)"
+    } else {
+      Write-Host "OBSERVE: [$Label] Restart Manager restart of the tray: none within 20 s"
+    }
   }
   $exit = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' | ForEach-Object { Get-Content $_.FullName } |
             Where-Object { $_.Contains("[$($Proc.Id)]") -and $_.Contains('RST tray exited') })
@@ -479,8 +504,10 @@ if ($Mode -eq 'Install') {
   # Repair drops it. Then 2026 back: Repair restores it.
   Set-RevitStubs @('2025', '2026', '2027')
   $logD = Join-Path $LogDir 'rst-repair-add-2025.log'
-  Invoke-Msiexec '/fa' $Msi $logD | Out-Null
-  Show-LogLines $logD @('CloseApplication', 'RST.Tray.exe')
+  $codeD = Invoke-Msiexec '/fa' $Msi $logD
+  Show-LogLines $logD @('CloseApplication', 'RST.Tray.exe', 'RESTART MANAGER')
+  # 3010 would mean a file was still in use (e.g. a tray restarted mid-install); the restart must come after.
+  Assert ($codeD -eq 0) "(d) the repair with a tray running needs no reboot (exit $codeD)"
   Assert-OneProduct $newProductCode $newVersion '(d) repair'
   Assert-Years @('2025', '2026', '2027') '(d) repair added 2025'
   # The repair replaced the tray's files: Windows Installer (Restart Manager) closed the tray from (t) first.
@@ -512,8 +539,9 @@ if ($Mode -eq 'Install') {
     $trayB = Start-Tray @('--startup') '(b)'
     $cacheB = Seed-CacheProbe
     $logB = Join-Path $LogDir 'rst-install-samever.log'
-    Invoke-Msiexec '/i' $SameVersionMsi $logB | Out-Null
-    Show-LogLines $logB @($newProductCode, 'RemoveFolder')
+    $codeB = Invoke-Msiexec '/i' $SameVersionMsi $logB
+    Show-LogLines $logB @($newProductCode, 'RemoveFolder', 'RESTART MANAGER')
+    Assert ($codeB -eq 0) "(b) the upgrade with a tray running needs no reboot (exit $codeB)"
     Assert-OneProduct $pc2 $v2 '(b) same-version install'
     Assert-Years @('2025', '2026', '2027') '(b) all three detected'
     Assert-TrayClosed $trayB '(b) upgrade' 'session ending|WM_CLOSE'
@@ -576,8 +604,9 @@ if ($Mode -eq 'Install') {
     $trayU = Start-Tray @('--startup') '(u)'
     $cacheU = Seed-CacheProbe
     $logU = Join-Path $LogDir 'rst-upgrade-from-older.log'
-    Invoke-Msiexec '/i' $uninstallMsi $logU | Out-Null
-    Show-LogLines $logU @($pcOld, 'RemoveFolder')
+    $codeU = Invoke-Msiexec '/i' $uninstallMsi $logU
+    Show-LogLines $logU @($pcOld, 'RemoveFolder', 'RESTART MANAGER')
+    Assert ($codeU -eq 0) "(u) the MajorUpgrade with a tray running needs no reboot (exit $codeU)"
     $pcNew = Get-MsiProperty $uninstallMsi 'ProductCode'
     Assert-OneProduct $pcNew $newVersion '(u) upgraded'
     Assert ((Select-String -Path $logU -Pattern $pcOld -SimpleMatch -Quiet)) "(u) log names the removed older product $pcOld"
