@@ -865,7 +865,7 @@ public sealed class MsiFixtureDetectionTests
                                       ProductCatalog.NormalizeGuid(expect.ClientId)!.ToLowerInvariant());
 
         var found = new MsiProducts(m => _output.WriteLine(m)).Related(expect.UpgradeCode);
-        var manifests = ProductDetection.ManifestClientIds(ProductDetection.ManifestRoots());
+        var manifests = ProductDetection.InstalledClientIds(m => _output.WriteLine(m));
         var install = ProductDetection.Decide(fixture, found, manifests);
         _output.WriteLine($"[{expect.Scenario}] detected {install.Kind}: {string.Join(", ", found)}");
 

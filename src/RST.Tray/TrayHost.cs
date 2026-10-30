@@ -190,7 +190,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             ProductCatalog.FromEmbedded(m => Log.Warning("{Message}", m)),
             _http,
             new MsiProducts(m => Log.Warning("{Message}", m)),
-            () => ProductDetection.ManifestClientIds(ProductDetection.ManifestRoots(), m => Log.Warning("{Message}", m)),
+            () => ProductDetection.InstalledClientIds(m => Log.Warning("{Message}", m)),
             TrayUpdates.SettingsAndPresetPolicy(settingsPath: null, WindowsState.UpdateChecksPresets),
             _checks.Enabled, // already read above: the pages never read files or the registry on the UI thread
             TimeProvider.System,
