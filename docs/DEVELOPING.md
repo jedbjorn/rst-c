@@ -69,7 +69,7 @@ so rst-c copies from splash-it.
 - **Renames:** `SplashIt.*` became `RST.*` (`RST.Core.Theming`, `RST.UI.Theming`, …).
   `SplashItTheme` became `RstTheme`. The env vars are `RST_THEME` (Debug builds only:
   forces the detected theme) and `RST_SCREENSHOTS`. The kit's `Trace` calls became
-  Serilog `Log`.
+  `Log` (RST.Core.Logging, rst-c's logger).
 - **To update the kit:** re-copy from the sister repo's `origin/main`. Update the commit
   in each header, then re-apply the `Changes:` line. Do not edit the sister repos from
   here.
@@ -304,7 +304,7 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   and the Loader services (`ProfileLibraryService`,
   `ProfileLoadService`, `LoaderPrefsService`, `AddinMaintenanceService`, `AddinLookupService`). The
   WPF Builder's backend calls the same services for its profile list, the active profile, the
-  auto-reload and the add-in lookup. The services log through `ILoaderLog` (Serilog in RST.UI).
+  auto-reload and the add-in lookup. The services log through `ILoaderLog` (RST.UI passes an adapter to `Log`).
 - **The window (`RST.UI/Loader`):** `ProfileLoaderLauncher.Show(owner, …)` →
   `ProfileLoaderWindow` → `ProfileLoaderViewModel`, which talks to `IProfileLoaderBackend` (the
   services) and `ILoaderDialogs` (`ConfirmAddinChangesWindow`, `AddinReportWindow`). The load's
@@ -408,33 +408,89 @@ running Revit has, and it fails at run time. When you read a journal in evidence
 whole block, not its first line:
 `[regex]::Matches((Get-Content $j -Raw), "API_ERROR \{ : Assembly version conflict[^}]*\}")`.
 
+## No third-party DLLs in Revit's load context
+
+RST runs in Revit's shared default load context, with every other add-in that does not opt out.
+Only one assembly of a given name can load there. On the VM, Revit 2027 bound a same-named
+assembly from **another add-in's folder** before any add-in's resolver ran
+(`shared/evidence/v300-resolver/vm/README.md`, F1), so when a neighbour ships a different Serilog,
+RST can silently run on it, or fail to start. Decision #33 removes the class of problem: **RST
+ships no third-party DLL.** The staged folders (`build/R25`, `build/R26`, `build/R27`, and the
+tray's `build/Tray`) hold only `RST.Bootstrap`, `RST.Engine`, `RST.Core` and `RST.UI` (and
+`RST.Tray`).
+
+- **Logging** is RST's own (`RST.Core.Logging`, below), not Serilog.
+- **Health** reads Win32 and the registry (`RST.UI/Health/HealthNative.cs`), not
+  System.Management.
+- **JSON** is the shared framework's `System.Text.Json` (net8.0 and up). No project references
+  the package.
+- **CI enforces it.** The Stage and Stage Tray jobs run `build/check-shipped-dlls.sh` on the staged
+  folder. It fails on any DLL that is not `RST.dll` or `RST.*.dll` and is not named in
+  `build/third-party-allowlist.txt`, which is empty. `installer/ci-smoke.ps1` checks the installed
+  app trees and the tray folder the same way. A new dependency is a deliberate choice: it fails CI
+  until it is on the allowlist with a reason, and that needs a decision that weighs the clash risk.
+- `Directory.Packages.props` therefore has no runtime package. Test projects and the test
+  fixtures keep theirs. `tests/fixtures/SerilogProbe` ships Serilog on purpose (it is the
+  neighbour in VM step V3) and pins it with `VersionOverride`.
+
+## Logging (RST.Core.Logging)
+
+The engine, the windows and the tray log through one small in-house logger in `RST.Core/Logging`.
+It replaced Serilog in v3.1 (decision #33) and keeps Serilog's shape, so a call site moved by
+changing only its `using` line (`using Serilog;` became `using RST.Core.Logging;`):
+
+- **`Log`** is the static facade with Serilog's members and overloads: `Verbose`, `Debug`,
+  `Information`, `Warning`, `Error`, `Fatal`, each with and without an exception first, with
+  generic one-, two- and three-argument overloads and a `params` overload (so a single array is
+  one property, as in Serilog). Plus `Log.Logger`, `IsEnabled`, `Write` and `CloseAndFlush`.
+  Every member is thread-safe and none throws; before `Log.Logger` is set, and after
+  `CloseAndFlush`, calls are dropped.
+- **Message templates** (`MessageTemplate.cs`) render what Serilog's `{Message:lj}` wrote:
+  `{Name}` (strings bare, numbers and dates in the invariant culture), `{Name:format}`,
+  `{Name,10}`, `{@Name}` (scalars as text, anything else as JSON), `{$Name}` (ToString),
+  positional `{0}`, and `{{` `}}`. A sequence or dictionary renders as JSON. A token with no
+  argument stays as written, and a malformed one is literal text.
+- **`FileSink`** keeps the Serilog.Sinks.File rules the configurations used: the engine's
+  `rst_<yyyy-MM-dd_HHmmss>.log` is one file per session (no roll, Serilog's 1 GB cap); the tray's
+  `tray_.log` base becomes `tray_<yyyyMMdd>.log`, rolls daily and at 5 MB (`_001`, `_002`), keeps
+  10 files of its own pattern, and is shared by two trays of one user (a named mutex around
+  each append). Files are UTF-8 without a BOM, and every event is flushed to the OS as it is
+  written. A file that cannot be opened drops events and is retried every few seconds.
+- **Configuration:** `RstApplication.ConfigureLogging` (Debug and up, the engine line format
+  `{Timestamp:HH:mm:ss.fff} {Level:u3} {Message:lj}{NewLine}{Exception}`) and the tray's
+  `TrayLog.Configure` (Information and up, with the date and `[{ProcessId}]`). The engine's
+  boot-time prune of `rst_*.log` (`AppDataPaths.EngineSessionLogGlob`) and the tray's retention
+  (`TrayPaths.LogFileGlob`) never touch each other's files.
+- **Tests:** `RST.Tests/Logging` (templates, line format, file names, the daily and size rolls,
+  retention, shared writers, threads, failures); `RuntimeTests` replace `Log.Logger` with a list
+  sink to assert what a window logged.
+
 ## The bootstrap's assembly resolver
 
 `RST.Bootstrap` loads the engine into Revit's shared default load context and registers a
-process-wide `AssemblyLoadContext.Default.Resolving` handler over `RST.Engine.deps.json`. Any
-add-in's request for Serilog, Serilog.Sinks.File, System.Management, RST.Core or RST.UI can reach
-it. `EngineDependencyResolver` (in `RstBootstrap.cs`, decisions #27 and #32):
+process-wide `AssemblyLoadContext.Default.Resolving` handler over `RST.Engine.deps.json`. Every
+add-in's unresolved requests reach it, but it **answers only for RST's own assemblies**: `RST` and
+`RST.*` (RST.Core, RST.UI) that the deps.json lists (decision #33). Any other name, a third-party
+one included, is declined (`null`) without a log line, because RST ships no third-party DLL.
+For RST's own, `EngineDependencyResolver` (in `RstBootstrap.cs`, decisions #27 and #32):
 
 - returns an already-loaded assembly of the same name when its version is at or above the request,
   instead of loading ours by path;
-- when the loaded copy is older than the request but has the **same major** version (RST's
-  Serilog 4.0 loaded, another add-in asks for 4.2), hands that copy over. Only one copy can load
-  into the shared context, and the requester failing to load is worse than it running on an
-  older minor version. One `WRN` per assembly per session names the requested version, the
-  version given and the likely requester (the first caller on the stack outside .NET and the
-  bootstrap);
+- when the loaded copy is older than the request but has the **same major** version, hands that
+  copy over. Only one copy can load into the shared context, and the requester failing to load
+  is worse than it running on an older minor version. One `WRN` per assembly per session names
+  the requested version, the version given and the likely requester (the first caller on the
+  stack outside .NET and the bootstrap);
 - when the loaded copy has a **different major** version, writes a `WRN` naming both versions,
   the requester and the loaded path, and returns `null`;
 - when nothing is loaded yet and the request is above the copy RST ships, returns `null` with a
-  `WRN`, so the requester's own newer copy can load (RST then binds up to it);
+  `WRN`;
 - never throws from inside the event: a failure becomes a `WRN` line and `null`.
 
-After the engine's `OnStartup`, the boot log records the Serilog the engine bound to:
-`Serilog bound: 4.0.0.0 at <path> (engine compiled against 4.0.0.0)`. That line is a `WRN` when
-Serilog is older than compiled, which means another add-in's resolver supplied its copy first.
-The handler cannot prevent that. Only one Serilog can load into the shared context, so when
-another add-in loads a different major version first, one of the two add-ins loses. RST still shares
-Serilog's global `Log.Logger`; moving to a private logger is planned for v3.1.
+After the engine's `OnStartup`, the boot log records what the app folder ships:
+`Third-party DLLs shipped: none (3 RST DLLs in the app folder; decision #33)`. It is a `WRN`
+naming each file when the folder holds a DLL that is not RST's own (a hand-copied file, or a
+leftover from a non-MSI install). This line replaced v3.0's `Serilog bound: …` line.
 
 ## Ribbon stacks (F15)
 
