@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST-Setup.exe: the setup bundle (feature #13 Phase 2, spec #15).
+
+  Chain: RST.msi (always), then each shippable companion in
+  companions/companions.json (generated into obj\gen\Companions.g.wxs by
+  gen-companions.ps1: one opt-in Install<Id> variable, one theme checkbox
+  and one MsiPackage per companion). After setup every product is a stock
+  install: RST.msi sits behind this bundle's Add/Remove Programs entry,
+  and each companion keeps its own entry, its own upgrades, and stays
+  installed when the bundle is uninstalled.
+
+  Per-user: every chained package is a per-user MSI, so Burn registers the
+  bundle per-user (HKCU) and never launches an elevated engine. Adding a
+  per-machine package would change that; the bundle smoke asserts
+  "scope: PerUser" in the Burn log.
+
+  UpgradeCode is this bundle's stable identity. NEVER change it once
+  shipped: it is how a newer RST-Setup.exe recognizes and replaces an
+  installed older one. It must stay a literal GUID (the companion registry
+  test reads it to keep companions from reusing it). Recorded in
+  installer-bundle/README.md.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+
+  <Bundle Name="RST"
+          Manufacturer="Designs/OS"
+          Version="$(var.RstBundleVersion)"
+          UpgradeCode="2BE2BE5D-9203-4344-A70D-E735D3B041A3"
+          IconSourceFile="..\installer\branding\rst.ico"
+          AboutUrl="https://github.com/jedbjorn/rst-c"
+          HelpUrl="https://github.com/jedbjorn/rst-c/tree/main/docs"
+          UpdateUrl="https://github.com/jedbjorn/rst-c/releases/latest"
+          Compressed="yes"
+          bal:CommandLineVariables="caseInsensitive">
+
+    <!-- The standard BA with the RTF license page (the same License.rtf as
+         RST.msi). ThemeFile is generated from theme\RstTheme.xml: it adds
+         the companion checkboxes to the Install page and the "companions
+         stay installed" note to the finish page. The logo is the RST mark
+         (the same 48x48 image embedded in installer\branding\rst.ico).
+         SuppressOptionsUI: there is no install folder to choose; every
+         package decides its own per-user paths. -->
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="rtfLicense"
+          LicenseFile="..\installer\branding\License.rtf"
+          ThemeFile="$(var.RstThemeXml)"
+          LocalizationFile="theme\RstTheme.wxl"
+          LogoFile="..\src\RST.Engine\Assets\branding.png"
+          SuppressOptionsUI="yes"
+          ShowVersion="yes" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <!-- rst-c itself. Vital (the default): if it fails, the bundle fails
+           and rolls back. Not Visible (the default): Burn hides its own
+           Add/Remove Programs entry behind the bundle's, so Settings > Apps
+           shows one "RST". RST.msi's launch condition still applies: a
+           first install fails when no Revit 2025/2026/2027 is found. -->
+      <MsiPackage Id="RST" SourceFile="$(var.RstMsi)" />
+
+      <!-- Companions: Permanent, Visible, Vital="no", InstallCondition
+           bound to the checkbox. Generated from the registry. -->
+      <PackageGroupRef Id="RstCompanions" />
+    </Chain>
+
+  </Bundle>
+
+</Wix>
