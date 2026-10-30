@@ -6,8 +6,8 @@
 // monitors (System.Management WMI/CIM in-process), and Revit-side
 // HardwareAcceleration (Revit.ini [Graphics] UseGraphicsHardware).
 //
-// Same JSON schema as upstream so the existing health_viewer UI
-// renders without changes.
+// Same JSON schema as upstream, so a saved snapshot reads back unchanged
+// (the Health window's HealthReport renders it).
 
 using System;
 using System.Collections.Generic;

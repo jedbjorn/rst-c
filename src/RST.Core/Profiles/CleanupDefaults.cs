@@ -25,7 +25,7 @@ public static class CleanupDefaults
 
     /// <summary>
     /// Build a fresh list of the OOB targets. Called by the Builder when
-    /// creating a new profile and by HealthBridge.GetCleanupTargets as a
+    /// creating a new profile and by HealthService.GetCleanupTargets as a
     /// fallback when a loaded profile has null CleanupTargets.
     /// </summary>
     public static List<CleanupTarget> Build() => new()

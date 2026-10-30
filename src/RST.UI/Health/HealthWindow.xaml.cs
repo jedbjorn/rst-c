@@ -1,95 +1,48 @@
-// HealthWindow.xaml.cs — WPF host for the WebView2-rendered health viewer.
-//
-// Same boot sequence as LoaderWindow:
-//   1. Construct CoreWebView2Environment under %LocalAppData%\RST\WebView2.
-//   2. Map Assets/ as a virtual host so health_viewer.html resolves
-//      relative-path JS via https://rst.ui/.
-//   3. Inject pywebview-shim.js at document_start (legacy JS calls
-//      window.pywebview.api.foo_bar()).
-//   4. Register HealthBridge as host object "api".
-//   5. Navigate to https://rst.ui/health_viewer.html.
+// rst-c's own (not vendored): the Health window's code-behind (spec #16, WU2). The window binds to a
+// HealthViewModel; HealthLauncher builds both, owns the window to Revit and shows it modally.
 
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using System.ComponentModel;
 using System.Windows;
-using Microsoft.Web.WebView2.Core;
-using RST.Core.Health;
-using Serilog;
+using System.Windows.Input;
+using System.Windows.Threading;
+using RST.UI.Dialogs;
+using RST.UI.Theming;
 
 namespace RST.UI.Health;
 
 public partial class HealthWindow : Window
 {
-    private const string VirtualHost = "rst.ui";
-    private readonly HealthBridge _bridge;
-
-    public HealthWindow(HealthContext context, Action<bool>? telemetryToggled = null,
-                        Func<DateTimeOffset?>? liveSessionStartUtc = null)
+    /// <summary>Build after <c>RstTheme.Apply</c>: Theme.xaml reads the theme when the window loads it.</summary>
+    public HealthWindow(HealthViewModel viewModel)
     {
+        ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         InitializeComponent();
-        _bridge = new HealthBridge(
-            context,
-            () => Dispatcher.BeginInvoke(new Action(Close)),
-            telemetryToggled,
-            liveSessionStartUtc);
-        Loaded += async (_, _) => await InitializeWebViewAsync();
+        DarkTitleBar.Attach(this);
+        DataContext = viewModel;
+        viewModel.RequestClose += OnRequestClose;
+        viewModel.PropertyChanged += OnViewModelChanged;
+        Closed += (_, _) =>
+        {
+            viewModel.RequestClose -= OnRequestClose;
+            viewModel.PropertyChanged -= OnViewModelChanged;
+            viewModel.Dispose();
+        };
     }
 
-    private async Task InitializeWebViewAsync()
+    public HealthViewModel ViewModel { get; }
+
+    protected override void OnSourceInitialized(EventArgs e)
     {
-        try
-        {
-            var userDataDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RST", "WebView2");
-            Directory.CreateDirectory(userDataDir);
+        base.OnSourceInitialized(e);
+        WindowPlacement.CapToWorkArea(this);
+    }
 
-            var env = await CoreWebView2Environment.CreateAsync(
-                browserExecutableFolder: null,
-                userDataFolder: userDataDir);
+    private void OnRequestClose(object? sender, EventArgs e) => Close();
 
-            await WebView.EnsureCoreWebView2Async(env);
-            var core = WebView.CoreWebView2;
-
-            var assetsDir = Path.Combine(
-                Path.GetDirectoryName(typeof(HealthWindow).Assembly.Location)!,
-                "Assets");
-
-            core.SetVirtualHostNameToFolderMapping(
-                hostName: VirtualHost,
-                folderPath: assetsDir,
-                accessKind: CoreWebView2HostResourceAccessKind.Allow);
-
-            var shimPath = Path.Combine(assetsDir, "pywebview-shim.js");
-            var shim = File.ReadAllText(shimPath);
-            await core.AddScriptToExecuteOnDocumentCreatedAsync(shim);
-
-            core.AddHostObjectToScript("api", _bridge);
-            core.NavigationCompleted += (_, e) =>
-            {
-                if (e.IsSuccess)
-                    Log.Information("Health WebView2 navigation OK");
-                else
-                    Log.Warning("Health WebView2 navigation failed: status={Status}, error={Error}",
-                                e.HttpStatusCode, e.WebErrorStatus);
-            };
-
-            var landing = $"https://{VirtualHost}/health_viewer.html";
-            Log.Information("Health WebView2 initialised: assetsDir={AssetsDir}, userData={UserData}, landing={Landing}",
-                            assetsDir, userDataDir, landing);
-            core.Navigate(landing);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Health WebView2 initialisation failed");
-            MessageBox.Show(
-                "Failed to initialise WebView2:\n\n" + ex.Message +
-                "\n\nWebView2 Runtime must be installed (preinstalled on Win10 1903+/Win11).",
-                "RST Health",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            Close();
-        }
+    /// <summary>The Junk modal takes the keyboard focus when it opens (the content behind it is disabled).</summary>
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(HealthViewModel.IsJunkOpen) || !ViewModel.IsJunkOpen) return;
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => JunkCard.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)));
     }
 }

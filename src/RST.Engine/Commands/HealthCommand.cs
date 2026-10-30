@@ -1,9 +1,10 @@
 // HealthCommand.cs — IExternalCommand wired to the "Health" ribbon button.
 //
 // Captures the live Revit context (version, build, username, active model
-// name/path/size, ACC cloud-cache fallback for size, warning count) and
-// hands it to RST.UI.Health.HealthHost.ShowModal which opens the
-// WebView2-hosted viewer modally on the UI thread.
+// name/path/size, ACC cloud-cache fallback for size, warning count), applies
+// Revit's theme and hands the context to RST.UI.Health.HealthLauncher.Show,
+// which opens the native WPF Health window modally, owned by Revit's main
+// window (spec #16, WU2).
 //
 // In-process replacement for the upstream three-process Python flow
 // (IronPython Snap → CPython viewer → CPython runner) — no JSON
@@ -20,6 +21,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RST.Core.Health;
 using RST.Core.Telemetry;
+using RST.Engine.Theming;
 using RST.UI.Health;
 using Serilog;
 
@@ -40,11 +42,12 @@ public sealed class HealthCommand : IExternalCommand
             // The Activity footer toggle routes back to the live
             // collector (markers + heartbeat); resolved at invoke time
             // so a collector that failed to start degrades to a no-op —
-            // the preference still persists via the bridge. The session
+            // the preference still persists via the service. The session
             // start is a live read for the same reason: a mid-window
             // enable emits session_start, and the clock should tick on
             // the very next refresh.
-            HealthHost.ShowModal(context,
+            RevitThemeDetector.ApplyToWindows();
+            HealthLauncher.Show(commandData.Application.MainWindowHandle, context,
                 telemetryToggled: enabled => RstApplication.GetTelemetry()?.SetEnabled(enabled),
                 liveSessionStartUtc: () => RstApplication.GetTelemetry()?.SessionStartUtc);
             Log.Information("=== Health session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);

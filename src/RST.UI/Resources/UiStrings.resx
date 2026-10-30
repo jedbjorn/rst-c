@@ -5,7 +5,7 @@
     MIT, same owner; splash-it took these entries word for word from gantt-it
     src/GanttIt.Revit/Resources/Strings.resx (gantt-it commit a96d0a1).
     Changes: only the kit's entries (Common_, Dialog_, Edit_, Color_, Pick_); splash-it's
-    Settings_, Status_ and Preview_ entries are left out.
+    Settings_, Status_ and Preview_ entries are left out; rst-c's Health window entries (Health_) are added at the end.
 
     RST.UI's user-facing strings: the vendored color picker and dialogs, and the
     windows' own text as they are ported. English only (spec #16). UiStrings.cs has one
@@ -107,5 +107,306 @@
   </data>
   <data name="Pick_NoMonitors" xml:space="preserve">
     <value>Windows reported no monitors.</value>
+  </data>
+  <!-- Health window (spec #16, WU2): every message text from the retired health_viewer.html. -->
+  <data name="Health_WindowTitle" xml:space="preserve">
+    <value>RST — Health</value>
+  </data>
+  <data name="Health_Heading" xml:space="preserve">
+    <value>RST · Health</value>
+  </data>
+  <data name="Health_TabHealth" xml:space="preserve">
+    <value>Health</value>
+  </data>
+  <data name="Health_TabActivity" xml:space="preserve">
+    <value>Activity</value>
+  </data>
+  <data name="Health_Device" xml:space="preserve">
+    <value>Device</value>
+  </data>
+  <data name="Health_Captured" xml:space="preserve">
+    <value>Captured</value>
+  </data>
+  <data name="Health_SectionHardware" xml:space="preserve">
+    <value>Hardware</value>
+  </data>
+  <data name="Health_SectionDisplayNetwork" xml:space="preserve">
+    <value>Display &amp; Network</value>
+  </data>
+  <data name="Health_SectionRevit" xml:space="preserve">
+    <value>Revit</value>
+  </data>
+  <data name="Health_SectionOs" xml:space="preserve">
+    <value>Operating System</value>
+  </data>
+  <data name="Health_RowUser" xml:space="preserve">
+    <value>User</value>
+  </data>
+  <data name="Health_RowCpu" xml:space="preserve">
+    <value>CPU</value>
+  </data>
+  <data name="Health_RowRam" xml:space="preserve">
+    <value>RAM</value>
+  </data>
+  <data name="Health_RowGpu" xml:space="preserve">
+    <value>GPU</value>
+  </data>
+  <data name="Health_RowGpuN" xml:space="preserve">
+    <value>GPU {0}</value>
+    <comment>{0} the adapter's number, from 1, when there is more than one.</comment>
+  </data>
+  <data name="Health_RowDisk" xml:space="preserve">
+    <value>Disk (C:)</value>
+  </data>
+  <data name="Health_RowJunkTotal" xml:space="preserve">
+    <value>Junk total</value>
+  </data>
+  <data name="Health_RowResolution" xml:space="preserve">
+    <value>Resolution</value>
+  </data>
+  <data name="Health_RowMonitors" xml:space="preserve">
+    <value>Monitors</value>
+  </data>
+  <data name="Health_RowAdapter" xml:space="preserve">
+    <value>Adapter</value>
+  </data>
+  <data name="Health_RowSpeed" xml:space="preserve">
+    <value>Speed</value>
+  </data>
+  <data name="Health_RowVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="Health_RowUsername" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="Health_RowHardwareAccel" xml:space="preserve">
+    <value>Hardware Accel</value>
+  </data>
+  <data name="Health_RowModel" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="Health_RowWarnings" xml:space="preserve">
+    <value>Warnings</value>
+  </data>
+  <data name="Health_RowOsName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Health_RowOsBuild" xml:space="preserve">
+    <value>Build</value>
+  </data>
+  <data name="Health_Unnamed" xml:space="preserve">
+    <value>(unnamed)</value>
+  </data>
+  <data name="Health_CpuCores" xml:space="preserve">
+    <value>{0} cores · {1} logical</value>
+    <comment>{0} physical cores, {1} logical cores ('?' when unknown).</comment>
+  </data>
+  <data name="Health_CpuUsed" xml:space="preserve">
+    <value>{0} used</value>
+    <comment>{0} the CPU load, e.g. 45%.</comment>
+  </data>
+  <data name="Health_RamUsed" xml:space="preserve">
+    <value>{0} used · {1}</value>
+    <comment>{0} the RAM in use, e.g. 12,288 MB; {1} the percentage.</comment>
+  </data>
+  <data name="Health_GpuDetails" xml:space="preserve">
+    <value>driver {0} · VRAM {1}</value>
+    <comment>{0} the driver version; {1} the video memory, e.g. 8,192 MB.</comment>
+  </data>
+  <data name="Health_DiskDetails" xml:space="preserve">
+    <value>{0} · {1} free of {2} · {3} used</value>
+    <comment>{0} the disk type; {1} free space; {2} the size; {3} the percentage used.</comment>
+  </data>
+  <data name="Health_JunkEntries" xml:space="preserve">
+    <value>{0} entries</value>
+    <comment>{0} the number of recent-file entries.</comment>
+  </data>
+  <data name="Health_JunkFiles" xml:space="preserve">
+    <value>{0} files</value>
+    <comment>{0} the number of files.</comment>
+  </data>
+  <data name="Health_JunkPaths" xml:space="preserve">
+    <value> · {0} paths</value>
+    <comment>Appended to the first path when a target resolves to several. {0} the number of paths.</comment>
+  </data>
+  <data name="Health_JunkTotalDetails" xml:space="preserve">
+    <value>{0} files · reclaimable on Clean Junk Files</value>
+    <comment>{0} the number of files.</comment>
+  </data>
+  <data name="Health_RevitBuild" xml:space="preserve">
+    <value>build {0}</value>
+    <comment>{0} the Revit build.</comment>
+  </data>
+  <data name="Health_ModelSize" xml:space="preserve">
+    <value>{0} MB</value>
+    <comment>{0} the model size.</comment>
+  </data>
+  <data name="Health_Enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="Health_Disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="Health_Unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="Health_ScanSystem" xml:space="preserve">
+    <value>Scan System</value>
+  </data>
+  <data name="Health_Scanning" xml:space="preserve">
+    <value>Scanning…</value>
+  </data>
+  <data name="Health_CleanJunkFiles" xml:space="preserve">
+    <value>Clean Junk Files</value>
+  </data>
+  <data name="Health_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Health_Collection" xml:space="preserve">
+    <value>Collection</value>
+  </data>
+  <data name="Health_CollectionOn" xml:space="preserve">
+    <value>collection on</value>
+  </data>
+  <data name="Health_CollectionOff" xml:space="preserve">
+    <value>collection off</value>
+  </data>
+  <data name="Health_StatusFiles" xml:space="preserve">
+    <value>{0} files</value>
+    <comment>{0} the number of outbox files.</comment>
+  </data>
+  <data name="Health_StatusSince" xml:space="preserve">
+    <value>since {0}</value>
+    <comment>{0} the date of the oldest event.</comment>
+  </data>
+  <data name="Health_JunkTitle" xml:space="preserve">
+    <value>Clean Junk Files</value>
+  </data>
+  <data name="Health_JunkSubtitle" xml:space="preserve">
+    <value>Deselect any target to skip. Files locked by running applications are skipped automatically.</value>
+  </data>
+  <data name="Health_JunkEmptyTitle" xml:space="preserve">
+    <value>No cleanup targets configured</value>
+  </data>
+  <data name="Health_JunkEmptyHint" xml:space="preserve">
+    <value>Add some in the Builder → Junk Cleanup section.</value>
+  </data>
+  <data name="Health_JunkCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Health_JunkRun" xml:space="preserve">
+    <value>Clean Selected</value>
+  </data>
+  <data name="Health_NothingSelectedTitle" xml:space="preserve">
+    <value>Nothing selected</value>
+  </data>
+  <data name="Health_NothingSelected" xml:space="preserve">
+    <value>No targets were chosen for cleanup.</value>
+  </data>
+  <data name="Health_ConfirmCleanTitle" xml:space="preserve">
+    <value>Delete selected junk?</value>
+  </data>
+  <data name="Health_ConfirmClean" xml:space="preserve">
+    <value>This will permanently delete files in the selected targets. Files locked by running applications are skipped.</value>
+  </data>
+  <data name="Health_ConfirmContinue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
+  <data name="Health_CleaningTitle" xml:space="preserve">
+    <value>Cleaning</value>
+  </data>
+  <data name="Health_Cleaning" xml:space="preserve">
+    <value>Deleting selected junk files</value>
+  </data>
+  <data name="Health_CleanupCompleteTitle" xml:space="preserve">
+    <value>Cleanup complete</value>
+  </data>
+  <data name="Health_CleanupLine" xml:space="preserve">
+    <value>{0}: {1} deleted</value>
+    <comment>{0} the target's name; {1} the number of files deleted.</comment>
+  </data>
+  <data name="Health_CleanupLineLocked" xml:space="preserve">
+    <value>{0}: {1} deleted, {2} locked/in-use</value>
+    <comment>{0} the target's name; {1} files deleted; {2} files skipped.</comment>
+  </data>
+  <data name="Health_CleanupFailedTitle" xml:space="preserve">
+    <value>Cleanup failed</value>
+  </data>
+  <data name="Health_ScanFailedTitle" xml:space="preserve">
+    <value>Scan failed</value>
+  </data>
+  <data name="Health_UnknownError" xml:space="preserve">
+    <value>Unknown error</value>
+  </data>
+  <data name="Health_CollectionFailedTitle" xml:space="preserve">
+    <value>Could not change collection</value>
+  </data>
+  <data name="Health_StatSessionTimer" xml:space="preserve">
+    <value>Session Timer</value>
+  </data>
+  <data name="Health_StatSessionTotal" xml:space="preserve">
+    <value>Session Total</value>
+  </data>
+  <data name="Health_StatLongestSync" xml:space="preserve">
+    <value>Longest Sync</value>
+  </data>
+  <data name="Health_StatLongestOpen" xml:space="preserve">
+    <value>Longest Open Time</value>
+  </data>
+  <data name="Health_StatWarnings" xml:space="preserve">
+    <value>Warning Count</value>
+  </data>
+  <data name="Health_StatFileSize" xml:space="preserve">
+    <value>File Size</value>
+  </data>
+  <data name="Health_FileOpen" xml:space="preserve">
+    <value>file open {0}</value>
+    <comment>{0} how long the current file has been open, HH:MM:SS.</comment>
+  </data>
+  <data name="Health_ChartSession" xml:space="preserve">
+    <value>Session time — this file</value>
+  </data>
+  <data name="Health_ChartOpen" xml:space="preserve">
+    <value>Opening time — this file</value>
+  </data>
+  <data name="Health_ChartSync" xml:space="preserve">
+    <value>Sync history — this file</value>
+  </data>
+  <data name="Health_ChartPoint" xml:space="preserve">
+    <value>{0} — {1}</value>
+    <comment>A chart dot's tooltip. {0} the date or time; {1} the value.</comment>
+  </data>
+  <data name="Health_NoModelTitle" xml:space="preserve">
+    <value>No model open</value>
+  </data>
+  <data name="Health_NoModelHint" xml:space="preserve">
+    <value>Open a model to see its activity history.</value>
+  </data>
+  <data name="Health_NoTimeTitle" xml:space="preserve">
+    <value>No time recorded in this range</value>
+  </data>
+  <data name="Health_NoKeyHint" xml:space="preserve">
+    <value>This model has no usable identity key yet — save it first.</value>
+  </data>
+  <data name="Health_NoOpensTitle" xml:space="preserve">
+    <value>No opens in this range</value>
+  </data>
+  <data name="Health_NoSyncsTitle" xml:space="preserve">
+    <value>No syncs in this range</value>
+  </data>
+  <data name="Health_NotWorksharedTitle" xml:space="preserve">
+    <value>Not a workshared model</value>
+  </data>
+  <data name="Health_NotWorksharedHint" xml:space="preserve">
+    <value>Sync history appears for workshared and cloud models.</value>
+  </data>
+  <data name="Health_NotEnoughHistory" xml:space="preserve">
+    <value>not enough history yet</value>
+  </data>
+  <data name="Health_ActivityFailedTitle" xml:space="preserve">
+    <value>Could not load activity</value>
+  </data>
+  <data name="Health_WorkRunning" xml:space="preserve">
+    <value>A scan or cleanup is still running. Try again when it finishes.</value>
   </data>
 </root>
