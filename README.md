@@ -96,7 +96,7 @@ rst-c writes Serilog rolling files under `%AppData%\RST\logs\`. Both C#-side and
 
 ## Install
 
-`RST.msi` ships as a GitHub Release asset and covers Revit 2025, 2026 and 2027 in one installer.
+`RST.msi` ships as a GitHub Release asset and covers Revit 2025, 2026 and 2027 in one installer. It installs RST only for the Revit years it finds on the computer; if you install another Revit year later, run the same `RST.msi` again and choose **Repair**.
 
 1. Grab the latest from the [Releases](https://github.com/jedbjorn/rst-c/releases) page.
 2. Close Revit (the engine DLLs are locked while it is running).

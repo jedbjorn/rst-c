@@ -16,8 +16,11 @@ name: _build (reusable)
 #                    skip-R27 switch).
 #   • msi-unified  — Windows runner. Downloads R25 + R26 + R27 artifacts,
 #                    runs installer/RST.Installer.wixproj → RST.msi (all
-#                    three majors in one MSI), then a permanent install /
-#                    uninstall smoke (installer/ci-smoke.ps1 -Mode Install).
+#                    three majors in one MSI; each installs only when that
+#                    Revit year is detected), then a permanent smoke with
+#                    stub Revit.exe files (installer/ci-smoke.ps1 -Mode
+#                    Install): Component-table check, detected years only,
+#                    no-Revit refusal, Repair adds/drops a year, uninstall.
 #   • msi-migrate  — Windows runner, matrix Preview/Unified. Installs the
 #                    public v2.2.0 RST-R27.msi or RST.msi, then the new
 #                    RST.msi, and asserts the preview is removed / the
@@ -156,12 +159,15 @@ jobs:
         run: |
           Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-first.msi"
           dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstMsiVersion=${{ inputs.product_version }}
-      # Permanent install/uninstall smoke (feature #11, D6): all six trees
-      # land, a same-version build and a repeated install leave one product,
-      # uninstall removes the trees, user data survives.
+      # Permanent install/uninstall smoke (feature #11, D6 / AC3, decision
+      # #10). Stub Revit.exe files under C:\Program Files\Autodesk\Revit
+      # <year>\ drive the detection: no Revit is refused, only detected
+      # years install, Repair adds/drops a year, a same-version build and a
+      # repeated install leave one product, uninstall removes every tree,
+      # user data survives. -StagedRoot checks per-year component counts.
       - name: Install / uninstall smoke
         shell: pwsh
-        run: installer/ci-smoke.ps1 -Mode Install -Msi "$env:RUNNER_TEMP/RST-first.msi" -SameVersionMsi installer/bin/Release/RST.msi
+        run: installer/ci-smoke.ps1 -Mode Install -Msi "$env:RUNNER_TEMP/RST-first.msi" -SameVersionMsi installer/bin/Release/RST.msi -StagedRoot build
       - uses: actions/upload-artifact@v4
         with:
           name: RST.msi

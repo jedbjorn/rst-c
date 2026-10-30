@@ -42,7 +42,22 @@ dotnet build installer\RST.Installer.wixproj -c Release
 
 Local and push/PR builds without `-p:RstMsiVersion=` are stamped with the `.wixproj` fallback version (`2.99.0`), which sits between the latest release (v2.2.0) and the next (v3.0.0) so a dev build upgrades a released install in place.
 
-**CI checks** — `installer/ci-smoke.ps1` runs on `windows-latest` in `_build.yml`: `-Mode Install` (every build) installs `RST.msi` silently, checks all six trees, uninstalls and checks they are gone while user data survives; `-Mode Migrate` (job `msi-migrate`) upgrades from the public v2.2.0 preview MSI and v2.2.0 `RST.msi`.
+**Generated per-year components** — `<Files Include>` harvesting cannot carry a component `Condition`, so the `.wixproj` target `RstGenerateRevitYears` runs `installer/gen-revit-years.ps1` before compiling. It writes `installer/obj/RevitYears.g.wxs`: component groups `Revit2025`/`Revit2026`/`Revit2027`, with one component per staged file and each component carrying its year's condition and `Transitive="yes"`. The file is regenerated on every build and never committed. The package is **x64**, as in gantt-it and splash-it, because the Revit detection reads the 64-bit registry (ICE80).
+
+**CI checks** — `installer/ci-smoke.ps1` runs on `windows-latest` in `_build.yml`.
+- **Every mode** first reads the built package and checks:
+  - every component belongs to one Revit year and carries `REVIT<year>FOUND OR REMOVE~="ALL"` and Transitive;
+  - the per-year counts equal the staged files;
+  - the launch condition exists;
+  - `RemoveExistingProducts` is sequenced inside the install transaction.
+- **`-Mode Install`** runs on every build. Stub `Revit.exe` files in `C:\Program Files\Autodesk\Revit <year>\` drive the detection through these cases:
+  - no Revit: the install is refused;
+  - 2026 + 2027 only: only those years are installed;
+  - 2025 added, then Repair: 2025 is installed;
+  - 2026 removed, then Repair: 2026 is dropped;
+  - all three, same-version rebuild: one product;
+  - uninstall: every tree is gone, and user data survives.
+- **`-Mode Migrate`** (job `msi-migrate`) upgrades from the public v2.2.0 preview MSI and from v2.2.0 `RST.msi`.
 
 ## Setup UI & branding
 
@@ -90,7 +105,17 @@ The bitmaps are generated from the bundled `src/RST.Engine/Assets/branding.png` 
   *.pdb
 ```
 
-`RST.msi` writes all six trees: Addins\2025, Addins\2026, Addins\2027 and RST\R25\app, RST\R26\app, RST\R27\app. R25 and R26 carry the `net8.0-windows` engine; R27 carries the `net10.0-windows` engine with its own `RST.Engine.deps.json`. Every major is installed whether or not that Revit is present; an unused major's files sit idle.
+`RST.msi` carries three pairs of trees: Addins\2025 + RST\R25\app, Addins\2026 + RST\R26\app, and Addins\2027 + RST\R27\app. R25 and R26 carry the `net8.0-windows` engine. R27 carries the `net10.0-windows` engine, with its own `RST.Engine.deps.json`.
+
+**Only the Revit years installed on the computer get their trees.** The detection is the same as gantt-it and splash-it. A year counts as installed when `Revit.exe` is found in one of two places:
+- the `InstallLocation` of Revit's uninstall entry `{7346B4A0-<yy>00-0510-0000-705C0D862004}`, read from the 64-bit registry;
+- the default folder, `C:\Program Files\Autodesk\Revit <year>\`.
+
+What follows from that:
+- **No supported Revit:** a first install is refused with "RST needs Revit 2025, 2026 or 2027, and none was found on this computer." Repair and uninstall are never blocked.
+- **Revit year installed later:** run the same `RST.msi` again and choose **Repair** (or `msiexec /fa RST.msi`). The repair adds the new year's trees. It also drops a year whose Revit has since been uninstalled. The next RST upgrade does the same.
+- **Upgrade:** a newer `RST.msi` removes the old version completely, every year included, then installs fresh for the years it detects. Files an older RST put in a year whose Revit is absent are removed.
+- **Uninstall:** always removes every year.
 
 **User data** (`%AppData%\RST\profiles\`, `\logs\`, `\branding.png`, `\active_profile.json`, `\user_profile_prefs.json`, etc.) lives outside the install trees and is preserved across reinstalls and uninstalls.
 

@@ -6,14 +6,14 @@
     Build: from this directory, `dotnet build` (or `wix build Product.wxs`
     directly). Output: bin/<Configuration>/RST.msi.
 
-    The WXS auto-harvests files from ../build/R{25,26,27}/{addins,app}/, so
-    `build/stage.sh R25|R26|R27` must be run first to populate those trees.
+    The per-Revit-year components are generated from the staged trees
+    ../build/R{25,26,27}/{addins,app}/ by gen-revit-years.ps1 (target
+    RstGenerateRevitYears below), so `build/stage.sh R25|R26|R27` must be
+    run first. Windows only, like every WiX build here.
 
-    SDK is pinned to 6.x because the <Files> harvest element used in
-    Product.wxs was introduced in WiX v5.0 — v4.0.5 has no <Files>
-    schema at all and trips WIX0005 wherever the element is parented
-    (RST-040). v6.0.2 is the latest patch on the v6 line; bumping to
-    v7 is a one-line change if/when needed.
+    SDK is pinned to 6.x (RST-040: v4.0.5 lacked features this project
+    used). v6.0.2 is the latest patch on the v6 line; bumping to v7 is a
+    one-line change if/when needed.
   -->
 
   <!--
@@ -48,6 +48,11 @@
     <OutputType>Package</OutputType>
     <!-- WiX v4+ emits MSI by default; keep the project explicit. -->
     <Configurations>Debug;Release</Configurations>
+    <!-- x64 package (as gantt-it and splash-it): Revit 2025-2027 is 64-bit
+         only, and the Revit detection in Product.wxs reads the 64-bit
+         registry and ProgramFiles64Folder, which ICE80 rejects in a 32-bit
+         package. -->
+    <InstallerPlatform>x64</InstallerPlatform>
     <!-- The MSI ICE validation suite was authored for the per-machine
          install model. Three of its rules fire spuriously on every
          per-user (Scope="perUser") harvest and the WiX team has
@@ -55,8 +60,8 @@
            ICE91 — "directory doesn't vary based on ALLUSERS"; that's
                    the *intent* of perUser scope.
            ICE38 — components in user profile "should" have an HKCU
-                   KeyPath instead of a file KeyPath; auto-harvested
-                   components cannot express that.
+                   KeyPath instead of a file KeyPath; the generated
+                   one-file-per-component layout keeps the file KeyPath.
            ICE64 — per-user directories must be in the RemoveFile
                    table; for files laid down by the MSI itself, normal
                    uninstall removes them — the RemoveFile table is for
@@ -79,5 +84,20 @@
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" />
   </ItemGroup>
+
+  <!-- Per-Revit-year components (decision #10). <Files Include> cannot
+       carry a Condition, so gen-revit-years.ps1 writes one conditional,
+       Transitive component per staged file into obj\ (outside the default
+       **\*.wxs glob) and it is compiled from there. Regenerated on every
+       build so it always matches the staged trees. -->
+  <PropertyGroup>
+    <RstRevitYearsWxs>$(MSBuildProjectDirectory)\obj\RevitYears.g.wxs</RstRevitYearsWxs>
+  </PropertyGroup>
+  <Target Name="RstGenerateRevitYears" BeforeTargets="CoreCompile">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-revit-years.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstRevitYearsWxs)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(RstRevitYearsWxs)" />
+    </ItemGroup>
+  </Target>
 
 </Project>
