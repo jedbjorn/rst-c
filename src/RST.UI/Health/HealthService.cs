@@ -1,5 +1,5 @@
 // rst-c's own (not vendored): the Health window's services, extracted from the retired
-// HealthBridge (the WebView2 host object behind health_viewer.html) with the JSON layer removed
+// HealthBridge (v2.2.0's host object behind the HTML page health_viewer.html) with the JSON layer removed
 // (spec #16, WU2). Same reads, writes and rules: the snapshot at %AppData%\RST\health_scan.json,
 // the active profile's enabled cleanup targets (or the defaults), the ids re-checked here before
 // anything is deleted, the activity aggregation and the consent toggle.

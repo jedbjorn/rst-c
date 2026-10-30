@@ -39,7 +39,7 @@ public static class ProfileZip
     /// <remarks>
     /// Mutates <paramref name="profile"/>: rewrites <see cref="Profile.Branding"/>
     /// to point at the in-archive logo path. Caller passes a transient
-    /// deserialized copy (the Bridge does this), not a long-lived reference.
+    /// deserialized copy (ProfileSaveService.Export does this), not a long-lived reference.
     /// </remarks>
     public static void Pack(
         Profile profile,

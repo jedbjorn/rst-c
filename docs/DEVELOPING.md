@@ -1,7 +1,49 @@
 # Developing rst-c
 
-Notes for working on rst-c itself. This file covers the shared WPF kit, its theme
-keys, and the screenshot pipeline (feature #14, spec #16).
+Notes for working on rst-c itself: the native WPF front end (feature #14, spec #16), the
+shared family UI kit and its theme keys, the rules every window follows, the screenshot
+pipeline, and notes per window.
+
+## Architecture
+
+rst-c's three windows (the Profile Loader, the Profile Builder and Health) are native WPF,
+inside Revit's process, on the theme rst-c shares with gantt-it and splash-it.
+
+```mermaid
+graph LR
+  CMD["Engine command"]:::class2 --> DET["RevitThemeDetector"]:::class2
+  DET --> TH["RstTheme.Apply"]:::class1
+  CMD --> L["Launcher.Show(owner hwnd, …)"]:::class1
+  L --> W["WPF window"]:::class1
+  W --> VM["View-model"]:::class1
+  VM --> SVC["Services (RST.Core / RST.UI)"]:::class3
+  VM --> DS["IDialogService"]:::class3
+  SVC --> CB["Callbacks: switch scheduler, telemetry"]:::class4
+```
+
+| Project | Holds | Tests |
+|---|---|---|
+| `RST.Core` | The palette (`Theming/UiPalette`) and every rule with no WPF dependency: the Loader services and rules (`RST.Core.Loader`), the Builder's catalogue, drops, icon picker, editing and save rules (`RST.Core.Builder`), Health severity, formatters and chart maths (`RST.Core.Health`) | `RST.Tests`, on Linux and Windows |
+| `RST.UI` | The vendored kit, the windows, their view-models, the shared controls (`RibbonPreview`, `ActivityChart`, `IconPicker`), and the services that need WPF, dialogs or the file system (logo resize, Health scan and clean). **Revit-free** | `RST.RuntimeTests`, Windows only |
+| `RST.Engine` | The ribbon commands, `RevitThemeDetector`, the ribbon builder | Integration runner (VM) |
+
+- **Commands → launchers.** `LoaderCommand`, `BuilderCommand` and `HealthCommand` first capture
+  what the window needs from Revit (the command catalogue, the ribbon's tab titles, the profile
+  switch scheduler, the Health context), then call `RevitThemeDetector.ApplyToWindows()` and the
+  window's launcher: `ProfileLoaderLauncher.Show(owner, …)`, `ProfileBuilderLauncher.Show(owner, …)`
+  or `HealthLauncher.Show(owner, …)`, with `owner` = `UIApplication.MainWindowHandle`. The launcher
+  builds the services, the view-model and the window, owns it to Revit and calls `ShowDialog()`.
+- **Revit is reached only through callbacks** (`IProfileSwitchScheduler`, the telemetry toggle,
+  the captured context), so RST.UI never references Revit. `UiProjectTests` fails if RST.UI
+  references RevitAPI, RevitAPIUI, Autodesk.*, AdWindows or RST.Engine.
+- **MVVM without a package:** the kit's `ObservableObject` and `RelayCommand`. View-models take
+  their backend interface (`IProfileLoaderBackend`, `IProfileBuilderBackend`, the Health service)
+  and `IDialogService` through the constructor, so tests drive them with fakes.
+- **Services in Core.** Whatever can be plain C# lives in RST.Core and is tested on Linux:
+  the rules ported from the v2.x pages (see [History](#history-v2x-to-v30)) and the services that
+  read and write `%AppData%\RST\` (`ProfileLibraryService`, `ProfileLoadService`,
+  `LoaderPrefsService`, `AddinMaintenanceService`, `ProfileSaveService`, …). The WPF Loader and
+  Builder share one copy of each.
 
 ## Vendoring policy (the family kit)
 
@@ -49,26 +91,90 @@ so rst-c copies from splash-it.
 **RST.UI stays Revit-free.** `UiProjectTests` fails if RST.UI references RevitAPI,
 RevitAPIUI, Autodesk.*, AdWindows or RST.Engine.
 
-## Opening a window (for the window lanes)
+## Window rules
+
+Every rst-c window and dialog follows these. Copy them into a new window.
+
+### Opening
 
 ```csharp
 RevitThemeDetector.ApplyToWindows();               // Engine: before the window is built
 var dialogs = new DialogService();
 var window = new ProfileLoaderWindow(new ProfileLoaderViewModel(..., dialogs));
 dialogs.Owner = window;
-WindowPlacement.Own(window, commandData.Application.MainWindowHandle); // CenterOwner, or CenterScreen with no owner
+WindowPlacement.Own(window, commandData.Application.MainWindowHandle);
 window.ShowDialog();
 ```
 
-Each window:
+In practice the launcher does all but the first line. Each window:
 
 - merges Theme.xaml;
 - calls `DarkTitleBar.Attach(this)` in its constructor;
 - calls `WindowPlacement.CapToWorkArea(this)` from `OnSourceInitialized`;
 - uses `Background="{DynamicResource WindowBrush}"`, `FontFamily="Segoe UI"`, `FontSize="12"`,
-  `UseLayoutRounding="True"` and `TextOptions.TextFormattingMode="Display"`.
+  `UseLayoutRounding="True"` and `TextOptions.TextFormattingMode="Display"`;
+- sets `ShowInTaskbar="False"` and `WindowStartupLocation="CenterOwner"`.
 
-The theme is read when Theme.xaml loads, so a window keeps the theme it opened with.
+### Theme
+
+`RevitThemeDetector.Detect()` reads Revit's UI theme (`UIThemeManager`, including "Use system
+setting") and `RstTheme.Apply` pushes it into the kit before the window is built. Theme.xaml reads
+the palette when it loads, so **a window keeps the theme it opened with**; there is no live
+re-theme (the family behaves the same way). The shared `RibbonPreview` canvas follows that theme
+too. In Debug builds, `RST_THEME=dark|light` forces a theme for quick captures. A failed read
+falls back to light.
+
+### Owner, placement and the taskbar
+
+- **`WindowPlacement.Own(window, hwnd)`** sets the Win32 owner to Revit's main window and
+  `CenterOwner`. A zero handle (tests, an odd host) leaves the window unowned and `CenterScreen`.
+- **`WindowPlacement.CapToWorkArea(window)`** keeps the window inside the monitor's work area
+  (sizes as in v2.x: 1450 × 900 for the Loader and Builder, 900 × 800 for Health), so on a short
+  screen the content scrolls and the title bar and buttons stay reachable.
+- **`ShowInTaskbar="False"`** on every `Window`, dialogs included. An owned window still gets its
+  own taskbar entry (grouped under Revit) unless this is set; the VM found that on the first Health
+  build. The runtime tests assert it per window: `LoaderTaskbarTests`, `HealthWindowScreenshotTests`,
+  `ProfileBuilderScreenshotTests` and `ProfileBuilderInteractionScreenshotTests`.
+
+### Behavior
+
+- **Modal**, as in v2.x: one rst-c window at a time; Revit waits.
+- **Long work off the UI thread** (Scan System, Clean Junk Files, the load's add-in renames), with
+  the busy overlay or spinner shown and the commands disabled until it finishes.
+- **Destructive confirms default to Cancel** (`IDialogService.Confirm(..., danger: true)`); so does
+  Confirm Add-in Changes.
+- **External links** open with `Process.Start` and `UseShellExecute`, and only for absolute
+  `http`/`https` URLs: a shared profile is untrusted input.
+- **Closing or rebuilding a bound list from inside a WPF event** (the window's `Closing`, a
+  ComboBox's selection write) is posted to run after the event (`ProfileBuilderViewModel`'s
+  `post`). Doing it inline re-enters WPF mid-event. `ProfileBuilderWindowFlowTests` drives a real
+  window to cover it.
+
+### Drag and drop, and the TextBox preview routing lesson
+
+The Builder's drag and drop (`ProfileBuilderWindow.xaml.cs`, rules in `RST.Core.Builder.PanelDrops`):
+
+- `DragDrop.DoDragDrop` with a typed payload (`BuilderDrag`: catalogue row, panel header, slot row),
+  never text, so nothing outside rst-c accepts it.
+- The cards and rows report which half the cursor is over; the view-model sets `DropMarker` on the
+  target, drawn as an overlay border, so the layout never shifts (gantt-it's row-border approach).
+- **A `TextBox` swallows drags.** Its `TextEditor` marks `DragOver` and `Drop` handled (with no
+  effect) for any non-text payload, so a row's bubbling handlers never run over its name box,
+  which covers most of the row (VM defect D1). The fix is to handle the **preview** events on the
+  boxes (`PreviewDragEnter`, `PreviewDragOver`, `PreviewDrop`): when
+  `e.Data.GetDataPresent(typeof(BuilderDrag))`, forward to the row or card under it and mark the
+  event handled; otherwise leave it, so a text drag still reaches the TextBox.
+- **Starting a drag:** `PreviewMouseLeftButtonDown` remembers a pending drag unless the press is
+  inside a `TextBoxBase` or `ButtonBase` (`IsInteractive`), so typing, selecting text and clicking
+  ▲ ▼ × never start one.
+
+### Popups
+
+The Branding popover is a `StaysOpen="False"` `Popup` opened by a `ToggleButton` bound to
+`IsOpen`, and the toggle is not hit-testable while the popup is open. Otherwise the click that
+dismisses the popup reaches the button and reopens it (VM defect D2). On `Opened`, keyboard focus
+moves into the popup (its first control), because a mouse click leaves focus in the window and
+Escape would never reach the popup's key handler.
 
 ## Theme keys
 
@@ -161,7 +267,7 @@ uploads. Download it with:
 gh run download <run-id> -n RST-screenshots -D <folder>
 ```
 
-## Health window additions (WU2)
+## The Health window (WU2)
 
 The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthViewModel`) adds:
 
@@ -191,11 +297,9 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
 
 ## The Profile Loader (WU3)
 
-The native Profile Loader replaces `profile_loader.html`.
-
 - **Logic in RST.Core (`RST.Core.Loader`, tested on Linux in `RST.Tests/Loader`):** the ported
   JS rules (`RequiredAddinRules`, `RstifyRules`, `FailedDisableMessages`, `RibbonPreviewRules`)
-  and the services moved out of the retired `LoaderBridge` (`ProfileLibraryService`,
+  and the Loader services (`ProfileLibraryService`,
   `ProfileLoadService`, `LoaderPrefsService`, `AddinMaintenanceService`, `AddinLookupService`). The
   WPF Builder's backend calls the same services for its profile list, the active profile, the
   auto-reload and the add-in lookup. The services log through `ILoaderLog` (Serilog in RST.UI).
@@ -215,10 +319,8 @@ The native Profile Loader replaces `profile_loader.html`.
 
 ## The Profile Builder (WU4, WU5)
 
-The native Profile Builder (`RST.UI/Builder`) replaces `profile_builder.html`. `BuilderCommand`
-applies Revit's theme and calls `ProfileBuilderLauncher.Show(MainWindowHandle, …)`. With it,
-`LoaderBridge`, `LoaderWindow`, `LoaderHost`, `FileDialogBridge` and the last WebView2 code are gone:
-rst-c no longer references the WebView2 package.
+The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's theme and calls
+`ProfileBuilderLauncher.Show(MainWindowHandle, …)`.
 
 - **Logic in RST.Core (`RST.Core.Builder`, tested on Linux in `RST.Tests/Builder`):**
   `CatalogCommand` (get_catalog's shape and host-tab promotion), `CatalogTree` (the catalogue index
@@ -241,15 +343,27 @@ rst-c no longer references the WebView2 package.
   payloads in `src/RST.Tests/Fixtures/V220/builder`), and AC7 (`ProfileBuilderPerformanceTests`: 823
   commands, median keystroke under 100 ms, and far fewer realized rows than commands).
 - **WU5 additions:**
-  - **Drag and drop:** `RST.Core.Builder.PanelDrops` holds the page's index arithmetic and the
-    marker rules; the window's handlers start `DragDrop.DoDragDrop` with a `BuilderDrag` payload
-    (catalogue row, panel header, slot row) and report the cursor's half to the view-model, which
-    sets `DropMarker` on the cards and rows (overlay borders: no layout shift).
+  - **Drag and drop:** `RST.Core.Builder.PanelDrops` holds the index arithmetic and the
+    marker rules; see [Drag and drop](#drag-and-drop-and-the-textbox-preview-routing-lesson) for
+    the window side.
   - **Icon picker:** `RST.Core.Builder.IconPickerModel` (the port of `icon-picker.test.mjs`'s
     behavior, as a row model), `Controls/IconPickerViewModel` and the `Controls/IconPicker` overlay
     (a scrim inside the Builder window, so a click outside the card cancels).
   - **Modals:** `PresetsWindow` and `CleanupWindow` (family dialogs, `ShowInTaskbar="False"`) over
     `PresetsViewModel` / `CleanupViewModel`, behind `IBuilderDialogs`. The Cleanup modal edits a copy.
-  - **WPF event rule:** anything that closes the window or rebuilds a bound list from inside a WPF
-    event (the window's `Closing`, a ComboBox's selection write) is posted to run after it
-    (`ProfileBuilderViewModel`'s `post`); `ProfileBuilderWindowFlowTests` drives a real window.
+  - **Branding popover:** see [Popups](#popups).
+
+## History (v2.x to v3.0)
+
+Up to v2.2.0 the three windows were HTML pages in WebView2: `profile_loader.html`,
+`profile_builder.html` and `health_viewer.html` under `src/RST.UI/Assets/`, behind `LoaderWindow`,
+`LoaderHost`, `LoaderBridge`, `HealthHost`, `HealthBridge` and `FileDialogBridge`, with
+`pywebview-shim.js`, `rst_messages.js` and `rst_components.css`. Feature #14 replaced them one for
+one and removed the WebView2 package and its DLLs from the MSI. rst-c no longer creates
+`%LocalAppData%\RST\WebView2`; an existing folder is left in place on users' machines.
+
+Comments in the ported code cite those files with line numbers (for example
+`profile_builder.html 2346-2376`, or `LB:509-620` for `LoaderBridge.cs`). They refer to v2.2.0;
+read them with `git show v2.2.0:src/RST.UI/Assets/profile_builder.html` or
+`git show v2.2.0:src/RST.UI/Loader/LoaderBridge.cs`. The v2.2.0 reference data the AC6 tests
+compare against is in `src/RST.Tests/Fixtures/V220`.

@@ -314,8 +314,8 @@ public sealed class RstApplication : IExternalApplication
         // a prior crashed launch with the same second.
         PruneOldSessionLogs(logsDir, sessionLog);
 
-        // DEBUG minimum during dev so per-step traces (catalog stages, bridge
-        // entry args, navigation source) land in the file. Promote to
+        // DEBUG minimum during dev so per-step traces (catalog stages, window
+        // actions, the theme detected) land in the file. Promote to
         // Information once the loader/builder are stable.
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()

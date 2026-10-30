@@ -1,4 +1,4 @@
-// CleanupDefaults.cs — the 5 OOB cleanup targets that seed every new
+// CleanupDefaults.cs — the 6 OOB cleanup targets that seed every new
 // profile. Mirror the pre-RST-031 hardcoded behavior of HealthCleaner so
 // users moving from a legacy profile see the same set of options on
 // first run.
@@ -71,8 +71,8 @@ public static class CleanupDefaults
             Enabled = true,
         },
         // RST's own session logs. The boot-time prune in
-        // RstApplication.PruneOldSessionLogs already caps these at 5
-        // files; this entry is the user-visible hard exit when that
+        // RstApplication.PruneOldSessionLogs already caps these at 10
+        // files (MaxSessionLogs); this entry is the user-visible hard exit when that
         // automation fails (locked files, IO errors, etc.) — they can
         // see "RST Logs · 8 files · 14 MB" in the Health snapshot and
         // sweep manually instead of grepping AppData by hand.

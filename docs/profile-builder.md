@@ -1,7 +1,7 @@
 ---
 title: Profile Builder
 tags: [rst-c, builder, profiles, admin, export, import]
-date: 2026-06-24
+date: 2026-10-30
 project: rst-c
 purpose: Admin guide to building, managing, exporting, and importing profiles
 ---
@@ -12,88 +12,185 @@ purpose: Admin guide to building, managing, exporting, and importing profiles
 
 ## Overview
 
-The Builder is the admin counterpart to the Loader. It scans the live Revit session for every command on every tab — native Revit commands, add-in commands, pyRevit buttons, anything Revit's ribbon API knows about — and presents them as a searchable catalogue you can drag into panels on a new profile tab. The finished profile exports as a self-contained zip that any rst-c install can import.
+The Builder is the admin counterpart to the Loader. It reads every command on every tab of the running Revit session (native Revit commands, add-in commands, pyRevit buttons: anything Revit's ribbon knows about) and presents them as a searchable catalogue you can drag into panels on a new profile tab. The finished profile is saved for the Loader and can be exported as a self-contained `.zip` that any rst-c install can import.
 
-Live profile switching (no Revit restart on apply) is part of the same system — the profile the Builder produces is what the Loader applies live. Export and import are the distribution mechanism.
+Live profile switching (no Revit restart) is part of the same system: the profile the Builder saves is what the Loader loads. Export and import are how profiles are distributed.
 
 ## Building a profile
 
-![The Profile Builder window — the searchable command catalogue on the left filtered to "color", the profile's panels and their tool slots in the centre, the selected panel's properties on the right, and a live preview of the resulting ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
+![The Profile Builder window: the profile dropdown, Branding, Name and Tab along the top with Export ZIP, Save and Exit on the right; the Commands tree filtered by a search on the left; the profile's panel cards and their tool slots in the centre; the selected panel's Properties on the right; and the Live Preview of the ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
 
-### Setting the profile name and tab title
+### Opening the Builder
 
-Every profile has a **profile name** (shown in the Loader's picker) and a **tab title** (the ribbon tab label). These are set at the top of the Builder. If you rename a profile while editing an existing one, rst-c saves it as a new copy — the original is unchanged. This is a deliberate "fork" mechanism for creating variants of an existing profile.
+Click **Builder** on the **RST** panel of the **Add-Ins** tab. The window, titled **RST — Profile Builder**, opens centred over Revit, belongs to Revit (no taskbar button of its own; Revit waits until you close it) and uses Revit's light or dark theme as it was when the window opened.
 
-### Assembling the command catalogue
+The Builder starts on **+ New Profile**: a blank profile with one empty panel, "Panel 1".
 
-When the Builder opens, rst-c scans every tab and panel in the live Revit session and indexes all commands. The catalogue is searchable by name. Commands from all sources appear together — Revit built-ins, installed add-ins, pyRevit buttons.
+### The window
 
-Drag any command from the catalogue into a panel slot on the right. Each tool in a panel gets:
+- **Header:** the profile dropdown, "Profile Builder", **Branding ▾**, the **Name** and **Tab** boxes, then **Export ZIP**, **Save** and **Exit**.
+- **Commands (left):** the command catalogue, with its size and a **Filter…** box.
+- **Panels (centre):** **+ Add Panel** and one card per panel, in ribbon order.
+- **Properties (right):** Profile, Selected Panel, RST Presets and Junk Cleanup.
+- **Live Preview (bottom):** a read-only picture of the ribbon tab as it stands, updated as you edit.
 
-- **Name** — displayed on the ribbon button; defaults to the source command's name, editable.
-- **Icon** — chosen from a vendored 55-icon pack (each in seven colours), or auto-derived from the source command's own icon.
-- **Panel assignment** — which panel on the profile tab the tool appears in.
+### Name and tab title
 
-![The Builder's icon picker — the vendored icon pack laid out in a grid, with the colour-variant strip open below the selected "smiley" icon and its green variant highlighted](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
+Every profile has a **Name** (shown in the Loader's list) and a **Tab** (the ribbon tab's label). Both are required to save. The preview's tab label follows the Tab box as you type.
 
-### Naming and colouring panels
+### The command catalogue
 
-Panels are named individually. Each panel can also carry a hex colour and an opacity between 10% and 100% — see [Appearance](appearance.md) for how colours render on the ribbon.
+The catalogue is read from Revit when the Builder opens. It is a tree:
 
-### Setting profile defaults (presets)
+- **Autodesk Native** groups every built-in Revit tab. It starts collapsed.
+- Below it, add-in tabs and vendor panels, in alphabetical order.
+- Each level runs tab → panel → command. Groups show how many commands they hold, and commands show a short form of their command id (hover for the full id).
 
-The Builder lets admins set default behaviours that the Loader uses when a user first applies the profile:
+Typing in **Filter…** keeps the commands whose name or id contains the text (case does not matter), opens the groups that hold matches and updates their counts. "No matches for "<text>"." means nothing matched.
 
-- **RSTify** — whether tab-hiding is on by default and which tabs to hide. Users can override this in the Loader. See [Ribbon Tools](ribbon-tools.md).
-- **Disable non-required add-ins** — whether add-ins not listed as required are disabled on Apply.
+To add a command, **drag** it onto a panel, or **double-click** it to add it to the selected panel (a panel is created if there is none).
 
-![The RST Presets dialog in the Builder — a per-tab toggle list under "RSTify: hide these tabs", and a "Disable Unused Add-ins" toggle setting the Loader's default on first load](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
+### Panels and tools
 
-These defaults are stored in the profile's `presets` field. The user's own override (stored in `active_profile.json`) takes precedence once they have loaded the profile at least once.
+**+ Add Panel** adds "Panel N" in blue. Click a card to select it; the selected card has an accent ring and its settings appear under **Selected Panel**. Each card shows:
+
+- a colour stripe in the panel's colour;
+- the panel name, editable in place, and its slot count;
+- **▲ ▼** to move it, and **×** to delete it. Deleting asks **Delete panel "<name>"?**, with **Cancel** as the default;
+- its tools, one row each: a **Pick icon** button (the icon and its name, or "+ Icon"), the tool's name (editable; it is the ribbon button's label), the short command id, and **▲ ▼ ×** (× removes the tool without asking).
+
+An empty card reads "Drop a command here, or click one in the Commands pane."
+
+### Drag and drop
+
+| Drag | Drop on | Result |
+|---|---|---|
+| A command from the catalogue | A panel card | Added at the end of that panel |
+| A command from the catalogue | A tool row | Inserted before or after it, by which half of the row you drop on |
+| A tool row | Another tool row | Moved there, in the same panel or another |
+| A tool row | Another panel's card | Moved to the end of that panel |
+| A panel's header | Another panel card | Panels reordered, before or after by which half you drop on |
+
+While you drag, the source row dims, the target card is highlighted, and a green line marks where an item will land. You can drop over the name boxes too. A drag that starts inside a name box selects text instead of moving anything, and releasing outside a target changes nothing.
+
+### Icons
+
+Tool icons come from rst-c's built-in icon pack: 55 designs, each in seven colours. Click a tool's **Pick icon** button to open **Pick an icon**:
+
+- **∅ none** (first) removes the icon.
+- Clicking a design opens a row of its seven colours just below that design's row. Click a colour to use it.
+- Arrow keys, Home and End move between the colours. **Escape** closes the colour row first and the picker on a second press. Clicking outside the picker closes it without a change.
+
+The chosen icon shows on the tool's row, in the Live Preview and on the ribbon. A tool with no pack icon uses rst-c's default button icon on the ribbon (rst-c's own tools keep their own icons). There is no option to take an icon from the source command.
+
+![The Pick an icon overlay over the Builder: the icon pack's designs in a grid with ∅ none first, and the house design's row of seven colours open below it, with the tooltip "house — purple"](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
+
+### Properties
+
+- **Profile:** **Min Revit Version** (default `0.1.0`; informational, see [Notes & limits](#notes--limits)) and **Panel Opacity**, from 10 to 100 in steps of 5. Opacity sets how strongly every panel's colour is drawn; users can override it in the Loader.
+- **Selected Panel:** the panel's **Name**; its **Color**, as a swatch and a hex box (`#RRGGBB`, applied when you press Enter or leave the box). The swatch opens the colour picker, with a palette, recent colours, a hex box and a tool to pick a colour from anywhere on screen. **+ URL Button** opens a small editor with **Button label** and **URL** boxes: **Add** appends a link button to the panel (see [Custom URL Slots](custom-url-slots.md)) and **Cancel** discards it. Both boxes are required.
+- **RST Presets:** a summary (for example "2 tabs hidden • Disable Unused: on") and **Configure**.
+- **Junk Cleanup:** a summary ("5 of 6 targets enabled.") and **Configure**.
+
+See [Appearance](appearance.md) for how colours and opacity render on the ribbon.
+
+### RST Presets
+
+**RST Presets** sets the defaults the Loader offers the first time a user selects this profile:
+
+- **RSTify — Hide These Tabs:** one switch per ribbon tab on this machine, apart from the core tabs (Modify, Manage, View, Annotate, Add-Ins, Create) and the profile's own tab. Tabs the profile already hides but that are not on this ribbon are listed too.
+- **Disable Unused Add-ins:** the starting position of the Loader's **Disable unused add-ins** switch.
+
+**Apply** keeps the changes and **Cancel** discards them. The defaults are stored in the profile's `presets` field. When a user first selects the profile, the Loader asks whether to adopt them; after that, the user's own choices apply. See [Ribbon Tools](ribbon-tools.md).
+
+![The RST Presets dialog: the "RSTify — Hide These Tabs" switch list, the Disable Unused Add-ins switch, and Cancel and Apply](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
+
+### Junk Cleanup targets
+
+**Junk Cleanup Targets** chooses which of the Health tool's cleanup targets this profile offers in **Clean Junk Files**. The paths are fixed presets for safety: Temp, the Revit package cache, journals, the collaboration cache, the recent-file list and the RST logs (see [Health Tool](health-tool.md#junk-file-cleanup) for the paths). You cannot add a path of your own. Each row has:
+
+- an on/off switch;
+- the name, which you can edit;
+- the preset path, read-only;
+- its kind;
+- **×**, which removes it from this profile.
+
+**Restore Defaults** brings back the full preset list. **Apply** keeps the changes; **Cancel** undoes every change made since the dialog opened. With every row removed, the list reads `No targets. Use "Restore Defaults".`
+
+![The Junk Cleanup Targets dialog over the Builder: the help text, six rows each with an on/off switch, an editable name, the fixed preset path, its kind and ×, then Restore Defaults, Apply and Cancel](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-junk-cleanup.png)
+
+A profile keeps its own cleanup targets when you edit and save it. Only a profile with no targets at all (one made before cleanup targets existed) is given the defaults.
 
 ### Required add-ins
 
-Profiles can declare the add-ins they depend on. rst-c checks these on Apply and either auto-enables ones that are installed but disabled, or surfaces a download link for ones not found on the machine. See [Ribbon Tools](ribbon-tools.md) for how the matching and auto-enable work.
+When you save, the Builder works out which add-ins the profile depends on from the commands you used, and stores that list in the profile. The Loader checks it when the profile is loaded: it re-enables installed add-ins that are disabled and shows download links for missing ones. See [Ribbon Tools](ribbon-tools.md).
 
 ### Branding
 
-A logo image can be set for the machine — it appears in the branding panel at the leading edge of every profile tab. Set it once in the Builder; it applies to all profiles created or edited after that point. See [Appearance](appearance.md).
+**Branding ▾** opens a small panel for the company branding. It is a setting for this machine, not part of a profile. The dot on the button is filled when a logo or URL is set.
+
+- **Logo:** **Pick…** chooses an image; rst-c resizes a PNG, JPG or BMP to 85×85 and stores it as `%AppData%\RST\branding.png`. The dialog also offers SVG, but an SVG is copied as picked, without resizing, and the ribbon may not display it. **×** clears it. The file name, or "(none)", is shown beside them.
+- **URL:** a link kept with the branding and included in exported profiles. It is saved when you press Enter or leave the box.
+- **Done**, a click outside the panel, or **Escape** closes it. The panel takes the keyboard focus when it opens, so Escape works straight away.
+
+The branding appears at the leading edge of every profile tab on this machine. See [Appearance](appearance.md).
 
 ## Managing profiles
 
 ```linear
-Create new profile :::class1 -> Name + assemble panels :::class2 -> Set presets + required add-ins :::class2 -> Export zip :::class3 -> Distribute to users :::class4
+New profile :::class1 -> Name + assemble panels :::class2 -> Presets + cleanup targets :::class2 -> Save :::class3 -> Export ZIP :::class3 -> Distribute to users :::class4
 ```
+
+### Saving
+
+**Save** writes the profile to `%AppData%\RST\profiles\`:
+
+- A new profile is saved under a new file ("Saved as <file>").
+- An existing profile saved with the same name is overwritten.
+- An existing profile saved with a **new name** becomes a new copy with its own id, and the original is kept ("Saved as new profile "<name>" — original kept."). Use this to keep flavours of one profile side by side. If another profile already has that name, the save stops and asks you to choose a different one.
+- If the profile you saved is the loaded one, rst-c reloads it on the ribbon straight away ("Saved & ribbon reloaded.").
 
 ### Editing an existing profile
 
-Open the Builder and choose a profile from the drop-down at the top left. The profile's panels, tools, and settings load into the Builder. Edit as needed. **Saving with the same name overwrites the profile in place; renaming it saves a new copy.** This lets you maintain flavours of the same profile side by side.
+Choose a profile from the dropdown at the top left (the loaded one is marked "(loaded)"). Its panels, tools and settings load into the Builder. Your edits are made to a working copy, so the dropdown keeps showing the saved profiles until you save.
+
+### Unsaved changes
+
+If you have unsaved edits, the Builder asks before discarding them:
+
+| You | Choices |
+|---|---|
+| Click **Exit**, or close the window with **✕** | **Cancel**, **Discard & Exit**, **Save & Exit** |
+| Choose another profile in the dropdown | **Cancel**, **Discard & Switch**, **Save & Switch** |
+
+**Cancel** keeps you where you were, with your edits. **Save & Exit** closes only if the save succeeds.
 
 ### Deleting a profile
 
-Profile deletion is done from the Loader — select the profile and click **Delete profile**. There is no delete action in the Builder itself.
+Profiles are deleted in the Loader: select the profile and click **Delete Profile**. The Builder has no delete action.
 
 ## Export and import
 
 ### Exporting a profile
 
-Click **Export** in the Builder. rst-c packages the profile as a `.rstprofile` zip containing:
+Click **Export ZIP**. The profile needs a name. Choose where to save it in the **Export RST Profile (.zip)** dialog; the Builder confirms with "Exported to <path>". The export is the profile as it stands in the Builder; save as well if you want your own copy to match. The `.zip` contains:
 
-- `profile.json` — the full profile definition
-- `assets/branding.png` — the resolved branding logo (per-profile override if set, otherwise the machine-wide default)
+- `profile.json`: the full profile definition, including the branding URL if one is set;
+- `assets/branding.png`: the branding logo, if one is set.
 
-The exported zip is self-contained. The recipient does not need to set up branding separately — the logo travels with the profile.
+The zip is self-contained: the recipient does not need to set up branding, because the logo travels with the profile.
 
 ### Importing a profile
 
-Import is done through the Loader. Open the Loader, click **Import**, and select the `.rstprofile` file. rst-c extracts the profile JSON and branding assets into `%AppData%\RST\profiles\` and `%AppData%\RST\<profile-id>\` respectively. The profile then appears in the Loader's list ready to apply.
+Import happens in the Loader: click **+ Import from File** and choose the `.zip`. rst-c installs the profile into `%AppData%\RST\profiles\` and its logo into `%AppData%\RST\<profile-id>\`, and the profile appears in the Loader's list, ready to load.
 
 > [!class2]
-> Profiles are saved to `%AppData%\RST\profiles\` on creation. Imported zips are extracted there automatically — you do not need to manually place or rename any files.
+> You never need to place or rename profile files by hand. Saving and importing put them in `%AppData%\RST\profiles\`.
 
 ## Notes & limits
 
-- The Builder requires a live Revit session to scan commands. Open a project (even a blank one) before building a profile if you want add-in commands to appear in the catalogue.
-- A profile's `schemaVersion` field ensures forward compatibility. Older pre-port pyRevit profiles (no `schemaVersion` field, treated as v0) can be loaded and re-exported.
-- The `min_version` field on a profile records the minimum rst-c runtime required to apply it. Profiles built with newer features may not load on older installs.
-- Stacks (grouped button stacks on a panel) are supported in the profile schema; the Builder produces them when tools are grouped.
+- The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means the catalogue could not be read.
+- An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
+- A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
+- **Min Revit Version** is informational: the Loader shows it on the profile's card and details ("Min Revit"), but rst-c does not check or enforce it when a profile is loaded.
+- The Builder makes plain panels of large buttons. It does not create stacks (grouped buttons). Stacks in a hand-edited profile still appear in the previews.

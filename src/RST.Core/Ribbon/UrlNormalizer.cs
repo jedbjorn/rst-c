@@ -6,7 +6,7 @@
 // Win32Exception(2) "system cannot find the file specified". The
 // builder lets users type plain hostnames ("gmail.com") or bare email
 // addresses ("support@example.com"), so the runtime URL launchers
-// (SlotCommandBase URL slots, branding-panel UrlClickCommand) need to
+// (the URL slots in SlotCommandBase and SlotInvokeCommand) need to
 // canonicalise before handing the value to Process.Start.
 //
 // Rules (deliberately simple — no validation):

@@ -323,6 +323,46 @@ public class ProfileBuilderWindowFlowTests
     });
 
     [Fact]
+    public void Opening_the_popover_moves_focus_inside_so_Escape_closes_it_at_once() => Sta(() =>
+    {
+        // VM finding (WU5 re-run c89b3d78): opened with a mouse click, the popover left keyboard focus
+        // outside it, so the first Escape never reached it.
+        var o = Open();
+        try
+        {
+            var w = o.Window;
+            w.Activate();
+            ToggleBranding(w);
+            Assert.True(w.BrandingPopup.IsOpen);
+            // Where a key press goes: the keyboard focus, or (when the off-screen test window cannot take
+            // keyboard focus) the window's logical focus. Without the fix this is outside the popover.
+            var focused = System.Windows.Input.Keyboard.FocusedElement as DependencyObject;
+            if (focused is null || !IsUnder(focused, w.BrandingPopover))
+                focused = System.Windows.Input.FocusManager.GetFocusedElement(w) as DependencyObject;
+            Assert.NotNull(focused);
+            Assert.True(IsUnder(focused, w.BrandingPopover), "opening moves focus inside the popover");
+            Assert.Same(w.PickLogoButton, focused);
+
+            // Escape at the focused element (as a real key press) reaches the popup's own key handler,
+            // which handles it and closes the popover. From outside the popover it would not.
+            var args = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(focused as System.Windows.Media.Visual ?? w)!, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+            };
+            ((System.Windows.IInputElement)focused).RaiseEvent(args);
+            Settle();
+            Assert.True(args.Handled, "the popover's key handler handled Escape");
+            Assert.False(w.BrandingPopup.IsOpen, "the first Escape closes the popover");
+            Assert.False(w.BrandingButton.IsChecked);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
     public void The_popover_reopens_after_the_logo_file_dialog() => Sta(() =>
     {
         var o = Open();

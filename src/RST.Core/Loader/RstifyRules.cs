@@ -84,9 +84,9 @@ public static class RstifyRules
 }
 
 /// <summary>
-/// An add-in the disable pass could not rename. The bridge sends <c>{ fileName }</c> (or, when the
-/// whole pass threw, <c>{ fileName: "(disable subsystem failure)", error }</c>); an older shape
-/// used <c>{ name }</c>.
+/// An add-in the disable pass could not rename. <see cref="ProfileLoadService"/> reports its file
+/// name (or, when the whole pass threw, <c>"(disable subsystem failure)"</c> with the error); the
+/// v2.x bridge's older shape used <c>{ name }</c>.
 /// </summary>
 public sealed record FailedDisable(string? FileName, string? Name = null, string? Error = null);
 

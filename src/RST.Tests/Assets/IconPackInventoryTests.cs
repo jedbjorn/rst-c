@@ -3,7 +3,7 @@
 // Spec #9 (Colored Icon Pack Picker) asset contract: 55 logical icon
 // designs, each with exactly seven canonical color variants
 // (32_<name>_<color>.png) plus a blue compatibility alias (32_<name>.png)
-// byte-equivalent to its blue variant. The bridge enumerates this
+// byte-equivalent to its blue variant. The Builder's icon picker enumerates this
 // directory and the resolver loads from it — a missing variant or alias
 // is a release blocker, so the inventory itself is asserted here.
 
@@ -20,7 +20,7 @@ namespace RST.Tests.Assets;
 public class IconPackInventoryTests
 {
     // Canonical palette (fleet decision #4 / spec #9 palette contract),
-    // shared with the resolver and bridge via the Core icon-pack contract.
+    // shared with the resolver and the icon picker via the Core icon-pack contract.
     private static readonly IReadOnlyList<string> CanonicalColors = IconPack.CanonicalColors;
 
     private const int ExpectedDesignCount = 55;

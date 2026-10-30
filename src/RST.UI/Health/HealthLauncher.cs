@@ -1,5 +1,5 @@
 // rst-c's own (not vendored): opens the Health window for RST.Engine's HealthCommand (spec #16,
-// WU2, Launchers), replacing the WebView2-era HealthHost. The Engine never touches WPF types.
+// WU2, Launchers), replacing v2.2.0's HealthHost. The Engine never touches WPF types.
 
 using RST.Core.Health;
 using RST.UI.Dialogs;

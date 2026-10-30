@@ -257,7 +257,7 @@
                             </StackPanel>
                         </ToggleButton>
                         <Popup x:Name="BrandingPopup" PlacementTarget="{Binding ElementName=BrandingButton}" Placement="Bottom"
-                               VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" Closed="OnBrandingClosed"
+                               VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" Opened="OnBrandingOpened" Closed="OnBrandingClosed"
                                PreviewKeyDown="OnBrandingPopoverKey"
                                IsOpen="{Binding IsBrandingOpen, Mode=TwoWay}">
                             <Border x:Name="BrandingPopover" Width="320" Background="{StaticResource SurfaceBrush}"
@@ -271,7 +271,7 @@
                                     <TextBlock Text="{x:Static res:UiStrings.Builder_BrandingHeading}" Style="{StaticResource SectionText}" />
                                     <TextBlock Text="{x:Static res:UiStrings.Builder_Logo}" Style="{StaticResource PropLabel}" />
                                     <StackPanel Orientation="Horizontal">
-                                        <Button Content="{x:Static res:UiStrings.Builder_PickLogo}" Command="{Binding PickLogoCommand}"
+                                        <Button x:Name="PickLogoButton" Content="{x:Static res:UiStrings.Builder_PickLogo}" Command="{Binding PickLogoCommand}"
                                                 AutomationProperties.AutomationId="Builder.PickLogo" />
                                         <Button Content="{x:Static res:UiStrings.Builder_ClearLogo}" Command="{Binding ClearLogoCommand}"
                                                 Style="{StaticResource IconButton}" Margin="4,0,0,0"

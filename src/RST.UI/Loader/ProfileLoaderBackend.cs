@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the Profile Loader view-model's port to the RST.Core Loader
-// services (spec #16, WU3). The real backend only composes the same services LoaderBridge calls,
-// so the WPF Loader and the WPF Builder share one copy of the logic.
+// services (spec #16, WU3). The real backend only composes those RST.Core services (the ones the
+// Builder's backend also calls), so the WPF Loader and the WPF Builder share one copy of the logic.
 
 using RST.Core.Configuration;
 using RST.Core.Loader;

@@ -1,5 +1,5 @@
 // rst-c's own (not vendored): the titles and filters of rst-c's file dialogs (spec #16), kept
-// from the WebView2-era FileDialogBridge (retired in WU5) so the Loader's import and the Builder's
+// from v2.2.0's file dialogs (retired with the HTML pages in WU5) so the Loader's import and the Builder's
 // logo and export dialogs read exactly as before. The dialogs open through IDialogService.
 
 namespace RST.UI.Dialogs;

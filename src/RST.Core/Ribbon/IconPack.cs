@@ -4,11 +4,11 @@
 // explicit color variants (Assets/icons/pack/32_<name>_<color>.png) plus
 // a blue compatibility alias (32_<name>.png) that legacy bare
 // "pack:<name>" profile values resolve to. This type owns the three
-// pieces the Engine resolver, the UI bridge, and the tests must agree
-// on:
+// pieces the Engine resolver, the Builder's icon picker, and the tests
+// must agree on:
 //
 //   1. Canonical palette — seven color keys in a fixed order. The same
-//      order drives bridge output, the picker popdown, and the docs; it
+//      order drives the icon pack listing, the picker's colour row, and the docs; it
 //      never comes from filesystem enumeration order.
 //   2. Pack-value parsing — profile iconFile values. Only a RIGHT-SIDE
 //      suffix equal to a known color key splits off as a color, so
