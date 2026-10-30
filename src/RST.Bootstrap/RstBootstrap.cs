@@ -38,7 +38,7 @@ public sealed class RstBootstrap : IExternalApplication
                 string.IsNullOrEmpty(bootstrapDll) ? null : Path.GetDirectoryName(bootstrapDll),
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 major,
-                Directory.Exists);
+                File.Exists);
 
             BootLog.Info("RST.Bootstrap loading");
             BootLog.Info($"  bootstrapDll={bootstrapDll}");
@@ -175,22 +175,25 @@ public sealed class RstBootstrap : IExternalApplication
 /// Where the engine is (feature #17, spec #20 §7). RST-Machine.msi puts the bootstrap in
 /// <c>C:\Program Files\RST\R&lt;NN&gt;\</c> and the engine in its <c>app\</c> subfolder. RST.msi puts the
 /// bootstrap beside its manifest in the per-user Add-Ins folder and the engine in
-/// <c>%AppData%\RST\R&lt;NN&gt;\app\</c>. So: <c>&lt;bootstrap dir&gt;\app\</c> when that folder exists,
-/// otherwise the per-user folder, which is every per-user install before and after v3.1. Pure, with
-/// the folder check as a seam, so RST.RuntimeTests covers both layouts without Revit.
+/// <c>%AppData%\RST\R&lt;NN&gt;\app\</c>. So: <c>&lt;bootstrap dir&gt;\app\</c> when it holds
+/// <c>RST.Engine.dll</c>, otherwise the per-user folder, which is every per-user install before and after
+/// v3.1. The probe is for our engine, not for any folder named <c>app</c>: the per-user Add-Ins folder is
+/// shared with every other vendor, and a foreign <c>app\</c> there must not stop RST loading (review B1).
+/// Pure, with the file check as a seam, so RST.RuntimeTests covers both layouts without Revit.
 /// </summary>
 internal static class EngineLocation
 {
+    public const string EngineFileName = "RST.Engine.dll";
     public const string BesideBootstrap = "beside the bootstrap (per machine)";
     public const string PerUser = "per user (%AppData%)";
 
     public static (string AppDir, string Layout) Resolve(
-        string? bootstrapDir, string appData, string major, Func<string, bool> directoryExists)
+        string? bootstrapDir, string appData, string major, Func<string, bool> fileExists)
     {
         if (!string.IsNullOrEmpty(bootstrapDir))
         {
             var beside = Path.Combine(bootstrapDir, "app");
-            if (directoryExists(beside)) return (beside, BesideBootstrap);
+            if (fileExists(Path.Combine(beside, EngineFileName))) return (beside, BesideBootstrap);
         }
         return (Path.Combine(appData, "RST", major, "app"), PerUser);
     }

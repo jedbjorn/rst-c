@@ -9,7 +9,8 @@ namespace RST.RuntimeTests.Bootstrap;
 /// <summary>
 /// <see cref="EngineLocation"/> for both install layouts, on real folders: RST-Machine.msi's
 /// (<c>Program Files\RST\R&lt;NN&gt;\RST.Bootstrap.dll</c> with the engine in <c>app\</c> beside it) and RST.msi's
-/// (the bootstrap in the per-user Add-Ins folder, the engine in <c>%AppData%\RST\R&lt;NN&gt;\app\</c>).
+/// (the bootstrap in the per-user Add-Ins folder, the engine in <c>%AppData%\RST\R&lt;NN&gt;\app\</c>). The
+/// probe is for <c>app\RST.Engine.dll</c>, never for a bare <c>app\</c> folder (review B1).
 /// </summary>
 public sealed class EngineLocationTests : IDisposable
 {
@@ -24,15 +25,21 @@ public sealed class EngineLocationTests : IDisposable
 
     private string AppData => Path.Combine(_root, "Roaming");
 
+    private static void Touch(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "engine");
+    }
+
     [Fact]
     public void Per_machine_layout_loads_the_engine_beside_the_bootstrap()
     {
         var bootstrapDir = Path.Combine(_root, "Program Files", "RST", "R26");
-        Directory.CreateDirectory(Path.Combine(bootstrapDir, "app"));
+        Touch(Path.Combine(bootstrapDir, "app", "RST.Engine.dll"));
         // A per-user engine of the same major is present too: the bootstrap's own layout wins.
-        Directory.CreateDirectory(Path.Combine(AppData, "RST", "R26", "app"));
+        Touch(Path.Combine(AppData, "RST", "R26", "app", "RST.Engine.dll"));
 
-        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R26", Directory.Exists);
+        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R26", File.Exists);
 
         Assert.Equal(Path.Combine(bootstrapDir, "app"), appDir);
         Assert.Equal(EngineLocation.BesideBootstrap, layout);
@@ -43,11 +50,27 @@ public sealed class EngineLocationTests : IDisposable
     {
         var bootstrapDir = Path.Combine(AppData, "Autodesk", "Revit", "Addins", "2027");
         Directory.CreateDirectory(bootstrapDir);
-        Directory.CreateDirectory(Path.Combine(AppData, "RST", "R27", "app"));
+        Touch(Path.Combine(AppData, "RST", "R27", "app", "RST.Engine.dll"));
 
-        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R27", Directory.Exists);
+        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R27", File.Exists);
 
         Assert.Equal(Path.Combine(AppData, "RST", "R27", "app"), appDir);
+        Assert.Equal(EngineLocation.PerUser, layout);
+    }
+
+    // Review B1: the per-user Add-Ins folder is every vendor's. Another add-in's app\ folder beside RST's
+    // bootstrap must not be taken for RST's engine.
+    [Fact]
+    public void A_foreign_app_folder_beside_a_per_user_bootstrap_still_loads_from_AppData()
+    {
+        var bootstrapDir = Path.Combine(AppData, "Autodesk", "Revit", "Addins", "2026");
+        var foreign = Path.Combine(bootstrapDir, "app");
+        Touch(Path.Combine(foreign, "OtherVendor.dll"));
+        Touch(Path.Combine(AppData, "RST", "R26", "app", "RST.Engine.dll"));
+
+        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R26", File.Exists);
+
+        Assert.Equal(Path.Combine(AppData, "RST", "R26", "app"), appDir);
         Assert.Equal(EngineLocation.PerUser, layout);
     }
 
@@ -58,7 +81,7 @@ public sealed class EngineLocationTests : IDisposable
         Directory.CreateDirectory(bootstrapDir);
         File.WriteAllText(Path.Combine(bootstrapDir, "app"), "not a folder");
 
-        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R25", Directory.Exists);
+        var (appDir, layout) = EngineLocation.Resolve(bootstrapDir, AppData, "R25", File.Exists);
 
         Assert.Equal(Path.Combine(AppData, "RST", "R25", "app"), appDir);
         Assert.Equal(EngineLocation.PerUser, layout);
@@ -79,11 +102,22 @@ public sealed class EngineLocationTests : IDisposable
     }
 
     [Fact]
+    public void The_probe_asks_for_the_engine_file_itself()
+    {
+        var bootstrapDir = Path.Combine(_root, "Program Files", "RST", "R27");
+        var probed = new List<string>();
+
+        EngineLocation.Resolve(bootstrapDir, AppData, "R27", p => { probed.Add(p); return false; });
+
+        Assert.Equal(new[] { Path.Combine(bootstrapDir, "app", "RST.Engine.dll") }, probed);
+    }
+
+    [Fact]
     public void The_per_user_engine_path_is_returned_even_when_missing_so_the_bootstrap_logs_it()
     {
         var bootstrapDir = Path.Combine(AppData, "Autodesk", "Revit", "Addins", "2026");
 
-        var (appDir, _) = EngineLocation.Resolve(bootstrapDir, AppData, "R26", Directory.Exists);
+        var (appDir, _) = EngineLocation.Resolve(bootstrapDir, AppData, "R26", File.Exists);
 
         Assert.Equal(Path.Combine(AppData, "RST", "R26", "app"), appDir);
         Assert.False(Directory.Exists(appDir));
