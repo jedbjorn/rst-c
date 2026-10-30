@@ -513,7 +513,7 @@ function placeItem(item, t) {
 // ───────────────────────── render: mockup strip ─────────────────────────
 function renderMock() {
   const m = $('#mock'); m.innerHTML = '';
-  m.append(h('b', {}, 'MOCKUP v2 · F18 Builder UX'));
+  m.append(h('b', {}, 'MOCKUP v2.1 · F18 Builder UX'));
   for (const k in OPTS) {
     const [title, labels] = OPT_LABELS[k];
     m.append(h('span', { class:'grp' }, title + ':', h('span', { class:'seg' },
@@ -528,11 +528,11 @@ function renderHeader() {
   const el = $('#header'); el.innerHTML = '';
   const p = W();
   el.append(
+    h('button', { class:'gear', 'data-opens':'1', title:'Settings for this machine (not saved in profiles)', 'aria-label':'Settings', onclick:e => gearMenu(e.currentTarget) }, '⚙'),
     h('button', { class:'profile-btn', 'data-opens':'1', title:'Switch profile', onclick:e => profileMenu(e.currentTarget) },
       h('span', {}, h('b', {}, p.name || '(unnamed)'), S.saved[S.cur]?.loaded ? h('span', { class:'muted' }, '  (loaded)') : null), h('span', { class:'muted' }, '▾')),
     h('button', { title:'Export this profile as a .zip', onclick:() => toast(`Exported to Desktop\\${p.name}.zip`) }, 'Export ZIP'),
     h('div', { class:'vsep' }),
-    h('button', { class:'gear', 'data-opens':'1', title:'Settings for this machine (not saved in profiles)', 'aria-label':'Settings', onclick:e => gearMenu(e.currentTarget) }, '⚙'),
     h('span', { class:'section-title', style:'font-size:14px' }, 'Profile Builder'),
     h('div', { class:'spacer' }),
     S.dirty ? h('span', { class:'dirty' }, 'Unsaved changes') : null,
