@@ -472,13 +472,7 @@ public static class UiStrings
 
     public static string Builder_NewProfile => Get(nameof(Builder_NewProfile));
 
-    public static string Builder_LoadedOption(object? arg0) => Format(nameof(Builder_LoadedOption), arg0);
-
     public static string Builder_ProfileSelectorTip => Get(nameof(Builder_ProfileSelectorTip));
-
-    public static string Builder_Branding => Get(nameof(Builder_Branding));
-
-    public static string Builder_BrandingTip => Get(nameof(Builder_BrandingTip));
 
     public static string Builder_BrandingHeading => Get(nameof(Builder_BrandingHeading));
 
@@ -499,12 +493,6 @@ public static class UiStrings
     public static string Builder_Done => Get(nameof(Builder_Done));
 
     public static string Builder_Name => Get(nameof(Builder_Name));
-
-    public static string Builder_NamePlaceholder => Get(nameof(Builder_NamePlaceholder));
-
-    public static string Builder_Tab => Get(nameof(Builder_Tab));
-
-    public static string Builder_TabPlaceholder => Get(nameof(Builder_TabPlaceholder));
 
     public static string Builder_ExportZip => Get(nameof(Builder_ExportZip));
 
@@ -544,37 +532,13 @@ public static class UiStrings
 
     public static string Builder_Delete => Get(nameof(Builder_Delete));
 
-    public static string Builder_Properties => Get(nameof(Builder_Properties));
-
     public static string Builder_ProfileSection => Get(nameof(Builder_ProfileSection));
 
     public static string Builder_MinRevitVersion => Get(nameof(Builder_MinRevitVersion));
 
     public static string Builder_PanelOpacity => Get(nameof(Builder_PanelOpacity));
 
-    public static string Builder_SelectedPanel => Get(nameof(Builder_SelectedPanel));
-
-    public static string Builder_NoPanelSelected => Get(nameof(Builder_NoPanelSelected));
-
-    public static string Builder_Color => Get(nameof(Builder_Color));
-
     public static string Builder_ColorDialogTitle => Get(nameof(Builder_ColorDialogTitle));
-
-    public static string Builder_UrlButtons => Get(nameof(Builder_UrlButtons));
-
-    public static string Builder_AddUrlButton => Get(nameof(Builder_AddUrlButton));
-
-    public static string Builder_UrlLabelPlaceholder => Get(nameof(Builder_UrlLabelPlaceholder));
-
-    public static string Builder_UrlAdd => Get(nameof(Builder_UrlAdd));
-
-    public static string Builder_Presets => Get(nameof(Builder_Presets));
-
-    public static string Builder_PresetsHelp => Get(nameof(Builder_PresetsHelp));
-
-    public static string Builder_Configure => Get(nameof(Builder_Configure));
-
-    public static string Builder_Cleanup => Get(nameof(Builder_Cleanup));
 
     public static string Builder_CleanupHelp => Get(nameof(Builder_CleanupHelp));
 
@@ -618,15 +582,7 @@ public static class UiStrings
 
     public static string Builder_ClearLogoFailed(object? arg0) => Format(nameof(Builder_ClearLogoFailed), arg0);
 
-    public static string Builder_LabelRequired => Get(nameof(Builder_LabelRequired));
-
-    public static string Builder_UrlRequired => Get(nameof(Builder_UrlRequired));
-
     // The Profile Builder's modals and icon picker (spec #16, WU5).
-
-    public static string Builder_Apply => Get(nameof(Builder_Apply));
-
-    public static string Builder_PresetsTitle => Get(nameof(Builder_PresetsTitle));
 
     public static string Builder_PresetsBody => Get(nameof(Builder_PresetsBody));
 
@@ -638,17 +594,11 @@ public static class UiStrings
 
     public static string Builder_PresetsDisableUnusedHelp => Get(nameof(Builder_PresetsDisableUnusedHelp));
 
-    public static string Builder_CleanupTitle => Get(nameof(Builder_CleanupTitle));
-
-    public static string Builder_CleanupModalHelp => Get(nameof(Builder_CleanupModalHelp));
-
     public static string Builder_CleanupEmpty => Get(nameof(Builder_CleanupEmpty));
 
     public static string Builder_CleanupEnableTip => Get(nameof(Builder_CleanupEnableTip));
 
     public static string Builder_CleanupNamePlaceholder => Get(nameof(Builder_CleanupNamePlaceholder));
-
-    public static string Builder_CleanupPathTip => Get(nameof(Builder_CleanupPathTip));
 
     public static string Builder_CleanupRemoveTip => Get(nameof(Builder_CleanupRemoveTip));
 
@@ -669,4 +619,71 @@ public static class UiStrings
     // Stacks (feature #15, spec #17): kept and drawn, not authored in the Builder yet (feature #18).
 
     public static string Builder_StackSlotNameTip => Get(nameof(Builder_StackSlotNameTip));
+
+    // The window shell (feature #18, spec #19, WU2): the header's ⚙ and profile menus, Rename and
+    // Duplicate, the Branding dialog and the Profile pane's tabs.
+
+    public static string Builder_SettingsTip => Get(nameof(Builder_SettingsTip));
+
+    public static string Builder_SettingsHeading => Get(nameof(Builder_SettingsHeading));
+
+    public static string Builder_BrandingMenu => Get(nameof(Builder_BrandingMenu));
+
+    public static string Builder_BrandingMenuNote => Get(nameof(Builder_BrandingMenuNote));
+
+    public static string Builder_BrandingHelp => Get(nameof(Builder_BrandingHelp));
+
+    public static string Builder_SwitchProfileHeading => Get(nameof(Builder_SwitchProfileHeading));
+
+    public static string Builder_LoadedMark => Get(nameof(Builder_LoadedMark));
+
+    public static string Builder_RenameMenu => Get(nameof(Builder_RenameMenu));
+
+    public static string Builder_RenameNote => Get(nameof(Builder_RenameNote));
+
+    public static string Builder_DuplicateMenu => Get(nameof(Builder_DuplicateMenu));
+
+    public static string Builder_DuplicateNote => Get(nameof(Builder_DuplicateNote));
+
+    public static string Builder_UnsavedIndicator => Get(nameof(Builder_UnsavedIndicator));
+
+    public static string Builder_UnnamedProfile => Get(nameof(Builder_UnnamedProfile));
+
+    public static string Builder_UnnamedHint => Get(nameof(Builder_UnnamedHint));
+
+    public static string Builder_TabGeneral => Get(nameof(Builder_TabGeneral));
+
+    public static string Builder_TabLoaderDefaults => Get(nameof(Builder_TabLoaderDefaults));
+
+    public static string Builder_TabJunkCleanup => Get(nameof(Builder_TabJunkCleanup));
+
+    public static string Builder_ProfileName => Get(nameof(Builder_ProfileName));
+
+    public static string Builder_RibbonTabName => Get(nameof(Builder_RibbonTabName));
+
+    public static string Builder_PanelOpacityHelp => Get(nameof(Builder_PanelOpacityHelp));
+
+    public static string Builder_MinRevitHelp => Get(nameof(Builder_MinRevitHelp));
+
+    public static string Builder_RenameTitle => Get(nameof(Builder_RenameTitle));
+
+    public static string Builder_RenameConfirm => Get(nameof(Builder_RenameConfirm));
+
+    public static string Builder_DuplicateTitle => Get(nameof(Builder_DuplicateTitle));
+
+    public static string Builder_DuplicateHelp => Get(nameof(Builder_DuplicateHelp));
+
+    public static string Builder_DuplicateConfirm => Get(nameof(Builder_DuplicateConfirm));
+
+    public static string Builder_ProfileRowLoaded(object? arg0) => Format(nameof(Builder_ProfileRowLoaded), arg0);
+
+    public static string Builder_ProfileRowTab(object? arg0) => Format(nameof(Builder_ProfileRowTab), arg0);
+
+    public static string Builder_EditingName(object? arg0) => Format(nameof(Builder_EditingName), arg0);
+
+    public static string Builder_OpacityPercent(object? arg0) => Format(nameof(Builder_OpacityPercent), arg0);
+
+    public static string Builder_Duplicated(object? arg0) => Format(nameof(Builder_Duplicated), arg0);
+
+    public static string Builder_CleanupPathTip(object? arg0) => Format(nameof(Builder_CleanupPathTip), arg0);
 }

@@ -20,37 +20,60 @@ using ProfilePanel = RST.Core.Profiles.Panel;
 
 namespace RST.UI.Builder;
 
-/// <summary>One entry of the header's profile dropdown: "+ New Profile", or a profile ("(loaded)" when active).</summary>
-public sealed class ProfileOptionViewModel
+/// <summary>
+/// One profile in the header's profile menu (feature #18): its name, ticked when it is the one in
+/// the editor, and a note with its tab ("loaded · tab "X"" for the one the Loader has loaded).
+/// <see cref="New"/> stands for "+ New profile", which the menu offers as its own item.
+/// </summary>
+public sealed class ProfileOptionViewModel : ObservableObject
 {
-    private ProfileOptionViewModel(string key, string display, ProfileEntry? entry)
+    private bool _isCurrent;
+
+    private ProfileOptionViewModel(string key, string display, bool isLoaded, string note, ProfileEntry? entry)
     {
         Key = key;
         Display = display;
+        IsLoaded = isLoaded;
+        Note = note;
         Entry = entry;
     }
 
     /// <summary>The option's value: <c>__new__</c>, or the profile's id (its name when it has none).</summary>
     public string Key { get; }
 
+    /// <summary>The profile's name ("+ New profile" for <see cref="New"/>).</summary>
     public string Display { get; }
 
-    /// <summary>The profile (null for "+ New Profile").</summary>
+    /// <summary>The Loader has this profile loaded (its id is the active one).</summary>
+    public bool IsLoaded { get; }
+
+    /// <summary>The menu row's right-hand note: "loaded · tab "X"" or "tab "X"".</summary>
+    public string Note { get; }
+
+    /// <summary>The profile (null for "+ New profile").</summary>
     public ProfileEntry? Entry { get; }
 
     public bool IsNew => Entry is null;
 
+    /// <summary>The profile in the editor: ticked in the menu.</summary>
+    public bool IsCurrent
+    {
+        get => _isCurrent;
+        internal set => SetField(ref _isCurrent, value);
+    }
+
     public const string NewKey = "__new__";
 
-    public static ProfileOptionViewModel New() => new(NewKey, UiStrings.Builder_NewProfile, null);
+    public static ProfileOptionViewModel New() => new(NewKey, UiStrings.Builder_NewProfile, false, "", null);
 
-    /// <summary>populateProfileSelector's option: the name, suffixed "(loaded)" when its id is the active one.</summary>
+    /// <summary>populateProfileSelector's option: the name, marked loaded when its id is the active one.</summary>
     public static ProfileOptionViewModel For(ProfileEntry entry, string? activeId)
     {
         var p = entry.Profile;
         var key = string.IsNullOrEmpty(p.Id) ? p.ProfileName : p.Id!;
         var loaded = !string.IsNullOrEmpty(p.Id) && p.Id == activeId;
-        return new ProfileOptionViewModel(key, loaded ? UiStrings.Builder_LoadedOption(p.ProfileName) : p.ProfileName, entry);
+        var note = loaded ? UiStrings.Builder_ProfileRowLoaded(p.Tab ?? "") : UiStrings.Builder_ProfileRowTab(p.Tab ?? "");
+        return new ProfileOptionViewModel(key, p.ProfileName ?? "", loaded, note, entry);
     }
 
     public override string ToString() => Display;
@@ -231,7 +254,7 @@ public sealed class PanelCardViewModel : ObservableObject
     /// <summary>The panel's position in the profile.</summary>
     public int Index { get; }
 
-    /// <summary>The name, shared by the card's input and the Properties pane's (kept in sync).</summary>
+    /// <summary>The panel name, edited in place on the card.</summary>
     public string Name
     {
         get => Model.Name ?? "";
@@ -244,7 +267,7 @@ public sealed class PanelCardViewModel : ObservableObject
         }
     }
 
-    /// <summary>The color the hex box shows: the panel's, normalized, or the default blue (as the page's picker).</summary>
+    /// <summary>The panel colour, normalized, or the default blue (the colour picker starts from it).</summary>
     public string ColorHex
     {
         get => BuilderRules.NormalizeHex(Model.Color) ?? BuilderRules.DefaultPanelColor;

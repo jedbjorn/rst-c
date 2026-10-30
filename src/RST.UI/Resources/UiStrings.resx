@@ -724,20 +724,10 @@
     <value>Profile Builder</value>
   </data>
   <data name="Builder_NewProfile" xml:space="preserve">
-    <value>+ New Profile</value>
-  </data>
-  <data name="Builder_LoadedOption" xml:space="preserve">
-    <value>{0}  (loaded)</value>
-    <comment>{0} the profile name.</comment>
+    <value>+ New profile</value>
   </data>
   <data name="Builder_ProfileSelectorTip" xml:space="preserve">
     <value>Switch profile or start a new one</value>
-  </data>
-  <data name="Builder_Branding" xml:space="preserve">
-    <value>Branding</value>
-  </data>
-  <data name="Builder_BrandingTip" xml:space="preserve">
-    <value>Company Tab Branding</value>
   </data>
   <data name="Builder_BrandingHeading" xml:space="preserve">
     <value>Company Tab Branding</value>
@@ -768,15 +758,6 @@
   </data>
   <data name="Builder_Name" xml:space="preserve">
     <value>Name</value>
-  </data>
-  <data name="Builder_NamePlaceholder" xml:space="preserve">
-    <value>Profile name</value>
-  </data>
-  <data name="Builder_Tab" xml:space="preserve">
-    <value>Tab</value>
-  </data>
-  <data name="Builder_TabPlaceholder" xml:space="preserve">
-    <value>Ribbon tab</value>
   </data>
   <data name="Builder_ExportZip" xml:space="preserve">
     <value>Export ZIP</value>
@@ -838,56 +819,20 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_Delete" xml:space="preserve">
     <value>Delete</value>
   </data>
-  <data name="Builder_Properties" xml:space="preserve">
-    <value>Properties</value>
-  </data>
   <data name="Builder_ProfileSection" xml:space="preserve">
     <value>Profile</value>
   </data>
   <data name="Builder_MinRevitVersion" xml:space="preserve">
-    <value>Min Revit Version</value>
+    <value>Min Revit version</value>
   </data>
   <data name="Builder_PanelOpacity" xml:space="preserve">
-    <value>Panel Opacity</value>
-  </data>
-  <data name="Builder_SelectedPanel" xml:space="preserve">
-    <value>Selected Panel</value>
-  </data>
-  <data name="Builder_NoPanelSelected" xml:space="preserve">
-    <value>No panel selected.</value>
-  </data>
-  <data name="Builder_Color" xml:space="preserve">
-    <value>Color</value>
+    <value>Panel colour strength</value>
   </data>
   <data name="Builder_ColorDialogTitle" xml:space="preserve">
     <value>Panel color</value>
   </data>
-  <data name="Builder_UrlButtons" xml:space="preserve">
-    <value>URL Buttons</value>
-  </data>
-  <data name="Builder_AddUrlButton" xml:space="preserve">
-    <value>+ URL Button</value>
-  </data>
-  <data name="Builder_UrlLabelPlaceholder" xml:space="preserve">
-    <value>Button label</value>
-  </data>
-  <data name="Builder_UrlAdd" xml:space="preserve">
-    <value>Add</value>
-  </data>
-  <data name="Builder_Presets" xml:space="preserve">
-    <value>RST Presets</value>
-  </data>
-  <data name="Builder_PresetsHelp" xml:space="preserve">
-    <value>Pre-configure RSTify hidden tabs + Disable Unused Add-ins so the profile ships with a sensible Loader state out of the box.</value>
-  </data>
-  <data name="Builder_Configure" xml:space="preserve">
-    <value>Configure</value>
-  </data>
-  <data name="Builder_Cleanup" xml:space="preserve">
-    <value>Junk Cleanup</value>
-  </data>
   <data name="Builder_CleanupHelp" xml:space="preserve">
-    <value>Targets the Health tool's "Clean Junk Files" sweeps. Ship with sensible OOB defaults; remove or extend per profile.</value>
+    <value>Targets for the Health tool's Clean Junk Files. The paths are RST's fixed presets: switch each on or off, or rename it.</value>
   </data>
   <data name="Builder_LivePreview" xml:space="preserve">
     <value>Live Preview</value>
@@ -957,41 +902,23 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>Clear logo failed: {0}</value>
     <comment>{0} the error.</comment>
   </data>
-  <data name="Builder_LabelRequired" xml:space="preserve">
-    <value>Button label required.</value>
-  </data>
-  <data name="Builder_UrlRequired" xml:space="preserve">
-    <value>URL required.</value>
-  </data>
-  <data name="Builder_Apply" xml:space="preserve">
-    <value>Apply</value>
-  </data>
-  <data name="Builder_PresetsTitle" xml:space="preserve">
-    <value>RST Presets</value>
-  </data>
   <data name="Builder_PresetsBody" xml:space="preserve">
     <value>Defaults applied when a user selects this profile in the Loader. They can still tweak per load.</value>
   </data>
   <data name="Builder_PresetsHideTabs" xml:space="preserve">
-    <value>RSTify — Hide These Tabs</value>
+    <value>Hide these tabs (RSTify)</value>
   </data>
   <data name="Builder_PresetsNoTabs" xml:space="preserve">
     <value>No tabs available to hide on this machine.</value>
   </data>
   <data name="Builder_PresetsDisableUnused" xml:space="preserve">
-    <value>Disable Unused Add-ins</value>
+    <value>Disable unused add-ins</value>
   </data>
   <data name="Builder_PresetsDisableUnusedHelp" xml:space="preserve">
     <value>Default state for the Loader's footer toggle on first load.</value>
   </data>
-  <data name="Builder_CleanupTitle" xml:space="preserve">
-    <value>Junk Cleanup Targets</value>
-  </data>
-  <data name="Builder_CleanupModalHelp" xml:space="preserve">
-    <value>Choose which of the built-in cleanup targets this profile offers. For safety, the target paths are fixed — only RST's preset locations (Temp, package cache, journals, collaboration cache, recent-file list, RST logs) can be cleaned. Toggle each target on or off; use Restore Defaults to bring back any you removed.</value>
-  </data>
   <data name="Builder_CleanupEmpty" xml:space="preserve">
-    <value>No targets. Use "Restore Defaults".</value>
+    <value>No targets. Use "Restore defaults".</value>
   </data>
   <data name="Builder_CleanupEnableTip" xml:space="preserve">
     <value>Enable / disable this target</value>
@@ -999,14 +926,11 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_CleanupNamePlaceholder" xml:space="preserve">
     <value>Name</value>
   </data>
-  <data name="Builder_CleanupPathTip" xml:space="preserve">
-    <value>Preset path — fixed for safety</value>
-  </data>
   <data name="Builder_CleanupRemoveTip" xml:space="preserve">
-    <value>Remove from this profile (Restore Defaults brings it back)</value>
+    <value>Remove from this profile (Restore defaults brings it back)</value>
   </data>
   <data name="Builder_RestoreDefaults" xml:space="preserve">
-    <value>Restore Defaults</value>
+    <value>Restore defaults</value>
   </data>
   <data name="Builder_RestoreDefaultsTip" xml:space="preserve">
     <value>Replace the list with the OOB defaults</value>
@@ -1029,5 +953,107 @@ Open the Loader from inside Revit to populate the catalog.</value>
   </data>
   <data name="Builder_StackSlotNameTip" xml:space="preserve">
     <value>A stack's name links this row to the stack, so it can't be changed here.</value>
+  </data>
+  <data name="Builder_SettingsTip" xml:space="preserve">
+    <value>Settings for this machine</value>
+  </data>
+  <data name="Builder_SettingsHeading" xml:space="preserve">
+    <value>This machine — not saved in profiles</value>
+  </data>
+  <data name="Builder_BrandingMenu" xml:space="preserve">
+    <value>Branding…</value>
+  </data>
+  <data name="Builder_BrandingMenuNote" xml:space="preserve">
+    <value>logo + link on every tab</value>
+  </data>
+  <data name="Builder_BrandingHelp" xml:space="preserve">
+    <value>Shown on every RST tab on this machine. Not saved in profiles.</value>
+  </data>
+  <data name="Builder_SwitchProfileHeading" xml:space="preserve">
+    <value>Switch profile</value>
+  </data>
+  <data name="Builder_LoadedMark" xml:space="preserve">
+    <value>(loaded)</value>
+  </data>
+  <data name="Builder_RenameMenu" xml:space="preserve">
+    <value>Rename…</value>
+  </data>
+  <data name="Builder_RenameNote" xml:space="preserve">
+    <value>same profile, new name</value>
+  </data>
+  <data name="Builder_DuplicateMenu" xml:space="preserve">
+    <value>Duplicate…</value>
+  </data>
+  <data name="Builder_DuplicateNote" xml:space="preserve">
+    <value>a copy; original kept</value>
+  </data>
+  <data name="Builder_UnsavedIndicator" xml:space="preserve">
+    <value>Unsaved changes</value>
+  </data>
+  <data name="Builder_UnnamedProfile" xml:space="preserve">
+    <value>New profile</value>
+  </data>
+  <data name="Builder_UnnamedHint" xml:space="preserve">
+    <value>Not named yet: use Rename…</value>
+  </data>
+  <data name="Builder_TabGeneral" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="Builder_TabLoaderDefaults" xml:space="preserve">
+    <value>Loader defaults</value>
+  </data>
+  <data name="Builder_TabJunkCleanup" xml:space="preserve">
+    <value>Junk cleanup</value>
+  </data>
+  <data name="Builder_ProfileName" xml:space="preserve">
+    <value>Profile name</value>
+  </data>
+  <data name="Builder_RibbonTabName" xml:space="preserve">
+    <value>Ribbon tab name</value>
+  </data>
+  <data name="Builder_PanelOpacityHelp" xml:space="preserve">
+    <value>One value for every panel. Users can override it in the Loader.</value>
+  </data>
+  <data name="Builder_MinRevitHelp" xml:space="preserve">
+    <value>Informational</value>
+  </data>
+  <data name="Builder_RenameTitle" xml:space="preserve">
+    <value>Rename profile</value>
+  </data>
+  <data name="Builder_RenameConfirm" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="Builder_DuplicateTitle" xml:space="preserve">
+    <value>Duplicate profile</value>
+  </data>
+  <data name="Builder_DuplicateHelp" xml:space="preserve">
+    <value>A new profile with its own id, made from what you see now, unsaved edits included. The original stays as last saved.</value>
+  </data>
+  <data name="Builder_DuplicateConfirm" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="Builder_ProfileRowLoaded" xml:space="preserve">
+    <value>loaded · tab "{0}"</value>
+    <comment>{0} the profile's ribbon tab.</comment>
+  </data>
+  <data name="Builder_ProfileRowTab" xml:space="preserve">
+    <value>tab "{0}"</value>
+    <comment>{0} the profile's ribbon tab.</comment>
+  </data>
+  <data name="Builder_EditingName" xml:space="preserve">
+    <value>· editing {0}</value>
+    <comment>{0} the profile name.</comment>
+  </data>
+  <data name="Builder_OpacityPercent" xml:space="preserve">
+    <value>{0}%</value>
+    <comment>{0} the panel colour strength, 10 to 100.</comment>
+  </data>
+  <data name="Builder_Duplicated" xml:space="preserve">
+    <value>Duplicated as "{0}"; the original is kept.</value>
+    <comment>{0} the new profile name.</comment>
+  </data>
+  <data name="Builder_CleanupPathTip" xml:space="preserve">
+    <value>{0} (a preset path, fixed for safety)</value>
+    <comment>{0} the target's path.</comment>
   </data>
 </root>

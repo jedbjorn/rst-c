@@ -1,0 +1,190 @@
+// rst-c's own (not vendored): feature #18 (spec #19), WU2, AC5 for the window shell, through the
+// view-model over the real Builder backend on a temp profiles folder, where the files matter:
+// Rename then Save keeps the id and leaves one file; Duplicate writes a new id from the working copy
+// (unsaved edits included), switches to it and leaves the original's file as it was; both dialogs
+// refuse a missing or taken name (case-insensitive) and accept the next one typed; and edits on
+// the Loader defaults and Junk cleanup tabs survive a Save and a reopen. The real dialogs and the
+// window's menus are driven in ProfileBuilderWindowFlowTests and ProfileBuilderShellScreenshotTests.
+
+using System.IO;
+using FluentAssertions;
+using RST.Core.Builder;
+using RST.Core.Loader;
+using RST.Core.Profiles;
+using RST.RuntimeTests.Loader;
+using RST.Tests.Loader;
+using RST.UI.Builder;
+using RST.UI.Controls;
+using RST.UI.Loader;
+using Xunit;
+
+namespace RST.RuntimeTests.Builder;
+
+public sealed class ProfileBuilderShellTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "rst-shell-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); }
+        catch (IOException) { }
+    }
+
+    private string ProfilesDir => Path.Combine(_root, "profiles");
+
+    private string[] Files() => Directory.GetFiles(ProfilesDir, "*.json").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray()!;
+
+    /// <summary>The real backend on a temp folder holding Architecture and Structure, as the Builder writes them.</summary>
+    private ProfileBuilderBackend RealBackend()
+    {
+        Directory.CreateDirectory(ProfilesDir);
+        foreach (var p in new[] { LoaderFixtures.Architecture(), LoaderFixtures.Structure() })
+            ProfileStore.Save(ProfileEditing.ForEditing(p), ProfilesDir);
+        return Reopen();
+    }
+
+    private ProfileBuilderBackend Reopen() =>
+        new("2026", [], new FakeScheduler(), LoaderFixtures.Ribbon, LoaderPaths.Under(_root), LoaderAssets.LookupPath);
+
+    private static BuilderHarness OpenStructure(IProfileBuilderBackend backend)
+    {
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.IsDirty.Should().BeFalse();
+        return h;
+    }
+
+    private static Profile Read(string path) => ProfileSerializer.ReadString(File.ReadAllText(path));
+
+    [Fact]
+    public async Task Rename_then_Save_keeps_the_id_and_leaves_one_file()
+    {
+        var h = OpenStructure(RealBackend());
+        var before = Files();
+        before.Should().HaveCount(2);
+
+        h.Modals.Names.Enqueue("Structure 2027");
+        h.Model.RenameCommand.Execute(null);
+        h.Modals.NameDialogs.Single().Suggested.Should().Be("Structure", "the dialog opens on the current name");
+        h.Model.ProfileName.Should().Be("Structure 2027");
+        h.Model.DisplayName.Should().Be("Structure 2027");
+        h.Model.EditingText.Should().Be("· editing Structure 2027");
+        h.Model.IsDirty.Should().BeTrue("a rename is an unsaved change");
+        Files().Should().Equal(before, "nothing is written until Save");
+
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        var files = Files();
+        files.Should().HaveCount(2, "the rename replaced the old file: one file per profile");
+        files.Should().Contain("Structure_2027_" + BuilderFixtures.StructId + ".json").And.NotContain(f => f.StartsWith("Structure_" + BuilderFixtures.StructId, StringComparison.Ordinal));
+        var saved = Read(Path.Combine(ProfilesDir, "Structure_2027_" + BuilderFixtures.StructId + ".json"));
+        saved.Id.Should().Be(BuilderFixtures.StructId);
+        saved.ProfileName.Should().Be("Structure 2027");
+        h.Model.ProfileOptions.Select(o => o.Display).Should().Equal("Architecture", "Structure 2027");
+    }
+
+    [Fact]
+    public void Duplicate_writes_a_new_id_switches_to_the_copy_and_leaves_the_original_file()
+    {
+        var h = OpenStructure(RealBackend());
+        var original = Directory.GetFiles(ProfilesDir, "Structure_*.json").Single();
+        var originalBytes = File.ReadAllBytes(original);
+
+        h.Model.PanelOpacity = 80; // an unsaved edit: it goes into the copy, not the original
+        h.Modals.Names.Enqueue(""); // refused: required
+        h.Modals.Names.Enqueue("Structure Site");
+        h.Model.DuplicateCommand.Execute(null);
+
+        h.Modals.NameDialogs.Single().Suggested.Should().Be("Structure copy");
+        h.Modals.Refusals.Should().Equal("Profile name required.");
+        Files().Should().HaveCount(3);
+        File.ReadAllBytes(original).Should().Equal(originalBytes, "the original stays as last saved");
+
+        var copyFile = Directory.GetFiles(ProfilesDir, "Structure_Site_*.json").Single();
+        var copy = Read(copyFile);
+        copy.Id.Should().NotBeNullOrEmpty().And.NotBe(BuilderFixtures.StructId);
+        copy.PanelOpacity.Should().Be(80, "the copy is made from the working copy, unsaved edits included");
+        copy.Panels.Select(p => p.Name).Should().Equal("Frame", "Review", "Links");
+
+        h.Model.Profile.Id.Should().Be(copy.Id, "the editor switched to the copy");
+        h.Model.ProfileName.Should().Be("Structure Site");
+        h.Model.IsEditMode.Should().BeTrue();
+        h.Model.IsDirty.Should().BeFalse();
+        h.Model.SelectedProfileOption!.Key.Should().Be(copy.Id);
+        h.Model.ProfileOptions.Single(o => o.IsCurrent).Display.Should().Be("Structure Site");
+        h.Model.Toast.Text.Should().Be("Duplicated as \"Structure Site\"; the original is kept.");
+        h.Model.Toast.Kind.Should().Be(BannerKind.Success);
+    }
+
+    [Fact]
+    public void Rename_refuses_a_missing_or_taken_name_and_accepts_its_own_in_another_case()
+    {
+        var h = OpenStructure(RealBackend());
+        h.Modals.Names.Enqueue("  ");
+        h.Modals.Names.Enqueue("architecture");
+        h.Modals.Names.Enqueue("STRUCTURE");
+        h.Model.RenameCommand.Execute(null);
+        h.Modals.Refusals.Should().Equal(
+            "Profile name required.",
+            "A profile named \"architecture\" already exists. Choose a different name.");
+        h.Model.ProfileName.Should().Be("STRUCTURE", "the profile's own name is not taken by itself");
+
+        h.Model.RenameCommand.Execute(null); // cancelled: nothing typed
+        h.Model.ProfileName.Should().Be("STRUCTURE");
+    }
+
+    [Fact]
+    public void Duplicate_refuses_every_saved_name_including_the_original_s()
+    {
+        var h = OpenStructure(RealBackend());
+        h.Modals.Names.Enqueue("structure");
+        h.Modals.Names.Enqueue(" Architecture ");
+        h.Model.DuplicateCommand.Execute(null);
+        h.Modals.Refusals.Should().Equal(
+            "A profile named \"structure\" already exists. Choose a different name.",
+            "A profile named \"Architecture\" already exists. Choose a different name.");
+        Files().Should().HaveCount(2, "a cancelled Duplicate writes nothing");
+        h.Model.Profile.Id.Should().Be(BuilderFixtures.StructId);
+    }
+
+    [Fact]
+    public void Duplicate_is_only_for_a_saved_profile()
+    {
+        var h = BuilderHarness.Create(RealBackend());
+        h.Model.DuplicateCommand.CanExecute(null).Should().BeFalse("a new profile has no saved original");
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.DuplicateCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_new_profile_is_named_with_Rename_and_its_first_save_writes_it()
+    {
+        var h = BuilderHarness.Create(RealBackend());
+        h.Modals.Names.Enqueue("Structure"); // taken
+        h.Modals.Names.Enqueue("Interiors");
+        h.Model.RenameCommand.Execute(null);
+        h.Modals.Refusals.Should().ContainSingle();
+        h.Model.ProfileTab = "Studio Int";
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        Files().Should().HaveCount(3);
+        h.Model.IsEditMode.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Loader_defaults_and_Junk_cleanup_edits_survive_Save_and_a_reopen()
+    {
+        var h = OpenStructure(RealBackend());
+        h.Model.PresetTabs.Single(t => t.Tab == "Enscape").IsHidden = true;
+        h.Model.DisableUnused = false;
+        h.Model.CleanupRows[1].Name = "Package Cache";
+        h.Model.CleanupRows[3].Enabled = false;
+        h.Model.CleanupRows[5].RemoveCommand.Execute(null);
+        h.Model.SaveCommand.CanExecute(null).Should().BeTrue();
+        (await h.Model.SaveAsync()).Should().BeTrue();
+
+        var again = OpenStructure(Reopen());
+        again.Model.PresetTabs.Where(t => t.IsHidden).Select(t => t.Tab).Should().Equal("Massing & Site", "Collaborate", "Enscape");
+        again.Model.DisableUnused.Should().BeFalse();
+        again.Model.CleanupRows.Select(r => r.Name).Should().Equal("Temp", "Package Cache", "Journals", "Collaboration Cache", "Recent File List");
+        again.Model.CleanupRows.Select(r => r.Enabled).Should().Equal(true, true, true, false, true);
+    }
+}

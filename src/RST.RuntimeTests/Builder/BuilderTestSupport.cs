@@ -218,36 +218,37 @@ public static class BuilderFixtures
     }
 }
 
-/// <summary>Scripted answers for the RST Presets and Junk Cleanup modals; the edit runs on the modal's model first.</summary>
+/// <summary>
+/// Scripted answers for the Builder's dialogs. The name dialog types each of <see cref="Names"/> in
+/// turn and presses Confirm, as a user would after a refusal; it answers true at the first name
+/// that passes, and Cancel (false) when the script runs out. Branding records the call.
+/// </summary>
 public sealed class FakeBuilderDialogs : IBuilderDialogs
 {
-    public List<PresetsViewModel> Presets { get; } = [];
+    /// <summary>The names typed in the next name dialog, in order (empty: the dialog is cancelled).</summary>
+    public Queue<string> Names { get; } = new();
 
-    public List<CleanupViewModel> Cleanups { get; } = [];
+    /// <summary>Every name dialog opened, with what it showed first.</summary>
+    public List<(ProfileNameDialogModel Model, string Suggested)> NameDialogs { get; } = [];
 
-    /// <summary>What the user does in the Presets modal before answering.</summary>
-    public Action<PresetsViewModel>? EditPresetsWith { get; set; }
+    /// <summary>The refusals shown in the name dialogs, in order.</summary>
+    public List<string> Refusals { get; } = [];
 
-    public bool PresetsAnswer { get; set; } = true;
+    public List<ProfileBuilderViewModel> Brandings { get; } = [];
 
-    /// <summary>What the user does in the Cleanup modal before answering.</summary>
-    public Action<CleanupViewModel>? EditCleanupWith { get; set; }
-
-    public bool CleanupAnswer { get; set; } = true;
-
-    public bool EditPresets(PresetsViewModel model)
+    public bool EditName(ProfileNameDialogModel model)
     {
-        Presets.Add(model);
-        EditPresetsWith?.Invoke(model);
-        return PresetsAnswer;
+        NameDialogs.Add((model, model.Name));
+        while (Names.Count > 0)
+        {
+            model.Name = Names.Dequeue();
+            if (model.TryConfirm()) return true;
+            Refusals.Add(model.Error!);
+        }
+        return false;
     }
 
-    public bool EditCleanup(CleanupViewModel model)
-    {
-        Cleanups.Add(model);
-        EditCleanupWith?.Invoke(model);
-        return CleanupAnswer;
-    }
+    public void EditBranding(ProfileBuilderViewModel model) => Brandings.Add(model);
 }
 
 /// <summary>A view-model over a backend, with the fake dialogs and clock, ready to drive.</summary>

@@ -21,9 +21,6 @@ namespace RST.UI.Builder;
 public sealed record BrandingState(bool HasLogo, string? FileName, string? Url)
 {
     public static readonly BrandingState None = new(false, null, null);
-
-    /// <summary>The header button's dot is filled when a logo or a URL is set.</summary>
-    public bool IsSet => HasLogo || !string.IsNullOrEmpty(Url);
 }
 
 /// <summary>Everything the Profile Builder reads and writes. Tests pass a fake.</summary>
