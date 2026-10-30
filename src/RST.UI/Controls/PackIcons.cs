@@ -1,5 +1,7 @@
 // rst-c's own (not vendored): the pack icon images the RibbonPreview (WU3) and the Builder's
-// Pick-icon buttons (WU4) draw, loaded once per file from Assets\icons\pack (spec #16).
+// Pick-icon buttons (WU4) draw, loaded once per file from Assets\icons\pack (spec #16). The
+// preview's stack rows (spec #17) load them at 16 px, as the ribbon's stacked buttons do, and fall
+// back to the ribbon's own default_16.png (Default16), so the preview and the ribbon agree.
 
 using System.Collections.Concurrent;
 using System.IO;
@@ -13,24 +15,35 @@ public static class PackIcons
 {
     private static readonly ConcurrentDictionary<string, BitmapSource?> Cache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The 32 px image of <paramref name="value"/>, or null when the file is missing or unreadable.</summary>
+    /// <summary>The image of <paramref name="value"/> (32 px, or <paramref name="size"/>), or null when the file is missing or unreadable.</summary>
     /// <param name="value">A parsed <c>pack:</c> value.</param>
     /// <param name="directory">The icon pack folder; null is the shipped Assets\icons\pack next to RST.UI.dll.</param>
-    public static BitmapSource? Load(IconPackValue value, string? directory = null)
+    /// <param name="size">The decoded width: 32 (the pack's size), or 16 for a stack row.</param>
+    public static BitmapSource? Load(IconPackValue value, string? directory = null, int size = 32)
     {
         ArgumentNullException.ThrowIfNull(value);
         var dir = directory ?? LoaderAssets.IconPackDirectory;
-        var path = Path.Combine(dir, Path.GetFileName(value.RelativePath));
-        return Cache.GetOrAdd(path, static p =>
+        return LoadFile(Path.Combine(dir, Path.GetFileName(value.RelativePath)), size);
+    }
+
+    /// <summary>
+    /// The ribbon's 16 px default icon (Assets\icons\default_16.png, shipped by RST.Engine next to
+    /// RST.UI.dll): what a stacked button without a pack icon shows. Null when the file is missing.
+    /// </summary>
+    public static BitmapSource? Default16 => LoadFile(LoaderAssets.DefaultIcon16Path, 16);
+
+    private static BitmapSource? LoadFile(string path, int size)
+    {
+        return Cache.GetOrAdd(path + "@" + size, _ =>
         {
             try
             {
-                if (!File.Exists(p)) return null;
+                if (!File.Exists(path)) return null;
                 var image = new BitmapImage();
                 image.BeginInit();
-                image.UriSource = new Uri(p, UriKind.Absolute);
+                image.UriSource = new Uri(path, UriKind.Absolute);
                 image.CacheOption = BitmapCacheOption.OnLoad;
-                image.DecodePixelWidth = 32;
+                image.DecodePixelWidth = size;
                 image.EndInit();
                 image.Freeze();
                 return image;

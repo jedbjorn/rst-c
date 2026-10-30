@@ -103,6 +103,18 @@ public static class ProfileEditing
     }
 
     /// <summary>
+    /// Drops every stack no panel slot refers to (spec #17: an orphan stack is removed on save).
+    /// Returns the names removed, in stack order.
+    /// </summary>
+    public static IReadOnlyList<string> RemoveOrphanStacks(Profile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var orphans = ProfileSerializer.OrphanStacks(profile);
+        foreach (var name in orphans) profile.Stacks.Remove(name);
+        return orphans;
+    }
+
+    /// <summary>
     /// The checks Save makes before writing: name, then tab, then — in edit mode, when the name
     /// changed (trimmed) from the one loaded — the case-insensitive collision with another profile's
     /// name (by a different id). <see cref="SavePlanKind.AsCopy"/> clears the id and export date of

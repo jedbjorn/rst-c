@@ -46,6 +46,25 @@
     <Compile Include="..\RST.Tests\Builder\V220BuilderReference.cs" Link="Builder\Shared\V220BuilderReference.cs" />
   </ItemGroup>
 
+  <!--
+    Spec #17, T-A7: the ribbon mapping tests (Ribbon/RibbonItemFactoryTests) build real AdWindows
+    items outside Revit. The Nice3point package ships the original AdWindows.dll under ref/ only, so
+    NuGet compiles against it but copies nothing; the copy below puts it next to the tests. Versions
+    match RST.Engine's per Revit major. RST.Engine itself is unchanged (PrivateAssets=all, not shipped).
+  -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2025'">
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2025.0.2" VersionOverride="2025.0.2" PrivateAssets="all" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2026.0.4" VersionOverride="2026.0.4" PrivateAssets="all" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2027'">
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2027.0.0" VersionOverride="2027.0.0" PrivateAssets="all" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PkgNice3point_Revit_Api_AdWindows)' != ''">
+    <None Include="$(PkgNice3point_Revit_Api_AdWindows)\ref\*\AdWindows.dll" Link="AdWindows.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
     <ProjectReference Include="..\RST.UI\RST.UI.csproj" />

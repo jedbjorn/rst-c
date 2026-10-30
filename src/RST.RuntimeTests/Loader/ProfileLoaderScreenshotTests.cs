@@ -137,10 +137,12 @@ public class ProfileLoaderScreenshotTests
             AssertColor(theme == UiTheme.Dark ? RibbonPreview.DarkCanvas : RibbonPreview.LightCanvas,
                 At(bitmap, canvas, root, canvas.ActualWidth - 4, canvas.ActualHeight - 4), "ribbon canvas");
 
-            // Three panels; the pack icons are drawn (Planner default 9), the non-pack slot is not.
+            // Three panels; the pack icons are drawn (Planner default 9), the non-pack slot is not. The
+            // Checks stack's 3 tools have no pack icon and draw the ribbon's default 16 px icon (spec #17).
             Assert.Equal(3, preview.DrawnPanels.Count);
-            var icons = WindowCapture.Descendants<Image>(preview).Count(i => i.Source is not null);
-            Assert.Equal(6, icons);
+            var images = WindowCapture.Descendants<Image>(preview).Where(i => i.Source is not null).ToList();
+            Assert.Equal(6, images.Count(i => !ReferenceEquals(i.Source, PackIcons.Default16)));
+            Assert.Equal(3, images.Count(i => ReferenceEquals(i.Source, PackIcons.Default16)));
 
             // The RSTify switches are on and off; the add-in rows show every reachable status.
             Assert.Contains(opened.Model.TabToggles, t => t.IsHidden);

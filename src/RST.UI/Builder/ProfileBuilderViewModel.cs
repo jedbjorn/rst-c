@@ -9,6 +9,9 @@
 // Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
 // (Planner default 3), the panel delete confirm is the family's destructive MessageDialog, and the
 // Cleanup modal's Cancel reverts (Planner default 4).
+// Stacks (feature #15, spec #17): the Builder keeps a profile's stacks as they are and the preview
+// draws them; it does not author them (feature #18, decision #19). A stack no panel places (its
+// slot deleted) is dropped by the save (ProfileSaveService), and from the editor once that worked.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -885,6 +888,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             ShowToast(UiStrings.Builder_SaveFailed(result.Error ?? "unknown"), BannerKind.Error);
             return false;
         }
+        // The save wrote the profile without its orphan stacks; the editor follows (spec #17).
+        var orphans = ProfileEditing.RemoveOrphanStacks(_profile);
+        if (orphans.Count > 0) Log.Information("Builder: save removed stacks not on any panel: {Stacks}", string.Join(", ", orphans));
         if (result.Saved is { } saved)
         {
             _profile.Id = saved.Id;

@@ -3,6 +3,8 @@
 // which children show), the panel cards and their slot rows. Panel and slot edits write straight
 // into the profile, as the page's inputs did, and tell the window's view-model so the live
 // preview redraws. Cards and rows carry their drag-and-drop markers (WU5).
+// Stacks (feature #15, spec #17): a stack slot's name is read-only, because it is the only link
+// to profile.stacks. Stack authoring is feature #18 (decision #19).
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -335,11 +337,24 @@ public sealed class SlotRowViewModel : ObservableObject
     /// <summary>The type tag (<c>slot.type || 'tool'</c>).</summary>
     public string TypeTag => string.IsNullOrEmpty(Model.SlotType) ? "tool" : Model.SlotType;
 
+    /// <summary>A stack slot: its name is the link to the stack, so the row shows it read-only (spec #17).</summary>
+    public bool IsStack => Model.SlotType == "stack";
+
+    /// <summary>The name box's tooltip on a stack slot.</summary>
+    public string? NameToolTip => IsStack ? UiStrings.Builder_StackSlotNameTip : null;
+
+    /// <summary>The slot's name (the ribbon label). A stack slot's name cannot be edited here.</summary>
     public string Name
     {
         get => Model.Name ?? "";
         set
         {
+            if (IsStack)
+            {
+                // Renaming here would break the link to profile.stacks (the v3.0.0 save failure).
+                OnPropertyChanged();
+                return;
+            }
             if ((Model.Name ?? "") == (value ?? "")) return;
             Model.Name = value ?? "";
             OnPropertyChanged();

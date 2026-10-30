@@ -61,6 +61,8 @@ To add a command, **drag** it onto a panel, or **double-click** it to add it to 
 
 An empty card reads "Drop a command here, or click one in the Commands pane."
 
+A row that places a [stack](#stacks) shows a **stack** tag instead of the icon button. Its name is read-only there, because the name is what links the row to the stack.
+
 ### Drag and drop
 
 | Drag | Drop on | Result |
@@ -84,6 +86,37 @@ Tool icons come from rst-c's built-in icon pack: 55 designs, each in seven colou
 The chosen icon shows on the tool's row, in the Live Preview and on the ribbon. A tool with no pack icon uses rst-c's default button icon on the ribbon (rst-c's own tools keep their own icons). There is no option to take an icon from the source command.
 
 ![The Pick an icon overlay over the Builder: the icon pack's designs in a grid with ∅ none first, and the house design's row of seven colours open below it, with the tooltip "house — purple"](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
+
+### Stacks
+
+A **stack** is two or three small buttons, one above the other, in the space of one large button: the same layout as Revit's own stacked buttons. Stacks hold tools only (Revit or add-in commands, and [URL buttons](custom-url-slots.md)). On the ribbon each stacked button has a 16 px icon and a one-line label; a tool without a pack icon gets rst-c's default icon (a dark ≡ on a light grey tile, like the pack icons).
+
+> **The Builder keeps stacks but cannot author them yet.** You can't add, fill or rename a stack in the Builder in this version; Builder stack authoring is coming in a later release. For now, add stacks by editing the profile's JSON file (see below).
+
+What the Builder does with a profile that already has stacks:
+
+- **Keeps its stacks exactly as they are when you save.** The first save of a hand-edited file also tidies the rest of it, as for any profile: it adds the default Junk Cleanup targets if there are none, recomputes the required add-ins, drops the profile's own branding and reformats the file. After that, saving without edits writes the same file.
+- **Shows each placed stack** as a row with a **stack** tag in its panel card. You can move it with **▲ ▼**, drag it, or remove it with **×**. Its name is read-only.
+- **Removing a stack's row** leaves the stack unplaced. **Save** then drops the stack from the file, because a stack no panel places is never drawn. The Builder can't put a removed stack row back: to undo it, leave without saving: **Exit**, then **Discard & Exit**.
+- **Draws the stacks** in the Live Preview as rows with the tools' 16 px icons, as the Loader's preview and the ribbon do.
+
+**Adding a stack by hand.** A stack has two parts in the profile JSON: an entry under `"stacks"` with its tools, and a `{ "type": "stack", "name": … }` slot in a panel where it should appear. Each tool needs `"type": "tool"` and a `commandId` (a Revit or add-in command id, or `URL:` and an address); `sourceTab`, `sourcePanel` and `iconFile` are optional and work as on panel tools.
+
+```json
+"stacks": {
+  "Datum": {
+    "tools": [
+      { "type": "tool", "name": "Level", "commandId": "ID_OBJECTS_LEVEL", "sourceTab": "Architecture", "sourcePanel": "Datum", "iconFile": "pack:level_green" },
+      { "type": "tool", "name": "Grid", "commandId": "ID_OBJECTS_GRID", "sourceTab": "Architecture", "sourcePanel": "Datum" }
+    ]
+  }
+},
+"panels": [
+  { "name": "Model", "color": "#4f8ef7", "slots": [ { "type": "stack", "name": "Datum" } ] }
+]
+```
+
+To add one, close the Builder, open a profile's file from `%AppData%\RST\profiles\` in a text editor, add the two parts and save it. The Loader and the Builder show the stack the next time they open. To see it on the ribbon, select the profile in the Loader and click **Load Profile →** again (or restart Revit). A stack with fewer than two or more than three tools, or a tool without a `commandId`, fails validation and the profile is not listed (see [Notes & limits](#notes--limits)).
 
 ### Properties
 
@@ -193,4 +226,6 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
 - **Min Revit Version** is informational: the Loader shows it on the profile's card and details ("Min Revit"), but rst-c does not check or enforce it when a profile is loaded.
-- The Builder makes plain panels of large buttons. It does not create stacks (grouped buttons). Stacks in a hand-edited profile still appear in the previews.
+- Stacks hold push buttons only: Revit and add-in commands and URL buttons, two or three per stack. Pulldowns, split buttons, combo boxes, text boxes and stacks inside stacks are not supported, and the permanent RST panel on the Add-Ins tab has no stacks.
+- A profile file whose stacks break the rules (for example a hand-edited stack of one or four tools, or a stack tool without a command id) fails validation, so neither the Loader nor the Builder lists it; the log says why. The ribbon would skip such a stack in any case, with a log line, and never draws a stack of one or four buttons.
+- Profiles with stacks open in older versions of rst-c (v3.0.0 and earlier) without errors, but those versions do not draw the stacks on the ribbon.

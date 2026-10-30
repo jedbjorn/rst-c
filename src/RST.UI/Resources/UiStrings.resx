@@ -999,4 +999,7 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>{0} — {1}</value>
     <comment>{0} the design, {1} the color (underscores as spaces).</comment>
   </data>
+  <data name="Builder_StackSlotNameTip" xml:space="preserve">
+    <value>A stack's name links this row to the stack, so it can't be changed here.</value>
+  </data>
 </root>

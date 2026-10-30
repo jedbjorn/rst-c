@@ -35,6 +35,10 @@ public sealed class ProfileLibraryService
         var entries = ProfileStore.List(_paths.ProfilesDir, onSkip: (path, ex) =>
             _log.Warning(ex, "Loader.get_profiles: skipped unreadable profile {Path}", path));
         _log.Information("Loader.get_profiles → {Count} profiles from {Dir}", entries.Count, _paths.ProfilesDir);
+        // Spec #17 (review N5): what does not stop a profile loading (a stack no panel places) is still logged.
+        foreach (var entry in entries)
+            foreach (var warning in ProfileSerializer.Warnings(entry.Profile))
+                _log.Warning(null, "Loader.get_profiles: {File}: {Warning}", entry.FileName, warning);
         return entries;
     }
 

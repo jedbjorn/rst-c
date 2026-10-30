@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "5ac6e0f1-2b3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "profile": "Stacks",
+  "tab": "Studio Stacks",
+  "min_version": "0.1.0",
+  "exportDate": "2026-10-30",
+  "panelOpacity": 90,
+  "requiredAddins": [],
+  "hideRules": [],
+  "stacks": {
+    "Build": {
+      "tools": [
+        {
+          "type": "tool",
+          "name": "Wall",
+          "commandId": "ID_OBJECTS_WALL",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Build",
+          "iconFile": "pack:building_office_blue"
+        },
+        {
+          "type": "tool",
+          "name": "Door",
+          "commandId": "ID_OBJECTS_DOOR",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Build",
+          "iconFile": "pack:house_green"
+        },
+        {
+          "type": "tool",
+          "name": "Window",
+          "commandId": "ID_OBJECTS_WINDOW",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Build",
+          "iconFile": "pack:box_open_purple"
+        }
+      ]
+    },
+    "Links": {
+      "tools": [
+        {
+          "type": "tool",
+          "name": "Level",
+          "commandId": "ID_OBJECTS_LEVEL",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Datum",
+          "iconFile": "pack:level_green"
+        },
+        {
+          "type": "tool",
+          "name": "Revit Help",
+          "commandId": "URL:https://help.autodesk.com",
+          "sourceTab": "Custom",
+          "sourcePanel": "Custom",
+          "iconFile": "pack:question_light_grey"
+        }
+      ]
+    }
+  },
+  "panels": [
+    {
+      "name": "Model",
+      "color": "#4f8ef7",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Column",
+          "commandId": "ID_OBJECTS_COLUMN",
+          "sourceTab": "Structure",
+          "sourcePanel": "Structure",
+          "iconFile": "pack:box_stack_dark_grey"
+        },
+        {
+          "type": "stack",
+          "name": "Build"
+        },
+        {
+          "type": "stack",
+          "name": "Links"
+        }
+      ]
+    }
+  ]
+}

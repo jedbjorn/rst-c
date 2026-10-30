@@ -164,6 +164,22 @@
                 </Style.Triggers>
             </Style>
 
+            <!--
+                A slot row's name box. A stack slot's name is the link to its stack (spec #17): read-only,
+                drawn without its box so it reads as a label (review N2; the styling of 39d92255).
+            -->
+            <Style x:Key="SlotNameBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsStack}" Value="True">
+                        <Setter Property="IsReadOnly" Value="True" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderBrush" Value="Transparent" />
+                        <Setter Property="Cursor" Value="Arrow" />
+                        <Setter Property="Focusable" Value="False" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
             <!-- A catalogue node: groups (native group, tab, panel) with a count pill; commands with their short id. -->
             <HierarchicalDataTemplate x:Key="CatalogNodeTemplate" DataType="{x:Type builder:CatalogNodeViewModel}"
                                       ItemsSource="{Binding Children}">
@@ -498,6 +514,7 @@
                                                                                     <TextBlock Text="{Binding TypeTag}" Style="{StaticResource MutedText}" FontSize="10" />
                                                                                 </Border>
                                                                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                                         Style="{StaticResource SlotNameBox}" ToolTip="{Binding NameToolTip}"
                                                                                          PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
                                                                                          AutomationProperties.AutomationId="Builder.SlotName"
                                                                                          AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
