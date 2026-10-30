@@ -101,23 +101,6 @@ public class ProfileBuilderScreenshotTests
         AssertColor(Palette(theme, UiPalette.Window), At(bitmap, scroller, opened.Window.Root, 6, 6), $"{what} window background");
     }
 
-    private static BitmapSource CaptureDialog(Window dialog, UiTheme theme, string what)
-    {
-        WindowCapture.ShowOffScreen(dialog);
-        try
-        {
-            var bitmap = WindowCapture.Client(dialog);
-            Screenshots.Save(bitmap, Name(what, theme));
-            AssertColor(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 1, 1), $"{what} corner");
-            Assert.True(Screenshots.DistinctPixels(bitmap) > 30, $"{what} looks blank");
-            return bitmap;
-        }
-        finally
-        {
-            dialog.Close();
-        }
-    }
-
     [Fact]
     public void The_window_has_its_title_size_and_placement_and_stays_out_of_the_taskbar() => Sta(() =>
     {
@@ -282,10 +265,25 @@ public class ProfileBuilderScreenshotTests
         _ = h.Model.ExitAsync();
         var (title, message, primary, secondary, automationId) = h.Dialogs.ChooseCalls.Single();
         var dialog = new MessageDialog(new MessageDialogModel(title, title, message, [], primary, HasCancel: true) { SecondaryText = secondary }, automationId);
-        Assert.Equal(Visibility.Visible, ((Button)dialog.FindName("SecondaryButton")).Visibility);
-        Assert.Equal("Discard & Exit", ((Button)dialog.FindName("SecondaryButton")).Content);
-        Assert.True(((Button)dialog.FindName("ConfirmButton")).IsDefault, "Save & Exit is the default");
-        CaptureDialog(dialog, theme, "builder-unsaved-dialog");
+        WindowCapture.ShowOffScreen(dialog);
+        try
+        {
+            // The bindings resolve once the dialog is shown.
+            var secondaryButton = (Button)dialog.FindName("SecondaryButton");
+            Assert.Equal(Visibility.Visible, secondaryButton.Visibility);
+            Assert.Equal("Discard & Exit", secondaryButton.Content);
+            Assert.Equal("Save & Exit", ((Button)dialog.FindName("ConfirmButton")).Content);
+            Assert.True(((Button)dialog.FindName("ConfirmButton")).IsDefault, "Save & Exit is the default");
+            Assert.Equal(Visibility.Visible, ((Button)dialog.FindName("CancelButton")).Visibility);
+            var bitmap = WindowCapture.Client(dialog);
+            Screenshots.Save(bitmap, Name("builder-unsaved-dialog", theme));
+            AssertColor(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 1, 1), "builder-unsaved-dialog corner");
+            Assert.True(Screenshots.DistinctPixels(bitmap) > 30, "builder-unsaved-dialog looks blank");
+        }
+        finally
+        {
+            dialog.Close();
+        }
     });
 
     [Theory]

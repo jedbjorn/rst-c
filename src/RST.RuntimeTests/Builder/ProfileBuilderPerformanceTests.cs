@@ -60,7 +60,12 @@ public class ProfileBuilderPerformanceTests(ITestOutputHelper output)
                 foreach (var q in Keystrokes) times.Add(Type(model, window, q));
                 times.Sort();
                 var median = times[times.Count / 2];
-                output.WriteLine($"keystrokes: {times.Count}, median {median:0.0} ms, max {times[^1]:0.0} ms, min {times[0]:0.0} ms");
+                var summary = $"AC7 (spec #16, WU4): 823 commands; realized TreeViewItems with every group open: {realized}; "
+                    + $"keystrokes: {times.Count}, median {median:0.0} ms, min {times[0]:0.0} ms, max {times[^1]:0.0} ms";
+                output.WriteLine(summary);
+                // Kept with the screenshots, so the CI artifact carries the measured numbers.
+                System.IO.Directory.CreateDirectory(Screenshots.Folder);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, "builder-ac7-timing.txt"), summary + Environment.NewLine);
                 Assert.True(median < 100, $"median filter keystroke {median:0.0} ms (budget 100 ms)");
 
                 model.FilterText = "pipe";
