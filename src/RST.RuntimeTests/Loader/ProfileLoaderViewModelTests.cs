@@ -479,7 +479,7 @@ public class ProfileLoaderViewModelTests
         await vm.LoadAsync();
         _dialogs.AddinChanges.Should().BeEmpty();
         backend.LoadRequests.Should().ContainSingle().Which.Plan.Should().BeNull();
-        _dialogs.AddinReports.Single().Notes.Should().Equal("rst-c could not read the installed add-ins, so no add-in was changed: scan failed");
+        _dialogs.AddinReports.Single().Notes.Should().Equal("RST could not read the installed add-ins, so no add-in was changed: scan failed");
     }
 
     [Fact]
@@ -598,7 +598,7 @@ public class ProfileLoaderViewModelTests
     {
         var backend = LoaderFixtures.Backend();
         var item = backend.Inventory.Items.First(i => i.Name == "Ideate BIMLink");
-        var entry = new PlanEntry(item.Year, item.Name, null, item.Scope, item.Mechanism, item.ManifestPath, item.FileName, item.AddinIds,
+        var entry = new PlanEntry(item.Year, item.Name, null, item.Scope, item.ManifestPath, item.FileName, item.AddinIds,
             PlanAction.Enable, null, false, false, false, null);
         backend.OnUnload = () => new UnloadOutcome(true, null, new ActivationReport(ActivationIntent.Unload,
             [ActivationOutcome.For(entry, OutcomeResult.Done), ActivationOutcome.For(entry with { Year = 2027 }, OutcomeResult.NotChanged, ChangeReason.InUse)], []));
@@ -635,7 +635,7 @@ public class ProfileLoaderViewModelTests
     {
         var backend = LoaderFixtures.Backend();
         var item = backend.Inventory.Items.First(i => i.Name == "Ideate BIMLink");
-        var moved = new PlanEntry(2026, "Old Tool", null, AddinScope.User, SwitchMechanism.SettingsFile, item.ManifestPath, "OldTool.addin", item.AddinIds,
+        var moved = new PlanEntry(2026, "Old Tool", null, AddinScope.User, item.ManifestPath, "OldTool.addin", item.AddinIds,
             PlanAction.Disable, null, false, true, true, null);
         backend.OnMigrate = () => new ActivationReport(ActivationIntent.MigrateLegacy, [ActivationOutcome.For(moved, OutcomeResult.Done)], []);
         backend.ActiveIs(LoaderFixtures.Structure());
@@ -768,7 +768,7 @@ public class ProfileLoaderViewModelTests
         vm.RequiredAddins.Single(r => r.TabName == "Lumion").StatusLabel.Should().Be("Disabled");
 
         var lumion = backend.Inventory.Items.Single(i => i.Name == "Lumion LiveSync");
-        var entry = new PlanEntry(2026, lumion.Name, null, lumion.Scope, lumion.Mechanism, lumion.ManifestPath, lumion.FileName, lumion.AddinIds,
+        var entry = new PlanEntry(2026, lumion.Name, null, lumion.Scope, lumion.ManifestPath, lumion.FileName, lumion.AddinIds,
             PlanAction.Enable, null, false, false, false, null);
         backend.OnRestore = () =>
         {

@@ -68,7 +68,7 @@ public sealed class FakeAddinSwitching : IAddinSwitching
     /// <summary>An inventory of <paramref name="items"/>, every year on the settings file.</summary>
     public static AddinInventory InventoryOf(params InventoryItem[] items) =>
         new(items.Select(i => i.Year).Distinct().Order()
-                .Select(y => new InventoryYear(new RevitYear(y, null, null, SwitchMechanism.SettingsFile), "settings-" + y, SettingsFileState.Ok, null, false, "admin-" + y, false))
+                .Select(y => new InventoryYear(new RevitYear(y, null), "settings-" + y, SettingsFileState.Ok, null, false, "admin-" + y, false))
                 .ToList(),
             items);
 
@@ -82,14 +82,13 @@ public sealed class FakeAddinSwitching : IAddinSwitching
         string? vendor = "ACME",
         string? fileName = null,
         bool renamed = false,
-        AdminLock adminLock = AdminLock.None,
-        SwitchMechanism mechanism = SwitchMechanism.SettingsFile)
+        AdminLock adminLock = AdminLock.None)
     {
         var addinId = AddinIds.Normalize(id) ?? DeterministicId(name);
         var file = fileName ?? name.Replace(" ", "") + ".addin";
         var path = Path.Combine("C:", scope.ToString(), year.ToString(System.Globalization.CultureInfo.InvariantCulture), file);
-        return new InventoryItem(year, mechanism, name, vendor, scope, path, file, [addinId], renamed, false, null, null,
-            off && mechanism == SwitchMechanism.SettingsFile ? [addinId] : [], adminLock,
+        return new InventoryItem(year, name, vendor, scope, path, file, [addinId], renamed, false, null, null,
+            off ? [addinId] : [], adminLock,
             [new AddinEntry("Application", name + ".dll", addinId, name, vendor, null)]);
     }
 

@@ -40,7 +40,7 @@ public class ActivationPlannerTests
     {
         var ledger = new ActivationLedger();
         foreach (var e in inventory.Items.Where(i => i.Name == "Enscape"))
-            ledger.Add(new LedgerEntry(e.Year, e.AddinIds[0], e.Name, SwitchMechanism.SettingsFile, e.ManifestPath, DateTime.UtcNow));
+            ledger.Add(new LedgerEntry(e.Year, e.AddinIds[0], e.Name, LedgerKind.Setting, e.ManifestPath, DateTime.UtcNow));
         return ledger;
     }
 
@@ -122,7 +122,7 @@ public class ActivationPlannerTests
         var locked = Item(2027, "DiRoots.One", AddinScope.Machine, off: true, adminLock: AdminLock.AlwaysEnabled);
         locked.IsOff.Should().BeFalse();
         var ledger = new ActivationLedger();
-        ledger.Add(new LedgerEntry(2027, locked.AddinIds[0], locked.Name, SwitchMechanism.SettingsFile, locked.ManifestPath, DateTime.UtcNow));
+        ledger.Add(new LedgerEntry(2027, locked.AddinIds[0], locked.Name, LedgerKind.Setting, locked.ManifestPath, DateTime.UtcNow));
 
         var plan = ActivationPlanner.Plan(InventoryOf(locked), ActivationPolicy.Load([], true), ledger);
         plan.Changes.Should().ContainSingle().Which.Should().Match<PlanEntry>(e =>
@@ -149,20 +149,13 @@ public class ActivationPlannerTests
     }
 
     [Fact]
-    public void A_rename_year_disables_by_renaming_and_re_enables_its_renamed_manifests()
+    public void Revit_2025_takes_the_settings_file_path_like_2026_and_never_a_rename()
     {
-        var on = Item(2025, "Twinmotion", mechanism: SwitchMechanism.Rename, scope: AddinScope.Machine);
-        var renamed = Item(2025, "Enscape", mechanism: SwitchMechanism.Rename, renamed: true);
-        var inventory = new AddinInventory(
-            [new InventoryYear(new RevitYear(2025, null, "25.2.0.0", SwitchMechanism.Rename), "s", SettingsFileState.Missing, null, false, "a", false)],
-            [on, renamed]);
-
-        var disable = ActivationPlanner.Plan(inventory, ActivationPolicy.Load([], true), new ActivationLedger());
-        disable.Changes.Should().ContainSingle().Which.Should().Match<PlanEntry>(e =>
-            e.Name == "Twinmotion" && e.Action == PlanAction.Disable && e.Mechanism == SwitchMechanism.Rename && e.TargetIds.Count == 0 && e.MayNeedAdmin);
-
-        var unload = ActivationPlanner.Plan(inventory, ActivationPolicy.Unload, new ActivationLedger());
-        unload.Changes.Should().ContainSingle().Which.Name.Should().Be("Enscape");
+        // Decision #21: no rename fallback. A machine-wide 2025 add-in is switched through the user's file.
+        var machine = Item(2025, "Twinmotion", scope: AddinScope.Machine);
+        var plan = ActivationPlanner.Plan(InventoryOf(machine, Item(2026, "Twinmotion", scope: AddinScope.Machine)), ActivationPolicy.Load([], true), new ActivationLedger());
+        plan.Changes.Should().HaveCount(2).And.OnlyContain(e =>
+            e.Action == PlanAction.Disable && !e.Renamed && e.TargetIds.SequenceEqual(machine.AddinIds));
     }
 
     [Fact]
@@ -177,24 +170,55 @@ public class ActivationPlannerTests
     }
 
     [Fact]
+    public void An_unreadable_settings_file_keeps_that_years_record_and_says_so()
+    {
+        // Review N1: with the file unreadable every add-in looks on; forgetting would orphan RST's own entries.
+        var item = Item(2027, "Twinmotion");
+        var inventory = new AddinInventory(
+            [new InventoryYear(FakeAddinTree.Year(2027), "s", SettingsFileState.Unreadable, "in use", false, "a", false)], [item]);
+        var ledger = new ActivationLedger();
+        ledger.Add(new LedgerEntry(2027, item.AddinIds[0], item.Name, LedgerKind.Setting, item.ManifestPath, DateTime.UtcNow));
+        ledger.Add(new LedgerEntry(2027, DeterministicId("Gone"), "Gone", LedgerKind.Setting, "x", DateTime.UtcNow));
+
+        var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.RestoreAll, ledger);
+
+        plan.Forget.Should().BeEmpty();
+        plan.HasWork.Should().BeFalse();
+        plan.Notes.Single().Text.Should().Contain("could not be read").And.Contain("kept its record of the add-ins it switched off there");
+    }
+
+    [Fact]
     public void Stale_record_entries_are_forgotten_and_an_uninstalled_add_ins_setting_is_reset()
     {
         var reEnabledByUser = Item(2026, "Twinmotion");
         var inventory = InventoryOf(reEnabledByUser);
         var ledger = new ActivationLedger();
-        ledger.Add(new LedgerEntry(2026, reEnabledByUser.AddinIds[0], "Twinmotion", SwitchMechanism.SettingsFile, reEnabledByUser.ManifestPath, DateTime.UtcNow));
-        ledger.Add(new LedgerEntry(2026, DeterministicId("Gone"), "Gone", SwitchMechanism.SettingsFile, "x", DateTime.UtcNow));
-        ledger.Add(new LedgerEntry(2025, null, "Old", SwitchMechanism.Rename, "y", DateTime.UtcNow));
+        ledger.Add(new LedgerEntry(2026, reEnabledByUser.AddinIds[0], "Twinmotion", LedgerKind.Setting, reEnabledByUser.ManifestPath, DateTime.UtcNow));
+        ledger.Add(new LedgerEntry(2026, DeterministicId("Gone"), "Gone", LedgerKind.Setting, "x", DateTime.UtcNow));
+        ledger.Add(new LedgerEntry(2026, null, "Old", LedgerKind.V30Rename, "y", DateTime.UtcNow));
 
         var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.Unload, ledger);
 
         plan.Forget.Should().BeEquivalentTo(new[]
         {
-            new LedgerForget(new LedgerKey(2026, SwitchMechanism.SettingsFile, reEnabledByUser.AddinIds[0], reEnabledByUser.ManifestPath), false),
-            new LedgerForget(new LedgerKey(2026, SwitchMechanism.SettingsFile, DeterministicId("Gone"), "x"), true),
-            new LedgerForget(new LedgerKey(2025, SwitchMechanism.Rename, null, "y"), false),
+            new LedgerForget(new LedgerKey(2026, LedgerKind.Setting, reEnabledByUser.AddinIds[0], reEnabledByUser.ManifestPath), false),
+            new LedgerForget(new LedgerKey(2026, LedgerKind.Setting, DeterministicId("Gone"), "x"), true),
+            new LedgerForget(new LedgerKey(2026, LedgerKind.V30Rename, null, "y"), false),
         });
         plan.HasChanges.Should().BeFalse();
+        plan.HasWork.Should().BeTrue("a plan whose only work is the clean-up still runs (review B1)");
+    }
+
+    [Fact]
+    public void An_add_in_whose_manifest_failed_to_parse_keeps_its_record_entry_and_setting()
+    {
+        // Review N5: an unparsable manifest is still installed; its setting must not be reset.
+        var path = Path.Combine("C:", "User", "2026", "Broken.addin");
+        var inventory = new AddinInventory(
+            [new InventoryYear(FakeAddinTree.Year(2026), "s", SettingsFileState.Ok, null, false, "a", false, [path])], []);
+        var ledger = new ActivationLedger();
+        ledger.Add(new LedgerEntry(2026, DeterministicId("Broken"), "Broken", LedgerKind.Setting, path, DateTime.UtcNow));
+        ActivationPlanner.Plan(inventory, ActivationPolicy.Unload, ledger).Forget.Should().BeEmpty();
     }
 
     [Fact]
@@ -208,25 +232,43 @@ public class ActivationPlannerTests
     }
 
     [Fact]
-    public void The_migration_plan_moves_v3_renames_in_settings_years_only()
+    public void The_migration_plan_moves_v3_renames_but_not_while_a_settings_file_is_unreadable()
     {
         var inventory = new AddinInventory(
             [
-                new InventoryYear(FakeAddinTree.Year(2025, SwitchMechanism.Rename), "s", SettingsFileState.Missing, null, false, "a", false),
+                new InventoryYear(FakeAddinTree.Year(2025), "s", SettingsFileState.Missing, null, false, "a", false),
                 new InventoryYear(FakeAddinTree.Year(2026), "s", SettingsFileState.Ok, null, false, "a", false),
+                new InventoryYear(FakeAddinTree.Year(2027), "s", SettingsFileState.Unreadable, "bad", false, "a", false),
             ],
             [
-                Item(2025, "Old", mechanism: SwitchMechanism.Rename, renamed: true),
+                Item(2025, "Old", renamed: true),
                 Item(2026, "Old", renamed: true),
                 Item(2026, "Locked", renamed: true, adminLock: AdminLock.AlwaysEnabled),
                 Item(2026, "Fine"),
+                Item(2027, "Old", renamed: true),
             ]);
         var plan = ActivationPlanner.PlanMigration(inventory, new ActivationLedger());
-        plan.Changes.Should().ContainSingle().Which.Should().Match<PlanEntry>(e =>
-            e.Year == 2026 && e.Name == "Old" && e.Migrate && e.Action == PlanAction.Disable && e.Renamed);
+        // 2025 migrates like 2026 (decision #21); 2027 waits for a readable file (review N7).
+        plan.Changes.Select(e => (e.Year, e.Name)).Should().Equal((2025, "Old"), (2026, "Old"));
+        plan.Changes.Should().OnlyContain(e => e.Migrate && e.Action == PlanAction.Disable && e.Renamed);
         plan.Intent.Should().Be(ActivationIntent.MigrateLegacy);
     }
 
+    [Fact]
+    public void A_native_requirement_is_never_an_add_in_and_an_add_in_id_matches()
+    {
+        // Review N2: the planner honours `native` and `addinId` exactly as the pills do.
+        var probe = Item(2026, "Probe", id: "d4c6e3e0-0000-4000-8000-525354500001", fileName: "Whatever.addin");
+        var probeTab = Item(2026, "RSTProbe Tools", fileName: "RSTProbeTools.addin");
+        var inventory = InventoryOf(probe, probeTab);
+        var byId = new RequiredAddin { TabName = "Elsewhere", AddinId = "D4C6E3E0-0000-4000-8000-525354500001" };
+        var native = new RequiredAddin { TabName = "RSTProbe", Native = true };
+
+        var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.Load([byId, native], true), new ActivationLedger());
+
+        plan.Entries.Single(e => e.Name == "Probe").Should().Match<PlanEntry>(e => e.Required && e.Action == PlanAction.NoChange);
+        plan.Entries.Single(e => e.Name == "RSTProbe Tools").Action.Should().Be(PlanAction.Disable, "a native requirement keeps no add-in on");
+    }
     [Fact]
     public void The_plan_round_trips_through_json_for_the_tray()
     {
@@ -262,27 +304,36 @@ public class ActivationPlannerTests
 
     // ── the property: the plan shown is the operations executed (T-B3) ───────
 
-    [Fact]
-    public void The_plan_shown_is_exactly_the_operations_executed_and_a_second_run_changes_nothing()
+    /// <summary>Every entry of a year's settings file: GUID → Disabled (empty when there is no file).</summary>
+    private static Dictionary<string, bool> SettingsOnDisk(FakeAddinTree tree, int year)
     {
+        var json = tree.ReadSettings(year);
+        if (json is null) return [];
+        return System.Text.Json.Nodes.JsonNode.Parse(json)!["AddInItemSettings"]!.AsArray()
+            .ToDictionary(n => n!["GUID"]!.GetValue<string>(), n => n!["Disabled"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void The_plan_shown_is_exactly_the_operations_executed_on_disk_and_a_second_run_changes_nothing()
+    {
+        int[] years = [2025, 2026, 2027];
         var random = new Random(16018);
         for (var run = 0; run < 40; run++)
         {
             using var tree = new FakeAddinTree();
             var names = Enumerable.Range(0, random.Next(1, 8)).Select(i => "Addin" + i).ToList();
-            var settings = new Dictionary<int, List<string>>();
-            foreach (var y in Years)
+            foreach (var y in years)
             {
-                settings[y] = [];
+                var settings = new List<string>();
                 foreach (var n in names)
                 {
                     if (random.Next(4) == 0) continue;
                     var id = DeterministicId(n);
                     var dir = random.Next(3) == 0 ? tree.MachineAddins(y) : tree.UserAddins(y);
-                    tree.Manifest(dir, n + ".addin", n, id, random.Next(6) == 0 ? "ADSK" : "ACME");
-                    if (random.Next(3) == 0) settings[y].Add("{\"Disabled\":true,\"GUID\":\"" + id + "\"}");
+                    tree.Manifest(dir, n + ".addin", n, id, random.Next(6) == 0 ? "ADSK" : "ACME", renamed: random.Next(10) == 0);
+                    if (random.Next(3) == 0) settings.Add("{\"Disabled\":true,\"GUID\":\"" + id + "\",\"LoadTime\":7,\"Name\":\"" + n + "\",\"Vendor\":\"X\"}");
                 }
-                if (settings[y].Count > 0) tree.Settings(y, "{\"DisableAllAddIns\":false,\"AddInItemSettings\":[" + string.Join(",", settings[y]) + "]}");
+                if (settings.Count > 0) tree.Settings(y, "{\"DisableAllAddIns\":false,\"AddInItemSettings\":[" + string.Join(",", settings) + "]}");
             }
             var required = names.Where(_ => random.Next(3) == 0).Select(n => new RequiredAddin { TabName = n, AddinFile = n + ".addin" }).ToList();
             var policy = random.Next(3) switch
@@ -291,18 +342,44 @@ public class ActivationPlannerTests
                 1 => ActivationPolicy.Load(required, false),
                 _ => ActivationPolicy.Unload,
             };
-            var years = Years.Select(y => FakeAddinTree.Year(y)).ToArray();
+            var revitYears = years.Select(y => FakeAddinTree.Year(y)).ToArray();
 
-            // A first Disable pass so rst-c's own record has entries to re-enable.
-            tree.Run(ActivationPolicy.Load([], true), null, years);
-            var (plan, report) = tree.Run(policy, null, years);
+            // A first Disable pass so RST's own record has entries; then the user re-enables some by hand.
+            tree.Run(ActivationPolicy.Load([], true), null, revitYears);
+            foreach (var y in years)
+            {
+                var json = tree.ReadSettings(y);
+                if (json is null) continue;
+                var doc = AddinsSettingsDocument.TryParse(json, out _)!;
+                foreach (var id in doc.DisabledIds().Where(_ => random.Next(4) == 0).ToList()) doc.SetDisabled(id, false, null, null);
+                tree.Settings(y, doc.ToJson());
+            }
+
+            var before = years.ToDictionary(y => y, y => SettingsOnDisk(tree, y));
+            var (plan, report) = tree.Run(policy, null, revitYears);
 
             report.Outcomes.Select(o => o.OperationKey).Should().BeEquivalentTo(plan.Changes.Select(e => e.OperationKey), $"run {run}");
             report.Outcomes.Select(o => o.OperationKey).Should().OnlyHaveUniqueItems();
             report.Outcomes.Where(o => !o.IsDone).Should().BeEmpty($"run {run}: nothing blocks on a plain disk");
 
-            var again = ActivationPlanner.Plan(tree.Scan(years), policy, tree.Ledger());
-            again.HasChanges.Should().BeFalse($"run {run}: the target state was reached");
+            // On disk (review N3): exactly the planned tokens flipped, to the planned value; nothing else moved.
+            foreach (var y in years)
+            {
+                var after = SettingsOnDisk(tree, y);
+                var flipped = after.Where(kv => !before[y].TryGetValue(kv.Key, out var was) || was != kv.Value)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+                var planned = plan.Changes.Where(e => e.Year == y)
+                    .SelectMany(e => e.TargetIds.Select(id => (id, Disabled: e.Action == PlanAction.Disable)))
+                    .ToDictionary(t => t.id, t => t.Disabled);
+                flipped.Should().BeEquivalentTo(planned, $"run {run}, {y}");
+                before[y].Keys.Should().BeSubsetOf(after.Keys, $"run {run}, {y}: no entry is dropped");
+            }
+            // Every record entry the user re-enabled by hand is gone (In Scope 4).
+            foreach (var e in tree.Ledger().Entries.Where(e => e.Kind == LedgerKind.Setting))
+                SettingsOnDisk(tree, e.Year).GetValueOrDefault(e.AddinId!).Should().BeTrue($"run {run}: the record only lists add-ins that are off");
+
+            var again = ActivationPlanner.Plan(tree.Scan(revitYears), policy, tree.Ledger());
+            again.HasWork.Should().BeFalse($"run {run}: the target state was reached and the record is tidy");
         }
     }
 }

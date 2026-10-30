@@ -70,21 +70,13 @@ public sealed class ConfirmAddinChangesModel
     {
         ArgumentNullException.ThrowIfNull(plan);
         var changes = plan.Changes;
+        // "RST-Probe (2026, 2027)": one line per add-in, with the years it applies to.
         IReadOnlyList<string> Grouped(PlanAction action) =>
-            Labels(changes.Where(e => e.Action == action && e.ExpectedBlock is null));
+            ActivationWording.GroupByName(changes.Where(e => e.Action == action && e.ExpectedBlock is null), e => e.Name, e => e.Year);
         var staying = ActivationWording.GroupByName(
             plan.Entries.Where(e => e.Required && e.Action == PlanAction.NoChange), e => e.Name, e => e.Year);
         var blocked = changes.Where(e => e.ExpectedBlock is not null).Select(ActivationWording.BlockedLine).Distinct();
         return new ConfirmAddinChangesModel(Grouped(PlanAction.Disable), Grouped(PlanAction.Enable), staying, blocked, plan.Years);
-    }
-
-    /// <summary>"RST-Probe (2026, 2027)"; a rename that needs administrator rights says so.</summary>
-    private static IReadOnlyList<string> Labels(IEnumerable<PlanEntry> entries)
-    {
-        var list = entries.ToList();
-        var plain = ActivationWording.GroupByName(list.Where(e => !e.MayNeedAdmin), e => e.Name, e => e.Year);
-        var admin = ActivationWording.GroupByName(list.Where(e => e.MayNeedAdmin), e => e.Name, e => e.Year).Select(UiStrings.Loader_MayNeedAdmin);
-        return [.. plain, .. admin];
     }
 
     public string Subtitle { get; }

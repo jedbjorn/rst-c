@@ -72,12 +72,12 @@ A switched-off add-in never shows **Loaded**, even while its tab is still on the
 
 ### How add-ins are switched on and off
 
-rst-c switches add-ins through **Revit's own Add-Ins Manager** (Revit 2025.3 and later, 2026, 2027). Every Revit year keeps a per-user settings file, `%AppData%\Autodesk\Revit\Autodesk Revit <year>\AddinsData\AddInsSettings.json`, with an on/off entry per add-in. rst-c edits that entry, exactly as ticking or unticking the add-in in **Manage › Add-Ins Manager** would, and leaves every other entry and setting as it was.
+rst-c switches add-ins through **Revit's own Add-Ins Manager**, in Revit 2025, 2026 and 2027. Every Revit year keeps a per-user settings file, `%AppData%\Autodesk\Revit\Autodesk Revit <year>\AddinsData\AddInsSettings.json`, with an on/off entry per add-in. rst-c edits that entry, exactly as ticking or unticking the add-in in **Manage › Add-Ins Manager** would, and leaves every other entry and setting as it was.
 
 - **For your Windows user only.** It works for add-ins installed for all users too, without admin rights, and other people on the same computer are not affected.
 - **Every installed Revit year.** A switch applies to each Revit year installed on the computer, each with its own settings file.
 - **At the next start.** Revit reads the file when it starts, so every change applies the next time that Revit year starts. rst-c can write it while Revit is running.
-- **Revit 2025.0–2025.2** have no Add-Ins Manager. For those builds only, rst-c still renames the manifest (`X.addin` to `X.addin.RSTdisabled`), which works for add-ins installed for you; add-ins installed for all users need admin rights there.
+- **Revit 2025 is partially supported.** rst-c treats it exactly like 2026, but switching only works on **Revit 2025.3 or later**: Autodesk's Add-Ins Manager arrived in 2025.3, and an older 2025 build ignores the settings file. Update Revit 2025 to switch add-ins there. Revit years before 2025 are not supported and are left alone.
 
 rst-c keeps its own record of the add-ins **it** switched off, in `%AppData%\RST\addin_switches.json`. Switching back on only ever touches what is in that record: an add-in you switched off yourself in Autodesk's Add-Ins Manager stays off. An entry is cleared once the add-in is back on, or once it is no longer installed.
 
@@ -107,7 +107,7 @@ After every load, the **Add-in Check** reports what changed and what could not, 
 | Reason | What it means |
 |---|---|
 | locked on / locked off by your administrator | IT's `AdminSettings.json` decides this add-in; rst-c cannot change it |
-| installed for all users; changing it needs administrator rights | Revit 2025.0–2025.2 only (the rename fallback) |
+| installed for all users; renaming its file back needs administrator rights | Only when undoing an RST 3.0 rename (see below) of an add-in installed for all users |
 | a file was in use by another program; try again | Another program had the file open |
 | no longer installed | The add-in was removed between the plan and the change |
 | Revit's add-in settings file could not be read or written | rst-c never overwrites a file it cannot read; Revit rebuilds an unreadable file itself at its next start |
@@ -128,7 +128,7 @@ rst-c finds add-ins where each Revit year loads them: your `%AppData%\Autodesk\R
 
 ### Upgrading from v3.0
 
-RST 3.0 switched add-ins off by renaming their manifests to `.addin.RSTdisabled`. The first time the Loader opens after the upgrade, rst-c moves each of those into Revit's settings file instead (the add-in stays off) and gives the file its own name back, and shows **Add-ins Switched Off by RST 3.0** once. A rename it cannot undo (an add-in installed for all users) is reported once and stays off. Revit 2025.0–2025.2 keep their renames.
+RST 3.0 switched add-ins off by renaming their manifests to `.addin.RSTdisabled`. The first time the Loader opens after the upgrade, rst-c moves each of those into Revit's settings file instead (the add-in stays off) and gives the file its own name back, and shows **Add-ins Switched Off by RST 3.0** once. A rename it cannot undo (an add-in installed for all users) is reported once and stays off; Unload and **Restore All Add-ins** try again. If a year's settings file cannot be read at that moment, that year waits for the next time the Loader opens. Undoing these renames is the only time rst-c renames a file.
 
 ## Stacks on the ribbon
 
@@ -148,5 +148,7 @@ Stacks are built through the same AdWindows interface as the rest of the profile
 - RSTify uses tab titles to identify tabs. Tabs with identical titles (rare but possible with some add-ins) will both be affected by a hide rule targeting that title.
 - If Autodesk's Add-Ins Manager dialog is open and you press **Apply** after rst-c switched something, Revit's own choice wins; the next profile load applies the plan again.
 - IT's admin locks (`AdminSettings.json`) are read, reported and respected, never changed.
+- If a year's settings file cannot be read (for example while that Revit year is starting), rst-c leaves it and its record for that year untouched and says so; try again in a moment.
+- Record clean-ups (entries for add-ins that are back on or uninstalled) are reported in one "Tidied up" line. Two Loaders open in different Revit years can save the record at the same time; each re-reads it first, so neither loses the other's entries.
 - Saving the active profile in the Builder reloads its ribbon only; it never changes add-ins. Add-ins change through **Load Profile**, with its confirmation and its report.
 - A profile's requirements are always evaluated against the computer it is loaded on, not the one it was built on. Profiles built before the required add-in feature (pre-RST-022) have an empty `requiredAddins` list; the check is a no-op for them.

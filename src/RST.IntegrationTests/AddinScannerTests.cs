@@ -33,11 +33,11 @@ public sealed class AddinScannerTests
     }
 
     [Fact]
-    public void Detection_finds_the_installed_years_with_their_build_and_mechanism()
+    public void Detection_finds_the_installed_supported_years()
     {
         var years = RevitInstallations.Detect(AddinRoots.FromEnvironment());
         foreach (var y in years)
-            _output.WriteLine($"Revit {y.Year}: dir={y.InstallDir} build={y.Build} mechanism={y.Mechanism}");
+            _output.WriteLine($"Revit {y.Year}: dir={y.InstallDir}");
         years.Should().NotBeEmpty();
         years.Select(y => y.Year.ToString()).Should().BeSubsetOf(
             RevitEnvironment.InstalledVersions().Where(v => RevitInstallations.SupportedYears.Contains(int.Parse(v))));

@@ -406,6 +406,6 @@ public static class LoaderFixtures
         var items = backend.Inventory.Items.Select(i => i.Name == "Ideate BIMLink" ? i with { DisabledIds = i.AddinIds } : i).ToList();
         backend.Inventory = new AddinInventory(backend.Inventory.Years, items);
         foreach (var i in items.Where(i => i.Name == "Ideate BIMLink"))
-            backend.Ledger.Add(new LedgerEntry(i.Year, i.AddinIds[0], i.Name, SwitchMechanism.SettingsFile, i.ManifestPath, DateTime.UtcNow));
+            backend.Ledger.Add(new LedgerEntry(i.Year, i.AddinIds[0], i.Name, LedgerKind.Setting, i.ManifestPath, DateTime.UtcNow));
     }
 }

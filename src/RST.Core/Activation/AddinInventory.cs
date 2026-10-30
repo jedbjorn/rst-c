@@ -11,7 +11,6 @@ namespace RST.Core.Activation;
 /// <summary>One add-in (manifest) in one Revit year.</summary>
 public sealed record InventoryItem(
     int Year,
-    SwitchMechanism Mechanism,
     string Name,
     string? VendorId,
     AddinScope Scope,
@@ -45,7 +44,7 @@ public sealed record InventoryItem(
     public bool IsAutodesk => Entries.Any(e => IsAutodeskVendor(e.VendorId)) || IsAutodeskVendor(VendorId);
 
     /// <summary>Every ClientId has Disabled:true in the user's AddInsSettings.json.</summary>
-    public bool SwitchedOffInSettings => Mechanism == SwitchMechanism.SettingsFile && AddinIds.Count > 0 && AddinIds.All(DisabledIds.Contains);
+    public bool SwitchedOffInSettings => AddinIds.Count > 0 && AddinIds.All(DisabledIds.Contains);
 
     /// <summary>
     /// The add-in will not load at the next start: renamed (Revit cannot find it), locked off by the
@@ -71,11 +70,20 @@ public sealed record InventoryYear(
     string? SettingsError,
     bool UserDisableAll,
     string AdminPath,
-    bool AdminDisableAll)
+    bool AdminDisableAll,
+    IReadOnlyList<string>? UnreadableManifests = null)
 {
     public int Year => Revit.Year;
 
-    public SwitchMechanism Mechanism => Revit.Mechanism;
+    /// <summary>
+    /// The manifests found this year that could not be parsed (canonical .addin paths). They are
+    /// still installed as far as RST knows: their record entries are kept and their settings are
+    /// never reset (review N5).
+    /// </summary>
+    public IReadOnlyList<string> Unreadable => UnreadableManifests ?? [];
+
+    public bool IsUnreadableManifest(string manifestPath) =>
+        Unreadable.Any(p => string.Equals(p, manifestPath, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>The add-ins of every installed Revit year.</summary>
@@ -110,21 +118,15 @@ public sealed class AddinInventory
         ArgumentNullException.ThrowIfNull(roots);
         var yearRows = new List<InventoryYear>();
         var items = new List<InventoryItem>();
-        foreach (var revit in years ?? [])
+        // Decision #21: years before 2025 are not RST's to switch.
+        foreach (var revit in (years ?? []).Where(y => y.Year >= RevitInstallations.MinimumYear))
         {
             var settingsPath = roots.SettingsFile(revit.Year);
             var adminPath = roots.AdminSettingsFile(revit.Year);
-            var state = SettingsFileState.Missing;
-            string? error = null;
-            AddinsSettingsDocument? settings = null;
-            var admin = AdminSettings.None;
-            if (revit.Mechanism == SwitchMechanism.SettingsFile)
-            {
-                (state, settings, error) = ReadSettings(settingsPath);
-                admin = AdminSettings.Read(adminPath);
-            }
+            var (state, settings, error) = ReadSettings(settingsPath);
+            var admin = AdminSettings.Read(adminPath);
             var disabledIds = settings?.DisabledIds() ?? new HashSet<string>();
-            yearRows.Add(new InventoryYear(revit, settingsPath, state, error, settings?.DisableAll ?? false, adminPath, admin.DisableAll));
+            var unreadable = new List<string>();
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var root in roots.ManifestRoots(revit.Year, revit.InstallDir))
@@ -132,10 +134,11 @@ public sealed class AddinInventory
                 foreach (var found in Find(root, revit.Year, onSkip))
                 {
                     if (!seen.Add(Full(found.Canonical))) continue;
-                    var item = Describe(revit, root.Scope, found, disabledIds, admin, onSkip);
+                    var item = Describe(revit, root.Scope, found, disabledIds, admin, onSkip, unreadable);
                     if (item is not null) items.Add(item);
                 }
             }
+            yearRows.Add(new InventoryYear(revit, settingsPath, state, error, settings?.DisableAll ?? false, adminPath, admin.DisableAll, unreadable));
         }
         return new AddinInventory(yearRows, items);
     }
@@ -225,7 +228,8 @@ public sealed class AddinInventory
     }
 
     private static InventoryItem? Describe(
-        RevitYear revit, AddinScope scope, Found found, IReadOnlySet<string> disabledIds, AdminSettings admin, Action<string, Exception>? onSkip)
+        RevitYear revit, AddinScope scope, Found found, IReadOnlySet<string> disabledIds, AdminSettings admin,
+        Action<string, Exception>? onSkip, List<string> unreadable)
     {
         var path = found.Live ?? found.RenamedPath!;
         AddinManifest? manifest;
@@ -236,9 +240,14 @@ public sealed class AddinInventory
         catch (Exception ex)
         {
             onSkip?.Invoke(path, ex);
+            unreadable.Add(found.Canonical);
             return null;
         }
-        if (manifest is null) return null;
+        if (manifest is null)
+        {
+            unreadable.Add(found.Canonical);
+            return null;
+        }
 
         var ids = manifest.Entries.Select(e => AddinIds.Normalize(e.AddinId)).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
         var fileName = Path.GetFileName(found.Canonical);
@@ -247,7 +256,7 @@ public sealed class AddinInventory
         var vendor = manifest.Entries.Select(e => e.VendorId).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
         var lockState = AdminLock.None;
-        if (revit.Mechanism == SwitchMechanism.SettingsFile && scope != AddinScope.RevitInstall)
+        if (scope != AddinScope.RevitInstall)
         {
             foreach (var id in ids)
             {
@@ -259,13 +268,10 @@ public sealed class AddinInventory
                 lockState = AdminLock.AlwaysDisabled;
         }
 
-        var disabled = revit.Mechanism == SwitchMechanism.SettingsFile
-            ? ids.Where(disabledIds.Contains).ToList()
-            : (IReadOnlyList<string>)[];
+        var disabled = ids.Where(disabledIds.Contains).ToList();
 
         return new InventoryItem(
             revit.Year,
-            revit.Mechanism,
             name!,
             vendor,
             scope,

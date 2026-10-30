@@ -43,7 +43,7 @@ public sealed class FakeAddinTree : IDisposable
 
     public string RevitInstallAddins(int year) => Path.Combine(Roots.DefaultRevitInstall(year), "AddIns");
 
-    public static RevitYear Year(int year, SwitchMechanism mechanism = SwitchMechanism.SettingsFile) => new(year, null, null, mechanism);
+    public static RevitYear Year(int year) => new(year, null);
 
     /// <summary>Writes a one-entry application manifest; returns its canonical (.addin) path.</summary>
     public string Manifest(string dir, string fileName, string name, string? id, string vendor = "ACME", bool renamed = false)

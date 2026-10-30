@@ -21,7 +21,7 @@ public sealed class AddinInventoryTests : IDisposable
 
     public void Dispose() => _tree.Dispose();
 
-    /// <summary>The machine the spike found (2026, 2027) plus a 2025 that predates the Add-Ins Manager.</summary>
+    /// <summary>The machine the spike found (2026, 2027) plus a 2025, treated exactly like 2026 (decision #21).</summary>
     private AddinInventory BuildMachine()
     {
         foreach (var y in new[] { 2025, 2026, 2027 })
@@ -50,7 +50,7 @@ public sealed class AddinInventoryTests : IDisposable
         _tree.Settings(2026, "{\"DisableAllAddIns\":false,\"AddInItemSettings\":[{\"Disabled\":true,\"GUID\":\"" + Kinship + "\",\"LoadTime\":10,\"Name\":\"Kinship\",\"Vendor\":\"ANDK\"}]}");
         _tree.Lock(2027, Path.Combine(_tree.MachineAddins(2027), "DiRoots.One.addin"), DiRoots, AdminLock.AlwaysDisabled);
 
-        return _tree.Scan(FakeAddinTree.Year(2025, SwitchMechanism.Rename), FakeAddinTree.Year(2026), FakeAddinTree.Year(2027));
+        return _tree.Scan(FakeAddinTree.Year(2025), FakeAddinTree.Year(2026), FakeAddinTree.Year(2027));
     }
 
     [Fact]
@@ -112,7 +112,6 @@ public sealed class AddinInventoryTests : IDisposable
 
         inventory.Year(2026)!.Settings.Should().Be(SettingsFileState.Ok);
         inventory.Year(2027)!.Settings.Should().Be(SettingsFileState.Missing);
-        inventory.Year(2025)!.Mechanism.Should().Be(SwitchMechanism.Rename);
         inventory.Year(2027)!.AdminPath.Should().Be(Path.Combine(_tree.Roots.ProgramFiles, "Autodesk", "Revit", "Admin", "2027", "AdminSettings.json"));
         inventory.Year(2026)!.AdminPath.Should().Be(Path.Combine(_tree.Roots.ProgramData, "Autodesk", "RVT 2026", "Admin", "AdminSettings.json"));
         inventory.Year(2026)!.SettingsPath.Should().Be(Path.Combine(_tree.Roots.AppData, "Autodesk", "Revit", "Autodesk Revit 2026", "AddinsData", "AddInsSettings.json"));
@@ -161,20 +160,23 @@ public sealed class AddinInventoryTests : IDisposable
     }
 
     [Fact]
-    public void A_rename_year_ignores_the_settings_file_and_the_disable_all_flag_is_read()
+    public void Revit_2025_reads_its_settings_file_like_2026_and_years_before_2025_are_ignored()
     {
+        // Decision #21: 2025 is treated exactly like 2026; 2024 is not RST's to switch.
         _tree.Manifest(_tree.UserAddins(2025), "Kinship.addin", "Kinship", Kinship);
-        _tree.Settings(2025, "{\"DisableAllAddIns\":true,\"AddInItemSettings\":[{\"Disabled\":true,\"GUID\":\"" + Kinship + "\"}]}");
-        var inventory = _tree.Scan(FakeAddinTree.Year(2025, SwitchMechanism.Rename));
-        inventory.Items.Single().IsOff.Should().BeFalse();
-        inventory.Year(2025)!.Settings.Should().Be(SettingsFileState.Missing, "2025.0–2025.2 have no Add-Ins Manager");
+        _tree.Settings(2025, "{\"DisableAllAddIns\":false,\"AddInItemSettings\":[{\"Disabled\":true,\"GUID\":\"" + Kinship + "\"}]}");
+        _tree.Manifest(_tree.UserAddins(2024), "Kinship.addin", "Kinship", Kinship);
+        var inventory = _tree.Scan(FakeAddinTree.Year(2024), FakeAddinTree.Year(2025));
+        inventory.Years.Select(y => y.Year).Should().Equal(2025);
+        inventory.Items.Single().Should().Match<InventoryItem>(i => i.Year == 2025 && i.IsOff && i.SwitchedOffInSettings);
+        inventory.Year(2025)!.Settings.Should().Be(SettingsFileState.Ok);
 
         _tree.Settings(2026, "{\"DisableAllAddIns\":true,\"AddInItemSettings\":[]}");
         _tree.Scan(2026).Year(2026)!.UserDisableAll.Should().BeTrue();
     }
 
     [Fact]
-    public void A_manifest_or_bundle_that_cannot_be_read_is_skipped_and_reported()
+    public void A_manifest_or_bundle_that_cannot_be_read_is_skipped_reported_and_remembered()
     {
         Directory.CreateDirectory(_tree.UserAddins(2026));
         File.WriteAllText(Path.Combine(_tree.UserAddins(2026), "Broken.addin"), "<RevitAddIns><AddIn>");
@@ -182,8 +184,11 @@ public sealed class AddinInventoryTests : IDisposable
         Directory.CreateDirectory(bundle);
         File.WriteAllText(Path.Combine(bundle, "PackageContents.xml"), "not xml");
         var skipped = new List<string>();
-        AddinInventory.Scan(_tree.Roots, [FakeAddinTree.Year(2026)], (p, _) => skipped.Add(Path.GetFileName(p))).Items.Should().BeEmpty();
+        var inventory = AddinInventory.Scan(_tree.Roots, [FakeAddinTree.Year(2026)], (p, _) => skipped.Add(Path.GetFileName(p)));
+        inventory.Items.Should().BeEmpty();
         skipped.Should().BeEquivalentTo("Broken.addin", "PackageContents.xml");
+        // Still installed as far as RST knows (review N5).
+        inventory.Year(2026)!.IsUnreadableManifest(Path.Combine(_tree.UserAddins(2026), "Broken.addin")).Should().BeTrue();
     }
 }
 
@@ -195,24 +200,21 @@ public sealed class RevitInstallationsTests
 
         public HashSet<string> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        public Dictionary<string, Version> Versions { get; } = new(StringComparer.OrdinalIgnoreCase);
-
         public string? InstallLocation(int year) => Registry.GetValueOrDefault(year);
 
         public bool FileExists(string path) => Files.Contains(path);
-
-        public Version? FileVersion(string path) => Versions.GetValueOrDefault(path);
     }
 
     [Fact]
-    public void Installed_years_are_found_by_the_uninstall_entry_or_the_default_folder_and_each_gets_its_mechanism()
+    public void Installed_supported_years_are_found_by_the_uninstall_entry_or_the_default_folder()
     {
         var roots = new AddinRoots("/a", "/pd", "/pf");
         var probe = new Probe();
-        // 2025.2 in a custom folder (registry), no Add-Ins Manager: renames.
+        // 2024 is installed but not supported (decision #21).
+        probe.Files.Add(Path.Combine(roots.DefaultRevitInstall(2024), "Revit.exe"));
+        // 2025 in a custom folder (registry).
         probe.Registry[2025] = "/custom/Revit 2025";
         probe.Files.Add(Path.Combine("/custom/Revit 2025", "Revit.exe"));
-        probe.Versions[Path.Combine("/custom/Revit 2025", "Revit.exe")] = new Version(25, 2, 0, 1);
         // 2026 at the default folder.
         probe.Files.Add(Path.Combine(roots.DefaultRevitInstall(2026), "Revit.exe"));
         // 2027 is not installed (a stale registry entry without Revit.exe).
@@ -220,20 +222,8 @@ public sealed class RevitInstallationsTests
 
         var years = RevitInstallations.Detect(roots, probe);
 
-        years.Select(y => (y.Year, y.Mechanism)).Should().Equal((2025, SwitchMechanism.Rename), (2026, SwitchMechanism.SettingsFile));
+        years.Select(y => y.Year).Should().Equal(2025, 2026);
         years[0].InstallDir.Should().Be("/custom/Revit 2025");
-        years[0].Build.Should().Be("25.2.0.1");
+        RevitInstallations.MinimumYear.Should().Be(2025);
     }
-
-    [Theory]
-    [InlineData(2025, "25.0.2.419", false, SwitchMechanism.Rename)]
-    [InlineData(2025, "25.2.0.0", false, SwitchMechanism.Rename)]
-    [InlineData(2025, "25.3.0.0", false, SwitchMechanism.SettingsFile)]
-    [InlineData(2025, "25.4.10.32", false, SwitchMechanism.SettingsFile)]
-    [InlineData(2025, null, false, SwitchMechanism.Rename)]
-    [InlineData(2025, null, true, SwitchMechanism.SettingsFile)]
-    [InlineData(2026, null, false, SwitchMechanism.SettingsFile)]
-    [InlineData(2027, "27.3.0.28", false, SwitchMechanism.SettingsFile)]
-    public void The_add_ins_manager_arrived_in_2025_3(int year, string? build, bool managerPresent, SwitchMechanism expected) =>
-        RevitInstallations.MechanismFor(year, build is null ? null : Version.Parse(build), managerPresent).Should().Be(expected);
 }

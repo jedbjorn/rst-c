@@ -1,16 +1,18 @@
 // rst-c's own (not vendored): runs a confirmed ActivationPlan (spec #18, In Scope 3; AC3).
 //
-//   Revit with the Add-Ins Manager (2025.3+, 2026, 2027): one read-modify-write of the year's
-//     AddInsSettings.json, atomic (temp file + replace), keeping every other field and entry,
-//     appending missing entries and creating the file when absent. A one-time backup
-//     (AddInsSettings.json.rst-bak) is kept beside it. The file is read back afterwards.
-//   Revit 2025.0–2025.2: renames X.addin ↔ X.addin.RSTdisabled.
-//   A v3.0 rename in a settings-file year is undone (renamed back) after the setting is written.
+// Every supported year (2025, 2026, 2027; decision #21) switches through its AddInsSettings.json:
+// one read-modify-write per year, atomic (temp file + replace), keeping every other field and
+// entry, appending missing entries and creating the file when absent. A one-time backup
+// (AddInsSettings.json.rst-bak) is kept beside it, and the file is read back afterwards.
 //
-// It runs the plan's Enable and Disable entries and nothing else, and reports each one once:
-// Done, or NotChanged with AdminLocked, NeedsAdmin, InUse, Vanished, FileError or Other. Admin locks
-// are re-read at execution time. No exception escapes; rst-c's record (addin_switches.json) is
-// updated with what actually changed.
+// The only rename left is undoing RST 3.0's X.addin.RSTdisabled: after the setting is written (the
+// one-time move), or before it is cleared (switching such an add-in back on).
+//
+// It runs the plan's Enable and Disable entries and its record clean-up, nothing else, and reports
+// each change once: Done, or NotChanged with AdminLocked, NeedsAdmin (a v3.0 undo of a manifest
+// installed for all users), InUse, Vanished, FileError or Other. The clean-up is one "Tidied up"
+// note. Admin locks are re-read at execution time. No exception escapes. RST's record
+// (addin_switches.json) is updated with what actually changed, merged with what is on disk.
 
 namespace RST.Core.Activation;
 
@@ -24,7 +26,7 @@ public sealed class ActivationExecutor
     private readonly Func<DateTime> _utcNow;
 
     /// <param name="roots">Where the settings and lock files are.</param>
-    /// <param name="ledgerPath">rst-c's record; usually <see cref="ActivationLedger.DefaultPath"/>.</param>
+    /// <param name="ledgerPath">RST's record; usually <see cref="ActivationLedger.DefaultPath"/>.</param>
     /// <param name="fs">The file operations; null is the real file system.</param>
     /// <param name="utcNow">The record's timestamps; null is now.</param>
     public ActivationExecutor(AddinRoots roots, string ledgerPath, IActivationFileSystem? fs = null, Func<DateTime>? utcNow = null)
@@ -35,23 +37,26 @@ public sealed class ActivationExecutor
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
     }
 
-    /// <summary>Runs <paramref name="plan"/> against rst-c's record on disk, and saves the record.</summary>
+    /// <summary>Runs <paramref name="plan"/> against RST's record on disk, and saves the record.</summary>
     public ActivationReport Execute(ActivationPlan plan) => Execute(plan, ActivationLedger.Load(_ledgerPath), save: true);
 
-    /// <summary>Runs <paramref name="plan"/> and updates <paramref name="ledger"/> (saved when <paramref name="save"/>).</summary>
+    /// <summary>
+    /// Runs <paramref name="plan"/> and updates <paramref name="ledger"/>. When <paramref name="save"/>,
+    /// the same changes are applied to the record on disk, re-read under a lock (review N9).
+    /// </summary>
     public ActivationReport Execute(ActivationPlan plan, ActivationLedger ledger, bool save = true)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(ledger);
         var outcomes = new Dictionary<PlanEntry, ActivationOutcome>(ReferenceEqualityComparer.Instance);
         var notes = new List<string>(plan.Notes.Select(n => n.Text));
-        var ledgerChanged = false;
+        var record = new RecordChanges(ledger);
 
         // Clear the record entries the plan found stale; collect the settings resets they ask for.
         var resets = new Dictionary<int, List<string>>();
         foreach (var f in plan.Forget)
         {
-            ledgerChanged |= ledger.Remove(f.Key);
+            record.Remove(f.Key);
             if (f.ResetSetting && f.Key.AddinId is { } id)
             {
                 if (!resets.TryGetValue(f.Key.Year, out var list)) resets[f.Key.Year] = list = [];
@@ -60,20 +65,20 @@ public sealed class ActivationExecutor
         }
 
         var changes = plan.Changes;
-        var settingsYears = changes.Where(e => e.Mechanism == SwitchMechanism.SettingsFile).Select(e => e.Year).Concat(resets.Keys).Distinct().Order();
-        foreach (var year in settingsYears)
+        var resetDone = new List<int>();
+        foreach (var year in changes.Select(e => e.Year).Concat(resets.Keys).Distinct().Order())
         {
-            var ops = changes.Where(e => e.Year == year && e.Mechanism == SwitchMechanism.SettingsFile).ToList();
-            ledgerChanged |= RunSettingsYear(year, ops, resets.GetValueOrDefault(year) ?? [], ledger, outcomes);
+            var ops = changes.Where(e => e.Year == year).ToList();
+            if (RunYear(year, ops, resets.GetValueOrDefault(year) ?? [], record, outcomes)) resetDone.Add(year);
         }
-        foreach (var e in changes.Where(e => e.Mechanism == SwitchMechanism.Rename))
-            ledgerChanged |= RunRename(e, ledger, outcomes);
 
-        if (save && ledgerChanged)
+        if (ActivationWording.TidiedUpNote(plan.Forget.Count, resetDone) is { } tidied) notes.Add(tidied);
+
+        if (save && record.Count > 0)
         {
             try
             {
-                ledger.Save(_ledgerPath, _fs);
+                ActivationLedger.SaveMerged(_ledgerPath, record.Changes, _fs);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -86,9 +91,9 @@ public sealed class ActivationExecutor
         return new ActivationReport(plan.Intent, ordered, notes);
     }
 
-    private bool RunSettingsYear(int year, List<PlanEntry> ops, List<string> resetIds, ActivationLedger ledger, Dictionary<PlanEntry, ActivationOutcome> outcomes)
+    /// <summary>Runs one year's changes and resets; true when a reset was written.</summary>
+    private bool RunYear(int year, List<PlanEntry> ops, List<string> resetIds, RecordChanges record, Dictionary<PlanEntry, ActivationOutcome> outcomes)
     {
-        var ledgerChanged = false;
         var admin = AdminSettings.Read(_roots.AdminSettingsFile(year));
         var pending = new List<PlanEntry>();
         foreach (var e in ops)
@@ -101,7 +106,7 @@ public sealed class ActivationExecutor
                 pending.Add(e);
         }
 
-        // Turning on a v3.0-renamed add-in: rename it back first, so a failed rename leaves the setting alone.
+        // Switching a v3.0-renamed add-in back on: rename it back first, so a failed rename leaves the setting alone.
         foreach (var e in pending.Where(e => e.Action == PlanAction.Enable && e.Renamed).ToList())
         {
             if (TryMove(e.ManifestPath + InventoryItem.RenamedSuffix, e.ManifestPath, e.Scope) is { } failure)
@@ -112,10 +117,11 @@ public sealed class ActivationExecutor
         }
 
         var flips = pending.Where(e => e.TargetIds.Count > 0).ToList();
+        var resetWritten = false;
         if (flips.Count > 0 || resetIds.Count > 0)
         {
             var path = _roots.SettingsFile(year);
-            var written = WriteSettings(path, flips, resetIds, out var failure);
+            var written = WriteSettings(path, flips, resetIds, out var failure, out resetWritten);
             if (!written)
             {
                 foreach (var e in flips)
@@ -126,7 +132,7 @@ public sealed class ActivationExecutor
             }
             else
             {
-                var check = AddinInventory.ReadSettings(path).Document;
+                var check = ReadBack(path);
                 foreach (var e in flips)
                 {
                     var want = e.Action == PlanAction.Disable;
@@ -138,9 +144,8 @@ public sealed class ActivationExecutor
                     }
                     foreach (var id in e.TargetIds)
                     {
-                        if (want) ledger.Add(new LedgerEntry(year, id, e.Name, SwitchMechanism.SettingsFile, e.ManifestPath, _utcNow()));
-                        else ledger.Remove(new LedgerKey(year, SwitchMechanism.SettingsFile, id, e.ManifestPath));
-                        ledgerChanged = true;
+                        if (want) record.Add(new LedgerEntry(year, id, e.Name, LedgerKind.Setting, e.ManifestPath, _utcNow()));
+                        else record.Remove(new LedgerKey(year, LedgerKind.Setting, id, e.ManifestPath));
                     }
                 }
             }
@@ -152,9 +157,8 @@ public sealed class ActivationExecutor
             if (TryMove(e.ManifestPath + InventoryItem.RenamedSuffix, e.ManifestPath, e.Scope) is { } failure)
             {
                 outcomes[e] = ActivationOutcome.For(e, OutcomeResult.NotChanged, failure.Reason, failure.Detail);
-                // Still renamed, and still rst-c's: record it so the move is not retried (and reported) every time.
-                ledger.Add(new LedgerEntry(year, null, e.Name, SwitchMechanism.Rename, e.ManifestPath, _utcNow()));
-                ledgerChanged = true;
+                // Still renamed, and still RST's: record it so the move is not retried (and reported) every time.
+                record.Add(new LedgerEntry(year, null, e.Name, LedgerKind.V30Rename, e.ManifestPath, _utcNow()));
                 pending.Remove(e);
             }
         }
@@ -162,12 +166,10 @@ public sealed class ActivationExecutor
         foreach (var e in pending)
         {
             if (e.Action == PlanAction.Enable && e.Renamed)
-            {
-                ledgerChanged |= ledger.Remove(new LedgerKey(year, SwitchMechanism.Rename, null, e.ManifestPath));
-            }
+                record.Remove(new LedgerKey(year, LedgerKind.V30Rename, null, e.ManifestPath));
             outcomes[e] = ActivationOutcome.For(e, OutcomeResult.Done);
         }
-        return ledgerChanged;
+        return resetWritten;
     }
 
     /// <summary>The live lock check: IT's file is re-read when the plan runs.</summary>
@@ -181,9 +183,23 @@ public sealed class ActivationExecutor
 
     private sealed record Failure(ChangeReason Reason, string? Detail);
 
-    private bool WriteSettings(string path, IReadOnlyList<PlanEntry> flips, IReadOnlyList<string> resetIds, out Failure? failure)
+    /// <summary>Reads the file back through the same seam it was written with.</summary>
+    private AddinsSettingsDocument? ReadBack(string path)
+    {
+        try
+        {
+            return _fs.FileExists(path) ? AddinsSettingsDocument.TryParse(_fs.ReadAllText(path), out _) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private bool WriteSettings(string path, IReadOnlyList<PlanEntry> flips, IReadOnlyList<string> resetIds, out Failure? failure, out bool resetWritten)
     {
         failure = null;
+        resetWritten = false;
         AddinsSettingsDocument? doc;
         var exists = false;
         try
@@ -194,7 +210,7 @@ public sealed class ActivationExecutor
                 doc = AddinsSettingsDocument.TryParse(_fs.ReadAllText(path), out var error);
                 if (doc is null)
                 {
-                    // Never overwrite a file rst-c cannot read: Revit's own rebuild is the user's call.
+                    // Never overwrite a file RST cannot read: Revit's own rebuild is the user's call.
                     failure = new Failure(ChangeReason.FileError, error);
                     return false;
                 }
@@ -214,14 +230,16 @@ public sealed class ActivationExecutor
         foreach (var e in flips)
             foreach (var id in e.TargetIds)
                 changed |= doc.SetDisabled(id, e.Action == PlanAction.Disable, e.Name, e.VendorId);
+        var resets = false;
         foreach (var id in resetIds)
-            if (doc.IsDisabled(id) == true) changed |= doc.SetDisabled(id, false, null, null);
-        if (!changed) return true;
+            if (doc.IsDisabled(id) == true) resets |= doc.SetDisabled(id, false, null, null);
+        if (!changed && !resets) return true;
 
         try
         {
             if (exists && !_fs.FileExists(path + BackupSuffix)) _fs.Copy(path, path + BackupSuffix);
             _fs.WriteAtomic(path, doc.ToBytes());
+            resetWritten = resets;
             return true;
         }
         catch (Exception ex)
@@ -229,35 +247,6 @@ public sealed class ActivationExecutor
             failure = MapSettings(ex);
             return false;
         }
-    }
-
-    private bool RunRename(PlanEntry e, ActivationLedger ledger, Dictionary<PlanEntry, ActivationOutcome> outcomes)
-    {
-        var renamed = e.ManifestPath + InventoryItem.RenamedSuffix;
-        var (source, destination) = e.Action == PlanAction.Disable ? (e.ManifestPath, renamed) : (renamed, e.ManifestPath);
-        if (!_fs.FileExists(source))
-        {
-            outcomes[e] = _fs.FileExists(destination)
-                ? ActivationOutcome.For(e, OutcomeResult.Done)
-                : ActivationOutcome.For(e, OutcomeResult.NotChanged, ChangeReason.Vanished);
-            if (!_fs.FileExists(destination)) return false;
-        }
-        else if (TryMove(source, destination, e.Scope) is { } failure)
-        {
-            outcomes[e] = ActivationOutcome.For(e, OutcomeResult.NotChanged, failure.Reason, failure.Detail);
-            return false;
-        }
-        else
-        {
-            outcomes[e] = ActivationOutcome.For(e, OutcomeResult.Done);
-        }
-
-        if (e.Action == PlanAction.Disable)
-        {
-            ledger.Add(new LedgerEntry(e.Year, null, e.Name, SwitchMechanism.Rename, e.ManifestPath, _utcNow()));
-            return true;
-        }
-        return ledger.Remove(new LedgerKey(e.Year, SwitchMechanism.Rename, null, e.ManifestPath));
     }
 
     private Failure? TryMove(string source, string destination, AddinScope scope)
@@ -296,4 +285,24 @@ public sealed class ActivationExecutor
         IOException or UnauthorizedAccessException => new Failure(ChangeReason.FileError, ex.Message),
         _ => new Failure(ChangeReason.Other, ex.Message),
     };
+
+    /// <summary>The record changes of one run: applied to the in-memory record now, and replayed on the file when it is saved.</summary>
+    private sealed class RecordChanges(ActivationLedger ledger)
+    {
+        private readonly List<Action<ActivationLedger>> _changes = [];
+
+        public IReadOnlyList<Action<ActivationLedger>> Changes => _changes;
+
+        public int Count => _changes.Count;
+
+        public void Add(LedgerEntry entry) => Apply(l => l.Add(entry));
+
+        public void Remove(LedgerKey key) => Apply(l => l.Remove(key));
+
+        private void Apply(Action<ActivationLedger> change)
+        {
+            change(ledger);
+            _changes.Add(change);
+        }
+    }
 }

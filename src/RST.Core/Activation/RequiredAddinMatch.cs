@@ -8,7 +8,7 @@
 //   3. fuzzy: the requirement's tab name contains, or is contained by, the manifest's file stem or
 //      an entry's Name (the v2.x isAddinLoaded rule), only when tiers 1 and 2 found nothing.
 // Every manifest a tier matches counts, not just the first. A requirement on one of Revit's own
-// tabs (RequiredAddinRules.BuiltinTabs, e.g. "Architecture") is never an add-in.
+// tabs (RequiredAddinRules.BuiltinTabs, e.g. "Architecture"), or marked native, is never an add-in.
 
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -20,6 +20,7 @@ public static class RequiredAddinMatch
     /// <summary>False for a requirement that names one of Revit's own tabs, or names nothing.</summary>
     public static bool IsAddinRequirement(RequiredAddin? required) =>
         required is not null
+        && required.Native != true
         && !RequiredAddinRules.IsNativeTab(required.TabName)
         && (!string.IsNullOrWhiteSpace(required.TabName) || !string.IsNullOrWhiteSpace(required.AddinFile) || !string.IsNullOrWhiteSpace(required.AddinId));
 

@@ -194,7 +194,7 @@ public sealed class ProfileLoadService
         ArgumentNullException.ThrowIfNull(start);
         if (start.Entry is null || start.Failure is not null) return AddinPassResult.None;
         var plan = start.Request.Plan;
-        if (plan is null || _switching is null || !plan.HasChanges)
+        if (plan is null || _switching is null || !plan.HasWork)
         {
             return plan is { Notes.Count: > 0 }
                 ? new AddinPassResult(ActivationReport.Empty(ActivationIntent.Load, [.. plan.Notes.Select(n => n.Text)]))
@@ -270,7 +270,7 @@ public sealed class ProfileLoadService
             {
                 var plan = _switching.Plan(_switching.Inventory(), ActivationPolicy.Unload);
                 AddinMaintenanceService.LogPlan(_log, plan, "Unload");
-                report = plan.HasChanges
+                report = plan.HasWork
                     ? _switching.Execute(plan)
                     : ActivationReport.Empty(ActivationIntent.Unload, [.. plan.Notes.Select(n => n.Text)]);
                 AddinMaintenanceService.LogReport(_log, report);
@@ -278,7 +278,7 @@ public sealed class ProfileLoadService
             catch (Exception ex)
             {
                 _log.Error(ex, "Loader.unload_profile: switching add-ins back on threw");
-                report = ActivationReport.Empty(ActivationIntent.Unload, "rst-c could not switch its add-ins back on: " + ex.Message);
+                report = ActivationReport.Empty(ActivationIntent.Unload, "RST could not switch its add-ins back on: " + ex.Message);
             }
         }
         _log.Information("Loader.unload_profile OK");

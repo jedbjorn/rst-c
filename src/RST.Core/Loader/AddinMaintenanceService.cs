@@ -38,7 +38,7 @@ public sealed class AddinMaintenanceService
         {
             var inventory = _switching.Inventory();
             _log.Information("Loader.addins: inventory years={Years} items={Items}",
-                string.Join(",", inventory.Years.Select(y => y.Year + ":" + y.Mechanism + ":" + y.Settings)), inventory.Items.Count);
+                string.Join(",", inventory.Years.Select(y => y.Year + ":" + y.Settings)), inventory.Items.Count);
             return inventory;
         }
         catch (Exception ex)
@@ -104,8 +104,8 @@ public sealed class AddinMaintenanceService
         log.Information("Loader.addins.plan {What}: intent={Intent} disableUnused={Disable} entries={Entries} changes={Changes} years={Years}",
             what, plan.Intent, plan.DisableUnused, plan.Entries.Count, plan.Changes.Count, string.Join(",", plan.Years));
         foreach (var e in plan.Changes)
-            log.Information("Loader.addins.plan: {Action} {Name} ({Year}) scope={Scope} mechanism={Mechanism} ids={Ids} blocked={Blocked} path={Path}",
-                e.Action, e.Name, e.Year, e.Scope, e.Mechanism, string.Join(",", e.TargetIds), e.ExpectedBlock, e.ManifestPath);
+            log.Information("Loader.addins.plan: {Action} {Name} ({Year}) scope={Scope} renamed={Renamed} ids={Ids} blocked={Blocked} path={Path}",
+                e.Action, e.Name, e.Year, e.Scope, e.Renamed, string.Join(",", e.TargetIds), e.ExpectedBlock, e.ManifestPath);
     }
 
     public static void LogReport(ILoaderLog log, ActivationReport report)

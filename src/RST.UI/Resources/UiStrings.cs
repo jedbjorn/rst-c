@@ -404,8 +404,6 @@ public static class UiStrings
 
     public static string Loader_ConfirmAndLoad => Get(nameof(Loader_ConfirmAndLoad));
 
-    public static string Loader_MayNeedAdmin(object? arg0) => Format(nameof(Loader_MayNeedAdmin), arg0);
-
     public static string Loader_Unknown => Get(nameof(Loader_Unknown));
 
     public static string Loader_QaTitle => Get(nameof(Loader_QaTitle));

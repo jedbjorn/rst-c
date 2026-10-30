@@ -59,7 +59,10 @@ public enum ChangeReason
     /// <summary>IT's AdminSettings.json locks the add-in.</summary>
     AdminLocked,
 
-    /// <summary>Renaming a manifest installed for all users needs administrator rights (Revit 2025.0–2025.2).</summary>
+    /// <summary>
+    /// Undoing RST 3.0's rename of a manifest installed for all users needs administrator rights
+    /// (the only rename RST still makes; decision #21).
+    /// </summary>
     NeedsAdmin,
 
     /// <summary>Another program had the file open.</summary>
@@ -84,7 +87,6 @@ public sealed record PlanEntry(
     string Name,
     string? VendorId,
     AddinScope Scope,
-    SwitchMechanism Mechanism,
     string ManifestPath,
     string FileName,
     IReadOnlyList<string> TargetIds,
@@ -97,10 +99,6 @@ public sealed record PlanEntry(
 {
     [JsonIgnore]
     public bool IsChange => Action is PlanAction.Enable or PlanAction.Disable;
-
-    /// <summary>Renaming a machine-wide manifest (Revit 2025.0–2025.2) usually needs administrator rights.</summary>
-    [JsonIgnore]
-    public bool MayNeedAdmin => IsChange && Mechanism == SwitchMechanism.Rename && Scope == AddinScope.Machine;
 
     /// <summary>What identifies the operation in the report ("plan shown = operations executed").</summary>
     [JsonIgnore]
@@ -136,6 +134,14 @@ public sealed record ActivationPlan(
 
     [JsonIgnore]
     public bool HasChanges => Entries.Any(e => e.IsChange);
+
+    /// <summary>
+    /// There is something to run: a change, or record entries to clear (review B1: a plan whose only
+    /// work is the clean-up must still run, or a stale entry could later re-enable an add-in the user
+    /// switched off).
+    /// </summary>
+    [JsonIgnore]
+    public bool HasWork => HasChanges || Forget.Count > 0;
 
     /// <summary>The years the plan covers.</summary>
     [JsonIgnore]

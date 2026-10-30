@@ -623,10 +623,6 @@
   <data name="Loader_ConfirmAndLoad" xml:space="preserve">
     <value>Confirm &amp; Load</value>
   </data>
-  <data name="Loader_MayNeedAdmin" xml:space="preserve">
-    <value>{0} — all users; may need administrator rights</value>
-    <comment>{0} the add-in and its years.</comment>
-  </data>
   <data name="Loader_Unknown" xml:space="preserve">
     <value>Unknown</value>
   </data>
@@ -684,22 +680,22 @@
     <value>Add-ins After Unloading</value>
   </data>
   <data name="Loader_UnloadReportSubtitle" xml:space="preserve">
-    <value>rst-c switched back on the add-ins it had switched off.</value>
+    <value>RST switched back on the add-ins it had switched off.</value>
   </data>
   <data name="Loader_RestoreReportTitle" xml:space="preserve">
     <value>Restore All Add-ins</value>
   </data>
   <data name="Loader_RestoreReportSubtitle" xml:space="preserve">
-    <value>Everything rst-c switched off, in every Revit year, is switched back on. Add-ins you switched off in Autodesk's Add-Ins Manager stay off.</value>
+    <value>Everything RST switched off, in every Revit year, is switched back on. Add-ins you switched off in Autodesk's Add-Ins Manager stay off.</value>
   </data>
   <data name="Loader_MigrateReportTitle" xml:space="preserve">
     <value>Add-ins Switched Off by RST 3.0</value>
   </data>
   <data name="Loader_MigrateReportSubtitle" xml:space="preserve">
-    <value>RST 3.0 renamed these add-ins' files to switch them off. They stay off: rst-c now switches them through Revit's Add-Ins Manager settings, and their files have their own names back.</value>
+    <value>RST 3.0 renamed these add-ins' files to switch them off. They stay off: RST now switches them through Revit's Add-Ins Manager settings, and their files have their own names back.</value>
   </data>
   <data name="Loader_PlanFailed" xml:space="preserve">
-    <value>rst-c could not read the installed add-ins, so no add-in was changed: {0}</value>
+    <value>RST could not read the installed add-ins, so no add-in was changed: {0}</value>
     <comment>{0} the error message.</comment>
   </data>
   <data name="Preview_NoTab" xml:space="preserve">

@@ -218,6 +218,32 @@ public class RequiredAddinRulesTests
         }
     }
 
+    [Fact]
+    public void The_pills_pass_the_add_in_id_and_the_native_flag_to_the_same_matcher_as_the_planner()
+    {
+        // Review N2: a profile carrying addinId, or native, gets the same answer from the pill and the plan.
+        var probe = Installed("Probe", fileName: "Whatever.addin") with { AddinIds = ["d4c6e3e0-0000-4000-8000-525354500001"] };
+        var session = Session(installed: [probe, Installed("RSTProbe Tools", fileName: "RSTProbeTools.addin")]);
+        var profile = new Profile
+        {
+            RequiredAddins =
+            [
+                new RequiredAddin { TabName = "Elsewhere", AddinId = "D4C6E3E0-0000-4000-8000-525354500001" },
+                new RequiredAddin { TabName = "RSTProbe", Native = true },
+            ],
+        };
+
+        var rows = RequiredAddinRules.Rows(profile, session);
+        rows.Select(r => r.Status).Should().Equal(AddinRowStatus.Loaded, AddinRowStatus.Native);
+
+        var normalized = RequiredAddinRules.Normalize(profile.RequiredAddins);
+        normalized[0].AddinId.Should().Be("D4C6E3E0-0000-4000-8000-525354500001");
+        foreach (var (row, req) in normalized.Zip(profile.RequiredAddins))
+            RequiredAddinRules.Matches(row, session).Should().Equal(RequiredAddinMatch.Match(req, session.Installed));
+        RequiredAddinMatch.RequiredItems(profile.RequiredAddins, FakeAddinSwitching.InventoryOf([.. session.Installed]))
+            .Select(i => i.Name).Should().Equal("Probe");
+    }
+
     // ── getNotFoundAddins and the warning ────────────────────────────────────
 
     [Fact]

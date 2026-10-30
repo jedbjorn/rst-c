@@ -114,6 +114,11 @@ public sealed class RequiredAddin
     /// addin or no URL was listed.
     /// </summary>
     [JsonPropertyName("url")]          public string? Url         { get; set; }
+    /// <summary>
+    /// The v2.x <c>native</c> flag: a requirement on a built-in Revit feature, never an add-in. The
+    /// Loader's pills and the add-in planner both honour it (spec #18, review N2). Not written when unset.
+    /// </summary>
+    [JsonPropertyName("native")]       public bool? Native        { get; set; }
 }
 
 /// <summary>RSTify rule — a tab to hide while the profile is active.</summary>

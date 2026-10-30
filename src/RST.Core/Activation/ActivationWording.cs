@@ -15,7 +15,7 @@ public static class ActivationWording
     public static string Reason(ChangeReason reason, PlanAction action, string? detail = null) => reason switch
     {
         ChangeReason.AdminLocked => action == PlanAction.Disable ? "locked on by your administrator" : "locked off by your administrator",
-        ChangeReason.NeedsAdmin => "installed for all users; changing it needs administrator rights",
+        ChangeReason.NeedsAdmin => "installed for all users; renaming its file back needs administrator rights",
         ChangeReason.InUse => "a file was in use by another program; try again",
         ChangeReason.Vanished => "no longer installed",
         ChangeReason.FileError => "Revit's add-in settings file could not be read or written" + (string.IsNullOrWhiteSpace(detail) ? "" : " (" + detail + ")"),
@@ -64,8 +64,29 @@ public static class ActivationWording
         return "Revit " + string.Join(", ", years.Take(years.Count - 1).Select(Year)) + " and " + Year(years[^1]);
     }
 
-    public static string SettingsUnreadableNote(int year) =>
-        "Revit " + Year(year) + ": its add-in settings file could not be read, so rst-c left it unchanged. Revit rebuilds it the next time it starts.";
+    /// <summary>
+    /// The FileError note for a year whose settings file could not be read (review N1: RST's record
+    /// for that year is kept, so the add-ins it switched off there can still be switched back on).
+    /// </summary>
+    public static string SettingsUnreadableNote(int year, bool keptRecord = false) =>
+        "Revit " + Year(year) + ": its add-in settings file could not be read (it may be in use while Revit starts), so RST left it unchanged"
+        + (keptRecord ? " and kept its record of the add-ins it switched off there" : "")
+        + ". Try again in a moment.";
+
+    /// <summary>
+    /// The one "Tidied up" line for the record clean-up a plan ran (review N5): entries for add-ins
+    /// that are back on or gone, and the settings reset for add-ins that were uninstalled.
+    /// Null when there was nothing to tidy.
+    /// </summary>
+    public static string? TidiedUpNote(int cleared, IReadOnlyList<int> resetYears)
+    {
+        if (cleared == 0) return null;
+        var line = "Tidied up: RST cleared " + cleared + (cleared == 1 ? " entry" : " entries")
+                   + " from its record of switched-off add-ins (back on, or no longer installed)";
+        if (resetYears.Count > 0)
+            line += "; for the uninstalled ones it also reset Revit's setting so a reinstall loads (" + string.Join(", ", resetYears.Distinct().Order().Select(Year)) + ")";
+        return line + ".";
+    }
 
     public static string UserDisableAllNote(int year) =>
         "Revit " + Year(year) + ": “Disable all Add-Ins” is ticked in Autodesk's Add-Ins Manager, so no add-in loads there.";
@@ -73,7 +94,7 @@ public static class ActivationWording
     public static string AdminDisableAllNote(int year) =>
         "Revit " + Year(year) + ": your administrator has switched off all add-ins.";
 
-    public const string LedgerSaveFailed = "rst-c could not update its record of the add-ins it switched off";
+    public const string LedgerSaveFailed = "RST could not update its record of the add-ins it switched off";
 
     private static string Year(int year) => year.ToString(CultureInfo.InvariantCulture);
 }

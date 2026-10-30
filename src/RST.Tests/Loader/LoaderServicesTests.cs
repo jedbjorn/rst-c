@@ -338,7 +338,7 @@ public sealed class ProfileLoadServiceTests : IDisposable
         var mine = FakeAddinSwitching.Item(2026, "Twinmotion", off: true);
         var users = FakeAddinSwitching.Item(2026, "Lumion", off: true);
         _switching.InventoryResult = FakeAddinSwitching.InventoryOf(mine, users);
-        _switching.Ledger.Add(new LedgerEntry(2026, mine.AddinIds[0], "Twinmotion", SwitchMechanism.SettingsFile, mine.ManifestPath, DateTime.UtcNow));
+        _switching.Ledger.Add(new LedgerEntry(2026, mine.AddinIds[0], "Twinmotion", LedgerKind.Setting, mine.ManifestPath, DateTime.UtcNow));
         var p = AddProfile();
         Service().Load(new LoadRequest("Arch", p.Id, false, []));
 
@@ -361,6 +361,104 @@ public sealed class ProfileLoadServiceTests : IDisposable
         result.Ok.Should().BeTrue();
         result.Addins.Notes.Should().ContainSingle().Which.Should().Contain("scan");
         ActiveProfile.Read(_root.Paths.ActiveProfileFile).IsBlank.Should().BeTrue();
+    }
+}
+
+/// <summary>
+/// Review B1 at the load-service level, over real files: a plan whose only work is clearing RST's
+/// record must still run on Load and Unload, or a stale entry later re-enables an add-in the user
+/// switched off by hand.
+/// </summary>
+public sealed class RecordCleanupThroughLoadAndUnloadTests : IDisposable
+{
+    private const string X = "a47e7259-a459-4fdd-8435-fb0bc0f86268";
+
+    private readonly TempLoaderRoot _root = new();
+    private readonly RST.Tests.Activation.FakeAddinTree _tree = new();
+    private readonly AddinSwitching _switching;
+    private readonly ProfileLoadService _service;
+    private readonly Profile _profile;
+
+    public RecordCleanupThroughLoadAndUnloadTests()
+    {
+        _switching = new AddinSwitching(_tree.Roots, () => [new RevitYear(2026, null)], _tree.LedgerPath);
+        _service = new ProfileLoadService(_root.Paths, new FakeScheduler(), _switching);
+        _profile = TempLoaderRoot.Profile("P");
+        _root.Add(_profile);
+    }
+
+    public void Dispose()
+    {
+        _root.Dispose();
+        _tree.Dispose();
+    }
+
+    private LoadResult Load(bool disable) =>
+        _service.Load(new LoadRequest("P", _profile.Id, disable, [], _switching.Plan(_switching.Inventory(), ActivationPolicy.Load([], disable))));
+
+    private void UserSets(bool disabled)
+    {
+        var doc = AddinsSettingsDocument.TryParse(_tree.ReadSettings(2026)!, out _)!;
+        doc.SetDisabled(X, disabled, null, null);
+        _tree.Settings(2026, doc.ToJson());
+    }
+
+    private bool? XDisabled() => AddinsSettingsDocument.TryParse(_tree.ReadSettings(2026)!, out _)!.IsDisabled(X);
+
+    [Fact]
+    public void An_add_in_the_user_re_enabled_then_switched_off_again_is_never_turned_back_on_by_rst()
+    {
+        _tree.Manifest(_tree.UserAddins(2026), "X.addin", "X", X);
+
+        // 1. Load with Disable on: X is switched off and recorded.
+        Load(disable: true).AddinChanges.Should().ContainSingle().Which.Action.Should().Be(PlanAction.Disable);
+        _tree.Ledger().HasSetting(2026, X).Should().BeTrue();
+
+        // 2. The user ticks X back on in Autodesk's Add-Ins Manager.
+        UserSets(disabled: false);
+
+        // 3. Load with Disable off: nothing to switch, but the stale entry is cleared.
+        var tidy = Load(disable: false);
+        tidy.AddinChanges.Should().BeEmpty();
+        tidy.AddinNotes.Should().ContainSingle().Which.Should().StartWith("Tidied up: RST cleared 1 entry");
+        _tree.Ledger().Entries.Should().BeEmpty();
+
+        // 4. The user unticks X themselves.
+        UserSets(disabled: true);
+
+        // 5. Unload: X is the user's own choice now; RST leaves it off.
+        var unload = _service.Unload();
+        unload.Addins.Outcomes.Should().BeEmpty();
+        XDisabled().Should().BeTrue();
+    }
+
+    [Fact]
+    public void Unload_with_nothing_to_switch_back_on_still_clears_the_record()
+    {
+        _tree.Manifest(_tree.UserAddins(2026), "X.addin", "X", X);
+        Load(disable: true);
+        UserSets(disabled: false);
+
+        var unload = _service.Unload();
+
+        unload.Addins.Outcomes.Should().BeEmpty();
+        unload.Addins.Notes.Should().ContainSingle().Which.Should().StartWith("Tidied up:");
+        _tree.Ledger().Entries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Unload_clears_an_uninstalled_add_in_from_the_record_and_resets_its_setting()
+    {
+        var path = _tree.Manifest(_tree.UserAddins(2026), "X.addin", "X", X);
+        Load(disable: true);
+        File.Delete(path);
+
+        var unload = _service.Unload();
+
+        unload.Addins.Outcomes.Should().BeEmpty();
+        unload.Addins.Notes.Should().ContainSingle().Which.Should().Contain("reset Revit's setting so a reinstall loads (2026)");
+        _tree.Ledger().Entries.Should().BeEmpty();
+        XDisabled().Should().BeFalse();
     }
 }
 
@@ -433,7 +531,7 @@ public sealed class AddinMaintenanceServiceTests : IDisposable
     {
         var mine = FakeAddinSwitching.Item(2027, "Twinmotion", off: true);
         _switching.InventoryResult = FakeAddinSwitching.InventoryOf(mine, FakeAddinSwitching.Item(2027, "Lumion", off: true));
-        _switching.Ledger.Add(new LedgerEntry(2027, mine.AddinIds[0], "Twinmotion", SwitchMechanism.SettingsFile, mine.ManifestPath, DateTime.UtcNow));
+        _switching.Ledger.Add(new LedgerEntry(2027, mine.AddinIds[0], "Twinmotion", LedgerKind.Setting, mine.ManifestPath, DateTime.UtcNow));
 
         var result = Service().RestoreAll();
 

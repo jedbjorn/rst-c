@@ -18,8 +18,8 @@ using RST.Core.Profiles;
 
 namespace RST.Core.Loader;
 
-/// <summary>A required add-in in the Loader's shape: <c>{ tabName, addinFile, url, native? }</c>.</summary>
-public sealed record NormalizedRequiredAddin(string TabName, string? AddinFile, string Url, bool Native = false);
+/// <summary>A required add-in in the Loader's shape: <c>{ tabName, addinFile, url, native?, addinId? }</c>.</summary>
+public sealed record NormalizedRequiredAddin(string TabName, string? AddinFile, string Url, bool Native = false, string? AddinId = null);
 
 /// <summary>The status pill on a required add-in row.</summary>
 public enum AddinRowStatus
@@ -107,7 +107,9 @@ public static class RequiredAddinRules
         (requiredAddins ?? []).Where(r => r is not null).Select(r => new NormalizedRequiredAddin(
             string.IsNullOrEmpty(r.TabName) ? "" : r.TabName,
             string.IsNullOrEmpty(r.AddinFile) ? null : r.AddinFile,
-            string.IsNullOrEmpty(r.Url) ? "" : r.Url)).ToList();
+            string.IsNullOrEmpty(r.Url) ? "" : r.Url,
+            r.Native == true,
+            string.IsNullOrEmpty(r.AddinId) ? null : r.AddinId)).ToList();
 
     /// <summary>
     /// <c>normalizeRequiredAddins</c> over a raw <c>requiredAddins</c> JSON array, which may hold
@@ -133,14 +135,24 @@ public static class RequiredAddinRules
                 StringProperty(entry, "tabName") ?? "",
                 NullIfEmpty(StringProperty(entry, "addinFile")),
                 StringProperty(entry, "url") ?? "",
-                entry.TryGetProperty("native", out var native) && native.ValueKind == JsonValueKind.True));
+                entry.TryGetProperty("native", out var native) && native.ValueKind == JsonValueKind.True,
+                NullIfEmpty(StringProperty(entry, "addinId"))));
         }
         return result;
     }
 
     /// <summary>The running year's add-ins that satisfy <paramref name="addin"/> (the one matcher).</summary>
     public static IReadOnlyList<InventoryItem> Matches(NormalizedRequiredAddin addin, AddinSessionContext context) =>
-        RequiredAddinMatch.Match(new RequiredAddin { TabName = addin.TabName, AddinFile = addin.AddinFile }, context.Installed);
+        RequiredAddinMatch.Match(ToRequirement(addin), context.Installed);
+
+    /// <summary>The requirement the planner sees for this row: file, id, tab and native flag, all passed through (review N2).</summary>
+    public static RequiredAddin ToRequirement(NormalizedRequiredAddin addin) => new()
+    {
+        TabName = addin.TabName,
+        AddinFile = addin.AddinFile,
+        AddinId = addin.AddinId,
+        Native = addin.Native ? true : null,
+    };
 
     /// <summary>A live ribbon tab that contains the tab name or is contained by it (case-insensitive).</summary>
     public static bool IsOnRibbon(string tabName, AddinSessionContext context)

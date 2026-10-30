@@ -316,17 +316,17 @@ public class ProfileLoaderScreenshotTests
     {
         RstTheme.Apply(theme);
         var item = LoaderFixtures.Inventory().Items.First(i => i.Name == "DiRoots.One");
-        var entry = new PlanEntry(2026, "DiRoots.One", null, AddinScope.Machine, SwitchMechanism.SettingsFile, item.ManifestPath, item.FileName, item.AddinIds,
+        var entry = new PlanEntry(2026, "DiRoots.One", null, AddinScope.Machine, item.ManifestPath, item.FileName, item.AddinIds,
             PlanAction.Enable, null, false, false, false, null);
         var unload = new ActivationReport(ActivationIntent.Unload,
         [
             ActivationOutcome.For(entry, OutcomeResult.Done),
             ActivationOutcome.For(entry with { Year = 2027 }, OutcomeResult.Done),
-            ActivationOutcome.For(entry with { Name = "Old Tool", Year = 2025, Mechanism = SwitchMechanism.Rename }, OutcomeResult.NotChanged, ChangeReason.NeedsAdmin),
+            ActivationOutcome.For(entry with { Name = "Old Tool", Year = 2025, Renamed = true }, OutcomeResult.NotChanged, ChangeReason.NeedsAdmin),
         ], ["Revit 2027: \u201CDisable all Add-Ins\u201D is ticked in Autodesk's Add-Ins Manager, so no add-in loads there."]);
         var unloadModel = AddinReportModel.ForUnload(unload);
         Assert.Equal(new[] { "DiRoots.One (2026, 2027)" }, unloadModel.SwitchedOn);
-        Assert.Equal(new[] { "Old Tool (2025): installed for all users; changing it needs administrator rights" }, unloadModel.NotChanged);
+        Assert.Equal(new[] { "Old Tool (2025): installed for all users; renaming its file back needs administrator rights" }, unloadModel.NotChanged);
         CaptureDialog(new AddinReportWindow(unloadModel), theme, "loader-addin-report-unload");
 
         var moved = new ActivationReport(ActivationIntent.MigrateLegacy,
