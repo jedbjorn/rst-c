@@ -27,8 +27,9 @@ name: _build (reusable)
 #                    stub Revit.exe files (installer/ci-smoke.ps1 -Mode
 #                    Install): Component-table check, detected years only,
 #                    no-Revit refusal, Repair adds/drops a year, uninstall.
-#   • msi-migrate  — Windows runner, matrix Preview/Unified. Installs the
-#                    public v2.2.0 RST-R27.msi or RST.msi, then the new
+#   • msi-migrate  — Windows runner, matrix v2.2.0 Preview/Unified and
+#                    v3.0.0 Unified. Installs the public v2.2.0 RST-R27.msi
+#                    or RST.msi, or the v3.0.0 RST.msi, then the new
 #                    RST.msi, and asserts the preview is removed / the
 #                    unified product upgrades in place.
 #   • bundle       — Windows runner. Downloads + sha256-verifies the pinned
@@ -218,19 +219,26 @@ jobs:
           path: installer/bin/Release/RST.msi
           if-no-files-found: error
 
-  # Upgrade paths from the last two-MSI release (feature #11, AC4/AC5).
+  # Upgrade paths from released MSIs (feature #11, AC4/AC5).
   # v2.2.0 is pinned: it is the final release that shipped RST-R27.msi.
+  # v3.0.0 is the first unified release: the PR build (fallback 3.0.99,
+  # flag SC-004) must upgrade it in place.
   msi-migrate:
-    name: MSI upgrade from v2.2.0 (${{ matrix.from }})
+    name: MSI upgrade from ${{ matrix.release }} (${{ matrix.from }})
     needs: msi-unified
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - from: Preview
+          - release: v2.2.0
+            from: Preview
             asset: RST-R27.msi
-          - from: Unified
+          - release: v2.2.0
+            from: Unified
+            asset: RST.msi
+          - release: v3.0.0
+            from: Unified
             asset: RST.msi
     steps:
       - uses: actions/checkout@v4
@@ -242,11 +250,11 @@ jobs:
         with:
           name: stage-R27
           path: build/R27/
-      - name: Download v2.2.0 ${{ matrix.asset }}
+      - name: Download ${{ matrix.release }} ${{ matrix.asset }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download v2.2.0 -R "${{ github.repository }}" -p "${{ matrix.asset }}" -D old
-      - name: Upgrade from v2.2.0 ${{ matrix.asset }}
+        run: gh release download ${{ matrix.release }} -R "${{ github.repository }}" -p "${{ matrix.asset }}" -D old
+      - name: Upgrade from ${{ matrix.release }} ${{ matrix.asset }}
         shell: pwsh
         run: installer/ci-smoke.ps1 -Mode Migrate -From ${{ matrix.from }} -Msi new/RST.msi -OldMsi "old/${{ matrix.asset }}" -StagedR27 build/R27
 

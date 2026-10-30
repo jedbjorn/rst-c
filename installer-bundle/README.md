@@ -14,7 +14,7 @@ The bare `RST.msi` is still published beside it, for IT deployments that want on
 |---|---|
 | Bundle `UpgradeCode` | **`2BE2BE5D-9203-4344-A70D-E735D3B041A3`**: never change it once shipped |
 | Name in Settings → Apps | `RST` (Designs/OS) |
-| Version | the numeric `a.b.c` of the rst-c tag, the same value stamped into `RST.msi` (`v3.0.0-rc.1` → `3.0.0`); untagged builds `2.99.0` |
+| Version | the numeric `a.b.c` of the rst-c tag, the same value stamped into `RST.msi` (`v3.0.0-rc.1` → `3.0.0`); untagged builds `3.0.99` |
 | Scope | per-user: every chained package is a per-user MSI, so Burn registers the bundle in HKCU and never asks for elevation |
 | Engine | x64, `WixStandardBootstrapperApplication` (`WixToolset.BootstrapperApplications.wixext` 6.0.2), RTF license theme |
 

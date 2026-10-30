@@ -31,15 +31,15 @@
     *local* effective version instead (which the global can't shadow) and feed
     that to the preprocessor constant.
 
-    The fallback must sort ABOVE the latest public release (v2.2.0) and below
-    the next one (v3.0.0): a push/PR RST.msi then installs over a released
+    The fallback must sort ABOVE the latest public release (v3.0.0) and below
+    the next one (v3.1.0): a push/PR RST.msi then installs over a released
     RST.msi as an in-place MajorUpgrade (CI's msi-migrate job and the VM
-    check depend on it), and the v3.0.0 release still upgrades a dev build.
+    check depend on it), and the v3.1.0 release still upgrades a dev build.
     Move it after each release so it stays between the latest and the next.
   -->
   <PropertyGroup>
     <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
-    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">2.99.0</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">3.0.99</RstMsiVersionEffective>
     <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 
