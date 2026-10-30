@@ -9,6 +9,13 @@
 // Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
 // (Planner default 3), the panel delete confirm is the family's destructive MessageDialog, and the
 // Cleanup modal's Cancel reverts (Planner default 4).
+// Stacks (feature #15, spec #17, decision #16 item 5) port the page's hidden stack authoring
+// (c5b0004a, 2017-2066 and 2553-2616) into the Properties pane's Stacks section: add ("Stack N"),
+// drop or double-click commands in, a per-tool icon, reorder and remove tools, rename (references
+// rewritten, a duplicate refused), delete (the destructive confirm; references removed), place in
+// the selected panel ("+ Panel" or a drag onto a panel). A stack holds 2 or 3 tools while it is
+// authored: a fourth is refused with a toast, and one with fewer than 2 is flagged and blocks Save.
+// A stack no panel places is flagged and removed on save. The rules are RST.Core StackEditing.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -32,6 +39,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 {
     public const string UnsavedChangesDialogId = MessageDialog.DiscardChangesId;
     public const string DeletePanelDialogId = "DeletePanelDialog";
+    public const string DeleteStackDialogId = "DeleteStackDialog";
 
     /// <summary>
     /// The color picker's palette: the Builder's default blue and the other panel colors rst-c's
@@ -69,6 +77,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private bool _editMode;
     private string _originalName = "";
     private int _selectedPanelIndex = -1;
+    private string? _selectedStack;
     private ProfileOptionViewModel? _selectedOption;
 
     private BrandingState _branding = BrandingState.None;
@@ -110,7 +119,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         SaveCommand = new RelayCommand(() => _ = SaveAsync(), () => IsIdle);
         ExitCommand = new RelayCommand(() => _ = ExitAsync(), () => IsIdle);
         AddPanelCommand = new RelayCommand(AddPanel, () => IsIdle);
-        AddCatalogCommand = new RelayCommand<CatalogNodeViewModel>(n => AddToSelectedPanel(n.Command!), n => IsIdle && n.IsCommand);
+        AddCatalogCommand = new RelayCommand<CatalogNodeViewModel>(n => AddCatalog(n.Command!), n => IsIdle && n.IsCommand);
+        AddStackCommand = new RelayCommand(AddStack, () => IsIdle);
         PickColorCommand = new RelayCommand(PickColor, () => IsIdle && SelectedPanel is not null);
         OpenUrlEditorCommand = new RelayCommand(OpenUrlEditor, () => IsIdle && SelectedPanel is not null);
         CancelUrlEditorCommand = new RelayCommand(() => IsUrlEditorOpen = false);
@@ -263,6 +273,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     {
         _profile = ProfileEditing.NewProfile();
         _selectedPanelIndex = -1;
+        _selectedStack = null;
         _editMode = false;
         _originalName = "";
         AddPanelCore();
@@ -275,6 +286,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     {
         _profile = ProfileEditing.ForEditing(source);
         _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
+        _selectedStack = null;
         _editMode = true;
         _originalName = _profile.ProfileName ?? "";
         ProfileChanged();
@@ -285,6 +297,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     {
         IsUrlEditorOpen = false;
         IconPicker = null;
+        RenderStacks();
         RenderCanvas();
         OnPropertyChanged(nameof(ProfileName));
         OnPropertyChanged(nameof(ProfileTab));
@@ -477,6 +490,17 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Double-click a command: into the selected stack when one is selected (spec #17), else
+    /// addToolToSelectedPanel.
+    /// </summary>
+    public void AddCatalog(CatalogCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (SelectedStack is { } stack) AddToolToStack(stack, command);
+        else AddToSelectedPanel(command);
+    }
+
+    /// <summary>
     /// addToolToSelectedPanel (double-click a command): appends a tool slot to the selected panel,
     /// adding a panel first when none is selected.
     /// </summary>
@@ -518,6 +542,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     internal void SelectPanel(int index)
     {
+        // Clicking a panel makes it the double-click target again (a selected stack lets go).
+        ClearStackSelection();
         if (index == _selectedPanelIndex) return;
         _selectedPanelIndex = index;
         RenderCanvas();
@@ -580,16 +606,21 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// The Pick-icon button: opens the picker on the slot's current value (the pack list is read
     /// once). Only a variant or None changes the slot; Cancel, Escape and an outside click do not.
     /// </summary>
-    internal void PickIcon(SlotRowViewModel slot)
+    internal void PickIcon(SlotRowViewModel slot) => PickIcon(slot.Model, slot.Name, slot.IconChanged);
+
+    /// <summary>A stack tool's Pick-icon button: the same picker, for the tool in the stack (spec #17).</summary>
+    internal void PickIcon(StackToolRowViewModel tool) => PickIcon(tool.Model, tool.Stack.Name + " › " + tool.Name, tool.IconChanged);
+
+    private void PickIcon(Slot model, string what, Action changed)
     {
         _iconPack ??= Safe(_backend.GetIconPack, [], "list_iconpack");
-        IconPicker = new IconPickerViewModel(_iconPack, slot.Model.IconFile, PackDirectory, outcome =>
+        IconPicker = new IconPickerViewModel(_iconPack, model.IconFile, PackDirectory, outcome =>
         {
             IconPicker = null;
             if (!outcome.Committed) return;
-            slot.Model.IconFile = outcome.Value;
-            Log.Information("Builder: icon for {Slot} → {Icon}", slot.Name, outcome.Value ?? "(none)");
-            slot.IconChanged();
+            model.IconFile = outcome.Value;
+            Log.Information("Builder: icon for {Slot} → {Icon}", what, outcome.Value ?? "(none)");
+            changed();
             PreviewChanged();
         });
     }
@@ -607,7 +638,161 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedPanel));
         OnPropertyChanged(nameof(HasSelectedPanel));
         OnPropertyChanged(nameof(SelectedPanelIndex));
+        // A stack slot may have been placed, moved or removed: the "not on a panel" flags follow.
+        foreach (var card in Stacks) card.PlacementChanged();
         PreviewChanged();
+    }
+
+    // ---- stacks (spec #17) --------------------------------------------------------------------
+
+    /// <summary>The Stacks section's cards, in the profile's stack order.</summary>
+    public ObservableCollection<StackCardViewModel> Stacks { get; } = [];
+
+    public bool HasStacks => Stacks.Count > 0;
+
+    /// <summary>The selected stack (double-click adds commands to it), or null.</summary>
+    public StackCardViewModel? SelectedStack => _selectedStack is null ? null : Stacks.FirstOrDefault(c => c.Name == _selectedStack);
+
+    public bool HasSelectedStack => SelectedStack is not null;
+
+    /// <summary>"+ Add Stack".</summary>
+    public ICommand AddStackCommand { get; }
+
+    internal bool IsStackPlaced(string name) => StackEditing.IsPlaced(_profile, name);
+
+    /// <summary>addStack: a new empty "Stack N", selected so double-clicks fill it.</summary>
+    private void AddStack()
+    {
+        var name = StackEditing.AddStack(_profile);
+        Log.Information("Builder: stack added {Stack}", name);
+        _selectedStack = name;
+        RenderStacks();
+        PreviewChanged();
+    }
+
+    internal void SelectStack(StackCardViewModel card)
+    {
+        if (_selectedStack == card.Name) return;
+        _selectedStack = card.Name;
+        RaiseStackSelection();
+    }
+
+    private void ClearStackSelection()
+    {
+        if (_selectedStack is null) return;
+        _selectedStack = null;
+        RaiseStackSelection();
+    }
+
+    private void RaiseStackSelection()
+    {
+        foreach (var card in Stacks) card.IsSelected = card.Name == _selectedStack;
+        OnPropertyChanged(nameof(SelectedStack));
+        OnPropertyChanged(nameof(HasSelectedStack));
+    }
+
+    /// <summary>
+    /// renameStack, from the card's name box (Enter, or focus leaving it): a blank or unchanged name
+    /// snaps back; a name another stack has is refused with a toast; otherwise the stack and every
+    /// slot that places it take the new name. The box is re-read after the binding's write.
+    /// </summary>
+    internal void RenameStack(StackCardViewModel card, string? requested)
+    {
+        var old = card.Name;
+        var result = StackEditing.Rename(_profile, old, requested, out var final);
+        switch (result)
+        {
+            case StackRename.Renamed:
+                Log.Information("Builder: stack renamed {Old} → {New}", old, final);
+                if (_selectedStack == old) _selectedStack = final;
+                card.SetName(final);
+                foreach (var row in Panels.SelectMany(p => p.Slots).Where(r => r.IsStack && r.Model.Name == final)) row.NameChanged();
+                PreviewChanged();
+                break;
+            case StackRename.Duplicate:
+                ShowToast(UiStrings.Builder_StackExists((requested ?? "").Trim()), BannerKind.Error);
+                break;
+        }
+        // The text box wrote the value itself; it reads the committed name once its write is over.
+        _post(card.RaiseName);
+    }
+
+    /// <summary>deleteStack: the destructive confirm (Cancel is the default), then the stack and every slot that places it go.</summary>
+    internal void DeleteStack(StackCardViewModel card)
+    {
+        var name = card.Name;
+        if (!_dialogs.Confirm(UiStrings.Builder_DeleteStackTitle(name), UiStrings.Builder_DeleteStackText, [], UiStrings.Builder_Delete, danger: true, DeleteStackDialogId)) return;
+        var removed = StackEditing.Delete(_profile, name);
+        Log.Information("Builder: stack deleted {Stack} (slots removed={Removed})", name, removed);
+        if (_selectedStack == name) _selectedStack = null;
+        RenderStacks();
+        RenderCanvas();
+    }
+
+    /// <summary>addToolToStack (a drop on the card, or a double-click while it is selected): a fourth tool is refused with a toast.</summary>
+    internal void AddToolToStack(StackCardViewModel card, CatalogCommand command)
+    {
+        if (!StackEditing.AddTool(_profile, card.Name, command))
+        {
+            Log.Information("Builder: stack {Stack} is full; {Command} refused", card.Name, command.Id);
+            ShowToast(UiStrings.Builder_StackFull(card.Name), BannerKind.Error);
+            return;
+        }
+        Log.Information("Builder: {Command} added to stack {Stack}", command.Id, card.Name);
+        card.ToolsChanged();
+        PreviewChanged();
+    }
+
+    internal void RemoveStackTool(StackCardViewModel card, int index)
+    {
+        StackEditing.RemoveTool(_profile, card.Name, index);
+        card.ToolsChanged();
+        PreviewChanged();
+    }
+
+    internal void MoveStackTool(StackCardViewModel card, int index, int delta)
+    {
+        StackEditing.MoveTool(_profile, card.Name, index, delta);
+        card.ToolsChanged();
+        PreviewChanged();
+    }
+
+    /// <summary>"+ Panel" (addStackRefToSelectedPanel): the stack at the end of the selected panel, adding a panel first when none is selected.</summary>
+    internal void PlaceStack(StackCardViewModel card)
+    {
+        if (_selectedPanelIndex < 0 || _selectedPanelIndex >= _profile.Panels.Count) AddPanelCore();
+        _profile.Panels[_selectedPanelIndex].Slots.Add(StackEditing.StackSlot(card.Name));
+        Log.Information("Builder: stack {Stack} placed in panel {Panel}", card.Name, _selectedPanelIndex);
+        RenderCanvas();
+    }
+
+    /// <summary>The pointer is over a stack card. True when the card accepts the drag (a catalogue command).</summary>
+    public bool DragOverStack(StackCardViewModel card)
+    {
+        var accepted = _drag?.Kind == DragKind.Catalog;
+        ClearDropMarkers();
+        if (accepted) card.DropMarker = DropMarker.Over;
+        return accepted;
+    }
+
+    /// <summary>A drop on a stack card: a catalogue command joins the stack (a fourth is refused with a toast).</summary>
+    public void DropOnStack(StackCardViewModel card)
+    {
+        var drag = _drag;
+        EndDrag();
+        if (drag is { Kind: DragKind.Catalog, Command: { } command }) AddToolToStack(card, command);
+    }
+
+    /// <summary>The stack cards again from the profile.</summary>
+    private void RenderStacks()
+    {
+        Stacks.Clear();
+        foreach (var (name, stack) in _profile.Stacks)
+            Stacks.Add(new StackCardViewModel(name, stack ?? new Stack(), this) { IsSelected = name == _selectedStack });
+        if (_selectedStack is not null && !_profile.Stacks.ContainsKey(_selectedStack)) _selectedStack = null;
+        OnPropertyChanged(nameof(HasStacks));
+        OnPropertyChanged(nameof(SelectedStack));
+        OnPropertyChanged(nameof(HasSelectedStack));
     }
 
     // ---- the Properties pane ------------------------------------------------------------------
@@ -784,6 +969,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             card.DropMarker = DropMarker.None;
             foreach (var row in card.Slots) row.DropMarker = DropMarker.None;
         }
+        foreach (var stack in Stacks) stack.DropMarker = DropMarker.None;
     }
 
     /// <summary>A drop on a panel card (panel reorder, command append, slot move to the end).</summary>
@@ -823,6 +1009,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             foreach (var row in card.Slots)
                 row.DropMarker = slotIndex is { } s && card.Index == panelIndex && row.Index == s ? marker : DropMarker.None;
         }
+        foreach (var stack in Stacks) stack.DropMarker = DropMarker.None;
     }
 
     private SlotRowViewModel? Slot(int panelIndex, int slotIndex) =>
@@ -860,6 +1047,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     public async Task<bool> SaveAsync()
     {
         if (IsWorking) return false;
+        // Spec #17: a stack needs 2 or 3 tools before the profile can be saved (checked before the
+        // rename-as-copy plan, which clears the id of a copy).
+        if (StackEditing.FirstUnderfilled(_profile) is { } underfilled)
+        {
+            Log.Warning("Builder: save blocked, stack {Stack} has fewer than 2 tools", underfilled);
+            ShowToast(UiStrings.Builder_StackNeedsTools(underfilled), BannerKind.Error);
+            return false;
+        }
         var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, _library.Select(e => e.Profile));
         switch (plan)
         {
@@ -875,6 +1070,16 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 return false;
         }
         var savedAsCopy = plan == SavePlanKind.AsCopy;
+
+        // Spec #17: a stack no panel places is removed on save (its card said so); the editor drops
+        // it too, so it matches what is written.
+        var orphans = ProfileEditing.RemoveOrphanStacks(_profile);
+        if (orphans.Count > 0)
+        {
+            Log.Information("Builder: save removes stacks not on any panel: {Stacks}", string.Join(", ", orphans));
+            if (_selectedStack is not null && orphans.Contains(_selectedStack)) _selectedStack = null;
+            RenderStacks();
+        }
 
         _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup);
         Log.Information("Builder: save {Name} (edit={Edit}, copy={Copy}, requiredAddins={Required})",

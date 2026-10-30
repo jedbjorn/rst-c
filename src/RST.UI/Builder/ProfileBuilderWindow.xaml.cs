@@ -8,7 +8,10 @@
 // label box takes focus when the editor opens, and drag and drop
 // (WU5): DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel
 // headers and the slot rows; the cards and rows report the cursor's half to the view-model, which
-// owns the markers and the index arithmetic (RST.Core PanelDrops).
+// owns the markers and the index arithmetic (RST.Core PanelDrops). Stacks (spec #17): a stack
+// card's header drags onto a panel card or slot row (placing the stack), and a stack card takes
+// catalogue commands; its name box hands a BuilderDrag to the card in the Preview phase, as the
+// slot and panel name boxes do.
 
 using System.ComponentModel;
 using System.Windows;
@@ -93,6 +96,7 @@ public partial class ProfileBuilderWindow : Window
         CatalogNodeViewModel { Command: { } command } => BuilderDrag.FromCatalog(command),
         PanelCardViewModel card => BuilderDrag.FromPanel(card.Index),
         SlotRowViewModel slot => BuilderDrag.FromSlot(slot.Panel.Index, slot.Index),
+        StackCardViewModel stack => BuilderDrag.FromStack(stack.Name),
         _ => null,
     };
 
@@ -116,7 +120,7 @@ public partial class ProfileBuilderWindow : Window
         Model.BeginDrag(drag);
         try
         {
-            var effects = drag.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+            var effects = CopiesOnDrop(drag.Kind) ? DragDropEffects.Copy : DragDropEffects.Move;
             DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
         }
         finally
@@ -134,8 +138,11 @@ public partial class ProfileBuilderWindow : Window
 
     private static bool UpperHalf(DragEventArgs e, FrameworkElement target) => e.GetPosition(target).Y < target.ActualHeight / 2;
 
+    // A catalogue command or a stack is copied into a panel (the stack stays in the Stacks section); slots and panels move.
+    private static bool CopiesOnDrop(DragKind kind) => kind is DragKind.Catalog or DragKind.Stack;
+
     private DragDropEffects DropEffect(bool accepted) =>
-        !accepted ? DragDropEffects.None : Model.CurrentDrag?.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+        !accepted ? DragDropEffects.None : Model.CurrentDrag is { } drag && CopiesOnDrop(drag.Kind) ? DragDropEffects.Copy : DragDropEffects.Move;
 
     private void OnPanelDragOver(object sender, DragEventArgs e)
     {
@@ -209,7 +216,42 @@ public partial class ProfileBuilderWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>The nearest visual ancestor named <paramref name="name"/> (a slot row or a card).</summary>
+    // ---- stacks (spec #17) --------------------------------------------------------------------
+
+    // A stack card takes catalogue commands only; anything else is refused there (and does not
+    // reach the Properties pane behind it).
+    private void OnStackDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = sender is FrameworkElement { DataContext: StackCardViewModel stack }
+            ? DropEffect(Model.DragOverStack(stack))
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnStackDrop(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: StackCardViewModel stack }) Model.DropOnStack(stack);
+        e.Handled = true;
+    }
+
+    // The stack's name box would swallow the drag (the TextBox lesson above): hand it to the card.
+    private void OnStackNameBoxDragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not DependencyObject box || !e.Data.GetDataPresent(typeof(BuilderDrag))) return;
+        e.Effects = Ancestor(box, "StackRoot") is { DataContext: StackCardViewModel stack }
+            ? DropEffect(Model.DragOverStack(stack))
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnStackNameBoxDrop(object sender, DragEventArgs e)
+    {
+        if (sender is not DependencyObject box || !e.Data.GetDataPresent(typeof(BuilderDrag))) return;
+        if (Ancestor(box, "StackRoot") is { DataContext: StackCardViewModel stack }) Model.DropOnStack(stack);
+        e.Handled = true;
+    }
+
+    /// <summary>The nearest visual ancestor named <paramref name="name"/> (a slot row, a card or a stack card).</summary>
     private static FrameworkElement? Ancestor(DependencyObject from, string name)
     {
         for (var d = VisualTreeHelper.GetParent(from); d is not null; d = VisualTreeHelper.GetParent(d))

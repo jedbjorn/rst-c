@@ -999,4 +999,69 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>{0} — {1}</value>
     <comment>{0} the design, {1} the color (underscores as spaces).</comment>
   </data>
+  <data name="Builder_Stacks" xml:space="preserve">
+    <value>Stacks</value>
+  </data>
+  <data name="Builder_StacksHelp" xml:space="preserve">
+    <value>Two or three small buttons, one above the other. Drop commands on a stack (or select it and double-click them), then place it in the selected panel.</value>
+  </data>
+  <data name="Builder_AddStack" xml:space="preserve">
+    <value>+ Add Stack</value>
+  </data>
+  <data name="Builder_StacksEmpty" xml:space="preserve">
+    <value>No stacks. Add one and drop commands into it.</value>
+  </data>
+  <data name="Builder_StackDropHere" xml:space="preserve">
+    <value>Drop 2 or 3 commands here.</value>
+  </data>
+  <data name="Builder_StackName" xml:space="preserve">
+    <value>Stack name</value>
+  </data>
+  <data name="Builder_PlaceStack" xml:space="preserve">
+    <value>+ Panel</value>
+  </data>
+  <data name="Builder_PlaceStackTip" xml:space="preserve">
+    <value>Add this stack to the selected panel (or drag the stack onto a panel)</value>
+  </data>
+  <data name="Builder_DeleteStackTip" xml:space="preserve">
+    <value>Delete stack</value>
+  </data>
+  <data name="Builder_DeleteStackTitle" xml:space="preserve">
+    <value>Delete stack "{0}"?</value>
+    <comment>{0} the stack name.</comment>
+  </data>
+  <data name="Builder_DeleteStackText" xml:space="preserve">
+    <value>Slots referencing it will also be removed.</value>
+  </data>
+  <data name="Builder_StackExists" xml:space="preserve">
+    <value>Stack "{0}" already exists.</value>
+    <comment>{0} the name that was refused.</comment>
+  </data>
+  <data name="Builder_StackFull" xml:space="preserve">
+    <value>A stack holds 2 or 3 tools; "{0}" already has 3.</value>
+    <comment>{0} the stack name.</comment>
+  </data>
+  <data name="Builder_StackNeedsTools" xml:space="preserve">
+    <value>Stack "{0}" needs 2 or 3 tools before you can save.</value>
+    <comment>{0} the stack name.</comment>
+  </data>
+  <data name="Builder_StackUnderfilled" xml:space="preserve">
+    <value>Needs 2 or 3 tools</value>
+  </data>
+  <data name="Builder_StackUnplaced" xml:space="preserve">
+    <value>Not on a panel: removed when you save.</value>
+  </data>
+  <data name="Builder_StackCount" xml:space="preserve">
+    <value>{0} of 3</value>
+    <comment>{0} the number of tools in the stack.</comment>
+  </data>
+  <data name="Builder_RemoveStackToolTip" xml:space="preserve">
+    <value>Remove from the stack</value>
+  </data>
+  <data name="Builder_StackSlotNameTip" xml:space="preserve">
+    <value>A stack is renamed on its card under Stacks.</value>
+  </data>
+  <data name="Preview_StackNotDrawn" xml:space="preserve">
+    <value>Not drawn on the ribbon: a stack needs 2 or 3 tools.</value>
+  </data>
 </root>
