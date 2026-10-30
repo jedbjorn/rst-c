@@ -104,6 +104,13 @@ public class ProfileBuilderWindowFlowTests
             Assert.False(o.Closed);
             Assert.True(o.Window.IsVisible);
             Assert.Equal("Tab name required.", o.Window.Model.Toast.Text);
+
+            // Nothing was approved: a second ✕ asks again (WU4 re-review nit).
+            o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Cancel);
+            o.Window.Close();
+            Settle();
+            Assert.Equal(2, o.Dialogs.ChooseCalls.Count);
+            Assert.False(o.Closed);
         }
         finally
         {
