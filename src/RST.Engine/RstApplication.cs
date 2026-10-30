@@ -4,8 +4,10 @@
 //   OnStartup               — wire RST tab + Loader button (UIControlledApplication path),
 //                             configure logging, subscribe to ApplicationInitialized.
 //   ApplicationInitialized  — Revit's main loop is running; UIApplication is available.
-//                             Build the active profile tab via ProfileTabBuilder
-//                             (AdWindows-direct), then unsubscribe (one-shot).
+//                             Start the RST tray if it isn't running (a thread-pool
+//                             task, never awaited; spec #20 §2), build the active
+//                             profile tab via ProfileTabBuilder (AdWindows-direct),
+//                             then unsubscribe (one-shot).
 //   OnShutdown              — flush logs, dispose handlers, persist any pending state.
 
 using System;
@@ -21,6 +23,7 @@ using RST.Core.Scanning;
 using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
 using RST.Engine.Telemetry;
+using RST.Engine.Tray;
 using Serilog;
 
 namespace RST.Engine;
@@ -132,6 +135,11 @@ public sealed class RstApplication : IExternalApplication
             _initializedHandler = null;
         }
 
+        // Spec #20 §2 (AC2): how long Revit took to get here, so a VM run can compare startup with and without
+        // the tray launch in this log; then the launch itself, off Revit's UI thread and never waited for.
+        LogStartupTime();
+        StartTrayInBackground();
+
         BuildProfileTab(sender);
 
         // One-time consent notice (telemetry spec Consent & Config) —
@@ -139,6 +147,56 @@ public sealed class RstApplication : IExternalApplication
         // Revit and the ribbon build. Runs on the paths that skip the
         // build too (no active profile); its own guard, never throws.
         ConsentNotice.ShowIfDue(_telemetry, m => Log.Warning("Telemetry: {Message}", m));
+    }
+
+    /// <summary>
+    /// One line: the time from Revit.exe's start to ApplicationInitialized. Revit's startup is this number; the tray
+    /// launch must not move it by more than a second (spec #20 §2, AC2).
+    /// </summary>
+    private static void LogStartupTime()
+    {
+        try
+        {
+            using var revit = System.Diagnostics.Process.GetCurrentProcess();
+            var elapsed = DateTime.Now - revit.StartTime;
+            Log.Information("Revit startup: ApplicationInitialized {Ms} ms after Revit.exe started", (long)elapsed.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Revit startup time not readable (non-fatal)");
+        }
+    }
+
+    /// <summary>
+    /// Starts the RST tray when it is not running (spec #20 §2): a thread-pool task that Revit never waits for. Its
+    /// outcome is one log line (started, already running, switched off in Task Manager, Revit elevated, not
+    /// installed, or why it failed). Nothing here can fail or delay Revit's startup.
+    /// </summary>
+    private static void StartTrayInBackground()
+    {
+        try
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    var result = TrayLauncher.EnsureRunning(new MachineTrayLaunchEnvironment());
+                    if (result.Outcome == TrayLaunchOutcome.Failed)
+                        Log.Warning("Tray: {Message} ({Ms} ms, off the UI thread)", result.Message, sw.ElapsedMilliseconds);
+                    else
+                        Log.Information("Tray: {Message} ({Ms} ms, off the UI thread)", result.Message, sw.ElapsedMilliseconds);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Tray: launch check failed ({Ms} ms); Revit is unaffected", sw.ElapsedMilliseconds);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Tray: could not queue the launch check; Revit is unaffected");
+        }
     }
 
     private static void BuildProfileTab(object? sender)
