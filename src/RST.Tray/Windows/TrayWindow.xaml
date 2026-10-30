@@ -66,7 +66,7 @@
         <!-- Updates (WU3 fills it). -->
         <ScrollViewer x:Name="UpdatesPage" Grid.Row="1" Style="{StaticResource Page}"
                       Visibility="{Binding IsUpdatesPage, Converter={StaticResource BoolToVisible}}">
-            <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+            <StackPanel MaxWidth="640">
                 <TextBlock Text="{x:Static res:TrayStrings.Updates_Heading}" Style="{StaticResource HeadingText}" />
                 <TextBlock Text="{x:Static res:TrayStrings.Updates_Description}" Style="{StaticResource PageDescription}" />
                 <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.UpdatesLater">
@@ -78,7 +78,7 @@
         <!-- Apps: RST, Gantt-It and Splash-It (WU3 fills it). -->
         <ScrollViewer x:Name="AppsPage" Grid.Row="1" Style="{StaticResource Page}"
                       Visibility="{Binding IsAppsPage, Converter={StaticResource BoolToVisible}}">
-            <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+            <StackPanel MaxWidth="640">
                 <TextBlock Text="{x:Static res:TrayStrings.Apps_Heading}" Style="{StaticResource HeadingText}" />
                 <TextBlock Text="{x:Static res:TrayStrings.Apps_Description}" Style="{StaticResource PageDescription}" />
                 <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.AppsLater">
@@ -90,7 +90,7 @@
         <!-- Add-ins (WU2 fills it). -->
         <ScrollViewer x:Name="AddInsPage" Grid.Row="1" Style="{StaticResource Page}"
                       Visibility="{Binding IsAddInsPage, Converter={StaticResource BoolToVisible}}">
-            <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+            <StackPanel MaxWidth="640">
                 <TextBlock Text="{x:Static res:TrayStrings.AddIns_Heading}" Style="{StaticResource HeadingText}" />
                 <TextBlock Text="{x:Static res:TrayStrings.AddIns_Description}" Style="{StaticResource PageDescription}" />
                 <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.AddInsLater">
