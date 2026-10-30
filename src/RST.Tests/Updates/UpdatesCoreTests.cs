@@ -224,9 +224,13 @@ public class UpdateHostsTests
     [InlineData("https://api.github.com/repos/x/y/releases/tags/v1.0.0", UpdateHostUse.Feed, false)]
     [InlineData("https://api.github.com/repos/x/y/releases/tags/v1.0.0", UpdateHostUse.Api, true)]
     [InlineData("https://github.com/x/y/releases/download/v1.0.0/RST.msi", UpdateHostUse.Download, true)]
-    [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1", UpdateHostUse.Download, true)]
-    [InlineData("https://objects.githubusercontent.com/github-production-release-asset-2e65be/1", UpdateHostUse.Download, true)]
+    [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1", UpdateHostUse.DownloadRedirect, true)]
+    [InlineData("https://objects.githubusercontent.com/github-production-release-asset-2e65be/1", UpdateHostUse.DownloadRedirect, true)]
     [InlineData("https://release-assets.githubusercontent.com/x", UpdateHostUse.Feed, false)]
+    // WU4 review N2: a download starts at github.com and is redirected ONLY to the release-asset hosts.
+    [InlineData("https://release-assets.githubusercontent.com/x", UpdateHostUse.Download, false)]
+    [InlineData("https://github.com/other/repo/releases/download/v1.0.0/RST.msi", UpdateHostUse.DownloadRedirect, false)]
+    [InlineData("https://api.github.com/x", UpdateHostUse.DownloadRedirect, false)]
     [InlineData("https://evil.githubusercontent.com/x", UpdateHostUse.Download, false)]
     [InlineData("https://raw.githubusercontent.com/x", UpdateHostUse.Download, false)]
     [InlineData("https://github.com.evil.example/x", UpdateHostUse.Download, false)]
@@ -315,7 +319,11 @@ public class ProductCatalogTests
         var good = catalog.Find("good")!;
         good.UpgradeCodes.Should().Equal("11111111-2222-3333-4444-555555555555");
         good.AddinClientId.Should().Be("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "braces stripped, lower-cased");
-        logged.Should().HaveCount(6, "each unidentifiable shippable entry is logged; in_development and retired are silent");
+        // F17 WU4: "good" has no pinned asset and no hard-coded pattern for its id, so it is detected and checked but
+        // never installed (logged once more).
+        good.IsInstallable.Should().BeFalse();
+        logged.Should().HaveCount(7, "each unidentifiable shippable entry is logged; in_development and retired are silent");
+        logged.Should().ContainSingle(l => l.Contains("good has no known asset name"));
     }
 
     [Theory]

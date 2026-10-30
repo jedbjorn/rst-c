@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Resources;
+using RST.Core.Updates;
 
 namespace RST.Tray.Resources;
 
@@ -141,13 +142,13 @@ public static class TrayStrings
 
     public static string State_Unknown => Get(nameof(State_Unknown));
 
-    public static string Updates_InstallComingSoon => Get(nameof(Updates_InstallComingSoon));
+    public static string Updates_RstUpdateNote => Get(nameof(Updates_RstUpdateNote));
 
     public static string Updates_OtherApps => Get(nameof(Updates_OtherApps));
 
     public static string Updates_OtherAppsHint => Get(nameof(Updates_OtherAppsHint));
 
-    public static string Apps_InstallsComingSoon => Get(nameof(Apps_InstallsComingSoon));
+    public static string Apps_InstallsNote => Get(nameof(Apps_InstallsNote));
 
     public static string Apps_Detecting => Get(nameof(Apps_Detecting));
 
@@ -179,7 +180,15 @@ public static class TrayStrings
 
     public static string App_Update => Get(nameof(App_Update));
 
-    public static string App_ComingSoon => Get(nameof(App_ComingSoon));
+    public static string App_InstallWhenRevitCloses => Get(nameof(App_InstallWhenRevitCloses));
+
+    public static string App_UpdateWhenRevitCloses => Get(nameof(App_UpdateWhenRevitCloses));
+
+    public static string App_ReinstallPrevious(string version) => Format(nameof(App_ReinstallPrevious), version);
+
+    public static string App_Cancel => Get(nameof(App_Cancel));
+
+    public static string App_OpenLog => Get(nameof(App_OpenLog));
 
     public static string App_ReleasePage => Get(nameof(App_ReleasePage));
 
@@ -200,4 +209,60 @@ public static class TrayStrings
     public static string Notify_ManyTitle => Get(nameof(Notify_ManyTitle));
 
     public static string Notify_ManyText(string list) => Format(nameof(Notify_ManyText), list);
+
+    // Installs (F17 WU4): {0} the app, {1} the version.
+
+    public static string Install_Downloading(string app, string version) => Format(nameof(Install_Downloading), app, version);
+
+    public static string Install_WaitingForRevit(string app, string version) => Format(nameof(Install_WaitingForRevit), app, version);
+
+    public static string Install_Installing(string app, string version) => Format(nameof(Install_Installing), app, version);
+
+    public static string Install_RetryLater(string app, string version) => Format(nameof(Install_RetryLater), app, version);
+
+    public static string Install_Queued(string app, string version) => Format(nameof(Install_Queued), app, version);
+
+    public static string Install_QueuedRst(string app, string version) => Format(nameof(Install_QueuedRst), app, version);
+
+    public static string App_ReinstallPreviousWhenRevitCloses(string version) => Format(nameof(App_ReinstallPreviousWhenRevitCloses), version);
+
+    public static string Install_HandingOff(string app, string version) => Format(nameof(Install_HandingOff), app, version);
+
+    public static string Install_Done(string app, string version) => Format(nameof(Install_Done), app, version);
+
+    public static string Install_DoneRestart(string app, string version) => Format(nameof(Install_DoneRestart), app, version);
+
+    public static string Install_Refused(string app, string version, string reason) => Format(nameof(Install_Refused), app, version, reason);
+
+    public static string Install_Failed(string app, string version, int code) => Format(nameof(Install_Failed), app, version, code);
+
+    public static string Install_FailedGone(string app, string version, int code) => Format(nameof(Install_FailedGone), app, version, code);
+
+    public static string Install_Busy(string app, string version) => Format(nameof(Install_Busy), app, version);
+
+    public static string Install_UpdaterFailed(string app, string version) => Format(nameof(Install_UpdaterFailed), app, version);
+
+    public static string Install_PerMachineRst(string app, string version) => Format(nameof(Install_PerMachineRst), app, version);
+
+    public static string Install_PerMachine(string app, string version) => Format(nameof(Install_PerMachine), app, version);
+
+    /// <summary>
+    /// A refusal or failure in plain words (WU3 review D3): never an exception's text. The detail is in the tray log.
+    /// <paramref name="net"/> and <paramref name="status"/> refine <see cref="InstallProblem.Network"/>.
+    /// </summary>
+    public static string Problem(InstallProblem problem, NetFailure? net = null, int? status = null) => problem switch
+    {
+        InstallProblem.Network => Net(net ?? NetFailure.Unexpected, status),
+        InstallProblem.None or InstallProblem.PerMachine or InstallProblem.InstallFailed or InstallProblem.InstallerBusy
+            or InstallProblem.UpdaterFailed => Get("Net_Unexpected"),
+        _ => Get("Problem_" + problem),
+    };
+
+    /// <summary>A network failure in plain words: "couldn't reach GitHub", "GitHub answered HTTP 503", ….</summary>
+    public static string Net(NetFailure failure, int? status = null) => failure switch
+    {
+        NetFailure.HttpStatus when status is { } code => Format("Net_HttpStatus", code),
+        NetFailure.HttpStatus => Get("Net_Unexpected"),
+        _ => Get("Net_" + failure),
+    };
 }

@@ -94,18 +94,39 @@ public static class TrayIconRetry
 /// <summary>The tray's command line.</summary>
 /// <param name="StartHidden"><c>--startup</c> (the Run value at sign-in): start in the notification area, no window.</param>
 /// <param name="Unknown">Arguments the tray does not know (logged and ignored).</param>
-public sealed record TrayArguments(bool StartHidden, IReadOnlyList<string> Unknown)
+/// <param name="ApplyMsi">
+/// <c>--apply &lt;msi&gt;</c> (F17 WU4): this process is the updater copy, which installs that RST.msi and exits. Only
+/// honoured when the process runs as <see cref="TrayPaths.UpdaterExeName"/> from <see cref="TrayPaths.UpdaterDir"/>.
+/// </param>
+/// <param name="WaitPid"><c>--wait-pid &lt;pid&gt;</c>: the tray the updater waits for before it installs.</param>
+public sealed record TrayArguments(bool StartHidden, IReadOnlyList<string> Unknown, string? ApplyMsi = null, int? WaitPid = null)
 {
+    /// <summary>This process is the updater copy.</summary>
+    public bool IsApply => ApplyMsi is not null;
+
     public static TrayArguments Parse(IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(args);
         var startHidden = false;
+        string? apply = null;
+        int? waitPid = null;
         var unknown = new List<string>();
-        foreach (var arg in args)
+        for (var i = 0; i < args.Count; i++)
         {
+            var arg = args[i];
             if (string.Equals(arg, TrayPaths.StartupArgument, StringComparison.OrdinalIgnoreCase)) startHidden = true;
+            else if (string.Equals(arg, TrayPaths.ApplyArgument, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Count
+                     && !string.IsNullOrWhiteSpace(args[i + 1]))
+                apply = args[++i];
+            else if (string.Equals(arg, TrayPaths.WaitPidArgument, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Count
+                     && int.TryParse(args[i + 1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var pid)
+                     && pid > 0)
+            {
+                waitPid = pid;
+                i++;
+            }
             else if (!string.IsNullOrWhiteSpace(arg)) unknown.Add(arg);
         }
-        return new TrayArguments(startHidden, unknown);
+        return new TrayArguments(startHidden, unknown, apply, waitPid);
     }
 }

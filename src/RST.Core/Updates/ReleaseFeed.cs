@@ -33,14 +33,19 @@ public enum FeedOutcome
 
 /// <param name="Outcome">What happened.</param>
 /// <param name="Version">The latest full release (only for <see cref="FeedOutcome.Latest"/>).</param>
-/// <param name="Reason">Why it failed, for the log (only for <see cref="FeedOutcome.Failed"/>).</param>
-public sealed record FeedResult(FeedOutcome Outcome, ReleaseVersion? Version = null, string? Reason = null)
+/// <param name="Reason">Why it failed, for the log only (only for <see cref="FeedOutcome.Failed"/>).</param>
+/// <param name="Failure">The kind of failure, for the pages' plain wording (WU3 review D3).</param>
+/// <param name="Status">The HTTP status, when the failure is one.</param>
+public sealed record FeedResult(
+    FeedOutcome Outcome, ReleaseVersion? Version = null, string? Reason = null,
+    NetFailure Failure = NetFailure.Unexpected, int? Status = null)
 {
     public static FeedResult Latest(ReleaseVersion version) => new(FeedOutcome.Latest, version);
 
     public static FeedResult None { get; } = new(FeedOutcome.NoRelease);
 
-    public static FeedResult Fail(string reason) => new(FeedOutcome.Failed, Reason: reason);
+    public static FeedResult Fail(string reason, NetFailure failure = NetFailure.Unexpected, int? status = null) =>
+        new(FeedOutcome.Failed, Reason: reason, Failure: failure, Status: status);
 }
 
 public static class ReleaseFeed
@@ -73,9 +78,9 @@ public static class ReleaseFeed
         if (!IsRepo(repo)) return FeedResult.Fail("not a repo: " + repo);
         var code = (int)status;
         if (code is not (301 or 302 or 303 or 307 or 308))
-            return FeedResult.Fail(code == 200
-                ? "HTTP 200: the redirect was followed or GitHub changed releases/latest"
-                : $"HTTP {code}");
+            return code == 200
+                ? FeedResult.Fail("HTTP 200: the redirect was followed or GitHub changed releases/latest")
+                : FeedResult.Fail($"HTTP {code}", NetFailures.FromStatus(code), code);
         if (location is null) return FeedResult.Fail($"HTTP {code} without a Location");
 
         Uri target;
@@ -134,15 +139,15 @@ public static class ReleaseFeed
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {
-            return FeedResult.Fail("cancelled");
+            return FeedResult.Fail("cancelled", NetFailure.Cancelled);
         }
         catch (OperationCanceledException)
         {
-            return FeedResult.Fail($"no answer in {RequestTimeout.TotalSeconds:0} s");
+            return FeedResult.Fail($"no answer in {RequestTimeout.TotalSeconds:0} s", NetFailure.TimedOut);
         }
         catch (Exception ex)
         {
-            return FeedResult.Fail(ex.GetType().Name + ": " + ex.Message);
+            return FeedResult.Fail(ex.GetType().Name + ": " + ex.Message, NetFailures.FromException(ex));
         }
     }
 }

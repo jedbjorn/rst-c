@@ -105,6 +105,9 @@ internal sealed class TrayIcon : IDisposable
     /// <summary>The PC woke from sleep or hibernation (WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC; F17 WU3's check slots).</summary>
     public event EventHandler? Resumed;
 
+    /// <summary>Explorer restarted (TaskbarCreated) and the icon is back in the notification area.</summary>
+    public event EventHandler? Readded;
+
     /// <summary>The hidden window's handle (the menu's foreground anchor).</summary>
     public IntPtr Handle => _window.Handle;
 
@@ -219,9 +222,10 @@ internal sealed class TrayIcon : IDisposable
 
         if (_taskbarCreated != 0 && msg == _taskbarCreated)
         {
-            // Explorer (re)started: every notification icon is gone; put ours back.
+            // Explorer (re)started: every notification icon is gone; put ours back, and tell the host, which sends
+            // a notification that was waiting for the icon (WU3 review D2).
             _added = false;
-            Show();
+            if (Show()) Readded?.Invoke(this, EventArgs.Empty);
             return IntPtr.Zero;
         }
 

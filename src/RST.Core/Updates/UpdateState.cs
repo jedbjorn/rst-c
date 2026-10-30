@@ -187,14 +187,18 @@ public sealed class UpdateState
 /// <param name="Checking">A check is running.</param>
 /// <param name="AutomaticChecks">Automatic checks are on (the setting and the preset).</param>
 /// <param name="Detected">Installed products have been detected at least once (false: still looking).</param>
-/// <param name="FailureReason">Why the last check failed (null: it did not), for "Couldn't check: …".</param>
+/// <param name="FailureReason">Why the last check failed (null: it did not), the raw detail for the log.</param>
+/// <param name="Failure">The kind of that failure, for the page's plain "Couldn't check: …" (WU3 review D3).</param>
+/// <param name="FailureStatus">Its HTTP status, when it is one.</param>
 public sealed record UpdateSnapshot(
     IReadOnlyList<ProductStatus> Products,
     DateTimeOffset? LastCheckedUtc,
     bool Checking,
     bool AutomaticChecks,
     bool Detected,
-    string? FailureReason = null)
+    string? FailureReason = null,
+    NetFailure Failure = NetFailure.Unexpected,
+    int? FailureStatus = null)
 {
     public ProductStatus? Rst => Products.FirstOrDefault(p => p.Product.IsRst);
 

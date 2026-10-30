@@ -24,8 +24,14 @@ public enum UpdateHostUse
     /// <summary>The one GitHub REST call per update found (WU4).</summary>
     Api,
 
-    /// <summary>A release asset download and the redirects it takes (WU4).</summary>
+    /// <summary>A release asset download's first request: github.com (WU4).</summary>
     Download,
+
+    /// <summary>
+    /// Where a download may be redirected: GitHub's release-asset hosts only, never github.com again (spec #20 §5;
+    /// WU4 review N2).
+    /// </summary>
+    DownloadRedirect,
 }
 
 public static class UpdateHosts
@@ -42,7 +48,8 @@ public static class UpdateHosts
     {
         UpdateHostUse.Feed => new[] { GitHub },
         UpdateHostUse.Api => new[] { GitHubApi },
-        UpdateHostUse.Download => new[] { GitHub }.Concat(ReleaseAssetHosts).ToArray(),
+        UpdateHostUse.Download => new[] { GitHub },
+        UpdateHostUse.DownloadRedirect => ReleaseAssetHosts,
         _ => Array.Empty<string>(),
     };
 
