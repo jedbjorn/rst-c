@@ -17,7 +17,7 @@ using System.Collections.Generic;
 using Autodesk.Windows;
 using RST.Core.Scanning;
 using RST.Engine.Ribbon;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Scanning;
 

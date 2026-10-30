@@ -29,7 +29,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RST.Core.Configuration;
 using RST.Core.Scanning;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Scanning;
 

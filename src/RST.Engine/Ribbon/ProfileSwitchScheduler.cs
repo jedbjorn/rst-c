@@ -16,7 +16,7 @@
 using System;
 using Autodesk.Revit.UI;
 using RST.Core.Profiles;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Ribbon;
 

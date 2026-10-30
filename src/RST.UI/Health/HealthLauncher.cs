@@ -3,7 +3,7 @@
 
 using RST.Core.Health;
 using RST.UI.Dialogs;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Health;
 

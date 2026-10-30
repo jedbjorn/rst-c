@@ -219,7 +219,7 @@ public sealed class TrayPathsTests : IDisposable
             .Should().BeEquivalentTo(engine, "the engine's boot-time prune deletes only its own files");
         Directory.GetFiles(_logs, TrayPaths.LogFileGlob).Select(Path.GetFileName)
             .Should().BeEquivalentTo(tray);
-        // Serilog's daily roll names the files after the base name's stem ("tray_") plus the date.
+        // The file sink's daily roll names the files after the base name's stem ("tray_") plus the date.
         Path.GetFileNameWithoutExtension(TrayPaths.LogFileBaseName).Should().Be("tray_");
     }
 }

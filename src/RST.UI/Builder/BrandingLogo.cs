@@ -6,7 +6,7 @@ using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using RST.Core.Configuration;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Builder;
 

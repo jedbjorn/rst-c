@@ -10,7 +10,7 @@ using RST.Core.Builder;
 using RST.Core.Ribbon;
 using RST.UI.Mvvm;
 using RST.UI.Resources;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Controls;
 

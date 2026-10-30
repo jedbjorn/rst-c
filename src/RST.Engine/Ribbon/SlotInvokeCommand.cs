@@ -19,7 +19,7 @@ using System.Diagnostics;
 using System.Windows.Input;
 using Autodesk.Revit.UI;
 using RST.Core.Ribbon;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Ribbon;
 

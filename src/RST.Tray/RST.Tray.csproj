@@ -31,11 +31,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog" />
-    <PackageReference Include="Serilog.Sinks.File" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
     <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
   </ItemGroup>

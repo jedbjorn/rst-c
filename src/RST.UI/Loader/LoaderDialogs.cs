@@ -16,7 +16,7 @@ using RST.Core.Activation;
 using RST.Core.Loader;
 using RST.UI.Mvvm;
 using RST.UI.Resources;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Loader;
 

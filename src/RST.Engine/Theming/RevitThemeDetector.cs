@@ -1,7 +1,7 @@
 // Adapted from splash-it src/SplashIt.Revit/Theming/RevitThemeDetector.cs (splash-it commit ba86a71;
 // originally gantt-it src/GanttIt.Revit/UI/Theming/GanttItTheme.cs, gantt-it commit a96d0a1), MIT, same owner.
 // Changes: namespaces (SplashIt.* to RST.*); the debug override reads RST_THEME; a failed read is
-// logged through Serilog; ApplyToWindows (detect, then RstTheme.Apply) is the one call the window
+// logged through Log; ApplyToWindows (detect, then RstTheme.Apply) is the one call the window
 // launchers make before a window opens.
 
 using System.Windows;
@@ -9,7 +9,7 @@ using Autodesk.Revit.UI;
 using Microsoft.Win32;
 using RST.Core.Theming;
 using RST.UI.Theming;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Theming;
 

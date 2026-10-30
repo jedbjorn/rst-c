@@ -10,7 +10,7 @@ using RST.Core.Health;
 using RST.Core.Profiles;
 using RST.Core.Telemetry;
 using RST.UI.Resources;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Health;
 

@@ -14,7 +14,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RST.Core.Profiles;
 using RST.Engine.Ribbon;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Commands;
 
