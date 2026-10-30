@@ -164,6 +164,13 @@ public class ProfileBuilderStackTests
         card.IsSelected.Should().BeFalse();
         h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_GRID"));
         h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Grid");
+
+        // So does + Add Panel (the new panel is the target).
+        card.SelectCommand.Execute(null);
+        h.Model.AddPanelCommand.Execute(null);
+        h.Model.HasSelectedStack.Should().BeFalse();
+        h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_BEAM"));
+        h.Model.Profile.Panels[1].Slots.Select(s => s.Name).Should().Equal("Beam");
     }
 
     [Fact]

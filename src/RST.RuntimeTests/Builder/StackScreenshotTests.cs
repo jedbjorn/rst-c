@@ -76,11 +76,10 @@ public class StackScreenshotTests
         WindowCapture.ShowOffScreen(window);
         try
         {
-            // Lay out at full size, then scroll the Properties pane to the Stacks section.
+            // Lay out at full size, then scroll the Properties pane to the stack cards.
             WindowCapture.Content(window, WindowSize);
-            var section = WindowCapture.Descendants<Border>(window.PropertiesScroller).Single(b => Id(b) == "Builder.Stacks");
-            var top = section.TransformToAncestor((Visual)window.PropertiesScroller.Content).Transform(new Point(0, 0)).Y;
-            window.PropertiesScroller.ScrollToVerticalOffset(top);
+            var top = window.StackCards.TransformToAncestor((Visual)window.PropertiesScroller.Content).Transform(new Point(0, 0)).Y;
+            window.PropertiesScroller.ScrollToVerticalOffset(top - 12);
             window.UpdateLayout();
 
             Capture(window, theme, "builder-stacks");

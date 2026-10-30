@@ -530,6 +530,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private void AddPanel()
     {
+        // The new panel is selected, so double-click adds to it, not to a selected stack.
+        ClearStackSelection();
         AddPanelCore();
         RenderCanvas();
     }
