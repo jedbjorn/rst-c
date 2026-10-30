@@ -74,6 +74,7 @@ internal sealed class AddInsViewModel : ObservableObject
     private bool _isBusy;
     private string? _busyText;
     private string? _activeProfile;
+    private bool _activeUnreadable;
     private IReadOnlyList<AddInsYearViewModel> _years = [];
     private IReadOnlyList<ProfileOption> _profiles = [];
     private ProfileOption? _selected;
@@ -141,7 +142,7 @@ internal sealed class AddInsViewModel : ObservableObject
         private set => SetField(ref _busyText, value);
     }
 
-    public string ActiveProfileText => _activeProfile ?? AddInsStrings.ActiveProfileNone;
+    public string ActiveProfileText => _activeProfile ?? (_activeUnreadable ? AddInsStrings.ActiveProfileUnreadable : AddInsStrings.ActiveProfileNone);
 
     public bool HasActiveProfile => _activeProfile is not null;
 
@@ -282,6 +283,7 @@ internal sealed class AddInsViewModel : ObservableObject
         }
         SetReadError(null);
         _activeProfile = string.IsNullOrEmpty(status.ActiveProfile) ? null : status.ActiveProfile;
+        _activeUnreadable = status.ActiveProfileUnreadable;
         OnPropertyChanged(nameof(ActiveProfileText));
         OnPropertyChanged(nameof(HasActiveProfile));
 

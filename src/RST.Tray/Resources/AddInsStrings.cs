@@ -27,6 +27,8 @@ public static class AddInsStrings
 
     public static string ActiveProfileNone => Get(nameof(ActiveProfileNone));
 
+    public static string ActiveProfileUnreadable => Get(nameof(ActiveProfileUnreadable));
+
     public static string ApplyHeading => Get(nameof(ApplyHeading));
 
     public static string ProfileLabel => Get(nameof(ProfileLabel));

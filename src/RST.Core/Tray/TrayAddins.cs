@@ -42,7 +42,8 @@ public sealed record TrayAddinYear(
 /// <param name="ActiveProfile">The loaded profile's name; null when none is loaded.</param>
 /// <param name="Years">The installed Revit years, oldest first.</param>
 /// <param name="Error">Why the add-ins could not be read; null when they could.</param>
-public sealed record TrayAddinStatus(string? ActiveProfile, IReadOnlyList<TrayAddinYear> Years, string? Error = null)
+/// <param name="ActiveProfileUnreadable">active_profile.json exists but could not be read (locked): which profile is active is not known.</param>
+public sealed record TrayAddinStatus(string? ActiveProfile, IReadOnlyList<TrayAddinYear> Years, string? Error = null, bool ActiveProfileUnreadable = false)
 {
     public static TrayAddinStatus Empty { get; } = new(null, []);
 }
@@ -50,6 +51,7 @@ public sealed record TrayAddinStatus(string? ActiveProfile, IReadOnlyList<TrayAd
 public sealed class TrayAddinService
 {
     private readonly IAddinSwitching _switching;
+    private readonly LoaderPaths _paths;
     private readonly string _ledgerPath;
     private readonly AddinMaintenanceService _addins;
     private readonly ProfileLoadService _load;
@@ -62,6 +64,7 @@ public sealed class TrayAddinService
     public TrayAddinService(LoaderPaths? paths = null, IAddinSwitching? switching = null, ILoaderLog? log = null)
     {
         var p = paths ?? LoaderPaths.Default;
+        _paths = p;
         var l = log ?? NullLoaderLog.Instance;
         _ledgerPath = Path.Combine(p.Root, ActivationLedger.FileName);
         // The same construction as the Loader's backend: the record beside the other per-user files.
@@ -97,17 +100,34 @@ public sealed class TrayAddinService
         {
             var ap = _library.GetActive();
             if (!ap.IsBlank) active = ap.ProfileName;
+            // ActiveProfile.Read gives "blank" for a file it cannot open too; the page must not claim "none" then.
+            var unreadable = active is null && CannotOpen(_paths.ActiveProfileFile);
             var inventory = _switching.Inventory();
             var plan = _switching.Plan(inventory, ActivationPolicy.RestoreAll);
             var ledger = ActivationLedger.Load(_ledgerPath);
             var years = inventory.Years
                 .Select(y => YearStatus(y.Year, plan, ledger, runningYears?.Contains(y.Year) == true))
                 .ToList();
-            return new TrayAddinStatus(active, years);
+            return new TrayAddinStatus(active, years, ActiveProfileUnreadable: unreadable);
         }
         catch (Exception ex)
         {
             return new TrayAddinStatus(active, [], ex.Message);
+        }
+    }
+
+    /// <summary>The file exists but cannot be opened for reading (another process holds it, or access is denied).</summary>
+    private static bool CannotOpen(string path)
+    {
+        if (!File.Exists(path)) return false;
+        try
+        {
+            using var _ = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true;
         }
     }
 

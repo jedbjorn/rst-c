@@ -439,6 +439,7 @@ public class AddInsViewModelTests
         Assert.True(vm.HasError);
         Assert.Empty(f.Dialogs.AddinReports); // no report for a load that did not happen
         Assert.Null(vm.ResultText);
+        Assert.Equal(AddInsStrings.ActiveProfileUnreadable, vm.ActiveProfileText); // never "No profile loaded" for a locked file
 
         // Read again (Refresh): still there; the next action clears it.
         await vm.RefreshAsync();

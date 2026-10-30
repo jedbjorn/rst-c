@@ -30,6 +30,10 @@
   <data name="ActiveProfileNone" xml:space="preserve">
     <value>No profile loaded</value>
   </data>
+  <data name="ActiveProfileUnreadable" xml:space="preserve">
+    <value>Couldn't read it right now (the file is in use)</value>
+    <comment>Shown for the active profile while active_profile.json cannot be opened.</comment>
+  </data>
   <data name="ApplyHeading" xml:space="preserve">
     <value>Apply a profile</value>
   </data>
