@@ -35,8 +35,8 @@ public sealed class ProfileSaveService
 
     /// <summary>
     /// save_profile: name and tab required, then a new id and today's export date when missing,
-    /// then the full validation the read path enforces (a profile saved without it would vanish
-    /// from every picker), then the atomic write.
+    /// then the stacks no panel refers to dropped (spec #17), then the full validation the read path
+    /// enforces (a profile saved without it would vanish from every picker), then the atomic write.
     /// </summary>
     public SaveOutcome Save(Profile edited)
     {
@@ -55,6 +55,10 @@ public sealed class ProfileSaveService
 
         if (string.IsNullOrEmpty(profile.Id)) profile.Id = Guid.NewGuid().ToString();
         if (string.IsNullOrEmpty(profile.ExportDate)) profile.ExportDate = _utcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+        // Spec #17: a stack no panel slot refers to is a warning, and the save drops it.
+        foreach (var orphan in ProfileEditing.RemoveOrphanStacks(profile))
+            _log.Warning(null, "Builder.save_profile: stack {Stack} is not on any panel; removed from {Name}", orphan, profile.ProfileName);
 
         var errors = ProfileSerializer.Validate(profile);
         if (errors.Count > 0)
