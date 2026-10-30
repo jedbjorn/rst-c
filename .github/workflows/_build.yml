@@ -6,20 +6,25 @@ name: _build (reusable)
 # directly" by convention.
 #
 #   • test         — xunit on RST.Tests (configuration-agnostic)
-#   • test-runtime — xunit on RST.RuntimeTests (Windows-only WPF paths:
-#                    bridge + resolver production contracts)
+#   • test-runtime — matrix R25/R27: xunit on RST.RuntimeTests (Windows-
+#                    only WPF paths: bridge + resolver production
+#                    contracts) on net8.0-windows and net10.0-windows.
 #   • stage        — matrix R25/R26/R27, runs build/stage.sh per major,
-#                    uploads the bundle as a per-major artifact. R27 is
-#                    soft-fail (continue-on-error) until the build path
-#                    stabilises — first ever R27 build runs here, since
-#                    .NET 10 SDK is CI-only.
-#   • msi-unified  — Windows runner. Downloads R25 + R26 artifacts, runs
-#                    installer/RST.Installer.wixproj → RST.msi
-#                    (R25 + R26 in one MSI).
-#   • msi-r27      — Windows runner. Downloads R27 artifact, runs
-#                    installer-r27/RST.Installer.R27.wixproj → RST-R27.msi
-#                    (preview-only standalone). Soft-fail to keep the
-#                    workflow green when R27 stage has soft-failed.
+#                    uploads the bundle as a per-major artifact. Every
+#                    major is a hard gate: an R27 failure fails the
+#                    workflow and blocks a release (feature #11, D7: no
+#                    skip-R27 switch).
+#   • msi-unified  — Windows runner. Downloads R25 + R26 + R27 artifacts,
+#                    runs installer/RST.Installer.wixproj → RST.msi (all
+#                    three majors in one MSI; each installs only when that
+#                    Revit year is detected), then a permanent smoke with
+#                    stub Revit.exe files (installer/ci-smoke.ps1 -Mode
+#                    Install): Component-table check, detected years only,
+#                    no-Revit refusal, Repair adds/drops a year, uninstall.
+#   • msi-migrate  — Windows runner, matrix Preview/Unified. Installs the
+#                    public v2.2.0 RST-R27.msi or RST.msi, then the new
+#                    RST.msi, and asserts the preview is removed / the
+#                    unified product upgrades in place.
 #
 # WiX MSI emission is officially Windows-only (installer/README.md). The
 # WiX SDK MSBuild path on Linux emits WIX0000 ("behavior is undefined")
@@ -32,7 +37,7 @@ on:
     inputs:
       product_version:
         description: >-
-          Numeric MSI ProductVersion (a.b.c) to stamp into both MSIs. Empty for
+          Numeric MSI ProductVersion (a.b.c) to stamp into RST.msi. Empty for
           push/PR builds — the wixproj fallback applies. release.yml derives it
           from the tag so a release always raises ProductVersion (MajorUpgrade).
         type: string
@@ -57,20 +62,29 @@ jobs:
   # RuntimeTests invokes the real WPF assemblies (LoaderBridge, IconAssets)
   # — it can only RUN on Windows. No Revit needed, so windows-latest
   # suffices and the self-hosted Revit runner stays out of the PR gate.
+  # R27 leg (feature #11, D5): the same contracts on net10.0-windows.
   test-runtime:
     name: Test (runtime, Windows)
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        major: [R25, R27]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - run: dotnet test src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
+      - uses: actions/setup-dotnet@v4
+        if: matrix.major == 'R27'
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release ${{ matrix.major }}" --nologo
       # Spec #16 screenshot pipeline: the runtime tests write PNGs (and a
       # capture-environment .txt) under TestResults/screenshots. Uploaded even
       # when a test fails, so a broken render can be looked at. One upload per
-      # run: if this job becomes a per-major matrix (feature #11), only the
-      # R25 leg uploads, so the fixed artifact name never collides.
+      # run: this job is a per-major matrix (feature #11) and only the R25
+      # leg uploads, so the fixed artifact name never collides.
       - name: List screenshots
         if: always() && matrix.major != 'R27'
         shell: bash
@@ -94,9 +108,6 @@ jobs:
           - major: R25
           - major: R26
           - major: R27
-    # R27 is the first-ever build of the .NET 10 / Revit 2027 target —
-    # let it soft-fail without taking down R25/R26 or the workflow.
-    continue-on-error: ${{ matrix.major == 'R27' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -116,11 +127,13 @@ jobs:
           if-no-files-found: error
 
   msi-unified:
-    name: MSI (R25 + R26)
+    name: MSI (R25 + R26 + R27)
     needs: stage
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      # SDK 8 only: the MSI carries files, so the R27 net10 payload needs
+      # no .NET 10 here.
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -132,33 +145,63 @@ jobs:
         with:
           name: stage-R26
           path: build/R26/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R27
+          path: build/R27/
       - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
+      # Rebuild the same commit: same ProductVersion, new ProductCode. That
+      # is the rc -> final case (release.yml strips -rc.N) the smoke below
+      # checks against AllowSameVersionUpgrades. The rebuilt RST.msi is the
+      # one uploaded.
+      - name: Same-version rebuild
+        shell: pwsh
+        run: |
+          Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-first.msi"
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstMsiVersion=${{ inputs.product_version }}
+      # Permanent install/uninstall smoke (feature #11, D6 / AC3, decision
+      # #10). Stub Revit.exe files under C:\Program Files\Autodesk\Revit
+      # <year>\ drive the detection: no Revit is refused, only detected
+      # years install, Repair adds/drops a year, a same-version build and a
+      # repeated install leave one product, uninstall removes every tree,
+      # user data survives. -StagedRoot checks per-year component counts.
+      - name: Install / uninstall smoke
+        shell: pwsh
+        run: installer/ci-smoke.ps1 -Mode Install -Msi "$env:RUNNER_TEMP/RST-first.msi" -SameVersionMsi installer/bin/Release/RST.msi -StagedRoot build
       - uses: actions/upload-artifact@v4
         with:
           name: RST.msi
           path: installer/bin/Release/RST.msi
           if-no-files-found: error
 
-  msi-r27:
-    name: MSI (R27 preview)
-    needs: stage
+  # Upgrade paths from the last two-MSI release (feature #11, AC4/AC5).
+  # v2.2.0 is pinned: it is the final release that shipped RST-R27.msi.
+  msi-migrate:
+    name: MSI upgrade from v2.2.0 (${{ matrix.from }})
+    needs: msi-unified
     runs-on: windows-latest
-    # R27 stage is soft-fail; if its artifact is missing the download step
-    # below errors out. Soft-fail this job so the overall workflow stays
-    # green for R25 + R26 shippable artifacts.
-    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - from: Preview
+            asset: RST-R27.msi
+          - from: Unified
+            asset: RST.msi
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/download-artifact@v4
         with:
-          dotnet-version: '8.0.x'
+          name: RST.msi
+          path: new/
       - uses: actions/download-artifact@v4
         with:
           name: stage-R27
           path: build/R27/
-      - run: dotnet build installer-r27/RST.Installer.R27.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: RST-R27.msi
-          path: installer-r27/bin/Release/RST-R27.msi
-          if-no-files-found: error
+      - name: Download v2.2.0 ${{ matrix.asset }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v2.2.0 -R "${{ github.repository }}" -p "${{ matrix.asset }}" -D old
+      - name: Upgrade from v2.2.0 ${{ matrix.asset }}
+        shell: pwsh
+        run: installer/ci-smoke.ps1 -Mode Migrate -From ${{ matrix.from }} -Msi new/RST.msi -OldMsi "old/${{ matrix.asset }}" -StagedR27 build/R27

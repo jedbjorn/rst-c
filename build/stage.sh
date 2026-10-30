@@ -7,7 +7,7 @@
 #   build/R<NN>/app/{RST.Engine.dll, RST.UI.dll, RST.Core.dll, Serilog*,
 #                    System.Management.dll, Microsoft.Web.WebView2.*,
 #                    runtimes/, Assets/, *.deps.json, *.pdb}
-#       → drops into %AppData%\RST\app\
+#       → drops into %AppData%\RST\R<NN>\app\
 #
 # Usage: build/stage.sh R25 [Release|Debug]
 #   default config is Release.

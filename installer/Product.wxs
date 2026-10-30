@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  RST.msi — per-user installer for RST.
+  RST.msi — per-user installer for RST, Revit 2025 / 2026 / 2027.
 
   Lays the bootstrap thunk (RST.addin + RST.Bootstrap.dll) into the
   per-user Revit Add-Ins directory and the engine + transitives
@@ -9,12 +9,12 @@
   derives R<major> from application.ControlledApplication.VersionNumber
   at OnStartup (RST-037) and loads the matching engine.
 
-  Layout (RST-033 split):
-    %AppData%\Autodesk\Revit\Addins\<ver>\
+  Layout (RST-033 split), one pair of trees per Revit major:
+    %AppData%\Autodesk\Revit\Addins\<ver>\        (2025, 2026, 2027)
       RST.addin
       RST.Bootstrap.dll
       RST.Bootstrap.pdb
-    %AppData%\RST\R<NN>\app\
+    %AppData%\RST\R<NN>\app\                       (R25, R26, R27)
       RST.Engine.dll
       RST.UI.dll
       RST.Core.dll
@@ -28,9 +28,20 @@
                                                       stage time)
       *.pdb
 
-  v0 ships R25 only. R26/R27 expand once those majors enter the test
-  matrix; the WXS pattern is identical (one ComponentGroup per Revit
-  per tree).
+  Only the Revit years detected on the computer are installed (decision
+  #10, the gantt-it / splash-it pattern; see "Revit detection" below).
+  A first install with no supported Revit is refused by a launch
+  condition. A Revit year installed later is added by running the same
+  RST.msi again and choosing Repair (or by the next upgrade).
+
+  R25 + R26 are net8.0-windows; R27 is net10.0-windows. The MSI only
+  carries files, so mixed TFMs need nothing here: every major lands in
+  its own directory with its own RST.Engine.deps.json, and each Revit
+  loads only its own major's engine through the bootstrap.
+
+  Revit 2027 was folded in from the retired standalone preview MSI
+  ("RST (Revit 2027 preview)") in v3.0.0. The Upgrade row below removes
+  that preview automatically on install.
 
   UpgradeCode is the stable identity of the RST product family. NEVER
   change it once shipped — it's how the MSI engine knows to upgrade
@@ -46,10 +57,43 @@
            Scope="perUser"
            Compressed="yes">
 
-    <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles" />
+    <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles (Revit 2025–2027)" />
 
-    <!-- Replace any prior install of the same product family in place. -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <!-- Replace any prior install of the same product family in place.
+         Schedule="afterInstallInitialize" runs RemoveExistingProducts
+         inside this install's transaction, before any file is installed:
+         the old product (and the R27 preview, via the Upgrade row below)
+         is fully removed first, and if the new install then fails, the
+         rollback reinstalls it. The WiX default (afterInstallValidate)
+         removes it in a separate transaction, so a failed install would
+         leave no RST at all. ci-smoke.ps1 asserts this sequencing.
+         AllowSameVersionUpgrades: release.yml strips "-rc.N" from the tag,
+         so an rc and its final release (and dev builds of one commit)
+         share a ProductVersion with different ProductCodes. Without it
+         the later one installs side by side as a second "RST" instead of
+         replacing the first. Family convention (gantt-it, splash-it).
+         Downgrades stay blocked. -->
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <!-- R27 preview migration (feature #11, Option B).
+         02BE4399-A563-4B15-BD12-ECF5D8486FB3 is the UpgradeCode of the
+         RETIRED standalone "RST (Revit 2027 preview)" MSI (RST-R27.msi,
+         v1.0.0–v2.2.0). Retired, never reused. This row finds an
+         installed preview at any version (OnlyDetect="no"), and the
+         RemoveExistingProducts action that MajorUpgrade schedules above
+         removes it (rolled back if the install fails) before the unified
+         R27 payload installs, so the two
+         products never co-own Addins\2027 or RST\R27\app. Per-user
+         scope: only the installing user's preview is found. The row
+         stays indefinitely, so a late install of an old RST-R27.msi is
+         migrated again by the next RST.msi install. -->
+    <Upgrade Id="02BE4399-A563-4B15-BD12-ECF5D8486FB3">
+      <UpgradeVersion Minimum="0.0.0" IncludeMinimum="yes"
+                      OnlyDetect="no"
+                      Property="R27PREVIEWFOUND" />
+    </Upgrade>
 
     <MediaTemplate EmbedCab="yes" />
 
@@ -57,7 +101,7 @@
          options to misconfigure: welcome + license -> progress -> finish.
          The banner shows on every page; the dialog bitmap backs the
          welcome/exit pages. Needs WixToolset.UI.wixext (see .wixproj).
-         Bitmaps + license live in branding/ (shared with installer-r27). -->
+         Bitmaps + license live in branding/. -->
     <ui:WixUI Id="WixUI_Minimal" />
     <WixVariable Id="WixUIBannerBmp"  Value="branding\banner.bmp" />
     <WixVariable Id="WixUIDialogBmp"  Value="branding\dialog.bmp" />
@@ -72,36 +116,67 @@
     <Property Id="ARPURLINFOABOUT"  Value="https://github.com/jedbjorn/rst-c" />
     <Property Id="ARPURLUPDATEINFO" Value="https://github.com/jedbjorn/rst-c/releases/latest" />
 
-    <!-- Per-Revit-major detection. v0 doesn't gate install on these
-         (always-install-all is simpler and the spurious files in unused
-         majors are <10MB). The properties are populated for diagnostics
-         and for the future feature-conditional install path. -->
-    <Property Id="REVIT2025_REG">
-      <RegistrySearch Id="Revit2025Search" Root="HKLM"
-                      Key="SOFTWARE\Autodesk\Revit\2025"
-                      Name="InstallationLocation" Type="raw" />
+    <!-- Revit detection (decision #10). Copied from gantt-it
+         installer/Product.wxs (gantt-it commit a96d0a1, MIT, same owner).
+         Changes: product name in the launch-condition message; comments.
+
+         REVIT<year>FOUND is set to the path of Revit.exe when either search
+         finds it (a search that finds nothing leaves the property alone, so
+         the two act as an OR):
+           1. the folder in InstallLocation of Revit's uninstall entry,
+              {7346B4A0-<yy>00-0510-0000-705C0D862004} (Autodesk's product
+              code scheme). The entry does not depend on Revit's install
+              language, unlike HKLM\SOFTWARE\Autodesk\Revit\<year>.
+           2. the default folder, C:\Program Files\Autodesk\Revit <year>\.
+         The keys exist in the 64-bit registry only, hence
+         Bitness="always64" (and the x64 package, see the .wixproj).
+         Revit.exe sits directly in the folder (Depth 0). AppSearch runs on
+         every install, repair and uninstall, so the properties always
+         describe the computer as it is now. Secure: they reach the
+         per-user execute sequence. -->
+    <?foreach Yy in 25;26;27 ?>
+    <Property Id="REVIT20$(var.Yy)FOUND" Secure="yes">
+      <RegistrySearch Id="Revit20$(var.Yy)InstallLocation" Root="HKLM"
+                      Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7346B4A0-$(var.Yy)00-0510-0000-705C0D862004}"
+                      Name="InstallLocation" Type="directory" Bitness="always64">
+        <DirectorySearch Id="Revit20$(var.Yy)ExeInInstallLocation" Depth="0">
+          <FileSearch Name="Revit.exe" />
+        </DirectorySearch>
+      </RegistrySearch>
+      <DirectorySearch Id="Revit20$(var.Yy)ExeInDefaultFolder"
+                       Path="[ProgramFiles64Folder]Autodesk\Revit 20$(var.Yy)" Depth="0">
+        <FileSearch Name="Revit.exe" />
+      </DirectorySearch>
     </Property>
-    <Property Id="REVIT2026_REG">
-      <RegistrySearch Id="Revit2026Search" Root="HKLM"
-                      Key="SOFTWARE\Autodesk\Revit\2026"
-                      Name="InstallationLocation" Type="raw" />
-    </Property>
-    <Property Id="REVIT2027_REG">
-      <RegistrySearch Id="Revit2027Search" Root="HKLM"
-                      Key="SOFTWARE\Autodesk\Revit\2027"
-                      Name="InstallationLocation" Type="raw" />
-    </Property>
+    <?endforeach?>
+
+    <!-- A first install needs at least one supported Revit year.
+         "Installed" keeps repair and uninstall available on a computer that
+         no longer has any (an uninstall must always work). -->
+    <Launch Condition="Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND"
+            Message="RST needs Revit 2025, 2026 or 2027, and none was found on this computer." />
+
+    <!-- An administrative install (msiexec /a) only unpacks the files to a
+         folder; it installs nothing and does not run AppSearch, so the
+         launch condition does not apply to it. -->
+    <AdminUISequence>
+      <LaunchConditions Suppress="yes" />
+    </AdminUISequence>
+    <AdminExecuteSequence>
+      <LaunchConditions Suppress="yes" />
+    </AdminExecuteSequence>
 
     <!-- Directory layout under %AppData% (Roaming). All paths are
-         per-user; no admin elevation required for install. R27
-         directories will land in RST-013 once .NET 10 SDK is wired into
-         CI to stage the R27 engine. -->
+         per-user; no admin elevation required for install. The R27 Ids
+         and names match the retired preview MSI's, so both products
+         target the same paths. -->
     <StandardDirectory Id="AppDataFolder">
       <Directory Id="AutodeskFolder" Name="Autodesk">
         <Directory Id="RevitFolder" Name="Revit">
           <Directory Id="RevitAddinsFolder" Name="Addins">
             <Directory Id="Addins2025Dir" Name="2025" />
             <Directory Id="Addins2026Dir" Name="2026" />
+            <Directory Id="Addins2027Dir" Name="2027" />
           </Directory>
         </Directory>
       </Directory>
@@ -112,23 +187,33 @@
         <Directory Id="R26Dir" Name="R26">
           <Directory Id="R26AppDir" Name="app" />
         </Directory>
+        <Directory Id="R27Dir" Name="R27">
+          <Directory Id="R27AppDir" Name="app" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
-    <!-- Single feature for v0: install everything. Per-Revit conditional
-         install (using REVIT<NN>_REG above) is a future refinement —
-         absent Revit installs receive the .addin in a directory Revit
-         creates lazily; the engine subdir under %AppData%\RST\R<NN>\app\
-         simply sits idle until that Revit major is installed.
+    <!-- One feature, always selected. What is installed is decided per
+         Revit year by the component conditions.
 
-         <Files Include> auto-harvests the source tree into per-file
-         components and binds them to this feature. Path is relative to
-         this .wxs file's directory (installer/). -->
+         ComponentGroups Revit2025/2026/2027 are GENERATED at build time by
+         gen-revit-years.ps1 from build/R<NN>/{addins,app} (the .wixproj
+         compiles obj\RevitYears.g.wxs): one component per staged file, the
+         addins tree into Addins<year>Dir and the engine tree into
+         R<NN>AppDir. <Files Include> cannot carry a Condition, so it is not
+         used. Every component of a year carries
+           Condition="REVIT<year>FOUND OR REMOVE~="ALL""  Transitive="yes"
+         (the gantt-it pattern): Windows Installer re-evaluates a transitive
+         component's condition on a repair, so running the same RST.msi
+         again and choosing Repair adds a Revit year installed since, and
+         drops one uninstalled since. REMOVE~="ALL" keeps a full uninstall
+         (and the old version's removal during an upgrade) removing every
+         year, even one whose Revit is already gone. ci-smoke.ps1 checks
+         the built Component table. -->
     <Feature Id="Main" Title="RST" Level="1">
-      <Files Include="..\build\R25\addins\**" Directory="Addins2025Dir" />
-      <Files Include="..\build\R25\app\**"    Directory="R25AppDir" />
-      <Files Include="..\build\R26\addins\**" Directory="Addins2026Dir" />
-      <Files Include="..\build\R26\app\**"    Directory="R26AppDir" />
+      <ComponentGroupRef Id="Revit2025" />
+      <ComponentGroupRef Id="Revit2026" />
+      <ComponentGroupRef Id="Revit2027" />
     </Feature>
 
   </Package>
