@@ -29,8 +29,13 @@ internal sealed class FakeLaunchEnvironment : ITrayLaunchEnvironment
 
     public byte[]? MachineApproved { get; set; }
 
-    public IReadOnlyList<string> CandidatePaths { get; set; } =
-        [@"C:\Users\modeller\AppData\Local\Programs\RST\Tray\RST.Tray.exe", @"C:\Program Files\RST\Tray\RST.Tray.exe"];
+    public IReadOnlyList<TrayCandidate> Candidates { get; set; } =
+    [
+        new(@"C:\Users\modeller\AppData\Local\Programs\RST\Tray\RST.Tray.exe", PerMachine: false),
+        new(@"C:\Program Files\RST\Tray\RST.Tray.exe", PerMachine: true),
+    ];
+
+    public IReadOnlyList<string> CandidatePaths => Candidates.Select(c => c.Path).ToList();
 
     public HashSet<string> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -40,14 +45,15 @@ internal sealed class FakeLaunchEnvironment : ITrayLaunchEnvironment
 
     public bool MutexExists(string name) => Mutexes.Contains(name);
 
-    public IReadOnlyList<byte[]?> StartupApprovedValues() => [UserApproved, MachineApproved];
+    public byte[]? StartupApprovedValue(bool perMachine) => perMachine ? MachineApproved : UserApproved;
 
     public bool FileExists(string path) => Files.Contains(path);
 
-    public void Start(string path, string arguments)
+    public string Start(string path, string arguments)
     {
         if (StartThrows is not null) throw StartThrows;
         Started.Add((path, arguments));
+        return "scripted";
     }
 }
 
@@ -93,22 +99,37 @@ public class TrayLaunchDecisionTests
     }
 
     [Fact]
-    public void Task_Managers_Startup_toggle_off_in_either_hive_means_no_start()
+    public void Task_Managers_Startup_toggle_off_for_the_found_install_means_no_start()
     {
         var env = Installed();
-        env.UserApproved = Disabled;
+        env.UserApproved = Disabled; // RST.msi's HKCU Run value
         var result = TrayLauncher.EnsureRunning(env);
         Assert.Equal(TrayLaunchOutcome.StartupDisabled, result.Outcome);
         Assert.Contains("Task Manager", result.Message);
         Assert.Empty(env.Started);
 
         env.UserApproved = Enabled;
-        env.MachineApproved = Disabled; // RST-Machine.msi's HKLM Run value
-        Assert.Equal(TrayLaunchOutcome.StartupDisabled, TrayLauncher.EnsureRunning(env).Outcome);
-        Assert.Empty(env.Started);
-
-        env.MachineApproved = Enabled;
         Assert.Equal(TrayLaunchOutcome.Started, TrayLauncher.EnsureRunning(env).Outcome);
+
+        var machine = Installed(perUser: false, perMachine: true);
+        machine.MachineApproved = Disabled; // RST-Machine.msi's HKLM Run value
+        Assert.Equal(TrayLaunchOutcome.StartupDisabled, TrayLauncher.EnsureRunning(machine).Outcome);
+        Assert.Empty(machine.Started);
+    }
+
+    [Fact]
+    public void Only_the_found_installs_hive_counts_so_a_leftover_toggle_does_not_block_the_other_install()
+    {
+        // Review N3: a per-user install the user disabled leaves HKCU's value behind after its uninstall; the shared
+        // tray RST-Machine.msi installed later has its own HKLM entry, enabled.
+        var machine = Installed(perUser: false, perMachine: true);
+        machine.UserApproved = Disabled;
+        Assert.Equal(TrayLaunchOutcome.Started, TrayLauncher.EnsureRunning(machine).Outcome);
+        Assert.Equal(machine.CandidatePaths[1], machine.Started.Single().Path);
+
+        var user = Installed();
+        user.MachineApproved = Disabled;
+        Assert.Equal(TrayLaunchOutcome.Started, TrayLauncher.EnsureRunning(user).Outcome);
     }
 
     [Fact]
@@ -176,6 +197,13 @@ public class TrayLaunchDecisionTests
     [InlineData(new byte[] { 0x07, 0, 0, 0 }, true)]
     public void StartupApproved_is_off_when_the_first_byte_is_odd(byte[]? value, bool disabled) =>
         Assert.Equal(disabled, StartupApproved.IsDisabled(value));
+
+    [Fact]
+    public void The_start_says_how_it_was_started()
+    {
+        var env = Installed();
+        Assert.EndsWith("--startup (scripted)", TrayLauncher.EnsureRunning(env).Message);
+    }
 }
 
 public class TrayLaunchWindowsTests
@@ -197,14 +225,16 @@ public class TrayLaunchWindowsTests
     {
         var scratch = "RST.Test." + Guid.NewGuid().ToString("N");
         var env = new MachineTrayLaunchEnvironment(runValueName: scratch);
-        Assert.False(StartupApproved.AnyDisabled(env.StartupApprovedValues()));
+        Assert.Null(env.StartupApprovedValue(perMachine: false));
+        Assert.Null(env.StartupApprovedValue(perMachine: true));
         using var key = Registry.CurrentUser.CreateSubKey(StartupApproved.RunKey);
         try
         {
             key.SetValue(scratch, new byte[] { 0x03, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8 }, RegistryValueKind.Binary);
-            Assert.True(StartupApproved.AnyDisabled(env.StartupApprovedValues()));
+            Assert.True(StartupApproved.IsDisabled(env.StartupApprovedValue(perMachine: false)));
+            Assert.Null(env.StartupApprovedValue(perMachine: true)); // HKCU's value is not HKLM's
             key.SetValue(scratch, new byte[] { 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary);
-            Assert.False(StartupApproved.AnyDisabled(env.StartupApprovedValues()));
+            Assert.False(StartupApproved.IsDisabled(env.StartupApprovedValue(perMachine: false)));
         }
         finally
         {
@@ -220,29 +250,35 @@ public class TrayLaunchWindowsTests
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         Assert.Equal(new[]
         {
-            Path.Combine(local, "Programs", "RST", "Tray", "RST.Tray.exe"),
-            Path.Combine(programFiles, "RST", "Tray", "RST.Tray.exe"),
+            new TrayCandidate(Path.Combine(local, "Programs", "RST", "Tray", "RST.Tray.exe"), PerMachine: false),
+            new TrayCandidate(Path.Combine(programFiles, "RST", "Tray", "RST.Tray.exe"), PerMachine: true),
         }, paths);
-        Assert.Equal(paths, new MachineTrayLaunchEnvironment().CandidatePaths);
+        Assert.Equal(paths, new MachineTrayLaunchEnvironment().Candidates);
+        Assert.Equal(Path.Combine(programFiles, "RST", "Tray"), TrayLauncher.PerMachineInstallDir);
     }
 
     [Fact]
     public void With_no_tray_at_the_paths_nothing_starts_and_nothing_throws()
     {
         var nowhere = Path.Combine(Path.GetTempPath(), "rst-no-tray-" + Guid.NewGuid().ToString("N"), "RST.Tray.exe");
-        var env = new MachineTrayLaunchEnvironment([nowhere], runValueName: "RST.Test." + Guid.NewGuid().ToString("N"));
+        var env = new MachineTrayLaunchEnvironment([new TrayCandidate(nowhere, PerMachine: false)], runValueName: "RST.Test." + Guid.NewGuid().ToString("N"));
 
         var running = env.MutexExists(TrayPaths.MutexName(env.UserSid));
 
         var result = TrayLauncher.EnsureRunning(env);
 
-        // An elevated CI runner stops at the elevation rule; an unelevated seat at the missing path (a seat with a
-        // real tray running stops at its mutex).
-        var expected = running ? TrayLaunchOutcome.AlreadyRunning
-            : env.IsElevated ? TrayLaunchOutcome.Elevated
-            : TrayLaunchOutcome.NotInstalled;
-        Assert.Equal(expected, result.Outcome);
-        Assert.Equal(Environment.IsPrivilegedProcess, env.IsElevated);
+        // The path is looked for before anything else is read (a seat with a real tray running stops at its mutex).
+        Assert.Equal(running ? TrayLaunchOutcome.AlreadyRunning : TrayLaunchOutcome.NotInstalled, result.Outcome);
+    }
+
+    [Fact]
+    public void Elevated_means_a_full_token_under_UAC()
+    {
+        // TOKEN_ELEVATION_TYPE: 1 Default (UAC off, or a standard user), 2 Full (run as administrator), 3 Limited.
+        var type = MachineTrayLaunchEnvironment.ElevationType();
+        Assert.InRange(type, 1, 3);
+        Assert.Equal(type == 2, new MachineTrayLaunchEnvironment().IsElevated);
+        if (type == 2) Assert.True(Environment.IsPrivilegedProcess);
     }
 
     [Fact]
@@ -252,8 +288,9 @@ public class TrayLaunchWindowsTests
         var env = new MachineTrayLaunchEnvironment();
         var sw = Stopwatch.StartNew();
 
-        env.Start(cmd, "/c ping -n 6 127.0.0.1 >nul");
+        var route = env.Start(cmd, "/c ping -n 6 127.0.0.1 >nul");
 
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(3), $"Start waited {sw.Elapsed.TotalSeconds:0.0} s");
+        Assert.False(string.IsNullOrEmpty(route));
     }
 }

@@ -40,6 +40,7 @@ public sealed class RstApplication : IExternalApplication
     private EventHandler<ApplicationInitializedEventArgs>? _initializedHandler;
     private UIControlledApplication? _uiControlledApp;
     private bool _reassertQueued;
+    private bool _readyQueued;
     private static ProfileSwitchScheduler? _switchScheduler;
     private static TelemetryCollector? _telemetry;
 
@@ -135,12 +136,17 @@ public sealed class RstApplication : IExternalApplication
             _initializedHandler = null;
         }
 
-        // Spec #20 §2 (AC2): how long Revit took to get here, so a VM run can compare startup with and without
-        // the tray launch in this log; then the launch itself, off Revit's UI thread and never waited for.
-        LogStartupTime();
+        // Spec #20 §2 (AC2): how long Revit took to get here; then the tray launch, off Revit's UI thread and never
+        // waited for; then, at Revit's first Idling, how long Revit took to be ready. That last line is AC2's
+        // measure: it comes after the launch has started, so the launch's cost on Revit's start shows in it
+        // (review B1).
+        LogStartupTime("ApplicationInitialized");
         StartTrayInBackground();
+        QueueReadyTime();
 
+        var tab = System.Diagnostics.Stopwatch.StartNew();
         BuildProfileTab(sender);
+        Log.Information("ApplicationInitialized: profile tab step took {Ms} ms", tab.ElapsedMilliseconds);
 
         // One-time consent notice (telemetry spec Consent & Config) —
         // after the profile tab is up, so the modal never sits between
@@ -149,22 +155,52 @@ public sealed class RstApplication : IExternalApplication
         ConsentNotice.ShowIfDue(_telemetry, m => Log.Warning("Telemetry: {Message}", m));
     }
 
-    /// <summary>
-    /// One line: the time from Revit.exe's start to ApplicationInitialized. Revit's startup is this number; the tray
-    /// launch must not move it by more than a second (spec #20 §2, AC2).
-    /// </summary>
-    private static void LogStartupTime()
+    /// <summary>One line: the time from Revit.exe's start to <paramref name="point"/>.</summary>
+    private static void LogStartupTime(string point)
     {
         try
         {
             using var revit = System.Diagnostics.Process.GetCurrentProcess();
             var elapsed = DateTime.Now - revit.StartTime;
-            Log.Information("Revit startup: ApplicationInitialized {Ms} ms after Revit.exe started", (long)elapsed.TotalMilliseconds);
+            if (point == "ApplicationInitialized")
+                Log.Information("Revit startup: ApplicationInitialized {Ms} ms after Revit.exe started", (long)elapsed.TotalMilliseconds);
+            else
+                Log.Information("Revit ready: first Idling {Ms} ms after Revit.exe started (after the tray launch was queued)", (long)elapsed.TotalMilliseconds);
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "Revit startup time not readable (non-fatal)");
         }
+    }
+
+    /// <summary>
+    /// One-shot: at Revit's first Idling after ApplicationInitialized (the ribbon built, the start page up), log
+    /// "Revit ready". Spec #20 AC2 compares this time with and without the tray launch (review B1).
+    /// </summary>
+    private void QueueReadyTime()
+    {
+        if (_uiControlledApp is null) return;
+        try
+        {
+            _uiControlledApp.Idling += OnFirstIdling;
+            _readyQueued = true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Revit ready time not queued (non-fatal)");
+        }
+    }
+
+    private void OnFirstIdling(object? sender, Autodesk.Revit.UI.Events.IdlingEventArgs e)
+    {
+        if (!_readyQueued) return;
+        _readyQueued = false;
+        if (_uiControlledApp is not null)
+        {
+            try { _uiControlledApp.Idling -= OnFirstIdling; }
+            catch (Exception ex) { Log.Debug(ex, "Idling unsubscribe failed (non-fatal)"); }
+        }
+        LogStartupTime("first Idling");
     }
 
     /// <summary>
@@ -326,6 +362,12 @@ public sealed class RstApplication : IExternalApplication
             {
                 try { _uiControlledApp.Idling -= OnIdlingReassert; }
                 catch { /* fine */ }
+            }
+            if (_readyQueued)
+            {
+                try { _uiControlledApp.Idling -= OnFirstIdling; }
+                catch { /* fine */ }
+                _readyQueued = false;
             }
             _uiControlledApp = null;
         }
