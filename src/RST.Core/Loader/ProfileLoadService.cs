@@ -5,8 +5,8 @@
 //
 // The load runs in three steps so a window can keep the add-in renames off the UI thread
 // (spec #16, Planner default 8): Begin (UI thread: files), RunAddinPasses (any thread: the
-// .addin renames), Finish (UI thread: the Revit scheduler). Load runs all three in a row, as the
-// bridge does.
+// .addin renames), Finish (UI thread: the Revit scheduler). Load runs all three in a row, as
+// v2.2.0's bridge did.
 
 using RST.Core.AddIns;
 using RST.Core.Configuration;

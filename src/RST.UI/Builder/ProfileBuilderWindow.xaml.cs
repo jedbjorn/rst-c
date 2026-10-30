@@ -2,8 +2,9 @@
 // src/SplashIt.UI/Settings/SettingsWindow.xaml.cs (splash-it commit ba86a71, MIT, same owner).
 // The Profile Builder window (spec #16, WU4). All behavior is in ProfileBuilderViewModel; the
 // code here is view plumbing: the title-bar ✕ asks the view-model first (Planner default 3), the
-// Branding popover commits its URL box when it closes and closes on Escape (Branding ▾ is a
-// ToggleButton bound to the popup, so the dismissing click cannot reopen it), the URL editor's
+// Branding popover takes keyboard focus when it opens, commits its URL box when it closes and
+// closes on Escape (Branding ▾ is a ToggleButton bound to the popup, so the dismissing click cannot
+// reopen it), the URL editor's
 // label box takes focus when the editor opens, and drag and drop
 // (WU5): DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel
 // headers and the slot rows; the cards and rows report the cursor's half to the view-model, which
@@ -59,6 +60,12 @@ public partial class ProfileBuilderWindow : Window
         if (!Model.CanClose()) e.Cancel = true;
         base.OnClosing(e);
     }
+
+    // Opening moves keyboard focus into the popover (its first control, Pick…), so Escape closes it
+    // straight away after a mouse click on Branding ▾ (VM finding, WU5 re-run c89b3d78). The popup's
+    // content is laid out once it has opened, hence the Input-priority post.
+    private void OnBrandingOpened(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PickLogoButton.Focus());
 
     // Escape inside the popover closes it and puts the focus back on Branding ▾.
     private void OnBrandingPopoverKey(object sender, KeyEventArgs e)

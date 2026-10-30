@@ -1,6 +1,6 @@
 <!--
     rst-c's own (not vendored). The Health window (spec #16, WU2), native WPF on the family theme,
-    replacing the WebView2 page health_viewer.html one for one: the header (title, Health / Activity
+    replacing v2.2.0's HTML page health_viewer.html one for one: the header (title, Health / Activity
     tabs, Device and Captured), the Health tab's four collapsible sections, the Activity tab's stat
     cards, range pills and charts, the per-tab footer, the Junk modal, the Cleaning overlay and the
     toast. The view-model is HealthViewModel.

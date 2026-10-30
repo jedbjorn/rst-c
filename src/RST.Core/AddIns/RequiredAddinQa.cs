@@ -21,8 +21,8 @@
 //   3. fuzzy fallback — live ribbon tab title that contains the
 //      requirement's tab name (or vice-versa), or a manifest
 //      displayName / file-stem that does the same. Mirrors the
-//      JS-side isAddinLoaded heuristic in profile_loader.html so
-//      the picker's "Loaded" badge and the QA modal agree about
+//      Loader's isAddinLoaded heuristic (RST.Core.Loader.RequiredAddinRules)
+//      so the picker's "Loaded" badge and the QA modal agree about
 //      whether an addin counts as installed.
 //
 // Without tier 3 the QA over-reports Missing whenever the actual
@@ -175,8 +175,8 @@ public static class RequiredAddinQa
             }
         }
         // Tier 3 — fuzzy substring match against manifest displayName /
-        // file-stem and entry Name. Mirrors the JS-side isAddinLoaded
-        // heuristic in profile_loader.html so the picker's Loaded badge
+        // file-stem and entry Name. Mirrors the Loader's isAddinLoaded
+        // heuristic (RST.Core.Loader.RequiredAddinRules) so the picker's Loaded badge
         // and the QA modal agree. Triggered when the registry's
         // "addinFile" hint doesn't match the user's actual filename
         // (e.g. registry "Lumion.addin" vs installed "LumionLiveSync.addin").

@@ -15,8 +15,8 @@
 //     back to .addin. No-op if none found.
 //
 // Disable preview is computed by DisablePreview.cs (separate type so
-// the bridge can render the UI confirm modal without committing to
-// any rename).
+// the Loader can show its Confirm Add-in Changes dialog without
+// committing to any rename).
 //
 // Naming convention is shared with upstream pyRevit RST so .addin
 // files disabled by the Python version remain restorable here, and

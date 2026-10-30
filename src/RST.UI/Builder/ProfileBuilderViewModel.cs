@@ -103,7 +103,6 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
         Toast = new TransientMessage(schedule);
 
-        ToggleBrandingCommand = new RelayCommand(() => IsBrandingOpen = !IsBrandingOpen);
         CloseBrandingCommand = new RelayCommand(() => IsBrandingOpen = false);
         PickLogoCommand = new RelayCommand(PickLogo, () => IsIdle);
         ClearLogoCommand = new RelayCommand(ClearLogo, () => IsIdle);
@@ -365,8 +364,6 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             SetBrandingUrl(value ?? "");
         }
     }
-
-    public ICommand ToggleBrandingCommand { get; }
 
     public ICommand CloseBrandingCommand { get; }
 

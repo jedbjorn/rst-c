@@ -1,7 +1,7 @@
 ---
 title: Custom URL Slots
 tags: [rst-c, url, links, profile]
-date: 2026-06-24
+date: 2026-10-30
 project: rst-c
 purpose: Guide to adding URL, email, and file-path buttons to a profile
 ---
@@ -14,7 +14,11 @@ purpose: Guide to adding URL, email, and file-path buttons to a profile
 
 A profile button does not have to wrap a Revit command. It can point at a URL, a `mailto:` address, or a local file path. This lets admins fold company resources — the BIM standards wiki, the SharePoint library, the helpdesk inbox — into the same ribbon people already use, without asking anyone to remember a separate set of bookmarks.
 
-https://github.com/user-attachments/assets/3e216ab3-2597-400e-9010-cbb45df10b89
+## Adding a link button
+
+In the [Profile Builder](profile-builder.md), select the panel, then click **+ URL Button** under **Selected Panel**. Type a **Button label** (the text on the ribbon button) and the **URL**, then click **Add**; both are required. The link button is added to the end of the panel as a tool row whose id reads `URL:<link>`. Like any tool, you can rename it, give it an icon, and drag it to another place or panel.
+
+On the ribbon the button's tooltip reads "Open: <link>".
 
 ## Supported link types
 
@@ -35,7 +39,7 @@ rst-c hands the resolved link to Windows via `ShellExecute` (the same mechanism 
 
 ### Normalisation rules
 
-The Builder lets admins type links in natural form. rst-c applies these rules before storing and before opening:
+The Builder lets admins type links in natural form. rst-c applies these rules when the button is added, and again when it is clicked:
 
 ```mermaid
 graph TD
@@ -51,10 +55,10 @@ Known schemes that pass through unchanged: `http://`, `https://`, `mailto:`, `ft
 A bare email like `support@example.com` becomes `mailto:support@example.com`. A bare hostname like `bimstandards.example.com` becomes `https://bimstandards.example.com`. Anything else with no recognised scheme also gets `https://` prepended.
 
 > [!class2]
-> Normalisation is deliberate and simple — rst-c does not validate that the resulting URL resolves or that the target exists. The link is stored as typed and normalised at open time.
+> Normalisation is deliberate and simple: rst-c does not check that the resulting URL resolves or that the target exists. The profile stores the normalised link.
 
 ## Notes & limits
 
 - URL slots use the same button shape as command slots — they get a name, an icon, and a panel assignment in the Builder like any other tool.
-- There is no live preview of URL slots in the Builder; the link is tested by applying the profile and clicking the button.
+- The Builder does not open links. The Live Preview shows the button; to test the link, load the profile and click the button on the ribbon.
 - File paths in `file://` format must be absolute. Relative paths are not supported. UNC network paths (`\\server\share\…`) are not supported.

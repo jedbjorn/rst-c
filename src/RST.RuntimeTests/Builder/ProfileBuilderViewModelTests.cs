@@ -184,13 +184,9 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void The_popover_toggles_and_Done_closes_it()
+    public void Done_closes_the_popover()
     {
         var h = BuilderHarness.Create();
-        h.Model.ToggleBrandingCommand.Execute(null);
-        h.Model.IsBrandingOpen.Should().BeTrue();
-        h.Model.ToggleBrandingCommand.Execute(null);
-        h.Model.IsBrandingOpen.Should().BeFalse();
         h.Model.IsBrandingOpen = true;
         h.Model.CloseBrandingCommand.Execute(null);
         h.Model.IsBrandingOpen.Should().BeFalse();

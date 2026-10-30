@@ -30,7 +30,7 @@ public sealed class AddinLookupService
         _log = log ?? NullLoaderLog.Instance;
     }
 
-    /// <summary>The file's text unchanged (the bridge passes it through), or <c>{}</c> when missing or unreadable.</summary>
+    /// <summary>The file's text unchanged (as v2.2.0's bridge passed it through), or <c>{}</c> when missing or unreadable.</summary>
     public string ReadRawJson()
     {
         try

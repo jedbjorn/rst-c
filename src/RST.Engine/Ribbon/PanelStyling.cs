@@ -179,7 +179,7 @@ internal static class PanelStyling
             bmp.BeginInit();
             bmp.UriSource = new Uri(Path.GetFullPath(logoAbsolutePath), UriKind.Absolute);
             bmp.CacheOption = BitmapCacheOption.OnLoad;
-            // The branding logo is user-mutable — Bridge.PickLogoFile rewrites
+            // The branding logo is user-mutable — BrandingLogo.Store (the Builder) rewrites
             // the same %AppData%\RST\branding.png on every pick. WPF caches
             // BitmapImage by URI process-wide; without IgnoreImageCache the
             // cached old bitmap survives every profile rebuild for the rest
