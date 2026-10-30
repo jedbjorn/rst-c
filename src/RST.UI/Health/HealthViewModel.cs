@@ -484,7 +484,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
             LocalMidnightMs(p.Date), p.Hours,
             UiStrings.Health_ChartPoint(p.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), HealthFormat.HoursShort(p.Hours)))).ToList();
         if (perDay.Any(p => p.Y > 0))
-            SessionChart.Set(ActivityChartLayout.Build(perDay, v => HealthFormat.HoursShort(v), TickLabel));
+            SessionChart.Set(ActivityChartLayout.Build(perDay, HealthFormat.HoursAxis, TickLabel));
         else
             SessionChart.Set(null, UiStrings.Health_NoTimeTitle, file.MatchedKeys is null ? UiStrings.Health_NoKeyHint : "");
 
@@ -508,10 +508,10 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
                 card.Set(null, emptyTitle);
                 break;
             case ChartMode.Dots:
-                card.Set(ActivityChartLayout.Build(points, v => HealthFormat.Dur(v), TickLabel), "", UiStrings.Health_NotEnoughHistory);
+                card.Set(ActivityChartLayout.Build(points, HealthFormat.DurAxis, TickLabel), "", UiStrings.Health_NotEnoughHistory);
                 break;
             default:
-                card.Set(ActivityChartLayout.Build(points, v => HealthFormat.Dur(v), TickLabel));
+                card.Set(ActivityChartLayout.Build(points, HealthFormat.DurAxis, TickLabel));
                 break;
         }
     }

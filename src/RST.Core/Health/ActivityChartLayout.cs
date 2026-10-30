@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the Activity chart geometry, ported from buildChartSvg of the
 // retired src/RST.UI/Assets/health_viewer.html (spec #16, WU2). The same 760 x 190 box and
-// paddings, four gridlines with y labels, up to five date ticks, the monotone curve and one
+// paddings, four gridlines with y labels (kept distinct for small values: a defect fix over the HTML), up to five date ticks, the monotone curve and one
 // dot (with its hover label) per point. The WPF ActivityChart control draws this layout.
 
 namespace RST.Core.Health;
@@ -43,11 +43,20 @@ public sealed record ActivityChartLayout(
     /// <summary>
     /// Lays out <paramref name="points"/> (ascending x). The y axis runs from 0 to 1.12 × the
     /// largest value (1.12 when every value is 0 or less); one x collapses to the centre. Up to
-    /// five ticks, spread evenly over the points. <paramref name="yFormat"/> labels the
-    /// gridlines, <paramref name="xFormat"/> the ticks.
+    /// five ticks, spread evenly over the points. <paramref name="yFormat"/> labels each gridline
+    /// on its own, <paramref name="xFormat"/> the ticks.
     /// </summary>
     public static ActivityChartLayout Build(
-        IReadOnlyList<ActivityChartPoint> points, Func<double, string> yFormat, Func<double, string> xFormat)
+        IReadOnlyList<ActivityChartPoint> points, Func<double, string> yFormat, Func<double, string> xFormat) =>
+        Build(points, values => values.Select(yFormat).ToList(), xFormat);
+
+    /// <summary>
+    /// As <see cref="Build(IReadOnlyList{ActivityChartPoint}, Func{double, string}, Func{double, string})"/>, with
+    /// <paramref name="yAxis"/> labelling the four gridline values (top to bottom) together, so it can pick
+    /// a precision that keeps them distinct (<see cref="HealthFormat.HoursAxis"/>, <see cref="HealthFormat.DurAxis"/>).
+    /// </summary>
+    public static ActivityChartLayout Build(
+        IReadOnlyList<ActivityChartPoint> points, Func<IReadOnlyList<double>, IReadOnlyList<string>> yAxis, Func<double, string> xFormat)
     {
         var mode = ActivityChartMath.Mode(points.Count);
         if (mode == ChartMode.Empty) return new ActivityChartLayout(mode, [], [], [], null);
@@ -60,13 +69,12 @@ public sealed record ActivityChartLayout(
         double Sx(double x) => xMax == xMin ? PadLeft + InnerWidth / 2 : PadLeft + (x - xMin) / (xMax - xMin) * InnerWidth;
         double Sy(double y) => PadTop + InnerHeight - y / yMax * InnerHeight;
 
+        var gridValues = Enumerable.Range(0, GridLineCount)
+            .Select(g => yMax * (1 - (double)g / (GridLineCount - 1))).ToList();
+        var gridLabels = yAxis(gridValues);
         var grid = new List<ChartGridLine>(GridLineCount);
         for (var g = 0; g < GridLineCount; g++)
-        {
-            var gy = PadTop + InnerHeight * g / (GridLineCount - 1);
-            var gv = yMax * (1 - (double)g / (GridLineCount - 1));
-            grid.Add(new ChartGridLine(gy, yFormat(gv)));
-        }
+            grid.Add(new ChartGridLine(PadTop + InnerHeight * g / (GridLineCount - 1), gridLabels[g]));
 
         var tickCount = Math.Min(points.Count, MaxTicks);
         var ticks = new List<ChartTick>(tickCount);

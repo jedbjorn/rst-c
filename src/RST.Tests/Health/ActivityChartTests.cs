@@ -251,6 +251,62 @@ public class ActivityChartTests
         Assert.Equal(164, layout.Dots[0].Y, 6);
     }
 
+    /// <summary>Gridline labels for a chart whose largest value is <paramref name="top"/>.</summary>
+    private static string[] HourLabels(double top) =>
+        ActivityChartLayout.Build([new(0, top, ""), new(1, 0, "")], HealthFormat.HoursAxis, x => "")
+            .GridLines.Select(g => g.Label).ToArray();
+
+    private static string[] DurLabels(double top) =>
+        ActivityChartLayout.Build([new(0, top, ""), new(1, 0, "")], HealthFormat.DurAxis, x => "")
+            .GridLines.Select(g => g.Label).ToArray();
+
+    [Theory]
+    // Large enough: fmtHoursShort as the HTML drew it.
+    [InlineData(7.2, "8.1h", "5.4h", "2.7h", "0h")]
+    [InlineData(0.5, "0.6h", "0.4h", "0.2h", "0h")]
+    // The VM's "0.1h, 0.1h, 0h, 0h": whole minutes instead.
+    [InlineData(0.1, "7m", "4m", "2m", "0m")]
+    // The VM's "0h" four times (a few minutes, so minutes collide too): whole seconds.
+    [InlineData(0.01, "40s", "27s", "13s", "0s")]
+    [InlineData(0.001, "4s", "3s", "1s", "0s")]
+    // Under a second in total: tenths.
+    [InlineData(0.0001, "0.4s", "0.3s", "0.1s", "0.0s")]
+    public void HoursAxis_LabelsStayDistinct_ForSmallValues(double top, string a, string b, string c, string d) =>
+        Assert.Equal(new[] { a, b, c, d }, HourLabels(top));
+
+    [Theory]
+    [InlineData(64, "72s", "48s", "24s", "0.0s")]
+    [InlineData(5400, "1h 40m", "67m 12s", "33m 36s", "0.0s")]
+    [InlineData(0.04, "0.04s", "0.03s", "0.01s", "0.00s")]
+    [InlineData(0.004, "0.004s", "0.003s", "0.001s", "0.000s")]
+    public void DurAxis_LabelsStayDistinct_ForSmallValues(double top, string a, string b, string c, string d) =>
+        Assert.Equal(new[] { a, b, c, d }, DurLabels(top));
+
+    [Theory]
+    [InlineData(0.15)]
+    [InlineData(0.07)]
+    [InlineData(0.02)]
+    [InlineData(0.003)]
+    [InlineData(1e-6)]
+    [InlineData(12.0)]
+    [InlineData(100.0)]
+    public void AxisLabels_AreAlwaysDistinct(double top)
+    {
+        Assert.Equal(4, HourLabels(top).Distinct().Count());
+        Assert.Equal(4, DurLabels(top).Distinct().Count());
+    }
+
+    [Fact]
+    public void AxisLabels_DoNotChangeTheCurve()
+    {
+        List<ActivityChartPoint> points = [new(0, 0.02, ""), new(1, 0.1, ""), new(2, 0.05, "")];
+        var perValue = ActivityChartLayout.Build(points, v => HealthFormat.HoursShort(v), x => "");
+        var distinct = ActivityChartLayout.Build(points, HealthFormat.HoursAxis, x => "");
+        Assert.Equal(perValue.Curve!.Segments, distinct.Curve!.Segments);
+        Assert.Equal(perValue.Dots, distinct.Dots);
+        Assert.Equal(perValue.GridLines.Select(g => g.Y), distinct.GridLines.Select(g => g.Y));
+    }
+
     [Fact]
     public void Layout_SevenPoints_TickIndicesRoundHalvesUp()
     {

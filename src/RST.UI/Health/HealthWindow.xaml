@@ -14,7 +14,7 @@
         xmlns:core="clr-namespace:RST.Core.Health;assembly=RST.Core"
         Title="{x:Static res:UiStrings.Health_WindowTitle}"
         Width="900" Height="800" MinWidth="640" MinHeight="420"
-        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize" ShowInTaskbar="False"
         FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}">

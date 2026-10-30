@@ -378,4 +378,55 @@ public class HealthWindowScreenshotTests
             window.Close();
         }
     });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void ActivityTab_SmallValues_DistinctAxisLabels(UiTheme theme) => Sta(() =>
+    {
+        // VM AC9 finding: small values read "0.1h, 0.1h, 0h, 0h" on the HTML's axis; each label is now distinct.
+        RstTheme.Apply(theme);
+        var vm = ViewModel(new FakeHealthService
+        {
+            Snapshot = HealthSamples.Snapshot(),
+            Activity = _ => HealthSamples.SmallActivity(Now),
+        });
+        vm.Load();
+        vm.SelectedTab = HealthViewModel.ActivityTab;
+        var window = new HealthWindow(vm);
+        try
+        {
+            Capture(window, theme, "activity-small");
+            var charts = WindowCapture.Descendants<ActivityChart>(window).ToList();
+            Assert.Equal(3, charts.Count);
+            foreach (var chart in charts)
+            {
+                var labels = chart.Layout!.GridLines.Select(g => g.Label).ToList();
+                Assert.Equal(4, labels.Distinct().Count());
+                Assert.Single(chart.Surface.Children.OfType<Path>());
+            }
+            Assert.Equal(["7m", "4m", "2m", "0m"], charts[0].Layout!.GridLines.Select(g => g.Label));
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public void HealthWindow_HasNoTaskbarEntryOfItsOwn() => Sta(() =>
+    {
+        // VM AC9 finding: the window is owned by Revit and stays off the taskbar, like MessageDialog and ColorPickerDialog.
+        RstTheme.Apply(UiTheme.Light);
+        var window = new HealthWindow(ViewModel(new FakeHealthService()));
+        try
+        {
+            Assert.False(window.ShowInTaskbar);
+            Assert.False(new RST.UI.Dialogs.MessageDialog(
+                new RST.UI.Dialogs.MessageDialogModel("t", "t", "m", []), RST.UI.Dialogs.MessageDialog.MessageId).ShowInTaskbar);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 }

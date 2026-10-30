@@ -201,6 +201,33 @@ public static class HealthSamples
     }
 
     /// <summary>A new, non-workshared model: one open (a single dot), no time recorded, sync not applicable; collection off.</summary>
+    public static ActivityData SmallActivity(DateTimeOffset now)
+    {
+        // The VM's case: a fresh workshared model with a few minutes a day and sub-second syncs.
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
+        double[] hours = [0.02, 0.1, 0, 0.05, 0.08, 0.01, 0.06];
+        double[] opens = [4.2, 6.8, 3.1];
+        double[] syncs = [0.31, 0.12, 0.44, 0.27];
+        return new ActivityData
+        {
+            RangeDays = 7,
+            SessionStartUtc = now.AddMinutes(-9).AddSeconds(-35),
+            CurrentFileOpenUtc = now.AddMinutes(-6).AddSeconds(-58),
+            File = new ActivityFile
+            {
+                MatchedKeys = ActivityMatchKinds.Cloud,
+                IsWorkshared = true,
+                IsCloud = true,
+                WarningsCount = 0,
+                FileSizeMb = 6.5,
+                PerDayOpenHours = hours.Select((h, i) => new DayOpenHoursPoint(today.AddDays(i - 6), h)).ToList(),
+                OpenEvents = opens.Select((s, i) => new DurationPoint(now.AddDays(i - 3), s)).ToList(),
+                SyncEvents = syncs.Select((s, i) => new DurationPoint(now.AddDays(i - 4).AddHours(2), s)).ToList(),
+            },
+            Status = new TelemetryStatus(true, 2, 18_432, now.AddDays(-6)),
+        };
+    }
+
     public static ActivityData SparseActivity(DateTimeOffset now)
     {
         var today = DateOnly.FromDateTime(now.UtcDateTime);

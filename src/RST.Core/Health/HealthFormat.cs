@@ -113,6 +113,43 @@ public static class HealthFormat
                JsNumber(s % 60).PadLeft(2, '0');
     }
 
+    /// <summary>
+    /// The y-axis labels of an hours chart (Session time). <see cref="HoursShort"/> as the HTML drew
+    /// them, unless two gridlines would read the same ("0.1h, 0.1h, 0h, 0h" for small values; the HTML
+    /// had that defect): then whole minutes, then whole seconds, then finer seconds, the first that
+    /// keeps every label distinct.
+    /// </summary>
+    public static IReadOnlyList<string> HoursAxis(IReadOnlyList<double> hours) => DistinctLabels(hours,
+        h => HoursShort(h),
+        h => JsNumber(JsRound(h * 60)) + "m",
+        h => JsNumber(JsRound(h * 3600)) + "s",
+        h => ToFixed(h * 3600, 1) + "s",
+        h => ToFixed(h * 3600, 3) + "s",
+        h => JsNumber(h * 3600) + "s");
+
+    /// <summary>
+    /// The y-axis labels of a duration chart (Opening time, Sync history): <see cref="Dur"/>, unless two
+    /// gridlines would read the same (sub-second values: "0.0s" four times); then seconds with two,
+    /// then three decimals, the first that keeps every label distinct.
+    /// </summary>
+    public static IReadOnlyList<string> DurAxis(IReadOnlyList<double> seconds) => DistinctLabels(seconds,
+        s => Dur(s),
+        s => ToFixed(s, 2) + "s",
+        s => ToFixed(s, 3) + "s",
+        s => JsNumber(s) + "s");
+
+    /// <summary>The labels from the first formatter that gives every distinct value its own label; the last formatter otherwise.</summary>
+    public static IReadOnlyList<string> DistinctLabels(IReadOnlyList<double> values, params Func<double, string>[] ladder)
+    {
+        string[] labels = [];
+        foreach (var format in ladder)
+        {
+            labels = values.Select(format).ToArray();
+            if (labels.Distinct(StringComparer.Ordinal).Count() == values.Distinct().Count()) return labels;
+        }
+        return labels;
+    }
+
     /// <summary>JS <c>Math.round</c>: halves round up (toward +∞).</summary>
     public static double JsRound(double x) => Math.Floor(x + 0.5);
 
