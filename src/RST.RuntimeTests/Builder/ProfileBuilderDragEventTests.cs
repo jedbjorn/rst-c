@@ -263,4 +263,34 @@ public class ProfileBuilderDragEventTests
             Close(window, h);
         }
     });
+
+    [Fact]
+    public void Leaving_the_window_straight_from_a_name_box_clears_the_marker() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var wall = BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!);
+            h.Model.BeginDrag(wall);
+            var box = SlotNameBox(window, 0, 1);
+            DragOver(box, Payload(wall), Lower(box));
+            Assert.Equal(DropMarker.After, h.Model.Panels[0].Slots[1].DropMarker);
+
+            // The pointer leaves the window from the name box: WPF raises DragLeave there (the TextBox handles it).
+            var leave = Args(Payload(wall), box, Lower(box));
+            leave.RoutedEvent = DragDrop.PreviewDragLeaveEvent;
+            box.RaiseEvent(leave);
+            if (!leave.Handled)
+            {
+                leave.RoutedEvent = DragDrop.DragLeaveEvent;
+                box.RaiseEvent(leave);
+            }
+            Assert.All(h.Model.Panels.SelectMany(p => p.Slots), s => Assert.Equal(DropMarker.None, s.DropMarker));
+            Assert.All(h.Model.Panels, p => Assert.Equal(DropMarker.None, p.DropMarker));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
 }

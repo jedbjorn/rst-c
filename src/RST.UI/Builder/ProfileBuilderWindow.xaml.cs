@@ -38,7 +38,14 @@ public partial class ProfileBuilderWindow : Window
             // buildUrlEditor: the label box takes focus when the editor opens.
             if (e.PropertyName == nameof(ProfileBuilderViewModel.IsUrlEditorOpen) && model.IsUrlEditorOpen)
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UrlLabelBox.Focus());
+            // The popover's close time, taken the moment it closes (Popup.Closed comes later, after the
+            // click that closed it has already reached the Branding button). VM D2.
+            if (e.PropertyName == nameof(ProfileBuilderViewModel.IsBrandingOpen) && !model.IsBrandingOpen)
+                _brandingClosedAt = Environment.TickCount64;
         };
+        // A drag that leaves the window straight from a card, a row or a name box (whose own DragLeave
+        // the TextBox handles) still clears its marker.
+        AddHandler(DragDrop.DragLeaveEvent, new DragEventHandler((_, _) => Model.ClearDropMarkers()), handledEventsToo: true);
     }
 
     public ProfileBuilderViewModel Model { get; }
@@ -56,9 +63,10 @@ public partial class ProfileBuilderWindow : Window
         base.OnClosing(e);
     }
 
-    // A click on Branding while the popover is open only closes it (the popup's own outside-click
-    // close would otherwise be followed by the button reopening it).
-    private void OnBrandingButtonDown(object sender, MouseButtonEventArgs e)
+    // A click on Branding while the popover is open only closes it. With StaysOpen=False the popup
+    // closes itself on that mouse-down (an outside click) and WPF then delivers the same press to
+    // the button, which would reopen it: a press within 300 ms of the close is swallowed.
+    internal void OnBrandingButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (Model.IsBrandingOpen)
         {
@@ -76,7 +84,6 @@ public partial class ProfileBuilderWindow : Window
     // The URL is saved on change (blur or Enter); closing the popover is a blur.
     private void OnBrandingClosed(object? sender, EventArgs e)
     {
-        _brandingClosedAt = Environment.TickCount64;
         BrandingUrlBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
     }
 

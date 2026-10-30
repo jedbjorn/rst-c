@@ -233,4 +233,69 @@ public class ProfileBuilderWindowFlowTests
             Cleanup(o);
         }
     });
+
+    // ── the Branding popover (VM finding D2 and the Pick… note, WU5) ──
+
+    /// <summary>A press on the Branding button as WPF delivers it: the preview, then (unless handled) the click.</summary>
+    private static void PressBranding(ProfileBuilderWindow w)
+    {
+        var args = new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+        {
+            RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
+        };
+        w.BrandingButton.RaiseEvent(args);
+        if (!args.Handled) w.BrandingButton.Command.Execute(null);
+        Settle();
+    }
+
+    [Fact]
+    public void Branding_toggles_open_and_closed_even_when_the_popup_closes_itself_first() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            PressBranding(o.Window);
+            Assert.True(o.Window.BrandingPopup.IsOpen, "the first click opens the popover");
+
+            // The real sequence with StaysOpen=False: the popup closes on the press (an outside click),
+            // then WPF hands the same press to the button. It must stay closed.
+            o.Window.BrandingPopup.IsOpen = false;
+            PressBranding(o.Window);
+            Assert.False(o.Window.BrandingPopup.IsOpen, "clicking Branding while it was open closes it");
+            Assert.False(o.Window.Model.IsBrandingOpen);
+
+            // The popup still open when the press arrives (no outside-click close): the press closes it.
+            Thread.Sleep(350);
+            PressBranding(o.Window);
+            Assert.True(o.Window.BrandingPopup.IsOpen, "a later click opens it again");
+            PressBranding(o.Window);
+            Assert.False(o.Window.BrandingPopup.IsOpen);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
+    public void The_popover_reopens_after_the_logo_file_dialog() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            o.Window.Model.IsBrandingOpen = true;
+            Settle();
+            o.Dialogs.OpenResult = @"C:\logo.png";
+            o.Dialogs.DuringOpen = () => o.Window.BrandingPopup.IsOpen = false; // the dialog takes the focus
+            o.Window.Model.PickLogoCommand.Execute(null);
+            Settle();
+            Assert.True(o.Window.BrandingPopup.IsOpen, "the popover is back for the URL");
+            Assert.Equal("branding.png", o.Window.LogoName.Text);
+        }
+        finally
+        {
+            o.Window.Model.IsBrandingOpen = false;
+            Cleanup(o);
+        }
+    });
 }

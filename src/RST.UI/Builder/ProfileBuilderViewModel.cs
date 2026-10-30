@@ -390,6 +390,21 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private void PickLogo()
     {
+        // The file dialog takes the focus and the popover closes behind it; the page's popover stayed
+        // open, so it reopens once the dialog is done (VM finding, WU5).
+        var wasOpen = IsBrandingOpen;
+        try
+        {
+            PickLogoCore();
+        }
+        finally
+        {
+            if (wasOpen) _post(() => IsBrandingOpen = true);
+        }
+    }
+
+    private void PickLogoCore()
+    {
         var path = _dialogs.OpenFile(FileDialogTexts.LogoTitle, FileDialogTexts.ImageFilter);
         if (string.IsNullOrEmpty(path)) return; // cancelled: no toast
         var result = Safe(() => _backend.StoreLogo(path), LogoOutcome.Fail("unknown"), "pick_logo_file");

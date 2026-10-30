@@ -1,9 +1,9 @@
 // rst-c's own (not vendored): what the Profile Builder view-model reads and writes (spec #16,
-// WU4), in place of the Builder's LoaderBridge calls: get_catalog, get_profiles,
+// WU4), replacing the retired LoaderBridge's Builder calls: get_catalog, get_profiles,
 // get_active_profile, get_revit_version, get_addin_lookup, get_all_tabs, save_profile,
 // export_profile, load_profile (the auto-reload), list_iconpack, and the machine-wide branding
 // (load_default_branding, save_default_branding_url, pick_logo_file, clear_default_logo).
-// The real backend composes the same RST.Core services the bridge and the WPF Loader call.
+// The real backend composes the same RST.Core services the WPF Loader calls.
 
 using System.IO;
 using RST.Core.Builder;
