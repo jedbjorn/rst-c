@@ -118,6 +118,7 @@ public sealed class PanelStacksTests : IDisposable
         var q = Make(["A+B"]);
         PanelStacks.JoinStack(q, TileSource.New(Tool("X")), 0, 0).Should().Be(StackResult.Done);
         Shape(q).Should().Be("P0:[A B X]");
+        AssertConsistent(q);
     }
 
     [Fact]
@@ -130,6 +131,7 @@ public sealed class PanelStacksTests : IDisposable
         PanelStacks.JoinStack(p, TileSource.Tile(1, 0, 0), 0, 0).Should().Be(StackResult.Full);
         ProfileEditing.Snapshot(p).Should().Be(before, "a refused drop leaves the source where it was");
         PanelStacks.FullMessage.Should().Be("A stack holds 2–3 tools. This one is full.");
+        AssertConsistent(p);
     }
 
     [Fact]
@@ -141,6 +143,7 @@ public sealed class PanelStacksTests : IDisposable
         PanelStacks.JoinStack(p, TileSource.Tile(0, 0, 2), 0, 0, at: 0).Should().Be(StackResult.Done);
         Shape(p).Should().Be("P0:[A B C]");
         PanelStacks.JoinStack(p, TileSource.Tile(0, 0, 1), 0, 0, at: 1).Should().Be(StackResult.Unchanged);
+        AssertConsistent(p);
     }
 
     [Fact]
@@ -150,6 +153,7 @@ public sealed class PanelStacksTests : IDisposable
         PanelStacks.JoinStack(p, TileSource.Tile(0, 1), 0, 0).Should().Be(StackResult.Refused);
         PanelStacks.JoinStack(p, TileSource.New(Tool("X")), 0, 2).Should().Be(StackResult.Refused);
         Shape(p).Should().Be("P0:[A B],[C D],E");
+        AssertConsistent(p);
     }
 
     [Fact]
@@ -212,6 +216,7 @@ public sealed class PanelStacksTests : IDisposable
         var p = Make(["A+B", "C"]);
         PanelStacks.InsertBeside(p, TileSource.New(Tool("X")), 0, 0, after: false).Should().Be(StackResult.Done);
         Shape(p).Should().Be("P0:X,[A B],C");
+        AssertConsistent(p);
     }
 
     // ── New Stack, Edit Stack, un-stack, remove a row ──
@@ -228,6 +233,7 @@ public sealed class PanelStacksTests : IDisposable
         var q = Make(["A", "B", "C"]);
         PanelStacks.NewStack(q, 0, [1, 2, 0]).Should().Be(StackResult.Done);
         Shape(q).Should().Be("P0:[B C A]");
+        AssertConsistent(q);
     }
 
     [Fact]
@@ -241,6 +247,7 @@ public sealed class PanelStacksTests : IDisposable
         PanelStacks.NewStack(p, 0, [0, 1]).Should().Be(StackResult.Refused, "a stack is not a loose tool");
         PanelStacks.NewStack(p, 0, [0, 9]).Should().Be(StackResult.Refused);
         ProfileEditing.Snapshot(p).Should().Be(before);
+        AssertConsistent(p);
     }
 
     [Fact]
@@ -271,6 +278,7 @@ public sealed class PanelStacksTests : IDisposable
         PanelStacks.EditStack(p, 0, 0, [StackPick.Row(1)]).Should().Be(StackResult.Done);
         Shape(p).Should().Be("P0:A,B,C,D", "fewer than 2 removes the stack; its tools stay, in order");
         p.Stacks.Should().BeEmpty();
+        AssertConsistent(p);
     }
 
     [Fact]
@@ -281,6 +289,7 @@ public sealed class PanelStacksTests : IDisposable
         Shape(p).Should().Be("P0:X,A,B,C,Y");
         p.Stacks.Should().BeEmpty();
         PanelStacks.Unstack(p, 0, 0).Should().Be(StackResult.Refused);
+        AssertConsistent(p);
     }
 
     [Fact]
@@ -289,9 +298,11 @@ public sealed class PanelStacksTests : IDisposable
         var p = Make(["A+B+C", "X"]);
         PanelStacks.RemoveRow(p, 0, 0, 1).Should().Be(StackResult.Done);
         Shape(p).Should().Be("P0:[A C],X");
+        AssertConsistent(p);
         PanelStacks.RemoveRow(p, 0, 0, 0).Should().Be(StackResult.Done);
         Shape(p).Should().Be("P0:C,X");
         p.Stacks.Should().BeEmpty();
+        AssertConsistent(p);
     }
 
     // ── names ──
@@ -305,8 +316,10 @@ public sealed class PanelStacksTests : IDisposable
         PanelStacks.NewStack(p, 0, [0, 1]);
         PanelStacks.NewStack(p, 0, [1, 2]);
         p.Stacks.Keys.Should().Equal("stack 2", "Stack 1", "Stack 3");
+        AssertConsistent(p);
         PanelStacks.Unstack(p, 0, 0);
         PanelStacks.NextStackName(p).Should().Be("Stack 1", "a freed name is reused");
+        AssertConsistent(p);
     }
 
     // ── normaliser ──

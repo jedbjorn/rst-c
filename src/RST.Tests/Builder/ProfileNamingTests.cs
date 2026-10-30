@@ -64,6 +64,22 @@ public sealed class ProfileNamingTests : IDisposable
     }
 
     [Fact]
+    public void A_rename_of_a_profile_stored_under_a_legacy_name_leaves_one_file_with_the_same_id()
+    {
+        Directory.CreateDirectory(ProfilesDir);
+        using (var fs = File.Create(Path.Combine(ProfilesDir, "Arch_2024-05-01.json")))
+            ProfileSerializer.Write(Named("Arch", "id-arch"), fs);
+
+        var working = ProfileEditing.ForEditing(Library().Single());
+        ProfileNaming.Rename(working, "Architecture", Library()).Should().Be(NameCheck.Ok);
+        var saved = new ProfileSaveService(ProfilesDir).Save(working);
+
+        saved.Ok.Should().BeTrue();
+        Files().Should().Equal("Architecture_id-arch.json");
+        Library().Single().Id.Should().Be("id-arch");
+    }
+
+    [Fact]
     public void A_rename_must_be_given_and_unique_among_the_others_case_insensitively()
     {
         ProfileStore.Save(Named("Arch", "id-arch"), ProfilesDir);
