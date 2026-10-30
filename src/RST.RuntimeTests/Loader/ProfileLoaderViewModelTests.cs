@@ -585,6 +585,10 @@ public class ProfileLoaderViewModelTests
 
         backend.Calls.Should().Contain("Unload");
         _dialogs.AddinReports.Should().BeEmpty("rst-c had switched nothing off");
+        // Nothing is silent (spec #18, In Scope 5): a short non-modal note instead of a dialog.
+        vm.Toast.IsOpen.Should().BeTrue();
+        vm.Toast.Text.Should().Be("Unloaded. No add-in changes were needed.");
+        vm.Toast.Kind.Should().Be(BannerKind.Info);
         vm.Profiles.Should().OnlyContain(c => !c.IsLoaded);
         vm.Busy.Title.Should().Be("Unloading");
         vm.Busy.Message.Should().Be("A blank RST tab will replace the current one.");
@@ -606,6 +610,7 @@ public class ProfileLoaderViewModelTests
         vm.UnloadCommand.Execute(null);
 
         _dialogs.Log.Should().Equal("AddinReport:Add-ins After Unloading");
+        vm.Toast.IsOpen.Should().BeFalse("the report already says what changed");
         var report = _dialogs.AddinReports.Single();
         report.SwitchedOn.Should().Equal("Ideate BIMLink (2026)");
         report.NotChanged.Should().Equal("Ideate BIMLink (2027): a file was in use by another program; try again");

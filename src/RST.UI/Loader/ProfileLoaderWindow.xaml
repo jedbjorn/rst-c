@@ -296,7 +296,8 @@
             </Grid>
         </Grid>
 
-        <ContentControl Style="{StaticResource TransientBanner}" Content="{Binding Toast}" />
         <ContentControl Style="{StaticResource BusyOverlay}" Content="{Binding Busy}" />
+        <!-- Above the busy overlay, as in Health: the no-change Unload note shows during the 3 s "Unloading" close. -->
+        <ContentControl Style="{StaticResource TransientBanner}" Content="{Binding Toast}" />
     </Grid>
 </Window>

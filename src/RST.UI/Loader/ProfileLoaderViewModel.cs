@@ -637,6 +637,11 @@ public sealed class ProfileLoaderViewModel : ObservableObject
             Log.Information("UI: selector: unload switched add-ins back on {Payload}", new { done = result.Addins.Done.Count, notChanged = result.Addins.NotChanged.Count });
             _loaderDialogs.ShowAddinReport(AddinReportModel.ForUnload(result.Addins));
         }
+        else
+        {
+            // Nothing is silent (spec #18, In Scope 5): a short non-modal note instead of a dialog.
+            Toast.Show(UiStrings.Loader_UnloadNoAddinChanges, BannerKind.Info, TransientMessage.InformDuration);
+        }
         return true;
     }
 

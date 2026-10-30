@@ -682,6 +682,9 @@
   <data name="Loader_UnloadReportSubtitle" xml:space="preserve">
     <value>RST switched back on the add-ins it had switched off.</value>
   </data>
+  <data name="Loader_UnloadNoAddinChanges" xml:space="preserve">
+    <value>Unloaded. No add-in changes were needed.</value>
+  </data>
   <data name="Loader_RestoreReportTitle" xml:space="preserve">
     <value>Restore All Add-ins</value>
   </data>

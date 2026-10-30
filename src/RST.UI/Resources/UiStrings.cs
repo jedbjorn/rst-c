@@ -442,6 +442,8 @@ public static class UiStrings
 
     public static string Loader_UnloadReportSubtitle => Get(nameof(Loader_UnloadReportSubtitle));
 
+    public static string Loader_UnloadNoAddinChanges => Get(nameof(Loader_UnloadNoAddinChanges));
+
     public static string Loader_RestoreReportTitle => Get(nameof(Loader_RestoreReportTitle));
 
     public static string Loader_RestoreReportSubtitle => Get(nameof(Loader_RestoreReportSubtitle));
