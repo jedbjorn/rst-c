@@ -15,11 +15,13 @@ using System.Windows.Threading;
 using RST.Core.Configuration;
 using RST.Core.Tray;
 using RST.Core.Updates;
+using RST.Tray.AddIns;
 using RST.Tray.Resources;
 using RST.Tray.Shell;
 using RST.Tray.Updates;
 using RST.Tray.Windows;
 using RST.UI.Dialogs;
+using RST.UI.Loader;
 using RST.UI.Theming;
 using Serilog;
 
@@ -49,6 +51,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private bool _quitting;
     private int _iconFailures;
     private DispatcherTimer? _iconRetry;
+    private readonly ITrayAddinsBackend _addins = new TrayAddinsBackend();
+    private readonly AddinsWork _addinsWork = new();
 
     public TrayHost(TrayArguments args, SingleInstance instance)
     {
@@ -190,7 +194,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             ProductCatalog.FromEmbedded(m => Log.Warning("{Message}", m)),
             _http,
             new MsiProducts(m => Log.Warning("{Message}", m)),
-            () => ProductDetection.ManifestClientIds(ProductDetection.ManifestRoots(), m => Log.Warning("{Message}", m)),
+            () => ProductDetection.InstalledClientIds(m => Log.Warning("{Message}", m)),
             TrayUpdates.SettingsAndPresetPolicy(settingsPath: null, WindowsState.UpdateChecksPresets),
             _checks.Enabled, // already read above: the pages never read files or the registry on the UI thread
             TimeProvider.System,
@@ -280,7 +284,13 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         if (page is { } p) _page = p;
         if (_window is null)
         {
-            var built = new TrayWindow(new TrayViewModel(this, _page, this));
+            // The Add-ins page (F17 WU2) shows the Loader's own dialogs (Confirm Add-in Changes, the reports, "Adopt
+            // RSTify Presets?"), owned by this window.
+            var dialogs = new LoaderDialogs();
+            var messages = new DialogService();
+            var built = new TrayWindow(new TrayViewModel(this, _page, this, new AddInsViewModel(_addins, dialogs, messages, _addinsWork)));
+            dialogs.Owner = built;
+            messages.Owner = built;
             _window = built;
             _ = _updates?.RefreshInstalledAsync(); // what is installed now (local only, no network)
             built.ViewModel.PropertyChanged += (_, e) =>
@@ -457,6 +467,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _iconRetry?.Stop();
         ExitReason = reason;
         Log.Information("quitting ({Reason})", reason);
+        WaitForAddinWork();
         StopUpdates();
         try
         {
@@ -476,6 +487,18 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         Application.Current?.Shutdown(0);
     }
 
+    /// <summary>
+    /// An Apply or Restore All in flight writes Revit's settings files and then RST's record; it finishes (it takes
+    /// milliseconds) before the tray ends, so no add-in is left switched off without a record (review N7).
+    /// </summary>
+    private void WaitForAddinWork()
+    {
+        if (_addinsWork.IsIdle) return;
+        Log.Information("waiting for add-in changes in flight");
+        if (!_addinsWork.WaitIdle(TimeSpan.FromSeconds(5)))
+            Log.Warning("add-in changes still running after 5 s; quitting anyway");
+    }
+
     /// <summary>WPF ends the dispatcher after this returns; the icon goes now, the hidden window at Dispose.</summary>
     private void OnSessionEnding(string reason)
     {
@@ -483,6 +506,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _quitting = true;
         ExitReason = "session ending (" + reason + "): Restart Manager or sign-out";
         Log.Information("Windows asked the tray to close: {Reason}", ExitReason);
+        WaitForAddinWork();
         StopUpdates();
         try
         {

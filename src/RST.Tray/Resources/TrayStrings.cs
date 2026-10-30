@@ -42,7 +42,6 @@ public static class TrayStrings
 
     public static string Tab_Settings => Get(nameof(Tab_Settings));
 
-    public static string Page_ComingLater => Get(nameof(Page_ComingLater));
 
     public static string Updates_Heading => Get(nameof(Updates_Heading));
 
@@ -52,9 +51,7 @@ public static class TrayStrings
 
     public static string Apps_Description => Get(nameof(Apps_Description));
 
-    public static string AddIns_Heading => Get(nameof(AddIns_Heading));
 
-    public static string AddIns_Description => Get(nameof(AddIns_Description));
 
     public static string Settings_Appearance => Get(nameof(Settings_Appearance));
 
