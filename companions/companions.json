@@ -6,24 +6,36 @@
       "name": "Gantt-It",
       "description": "Gantt charts as native Revit legend views",
       "repo": "jedbjorn/gantt-it",
-      "status": "in_development",
+      "status": "shippable",
       "revitYears": [2025, 2026, 2027],
       "addinClientId": "9920fb42-542b-4ce1-9659-a078489af6b0",
       "vendorId": "DSOS",
       "defaultSelected": false,
-      "release": null
+      "release": {
+        "tag": "v1.1.0",
+        "asset": "GanttIt-1.1.0.msi",
+        "sha256": "06f403468ae484526dc7e8ddc9251bf2b34715ddcb14d668049b63c74d1eb18b",
+        "upgradeCode": "644FCAD5-E631-4441-9A11-75F175565136",
+        "version": "1.1.0"
+      }
     },
     {
       "id": "splash-it",
       "name": "Splash-It",
       "description": "Colors Revit view tabs by file",
       "repo": "jedbjorn/splash-it",
-      "status": "in_development",
+      "status": "shippable",
       "revitYears": [2025, 2026, 2027],
       "addinClientId": "0b1cc712-e936-4da1-9680-2d9a95f88271",
       "vendorId": "DSOS",
       "defaultSelected": false,
-      "release": null
+      "release": {
+        "tag": "v1.1.0",
+        "asset": "SplashIt-1.1.0.msi",
+        "sha256": "ac4e71ce8a34be8696565ea9c2d2634f606736c4c8272a2c3475f6b1f6e83c11",
+        "upgradeCode": "080648F4-EEC7-4DB6-A793-683A1C008BFC",
+        "version": "1.1.0"
+      }
     }
   ]
 }
