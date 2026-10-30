@@ -79,6 +79,8 @@
        only, the leg that uploads the RST-screenshots artifact. -->
   <ItemGroup Condition="'$(RevitVersion)' == '2025'">
     <ProjectReference Include="..\RST.Tray\RST.Tray.csproj" />
+    <!-- F17 WU3: the Core tests' clock, counting handler and fake Windows Installer, shared as source. -->
+    <Compile Include="..\RST.Tests\Updates\UpdateTestDoubles.cs" Link="Tray\Shared\UpdateTestDoubles.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(RevitVersion)' != '2025'">
     <Compile Remove="Tray\**" />

@@ -9,7 +9,8 @@
 //   - is the window Windows Installer's util:CloseApplication sends WM_CLOSE to on uninstall and upgrade. It is
 //     deliberately NOT a message-only (HWND_MESSAGE) window: EnumWindows, which CloseApplication walks, does not
 //     list message-only windows;
-//   - reports sign-out (WM_ENDSESSION) and Windows theme or high-contrast changes (WM_SETTINGCHANGE).
+//   - reports sign-out (WM_ENDSESSION), Windows theme or high-contrast changes (WM_SETTINGCHANGE), and waking
+//     from sleep (WM_POWERBROADCAST), which the update checks use to catch up a slot missed while asleep.
 // UI thread only.
 
 using System.Runtime.InteropServices;
@@ -31,6 +32,8 @@ internal sealed class TrayIcon : IDisposable
     private const int WM_ENDSESSION = 0x0016;
     private const int WM_SETTINGCHANGE = 0x001A;
     private const int WM_CONTEXTMENU = 0x007B;
+    private const int WM_POWERBROADCAST = 0x0218;
+    private const int PBT_APMRESUMEAUTOMATIC = 0x0012;
     private const int NIN_SELECT = 0x0400;
     private const int NIN_KEYSELECT = 0x0401;
     private const int NIN_BALLOONUSERCLICK = 0x0405;
@@ -98,6 +101,9 @@ internal sealed class TrayIcon : IDisposable
 
     /// <summary>The Windows app theme or high contrast changed.</summary>
     public event EventHandler? ThemeChanged;
+
+    /// <summary>The PC woke from sleep or hibernation (WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC; F17 WU3's check slots).</summary>
+    public event EventHandler? Resumed;
 
     /// <summary>The hidden window's handle (the menu's foreground anchor).</summary>
     public IntPtr Handle => _window.Handle;
@@ -235,6 +241,9 @@ internal sealed class TrayIcon : IDisposable
             case WM_SETTINGCHANGE:
                 if (wParam.ToInt64() == SPI_SETHIGHCONTRAST || IsImmersiveColorSet(lParam))
                     ThemeChanged?.Invoke(this, EventArgs.Empty);
+                break;
+            case WM_POWERBROADCAST:
+                if (wParam.ToInt64() == PBT_APMRESUMEAUTOMATIC) Resumed?.Invoke(this, EventArgs.Empty);
                 break;
         }
         return IntPtr.Zero;

@@ -206,8 +206,7 @@ public class TrayWindowScreenshotTests
         var items = menu.Items.OfType<MenuItem>().ToList();
         Assert.Equal(new[] { TrayStrings.Menu_Open, TrayStrings.Menu_CheckForUpdates, TrayStrings.Menu_Settings, TrayStrings.Menu_Quit },
                      items.Select(i => (string)i.Header));
-        Assert.False(items[1].IsEnabled); // Check for updates: wired in WU3.
-        Assert.All(items.Where((_, i) => i != 1), i => Assert.True(i.IsEnabled));
+        Assert.All(items, i => Assert.True(i.IsEnabled)); // Check for updates is wired (F17 WU3).
         AssertColor(Palette(theme, UiPalette.Surface), Screenshots.PixelAt(bitmap, bitmap.PixelWidth / 2, 3), "menu background");
     });
 }

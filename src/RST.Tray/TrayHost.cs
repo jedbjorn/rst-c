@@ -1,16 +1,20 @@
 // rst-c's own (not vendored): the RST tray's coordinator (spec #20 §1; F17 WU1). It owns the icon, the one window
 // (built lazily on first open, rebuilt on a theme change, released when closed), the settings and the first-run
 // update-check notice, and it ends the process cleanly on Quit, on WM_CLOSE (Windows Installer's
-// util:CloseApplication) and at sign-out. Event-driven only: no timers and no polling.
+// util:CloseApplication) and at sign-out. Event-driven: no polling. Besides the icon's short add retries at sign-in,
+// its one timer is the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing.
 
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
 using RST.Core.Tray;
+using RST.Core.Updates;
 using RST.Tray.Resources;
 using RST.Tray.Shell;
+using RST.Tray.Updates;
 using RST.Tray.Windows;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
@@ -18,7 +22,7 @@ using Serilog;
 
 namespace RST.Tray;
 
-internal sealed class TrayHost : ITraySettingsHost, IDisposable
+internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposable
 {
     public const string NoticeAutomationId = "TrayUpdateNotice";
 
@@ -28,6 +32,9 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
     private TraySettings _settings = new();
     private UpdateChecksState _checks;
     private TrayIcon? _icon;
+    private HttpClient? _http;
+    private TrayUpdates? _updates;
+    private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
     private TrayPage _page = TrayPage.Updates;
     private bool _quitting;
@@ -52,6 +59,43 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
     /// <summary>Why the tray ended, for the exit log line.</summary>
     public string ExitReason { get; private set; } = "dispatcher stopped";
 
+    // ITrayUpdatesHost (F17 WU3): the Updates and Apps pages read the checker through the host.
+
+    public UpdateSnapshot Current => _updates?.Current ?? UpdateSnapshot.Empty(ProductCatalog.Default, _checks.Enabled);
+
+    public event EventHandler? Changed
+    {
+        add { if (_updates is not null) _updates.Changed += value; }
+        remove { if (_updates is not null) _updates.Changed -= value; }
+    }
+
+    public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
+
+    public TimeZoneInfo TimeZone => TimeZoneInfo.Local;
+
+    /// <summary>Check now: the window's button and the menu's Check for updates. Never blocks.</summary>
+    public void CheckNow()
+    {
+        if (_quitting || _updates is null) return;
+        Log.Information("check for updates now (asked by the user)");
+        _ = _updates.CheckNowAsync();
+    }
+
+    /// <summary>The product's latest release page on github.com, built from the catalog's repo (never from data).</summary>
+    public void OpenReleasePage(ProductInfo product)
+    {
+        try
+        {
+            var uri = ReleaseFeed.LatestUri(product.Repo);
+            if (!UpdateHosts.IsAllowed(uri, UpdateHostUse.Feed)) return;
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "could not open the release page for {Product}", product.Name);
+        }
+    }
+
     /// <summary>Starts the tray: settings, theme, icon, the show signal, then the window (unless --startup) and the notice.</summary>
     public void Start()
     {
@@ -75,8 +119,28 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         _icon.CloseRequested += (_, _) => Quit("WM_CLOSE");
         _icon.SessionEnding += (_, _) => QuitNow("sign-out", insideWindowMessage: true);
         _icon.ThemeChanged += (_, _) => OnWindowsThemeChanged();
+        _icon.Resumed += (_, _) => _updates?.Resumed();
         ShowIcon();
         AppRestart.Register(m => Log.Warning("{Message}", m));
+
+        // Update checks (F17 WU3): the first automatic slot is 2–10 minutes away; nothing is sent before it, and
+        // nothing at all while checks are off. Detection waits for the window or that first check.
+        _http = TrayHttp.CreateClient(TrayHttp.CreateHandler());
+        _updates = new TrayUpdates(
+            ProductCatalog.FromEmbedded(m => Log.Warning("{Message}", m)),
+            _http,
+            new MsiProducts(m => Log.Warning("{Message}", m)),
+            () => ProductDetection.ManifestClientIds(ProductDetection.ManifestRoots(), m => Log.Warning("{Message}", m)),
+            TrayUpdates.SettingsAndPresetPolicy(settingsPath: null, WindowsState.UpdateChecksPresets),
+            _checks.Enabled, // already read above: the pages never read files or the registry on the UI thread
+            TimeProvider.System,
+            TrayPaths.UpdatesFile,
+            action => _dispatcher.BeginInvoke(action),
+            m => Log.Information("{Message}", m));
+        _updates.NewVersionsFound += (_, found) => Announce(found);
+        _updates.Start();
+        if (_updates.Loop.NextDueUtc is { } due)
+            Log.Information("first update check slot at {Due:u}{Off}", due, _checks.Enabled ? "" : " (checks are off: it will make no request)");
 
         _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
         {
@@ -99,6 +163,7 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         {
             Log.Information(_iconFailures == 0 ? "tray icon shown" : "tray icon shown after {Retries} retries", _iconFailures);
             _iconFailures = 0;
+            if (_pendingAnnounce is { } pending) Announce(pending); // a notification that waited for the icon
             return;
         }
         _iconFailures++;
@@ -124,8 +189,9 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         if (page is { } p) _page = p;
         if (_window is null)
         {
-            var built = new TrayWindow(new TrayViewModel(this, _page));
+            var built = new TrayWindow(new TrayViewModel(this, _page, this));
             _window = built;
+            _ = _updates?.RefreshInstalledAsync(); // what is installed now (local only, no network)
             built.ViewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(TrayViewModel.Page) && ReferenceEquals(_window, built)) _page = built.ViewModel.Page;
@@ -166,6 +232,7 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         _settings = saved;
         _checks = UpdateChecksPolicy.Resolve(_settings.CheckForUpdates, WindowsState.UpdateChecksPresets());
         Log.Information("check for updates automatically: {On}", on ? "on" : "off");
+        _updates?.AutomaticChecksChanged(_checks.Enabled);
         return true;
     }
 
@@ -184,8 +251,56 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
 
     public void Dispose()
     {
+        StopUpdates();
         _icon?.Dispose();
         _icon = null;
+    }
+
+    /// <summary>Stops the check loop (an in-flight check is cancelled) and releases the HTTP client. Idempotent.</summary>
+    private void StopUpdates()
+    {
+        try
+        {
+            _updates?.Dispose();
+            _http?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "stopping update checks");
+        }
+        _updates = null;
+        _http = null;
+    }
+
+    /// <summary>
+    /// One notification for the versions a check found for the first time ("RST 3.1.1 is available"). They are
+    /// recorded as announced only once the notification is shown; while the icon is not in the notification area
+    /// (Explorer still starting) they wait in <see cref="_pendingAnnounce"/> and go out when the icon is added.
+    /// </summary>
+    private void Announce(IReadOnlyList<ProductStatus> found)
+    {
+        if (_quitting || _icon is null || _updates is null || found.Count == 0) return;
+        if (!_icon.IsShown)
+        {
+            _pendingAnnounce = found;
+            Log.Information("notification waits for the tray icon: {Versions}", string.Join(", ", found.Select(s => s.Product.Name + " " + s.Latest)));
+            return;
+        }
+        _pendingAnnounce = null;
+        string title, text;
+        if (found.Count == 1)
+        {
+            title = TrayStrings.Notify_OneTitle(found[0].Product.Name, found[0].Latest!.Value.ToString());
+            text = TrayStrings.Notify_OneText;
+        }
+        else
+        {
+            title = TrayStrings.Notify_ManyTitle;
+            text = TrayStrings.Notify_ManyText(string.Join(", ", found.Select(s => s.Product.Name + " " + s.Latest!.Value)));
+        }
+        var shown = _icon.ShowNotification(title, text);
+        Log.Information("notification {Shown}: {Title}: {Text}", shown ? "shown" : "refused by the shell (offered again at the next check)", title, text);
+        if (shown) _updates.MarkAnnounced(found);
     }
 
     /// <summary>
@@ -200,6 +315,7 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         _iconRetry?.Stop();
         ExitReason = reason;
         Log.Information("quitting ({Reason})", reason);
+        StopUpdates();
         try
         {
             _icon?.Hide();
@@ -225,6 +341,7 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         _quitting = true;
         ExitReason = "session ending (" + reason + "): Restart Manager or sign-out";
         Log.Information("Windows asked the tray to close: {Reason}", ExitReason);
+        StopUpdates();
         try
         {
             _icon?.Hide();
@@ -240,7 +357,11 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         if (_quitting || _icon is null) return;
         var menu = TrayMenu.Build(new TrayMenuActions(
             Open: () => OpenWindow(TrayPage.Updates),
-            CheckForUpdates: () => { },
+            CheckForUpdates: () =>
+            {
+                CheckNow();
+                OpenWindow(TrayPage.Updates);
+            },
             Settings: () => OpenWindow(TrayPage.Settings),
             Quit: () => Quit("menu")));
         TrayMenu.Open(menu, screenPixels, _icon.Source);
