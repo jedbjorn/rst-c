@@ -359,7 +359,7 @@ public sealed class CustomToolsTests : IDisposable
         }
         var failure = Editor().Remove(Wiki, null, null).Failed.Should().ContainSingle().Subject;
         (failure.ProfileName, failure.ProfileId, failure.FileName).Should().Be(("Legacy", (string?)null, "Legacy_2024-05-01.json"));
-        failure.Error.Should().Contain("no id");
+        failure.Error.Should().Be("This profile file has no id, so it was not changed. Add an id to the file, or remove it.");
         File.ReadAllText(Path.Combine(_dir, "Legacy_2024-05-01.json")).Should().Be(before);
         Editor().Derive(null).Single(t => t.Link == Wiki).UsedIn.Should().ContainSingle().Which.Should().Be("Legacy", "it still holds the tool, and the list says so");
         AllTools(OnDisk(ArchId)).Should().NotContain(s => s.CommandId == "URL:" + Wiki, "the other profiles were changed");
