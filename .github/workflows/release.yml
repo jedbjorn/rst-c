@@ -5,8 +5,8 @@ name: release
 # Push a tag matching `v*` (e.g. `v0.1.0`, `v1.0.0`, `v0.2.0-rc.1`) and
 # this workflow:
 #   1. Runs the full _build.yml pipeline against the tagged commit.
-#   2. Downloads the produced MSI artifacts.
-#   3. Creates a GitHub Release with the MSIs attached, auto-generated
+#   2. Downloads the produced RST.msi artifact (Revit 2025 + 2026 + 2027).
+#   3. Creates a GitHub Release with RST.msi attached, auto-generated
 #      release notes, and pre-release flag set when the tag carries a
 #      hyphenated suffix (alpha/beta/rc).
 #
@@ -15,7 +15,7 @@ name: release
 #
 # Versioning: the MSI's <Package Version="…"> is threaded from the tag.
 # The `prepare` job strips the leading `v` and any `-prerelease` suffix to a
-# numeric a.b.c and passes it to _build.yml, which stamps both MSIs. So the
+# numeric a.b.c and passes it to _build.yml, which stamps RST.msi. So the
 # installed ProductVersion always matches the tag and a new tag always raises
 # it — driving MajorUpgrade / RemoveExistingProducts on in-place upgrade.
 
@@ -57,12 +57,6 @@ jobs:
         with:
           name: RST.msi
           path: ./artifacts/
-      # R27 MSI is soft-fail upstream; tolerate its artifact being absent.
-      - uses: actions/download-artifact@v4
-        with:
-          name: RST-R27.msi
-          path: ./artifacts/
-        continue-on-error: true
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -73,10 +67,9 @@ jobs:
           if [[ "$tag" == *-* ]]; then
             prerel=(--prerelease)
           fi
-          # Upload whatever MSIs are present in artifacts/. R27 may be
-          # missing if its stage soft-failed.
+          # Attach RST.msi by name so a stray artifact can never ship.
           gh release create "$tag" \
-            artifacts/*.msi \
+            artifacts/RST.msi \
             --title "$tag" \
             --generate-notes \
             "${prerel[@]}"
