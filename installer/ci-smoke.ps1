@@ -28,12 +28,22 @@
       (a) RST.Tray.exe installed and the HKCU Run value RST = "<exe>" --startup
       (t) --startup starts hidden; a second launch exits 0 and the first shows
           its window; a second --startup exits 0; one RST.Tray process
-      (d) the repair closes that running tray (Restart Manager, clean exit 0)
+      (d) the repair closes that running tray (Restart Manager, clean exit 0);
+          whether Restart Manager starts it again (RegisterApplicationRestart)
+          is recorded
+      (b) the same-version upgrade with a tray running: closed cleanly, the
+          upgrade completes, the cache (RemoveFolderEx) survives the old
+          version's removal
       (e) uninstall with a tray running and Restart Manager off: CloseApplication's
           WM_CLOSE closes it cleanly (exit 0, logged as WM_CLOSE),
           the Run value, %LocalAppData%\Programs\RST and the cache
           (RemoveFolderEx) are gone; the settings and log under %AppData%\RST
           (user data) stay
+      (u) -OlderMsi (this commit built with a lower ProductVersion) installed,
+          a tray running, then this RST.msi over it: a real MajorUpgrade; the
+          tray is closed cleanly, one product at the new version, the tray and
+          Run value installed, the cache survives; then uninstall removes the
+          cache, the Run value and the tray
       The package checks also cover the tray's components (unconditional, one
       per staged build/Tray file), the Run value, CloseApplication and
       RemoveFolderEx rows.
@@ -45,6 +55,7 @@
           installed R27 engine must be the newly staged one.
         Unified (AC5): RST.msi v2.2.0 or v3.0.0 -> new RST.msi. MajorUpgrade must leave
           exactly one RST product, at the new version, with all six trees.
+        Both: the tray and its Run value are installed after the upgrade.
 
   Product queries go through the WindowsInstaller.Installer COM object via
   InvokeMember (it has no type library PowerShell can bind to).
@@ -56,7 +67,8 @@ param(
   [string]$OldMsi,
   [string]$StagedR27 = 'build/R27',
   [string]$StagedRoot,
-  [string]$SameVersionMsi
+  [string]$SameVersionMsi,
+  [string]$OlderMsi
 )
 
 $ErrorActionPreference = 'Stop'
@@ -273,6 +285,28 @@ function Start-Tray([string[]]$TrayArgs, [string]$Label) {
   Write-Host "[$Label] tray pid $($p.Id) holds $TrayMutex"
   return $p
 }
+# A tray other than -OldPid (one Restart Manager started again), or $null after -Seconds.
+function Wait-TrayRestart([int]$OldPid, [int]$Seconds) {
+  $deadline = (Get-Date).AddSeconds($Seconds)
+  do {
+    $p = @(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $OldPid })
+    if ($p.Count -gt 0) { return $p[0] }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  return $null
+}
+# Ends every running tray (a test reset, not a product path) and waits for the mutex to go.
+function Stop-Trays {
+  Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "stopping tray pid $($_.Id)"; $_ | Stop-Process -Force; $_.WaitForExit(15000) | Out-Null }
+  $deadline = (Get-Date).AddSeconds(15)
+  while ((Test-TrayMutex) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
+}
+function Seed-CacheProbe {
+  New-Item -ItemType Directory -Force $TrayCache | Out-Null
+  $f = Join-Path $TrayCache 'probe.msi'
+  Set-Content -Path $f -Value 'rst-c ci cache probe' -NoNewline
+  return $f
+}
 function Wait-MainWindow($Proc, [int]$Seconds) {
   $deadline = (Get-Date).AddSeconds($Seconds)
   do {
@@ -311,16 +345,23 @@ function Test-TraySingleInstance([string]$Label) {
   Assert ($third.WaitForExit(30000) -and $third.ExitCode -eq 0) "[$Label] a second --startup launch exits with 0"
   return $first
 }
-# A running tray is closed by Windows Installer's CloseApplication (WM_CLOSE) and exits cleanly (code 0, not
-# CloseApplication's TerminateProcess code 1).
+# A running tray is closed by Windows Installer and exits cleanly (code 0).
 # -How is a pattern for the path in the tray's own exit line: 'WM_CLOSE' (util:CloseApplication) or 'session ending' (Windows
 # Installer's Restart Manager, which reaches the tray first when it is on).
-function Assert-TrayClosed($Proc, [string]$Label, [string]$How) {
+# Without -NoRestart a tray Restart Manager started again afterwards (RegisterApplicationRestart) is allowed and
+# recorded; with it (Restart Manager off, or the files gone) nothing may be running.
+function Assert-TrayClosed($Proc, [string]$Label, [string]$How, [switch]$NoRestart) {
   $exited = $Proc.WaitForExit(30000)
   if (-not $exited) { Show-TrayLog }
   Assert $exited "[$Label] the running tray (pid $($Proc.Id)) was closed"
-  Assert ($Proc.ExitCode -eq 0) "[$Label] it exited cleanly (exit $($Proc.ExitCode); CloseApplication's TerminateProcess would give 1)"
-  Assert (-not (Test-TrayMutex)) "[$Label] its mutex is released"
+  Assert ($Proc.ExitCode -eq 0) "[$Label] it exited cleanly (exit $($Proc.ExitCode))"
+  if ($NoRestart) {
+    Assert (-not (Test-TrayMutex)) "[$Label] its mutex is released"
+    Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 0) "[$Label] no RST.Tray process running"
+  } else {
+    $again = Wait-TrayRestart $Proc.Id 20
+    Write-Host "OBSERVE: [$Label] Restart Manager restart of the tray: $(if ($again) { "yes, pid $($again.Id), args '$((Get-CimInstance Win32_Process -Filter "ProcessId=$($again.Id)").CommandLine)'" } else { 'none within 20 s' })"
+  }
   $exit = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' | ForEach-Object { Get-Content $_.FullName } |
             Where-Object { $_.Contains("[$($Proc.Id)]") -and $_.Contains('RST tray exited') })
   Write-Host "[$Label] tray log: $($exit -join ' / ')"
@@ -465,11 +506,18 @@ if ($Mode -eq 'Install') {
     $pc2 = Get-MsiProperty $SameVersionMsi 'ProductCode'
     Write-Host "Same-version MSI: ProductVersion=$v2 ProductCode=$pc2"
     Assert ($v2 -eq $newVersion -and $pc2 -ne $newProductCode) '(b) second build has the same ProductVersion and a new ProductCode'
+    # A tray running and a cache file in place across the upgrade (review N3): the old version's removal
+    # (UPGRADINGPRODUCTCODE set) must leave the cache.
+    Stop-Trays
+    $trayB = Start-Tray @('--startup') '(b)'
+    $cacheB = Seed-CacheProbe
     $logB = Join-Path $LogDir 'rst-install-samever.log'
     Invoke-Msiexec '/i' $SameVersionMsi $logB | Out-Null
-    Show-LogLines $logB @($newProductCode)
+    Show-LogLines $logB @($newProductCode, 'RemoveFolder')
     Assert-OneProduct $pc2 $v2 '(b) same-version install'
     Assert-Years @('2025', '2026', '2027') '(b) all three detected'
+    Assert-TrayClosed $trayB '(b) upgrade' 'session ending|WM_CLOSE'
+    Assert (Test-Path $cacheB) '(b) the tray cache survives the upgrade (RemoveFolderEx skips UPGRADINGPRODUCTCODE)'
 
     Invoke-Msiexec '/i' $SameVersionMsi (Join-Path $LogDir 'rst-install-repeat.log') | Out-Null
     Assert-OneProduct $pc2 $v2 '(b) repeated install'
@@ -480,9 +528,9 @@ if ($Mode -eq 'Install') {
 
   # (e) Revit gone, a tray running, then uninstall: everything is removed and the tray is closed.
   Set-RevitStubs @()
+  Stop-Trays
   $trayE = Start-Tray @('--startup') '(e)'
-  New-Item -ItemType Directory -Force $TrayCache | Out-Null
-  Set-Content -Path (Join-Path $TrayCache 'probe.msi') -Value 'rst-c ci cache probe' -NoNewline
+  $null = Seed-CacheProbe
   # Restart Manager off, so util:CloseApplication's WM_CLOSE is what closes the tray (the repair in (d)
   # covered the Restart Manager path).
   $logE = Join-Path $LogDir 'rst-uninstall.log'
@@ -499,7 +547,7 @@ if ($Mode -eq 'Install') {
 
   # AC1: uninstall closed the running tray, removed the Run value, its files and its cache; only user data
   # under %AppData%\RST (settings, log) remains.
-  Assert-TrayClosed $trayE '(e) uninstall' 'WM_CLOSE'
+  Assert-TrayClosed $trayE '(e) uninstall' 'WM_CLOSE' -NoRestart
   Assert ($null -eq (Get-RunValue)) '(e) HKCU Run value RST removed'
   Assert (-not (Test-Path $TrayDir)) "(e) $TrayDir removed"
   Assert (-not (Test-Path (Split-Path $TrayDir))) "(e) $(Split-Path $TrayDir) removed"
@@ -512,6 +560,41 @@ if ($Mode -eq 'Install') {
   Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 0) '(e) no RST.Tray process running'
   Assert (Test-Path $TraySettings) '(e) the tray settings (user data) survive under %AppData%\RST'
   Assert (@(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log').Count -ge 1) '(e) the tray log (user data) survives under %AppData%\RST\logs'
+
+  # (u) a real MajorUpgrade from this commit built with a lower ProductVersion (review N3), a tray running.
+  if ($OlderMsi) {
+    $OlderMsi = (Resolve-Path $OlderMsi).Path
+    $vOld = Get-MsiProperty $OlderMsi 'ProductVersion'
+    $pcOld = Get-MsiProperty $OlderMsi 'ProductCode'
+    Write-Host "Older MSI: ProductVersion=$vOld ProductCode=$pcOld"
+    Assert ([version]$vOld -lt [version]$newVersion) "(u) the older build's ProductVersion $vOld is below $newVersion"
+    Set-RevitStubs @('2025', '2026', '2027')
+    Invoke-Msiexec '/i' $OlderMsi (Join-Path $LogDir 'rst-install-older.log') | Out-Null
+    Assert-OneProduct $pcOld $vOld '(u) older installed'
+    Assert-TrayInstalled '(u) older'
+    Stop-Trays
+    $trayU = Start-Tray @('--startup') '(u)'
+    $cacheU = Seed-CacheProbe
+    $logU = Join-Path $LogDir 'rst-upgrade-from-older.log'
+    Invoke-Msiexec '/i' $uninstallMsi $logU | Out-Null
+    Show-LogLines $logU @($pcOld, 'RemoveFolder')
+    $pcNew = Get-MsiProperty $uninstallMsi 'ProductCode'
+    Assert-OneProduct $pcNew $newVersion '(u) upgraded'
+    Assert ((Select-String -Path $logU -Pattern $pcOld -SimpleMatch -Quiet)) "(u) log names the removed older product $pcOld"
+    Assert-Years @('2025', '2026', '2027') '(u) upgraded'
+    Assert-TrayClosed $trayU '(u) upgrade' 'session ending|WM_CLOSE'
+    Assert-TrayInstalled '(u) upgraded'
+    Assert (Test-Path $cacheU) '(u) the tray cache survives the MajorUpgrade'
+
+    Stop-Trays
+    Set-RevitStubs @()
+    Invoke-Msiexec '/x' $uninstallMsi (Join-Path $LogDir 'rst-uninstall-after-upgrade.log') | Out-Null
+    Assert ((Get-Related $UnifiedCode).Count -eq 0) '(u) no RST product after uninstall'
+    Assert (-not (Test-Path $TrayCache)) '(u) uninstall removes the tray cache'
+    Assert ($null -eq (Get-RunValue)) '(u) HKCU Run value RST removed'
+    Assert (-not (Test-Path (Split-Path $TrayDir))) "(u) $(Split-Path $TrayDir) removed"
+    Assert-Probe $probe '(u)'
+  }
   Show-TrayLog
   exit 0
 }
@@ -564,4 +647,5 @@ $newHash = (Get-FileHash $engine27 -Algorithm SHA256).Hash
 Write-Host "R27 RST.Engine.dll after:  $newHash"
 Assert ($newHash -eq $stagedHash) 'installed R27 engine equals the newly staged engine'
 Assert-Probe $probe 'after upgrade'
+Assert-TrayInstalled 'after upgrade'
 exit 0

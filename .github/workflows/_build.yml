@@ -231,6 +231,17 @@ jobs:
         run: |
           Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-first.msi"
           dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstMsiVersion=${{ inputs.product_version }}
+      # RST tray (feature #17, review N3): the same commit built at a lower
+      # ProductVersion (1.0.0), for the smoke's MajorUpgrade-with-a-running-
+      # tray step (u). The release RST.msi is set aside and put back, so the
+      # uploaded artifact is the one built above.
+      - name: Older-version build (tray upgrade step)
+        shell: pwsh
+        run: |
+          Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-final.msi"
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstMsiVersion=1.0.0
+          Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-older.msi"
+          Copy-Item "$env:RUNNER_TEMP/RST-final.msi" installer/bin/Release/RST.msi -Force
       # Permanent install/uninstall smoke (feature #11, D6 / AC3, decision
       # #10). Stub Revit.exe files under C:\Program Files\Autodesk\Revit
       # <year>\ drive the detection: no Revit is refused, only detected
@@ -239,7 +250,7 @@ jobs:
       # user data survives. -StagedRoot checks per-year component counts.
       - name: Install / uninstall smoke
         shell: pwsh
-        run: installer/ci-smoke.ps1 -Mode Install -Msi "$env:RUNNER_TEMP/RST-first.msi" -SameVersionMsi installer/bin/Release/RST.msi -StagedRoot build
+        run: installer/ci-smoke.ps1 -Mode Install -Msi "$env:RUNNER_TEMP/RST-first.msi" -SameVersionMsi installer/bin/Release/RST.msi -StagedRoot build -OlderMsi "$env:RUNNER_TEMP/RST-older.msi"
       - uses: actions/upload-artifact@v4
         with:
           name: RST.msi
@@ -249,7 +260,9 @@ jobs:
   # Upgrade paths from released MSIs (feature #11, AC4/AC5).
   # v2.2.0 is pinned: it is the final release that shipped RST-R27.msi.
   # v3.0.0 is the first unified release: the PR build (fallback 3.0.99,
-  # flag SC-004) must upgrade it in place.
+  # flag SC-004) must upgrade it in place. It is also the last tray-less
+  # release, so the Migrate smoke's tray checks prove the first tray-carrying
+  # RST.msi over it (feature #17, review N3).
   msi-migrate:
     name: MSI upgrade from ${{ matrix.release }} (${{ matrix.from }})
     needs: msi-unified
