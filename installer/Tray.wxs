@@ -22,9 +22,14 @@
   Installer's Restart Manager usually gets there first (WM_QUERYENDSESSION:
   the tray lets WPF end it cleanly). util:CloseApplication covers the rest,
   e.g. MSIRESTARTMANAGERCONTROL=Disable: it sends WM_CLOSE to RST.Tray.exe's
-  top-level windows (the tray keeps a hidden one and exits cleanly on it),
-  waits up to Timeout seconds, then ends the process rather than ask for a
-  reboot. ci-smoke.ps1 checks both paths. util:RemoveFolderEx removes the tray's
+  top-level windows (the tray keeps a hidden one and exits cleanly on it)
+  and waits up to Timeout seconds. It never terminates the process and never
+  asks for a reboot: CloseApplication matches RST.Tray.exe by name across
+  every session, so a forced end would reach other users' trays (and WU4's
+  updater, which must therefore run under a different exe name). The tray
+  registers with Restart Manager (RegisterApplicationRestart, startup switch), so
+  after an installer closes it Windows starts it again. ci-smoke.ps1 checks
+  both paths. util:RemoveFolderEx removes the tray's
   download cache %LocalAppData%\RST\Tray\cache\ on a real uninstall (not when
   an upgrade removes the old version). The tray's settings and log are user
   data under %AppData%\RST\ and stay, like the rest of RST's user data.
@@ -51,7 +56,7 @@
     <SetProperty Id="RSTTRAYCACHEDIR" Value="[LocalAppDataFolder]RST\Tray\cache\" After="AppSearch" Sequence="execute" />
 
     <util:CloseApplication Id="CloseRstTray" Target="RST.Tray.exe"
-                           CloseMessage="yes" RebootPrompt="no" Timeout="10" TerminateProcess="1"
+                           CloseMessage="yes" RebootPrompt="no" Timeout="10"
                            Description="RST is closing its tray app." />
 
     <ComponentGroup Id="Tray">
