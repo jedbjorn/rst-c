@@ -1,0 +1,78 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+
+  <!--
+    RST.Setup — produces RST-Setup.exe, the WiX Burn bundle (feature #13
+    Phase 2, spec #15). It always installs RST.msi and offers each
+    `shippable` companion in companions/companions.json as an opt-in
+    checkbox; a ticked companion's own MSI is chained silently and
+    unmodified. See README.md in this folder.
+
+    Inputs (MSBuild properties, all optional):
+      RstMsi               the RST.msi to chain. Default: the installer
+                           project's output, ..\installer\bin\<Configuration>\RST.msi.
+      CompanionRegistry    the registry to generate the chain from. Default:
+                           ..\companions\companions.json. The bundle smoke
+                           passes a test registry that marks the fixture
+                           companion shippable.
+      CompanionPayloadDir  where each shippable companion's pinned MSI sits,
+                           under its exact asset name. Default: payload\
+                           (filled by fetch-companions.ps1).
+      RstBundleVersion     the bundle version: the numeric a.b.c of the
+                           rst-c tag, the same value release.yml stamps into
+                           RST.msi. Empty -> the RST.msi fallback (2.99.0).
+
+    Windows only, like every WiX build here (gen-companions.ps1 runs under
+    powershell.exe).
+  -->
+
+  <PropertyGroup>
+    <RstBundleVersionEffective>$(RstBundleVersion)</RstBundleVersionEffective>
+    <!-- Same fallback as installer/RST.Installer.wixproj: between the
+         latest release (v2.2.0) and the next (v3.0.0). -->
+    <RstBundleVersionEffective Condition="'$(RstBundleVersionEffective)' == ''">2.99.0</RstBundleVersionEffective>
+    <RstMsi Condition="'$(RstMsi)' == ''">$(MSBuildProjectDirectory)\..\installer\bin\$(Configuration)\RST.msi</RstMsi>
+    <CompanionRegistry Condition="'$(CompanionRegistry)' == ''">$(MSBuildProjectDirectory)\..\companions\companions.json</CompanionRegistry>
+    <CompanionPayloadDir Condition="'$(CompanionPayloadDir)' == ''">$(MSBuildProjectDirectory)\payload</CompanionPayloadDir>
+    <RstGenDir>$(MSBuildProjectDirectory)\obj\gen</RstGenDir>
+    <DefineConstants>$(DefineConstants);RstBundleVersion=$(RstBundleVersionEffective);RstMsi=$(RstMsi);RstThemeXml=$(RstGenDir)\thm.xml</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- A command-line -p:OutputName= (the smoke's test bundles) wins. -->
+    <OutputName>RST-Setup</OutputName>
+    <OutputType>Bundle</OutputType>
+    <Configurations>Debug;Release</Configurations>
+    <!-- x64 engine, matching the x64 MSIs it chains (Revit 2025-2027 is
+         64-bit only). -->
+    <InstallerPlatform>x64</InstallerPlatform>
+  </PropertyGroup>
+
+  <!-- The fixture companion is its own project (fixture/), and theme/ holds
+       the BA theme templates, which are payloads, not bundle sources or
+       bundle localization. Keep both out of the SDK's default globs. -->
+  <ItemGroup>
+    <Compile Remove="fixture\**" />
+    <EmbeddedResource Remove="theme\**;fixture\**" />
+    <None Remove="fixture\**" />
+  </ItemGroup>
+
+  <!-- WixStandardBootstrapperApplication. Version pinned centrally in
+       Directory.Packages.props (CPM). -->
+  <ItemGroup>
+    <PackageReference Include="WixToolset.BootstrapperApplications.wixext" />
+  </ItemGroup>
+
+  <!-- The companion chain, its variables and the BA theme (one checkbox per
+       shippable companion) are generated from the registry before every
+       compile, into obj\gen\ (outside the default globs, never committed).
+       gen-companions.ps1 also re-checks each payload's sha256 against its
+       pin and fails the build on a mismatch or a missing payload. -->
+  <Target Name="RstGenerateCompanions" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('$(RstMsi)')" Text="RST.msi not found at $(RstMsi). Build installer\RST.Installer.wixproj first, or pass -p:RstMsi=&lt;path&gt;." />
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-companions.ps1&quot; -Registry &quot;$(CompanionRegistry)&quot; -PayloadDir &quot;$(CompanionPayloadDir)&quot; -ThemeTemplate &quot;$(MSBuildProjectDirectory)\theme\RstTheme.xml&quot; -OutDir &quot;$(RstGenDir)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(RstGenDir)\Companions.g.wxs" />
+    </ItemGroup>
+  </Target>
+
+</Project>
