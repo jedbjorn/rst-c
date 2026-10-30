@@ -1056,8 +1056,4 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>{0} (a preset path, fixed for safety)</value>
     <comment>{0} the target's path.</comment>
   </data>
-  <data name="Builder_SavedOldFileKept" xml:space="preserve">
-    <value>Saved as {0}, but the old file {1} could not be removed ({2}). Delete it to avoid a duplicate.</value>
-    <comment>{0} the saved file; {1} the file the profile (with no id) was read from; {2} the error.</comment>
-  </data>
 </root>

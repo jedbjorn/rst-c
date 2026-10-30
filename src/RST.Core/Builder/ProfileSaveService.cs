@@ -88,34 +88,6 @@ public sealed class ProfileSaveService
         }
     }
 
-    /// <summary>
-    /// After the first save of a profile read from a file with no id (feature #18, WU1 review F6): the
-    /// save gave it an id and wrote it under its canonical name, so the file it came from (which
-    /// <see cref="ProfileStore.Save"/> cannot match by id) is removed, or the profile would be listed
-    /// twice. Only a bare file name in the profiles folder is accepted; one already gone is fine.
-    /// </summary>
-    public OpResult RemoveSupersededFile(string fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(['/', '\\']) >= 0 || Path.GetFileName(fileName) != fileName
-            || !fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            _log.Warning(null, "Builder.save_profile: refused to remove {File}: not a profile file name", fileName);
-            return OpResult.Fail("Not a profile file name: " + fileName);
-        }
-        var path = Path.Combine(_profilesDir, fileName);
-        try
-        {
-            if (File.Exists(path)) File.Delete(path);
-            _log.Information("Builder.save_profile: removed {File}, superseded by the saved profile", fileName);
-            return OpResult.Success;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _log.Warning(ex, "Builder.save_profile: could not remove {File}, superseded by the saved profile", fileName);
-            return OpResult.Fail(ex.Message);
-        }
-    }
-
     /// <summary>The Save dialog's suggested name: the canonical file name's stem plus ".zip" ("rst_profile.zip" with no name).</summary>
     public static string SuggestedExportName(Profile profile)
     {
