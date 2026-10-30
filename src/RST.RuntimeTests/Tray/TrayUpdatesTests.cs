@@ -385,7 +385,8 @@ public class UpdatesViewModelTests
         Assert.Equal(ProductState.Installed, failed.Rows[0].State); // not "up to date": that would be stale
         Assert.Equal("RST 3.1.0", failed.RstHeadline);
         Assert.True(failed.ShowCheckFailed);
-        Assert.Equal("Couldn't check: no answer in 30 s. RST tries again at the next daily check. Details are in the log.",
+        // WU3 review D3: the plain wording for a timeout; the raw "no answer in 30 s" stays in the log.
+        Assert.Equal("Couldn't check: GitHub didn't answer in time. RST tries again at the next daily check. Details are in the log.",
                      failed.CheckFailedText);
         Assert.Equal("Last successful check 28 Oct 2026 at 16:05", failed.LastCheckedText);
     }

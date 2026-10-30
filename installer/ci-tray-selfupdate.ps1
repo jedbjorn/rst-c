@@ -129,7 +129,7 @@ function Invoke-HandOff([string]$Msi, [string]$Version, [string]$Mode, [int]$Tra
   $env:RST_SELFUPDATE_MODE = $Mode
   $env:RST_SELFUPDATE_RESULT = $result
   & dotnet test src/RST.RuntimeTests/RST.RuntimeTests.csproj -c $Configuration --no-build --nologo `
-      --filter 'FullyQualifiedName~RST.RuntimeTests.Tray.TraySelfUpdateFixtureTests' --logger 'console;verbosity=normal'
+      --filter 'FullyQualifiedName~RST.RuntimeTests.Tray.TraySelfUpdateFixtureTests' --logger 'console;verbosity=normal' | Out-Host
   $code = $LASTEXITCODE
   Remove-Item Env:RST_SELFUPDATE_NEW_MSI, Env:RST_SELFUPDATE_VERSION, Env:RST_SELFUPDATE_TRAY_PID, Env:RST_SELFUPDATE_MODE, Env:RST_SELFUPDATE_RESULT
   Assert ($code -eq 0) "[$Mode] TraySelfUpdateFixtureTests passed (verified $Version, updater started)"

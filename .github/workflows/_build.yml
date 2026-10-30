@@ -585,3 +585,11 @@ jobs:
           path: |
             ${{ runner.temp }}/tray-selfupdate/
           if-no-files-found: ignore
+      # The three test builds, for AC8's VM half (shared/evidence/f17/wu4/vm-steps.md). Test-only, never released.
+      - name: Upload the RST.msi test builds
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-selfupdate-msi
+          path: ${{ runner.temp }}/RST-3.1.9*.msi
+          if-no-files-found: ignore

@@ -217,7 +217,12 @@ public class TrayInstallScreenshotTests
         var window = new TrayWindow(new TrayViewModel(new FakeTrayHost(), TrayPage.Apps, host));
         try
         {
-            Capture(window, Name("apps", scenario, theme));
+            // The whole page, not the first 540 px: every row's note must be in the picture.
+            WindowCapture.ShowOffScreen(window);
+            var root = (FrameworkElement)window.Content;
+            root.Measure(new Size(WindowSize.Width, double.PositiveInfinity));
+            Capture(window, Name("apps", scenario, theme),
+                    new Size(WindowSize.Width, Math.Max(WindowSize.Height, Math.Ceiling(root.DesiredSize.Height) + 40)));
             var texts = Texts(window.AppsPage);
             Assert.DoesNotContain(texts, t => t.Contains("Exception", StringComparison.Ordinal) || t.Contains("Coming soon", StringComparison.Ordinal));
             switch (scenario)
