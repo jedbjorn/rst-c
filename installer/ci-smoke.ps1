@@ -25,12 +25,12 @@
           file again -> still one product
       (e) stubs removed, uninstall -> every tree gone, probe survives
 
-  -Mode Migrate -From Preview|Unified -OldMsi <v2.2.0 asset>
-      Upgrade from the last two-MSI release, with all three Revit stubs.
+  -Mode Migrate -From Preview|Unified -OldMsi <released asset>
+      Upgrade from a public release, with all three Revit stubs.
         Preview (AC4): RST-R27.msi v2.2.0 -> new RST.msi. The Upgrade row on
           the retired R27 code must remove "RST (Revit 2027 preview)" and the
           installed R27 engine must be the newly staged one.
-        Unified (AC5): RST.msi v2.2.0 -> new RST.msi. MajorUpgrade must leave
+        Unified (AC5): RST.msi v2.2.0 or v3.0.0 -> new RST.msi. MajorUpgrade must leave
           exactly one RST product, at the new version, with all six trees.
 
   Product queries go through the WindowsInstaller.Installer COM object via
