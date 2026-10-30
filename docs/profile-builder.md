@@ -31,7 +31,7 @@ The Builder starts on **+ New Profile**: a blank profile with one empty panel, "
 - **Header:** the profile dropdown, "Profile Builder", **Branding ▾**, the **Name** and **Tab** boxes, then **Export ZIP**, **Save** and **Exit**.
 - **Commands (left):** the command catalogue, with its size and a **Filter…** box.
 - **Panels (centre):** **+ Add Panel** and one card per panel, in ribbon order.
-- **Properties (right):** Profile, Selected Panel, RST Presets and Junk Cleanup.
+- **Properties (right):** Profile, Selected Panel, Stacks, RST Presets and Junk Cleanup.
 - **Live Preview (bottom):** a read-only picture of the ribbon tab as it stands, updated as you edit.
 
 ### Name and tab title
@@ -61,6 +61,8 @@ To add a command, **drag** it onto a panel, or **double-click** it to add it to 
 
 An empty card reads "Drop a command here, or click one in the Commands pane."
 
+A row that places a [stack](#stacks) shows a **stack** tag instead of the icon button. Its name is read-only there: it is the stack's name, and you rename a stack on its card under **Stacks**.
+
 ### Drag and drop
 
 | Drag | Drop on | Result |
@@ -70,6 +72,9 @@ An empty card reads "Drop a command here, or click one in the Commands pane."
 | A tool row | Another tool row | Moved there, in the same panel or another |
 | A tool row | Another panel's card | Moved to the end of that panel |
 | A panel's header | Another panel card | Panels reordered, before or after by which half you drop on |
+| A command from the catalogue | A stack card | Added to that stack (up to three) |
+| A stack card's header | A panel card | The stack placed at the end of that panel |
+| A stack card's header | A tool row | The stack placed before or after it |
 
 While you drag, the source row dims, the target card is highlighted, and a green line marks where an item will land. You can drop over the name boxes too. A drag that starts inside a name box selects text instead of moving anything, and releasing outside a target changes nothing.
 
@@ -84,6 +89,23 @@ Tool icons come from rst-c's built-in icon pack: 55 designs, each in seven colou
 The chosen icon shows on the tool's row, in the Live Preview and on the ribbon. A tool with no pack icon uses rst-c's default button icon on the ribbon (rst-c's own tools keep their own icons). There is no option to take an icon from the source command.
 
 ![The Pick an icon overlay over the Builder: the icon pack's designs in a grid with ∅ none first, and the house design's row of seven colours open below it, with the tooltip "house — purple"](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
+
+### Stacks
+
+A **stack** is two or three small buttons, one above the other, in the space of one large button: the same layout as Revit's own stacked buttons. Stacks hold tools only (Revit or add-in commands, and [URL buttons](custom-url-slots.md)). On the ribbon each stacked button has a 16 px icon and a one-line label.
+
+The **Stacks** section of the Properties pane lists the profile's stacks, one card each:
+
+- **+ Add Stack** adds an empty "Stack N" and selects it (an accent ring).
+- **Add tools:** drag commands from the catalogue onto the card, or double-click them while the stack is selected. Clicking a panel card makes double-click add to that panel again.
+- **Two or three tools.** The card shows "N of 3". A fourth tool is refused ("A stack holds 2 or 3 tools; "<name>" already has 3."). A stack with fewer than two tools shows **Needs 2 or 3 tools**, and **Save** stops with "Stack "<name>" needs 2 or 3 tools before you can save." until it has two.
+- **Each tool** has a **Pick icon** button (the same icon picker as panel tools), its name and short command id, **▲ ▼** to reorder it, and **×** to remove it.
+- **Rename** a stack in its name box; the name applies when you press Enter or leave the box, and every panel that places the stack follows. A name another stack already has is refused ("Stack "<name>" already exists.").
+- **×** deletes the stack after **Delete stack "<name>"?** (Cancel is the default). The panel rows that place it are removed too.
+- **+ Panel** places the stack at the end of the selected panel, or drag the card's header onto a panel card or a tool row. A stack can be placed more than once.
+- A stack no panel places shows **Not on a panel: removed when you save.** Saving drops it.
+
+The Live Preview and the Loader's preview draw each stack as rows with the tools' icons. The Builder's preview fades a stack that the ribbon would not draw yet (fewer than two tools).
 
 ### Properties
 
@@ -193,4 +215,6 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
 - **Min Revit Version** is informational: the Loader shows it on the profile's card and details ("Min Revit"), but rst-c does not check or enforce it when a profile is loaded.
-- The Builder makes plain panels of large buttons. It does not create stacks (grouped buttons). Stacks in a hand-edited profile still appear in the previews.
+- Stacks hold push buttons only: Revit and add-in commands and URL buttons, two or three per stack. Pulldowns, split buttons, combo boxes, text boxes and stacks inside stacks are not supported, and the permanent RST panel on the Add-Ins tab has no stacks.
+- A profile file whose stacks break the rules (for example a hand-edited stack of one or four tools, or a stack tool without a command id) fails validation, so neither the Loader nor the Builder lists it; the log says why. The ribbon would skip such a stack in any case, with a log line, and never draws a stack of one or four buttons.
+- Profiles with stacks open in older versions of rst-c (v3.0.0 and earlier) without errors, but those versions do not draw the stacks on the ribbon.
