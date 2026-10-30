@@ -186,6 +186,12 @@ public sealed class LoaderTestDialogs : IDialogService, ILoaderDialogs
         return ConfirmAnswers.Count > 0 && ConfirmAnswers.Dequeue();
     }
 
+    public DialogChoice Choose(string title, string message, string primaryText, string secondaryText, string automationId)
+    {
+        Log.Add("Choose:" + title);
+        return DialogChoice.Cancel;
+    }
+
     public Rgb? PickColor(Rgb current, IReadOnlyList<Rgb> palette, string title) => null;
 
     public string? OpenFile(string title, string filter)

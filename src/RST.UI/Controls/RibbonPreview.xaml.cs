@@ -5,7 +5,6 @@
 // as columns of "≡" rows, "Empty" panels and "No panels configured". Builder mode labels tools by
 // name and shows empty stacks as "(empty)". The canvas follows the window theme, not the OS.
 
-using System.Collections.Concurrent;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -52,8 +51,6 @@ public partial class RibbonPreview : UserControl
 
     /// <summary>Revit's ribbon background, light theme.</summary>
     public static readonly Color LightCanvas = Color.FromRgb(0xE1, 0xE1, 0xE1);
-
-    private static readonly ConcurrentDictionary<string, BitmapSource?> IconCache = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly bool _dark;
     private readonly RibbonColors _colors;
@@ -307,30 +304,7 @@ public partial class RibbonPreview : UserControl
         };
     }
 
-    private BitmapSource? LoadIcon(IconPackValue value)
-    {
-        var dir = PackDirectory ?? LoaderAssets.IconPackDirectory;
-        var path = Path.Combine(dir, Path.GetFileName(value.RelativePath));
-        return IconCache.GetOrAdd(path, static p =>
-        {
-            try
-            {
-                if (!File.Exists(p)) return null;
-                var image = new BitmapImage();
-                image.BeginInit();
-                image.UriSource = new Uri(p, UriKind.Absolute);
-                image.CacheOption = BitmapCacheOption.OnLoad;
-                image.DecodePixelWidth = 32;
-                image.EndInit();
-                image.Freeze();
-                return image;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        });
-    }
+    private BitmapSource? LoadIcon(IconPackValue value) => PackIcons.Load(value, PackDirectory);
 
     private static SolidColorBrush Frozen(Color color)
     {

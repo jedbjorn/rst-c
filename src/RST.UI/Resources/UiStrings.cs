@@ -443,4 +443,164 @@ public static class UiStrings
     public static string Preview_Empty => Get(nameof(Preview_Empty));
 
     public static string Preview_EmptyStack(object? arg0) => Format(nameof(Preview_EmptyStack), arg0);
+
+    // The Profile Builder (spec #16, WU4).
+
+    public static string Builder_WindowTitle => Get(nameof(Builder_WindowTitle));
+
+    public static string Builder_Title => Get(nameof(Builder_Title));
+
+    public static string Builder_NewProfile => Get(nameof(Builder_NewProfile));
+
+    public static string Builder_LoadedOption(object? arg0) => Format(nameof(Builder_LoadedOption), arg0);
+
+    public static string Builder_ProfileSelectorTip => Get(nameof(Builder_ProfileSelectorTip));
+
+    public static string Builder_Branding => Get(nameof(Builder_Branding));
+
+    public static string Builder_BrandingTip => Get(nameof(Builder_BrandingTip));
+
+    public static string Builder_BrandingHeading => Get(nameof(Builder_BrandingHeading));
+
+    public static string Builder_Logo => Get(nameof(Builder_Logo));
+
+    public static string Builder_PickLogo => Get(nameof(Builder_PickLogo));
+
+    public static string Builder_ClearLogo => Get(nameof(Builder_ClearLogo));
+
+    public static string Builder_ClearLogoTip => Get(nameof(Builder_ClearLogoTip));
+
+    public static string Builder_NoLogo => Get(nameof(Builder_NoLogo));
+
+    public static string Builder_Url => Get(nameof(Builder_Url));
+
+    public static string Builder_UrlPlaceholder => Get(nameof(Builder_UrlPlaceholder));
+
+    public static string Builder_Done => Get(nameof(Builder_Done));
+
+    public static string Builder_Name => Get(nameof(Builder_Name));
+
+    public static string Builder_NamePlaceholder => Get(nameof(Builder_NamePlaceholder));
+
+    public static string Builder_Tab => Get(nameof(Builder_Tab));
+
+    public static string Builder_TabPlaceholder => Get(nameof(Builder_TabPlaceholder));
+
+    public static string Builder_ExportZip => Get(nameof(Builder_ExportZip));
+
+    public static string Builder_Save => Get(nameof(Builder_Save));
+
+    public static string Builder_Exit => Get(nameof(Builder_Exit));
+
+    public static string Builder_ExitTip => Get(nameof(Builder_ExitTip));
+
+    public static string Builder_Commands => Get(nameof(Builder_Commands));
+
+    public static string Builder_FilterPlaceholder => Get(nameof(Builder_FilterPlaceholder));
+
+    public static string Builder_CatalogEmpty => Get(nameof(Builder_CatalogEmpty));
+
+    public static string Builder_NoMatches(object? arg0) => Format(nameof(Builder_NoMatches), arg0);
+
+    public static string Builder_Panels => Get(nameof(Builder_Panels));
+
+    public static string Builder_AddPanel => Get(nameof(Builder_AddPanel));
+
+    public static string Builder_CanvasEmpty => Get(nameof(Builder_CanvasEmpty));
+
+    public static string Builder_PanelEmpty => Get(nameof(Builder_PanelEmpty));
+
+    public static string Builder_MoveUp => Get(nameof(Builder_MoveUp));
+
+    public static string Builder_MoveDown => Get(nameof(Builder_MoveDown));
+
+    public static string Builder_DeletePanelTip => Get(nameof(Builder_DeletePanelTip));
+
+    public static string Builder_RemoveSlotTip => Get(nameof(Builder_RemoveSlotTip));
+
+    public static string Builder_PickIconTip => Get(nameof(Builder_PickIconTip));
+
+    public static string Builder_DeletePanelTitle(object? arg0) => Format(nameof(Builder_DeletePanelTitle), arg0);
+
+    public static string Builder_Delete => Get(nameof(Builder_Delete));
+
+    public static string Builder_Properties => Get(nameof(Builder_Properties));
+
+    public static string Builder_ProfileSection => Get(nameof(Builder_ProfileSection));
+
+    public static string Builder_MinRevitVersion => Get(nameof(Builder_MinRevitVersion));
+
+    public static string Builder_PanelOpacity => Get(nameof(Builder_PanelOpacity));
+
+    public static string Builder_SelectedPanel => Get(nameof(Builder_SelectedPanel));
+
+    public static string Builder_NoPanelSelected => Get(nameof(Builder_NoPanelSelected));
+
+    public static string Builder_Color => Get(nameof(Builder_Color));
+
+    public static string Builder_ColorDialogTitle => Get(nameof(Builder_ColorDialogTitle));
+
+    public static string Builder_UrlButtons => Get(nameof(Builder_UrlButtons));
+
+    public static string Builder_AddUrlButton => Get(nameof(Builder_AddUrlButton));
+
+    public static string Builder_UrlLabelPlaceholder => Get(nameof(Builder_UrlLabelPlaceholder));
+
+    public static string Builder_UrlAdd => Get(nameof(Builder_UrlAdd));
+
+    public static string Builder_Presets => Get(nameof(Builder_Presets));
+
+    public static string Builder_PresetsHelp => Get(nameof(Builder_PresetsHelp));
+
+    public static string Builder_Configure => Get(nameof(Builder_Configure));
+
+    public static string Builder_Cleanup => Get(nameof(Builder_Cleanup));
+
+    public static string Builder_CleanupHelp => Get(nameof(Builder_CleanupHelp));
+
+    public static string Builder_LivePreview => Get(nameof(Builder_LivePreview));
+
+    public static string Builder_ReadOnly => Get(nameof(Builder_ReadOnly));
+
+    public static string Builder_UnsavedTitle => Get(nameof(Builder_UnsavedTitle));
+
+    public static string Builder_UnsavedText => Get(nameof(Builder_UnsavedText));
+
+    public static string Builder_SaveAndExit => Get(nameof(Builder_SaveAndExit));
+
+    public static string Builder_DiscardAndExit => Get(nameof(Builder_DiscardAndExit));
+
+    public static string Builder_SaveAndSwitch => Get(nameof(Builder_SaveAndSwitch));
+
+    public static string Builder_DiscardAndSwitch => Get(nameof(Builder_DiscardAndSwitch));
+
+    public static string Builder_NameRequired => Get(nameof(Builder_NameRequired));
+
+    public static string Builder_TabRequired => Get(nameof(Builder_TabRequired));
+
+    public static string Builder_NameCollision(object? arg0) => Format(nameof(Builder_NameCollision), arg0);
+
+    public static string Builder_SaveFailed(object? arg0) => Format(nameof(Builder_SaveFailed), arg0);
+
+    public static string Builder_SavedAsCopy(object? arg0) => Format(nameof(Builder_SavedAsCopy), arg0);
+
+    public static string Builder_SavedAs(object? arg0) => Format(nameof(Builder_SavedAs), arg0);
+
+    public static string Builder_SavedReloaded => Get(nameof(Builder_SavedReloaded));
+
+    public static string Builder_SavedReloadFailed => Get(nameof(Builder_SavedReloadFailed));
+
+    public static string Builder_ExportedTo(object? arg0) => Format(nameof(Builder_ExportedTo), arg0);
+
+    public static string Builder_ExportFailed(object? arg0) => Format(nameof(Builder_ExportFailed), arg0);
+
+    public static string Builder_SaveUrlFailed(object? arg0) => Format(nameof(Builder_SaveUrlFailed), arg0);
+
+    public static string Builder_LogoPickFailed(object? arg0) => Format(nameof(Builder_LogoPickFailed), arg0);
+
+    public static string Builder_ClearLogoFailed(object? arg0) => Format(nameof(Builder_ClearLogoFailed), arg0);
+
+    public static string Builder_LabelRequired => Get(nameof(Builder_LabelRequired));
+
+    public static string Builder_UrlRequired => Get(nameof(Builder_UrlRequired));
 }

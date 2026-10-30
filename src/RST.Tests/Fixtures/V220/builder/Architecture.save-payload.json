@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "id": "1f0c6a52-6b0e-4d6f-9a3e-2c8d4b7e9a10",
+  "profile": "Architecture",
+  "tab": "Studio Arch",
+  "min_version": "2.2.0",
+  "exportDate": "2026-09-14",
+  "panelOpacity": 85,
+  "requiredAddins": [
+    {
+      "tabName": "Enscape",
+      "addinFile": "Enscape.addin",
+      "url": "https://enscape3d.com"
+    },
+    {
+      "tabName": "Kinship",
+      "addinFile": "Kinship.addin",
+      "url": ""
+    }
+  ],
+  "hideRules": [],
+  "stacks": {},
+  "panels": [
+    {
+      "name": "Model",
+      "color": "#4f8ef7",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Wall",
+          "baseName": "Wall",
+          "commandId": "ID_OBJECTS_WALL",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Build",
+          "iconFile": "pack:building_office_blue"
+        },
+        {
+          "type": "tool",
+          "name": "Door",
+          "commandId": "ID_OBJECTS_DOOR",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Build",
+          "iconFile": "pack:house_purple"
+        },
+        {
+          "type": "tool",
+          "name": "Level",
+          "commandId": "ID_OBJECTS_LEVEL",
+          "sourceTab": "Architecture",
+          "sourcePanel": "Datum",
+          "iconFile": "pack:level_green"
+        }
+      ]
+    },
+    {
+      "name": "Render",
+      "color": "#10b981",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Enscape",
+          "commandId": "Enscape.Start",
+          "sourceTab": "Enscape",
+          "sourcePanel": "Enscape",
+          "iconFile": "pack:camera_orange"
+        },
+        {
+          "type": "tool",
+          "name": "Kinship",
+          "commandId": "Kinship.Open",
+          "sourceTab": "Kinship",
+          "sourcePanel": "Kinship",
+          "iconFile": "pack:box_open_red"
+        }
+      ]
+    },
+    {
+      "name": "Links",
+      "color": "#f59e0b",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Wiki",
+          "commandId": "URL:https://wiki.example.com",
+          "sourceTab": "Custom",
+          "iconFile": "pack:link_external"
+        },
+        {
+          "type": "tool",
+          "name": "Help",
+          "commandId": "URL:https://help.example.com",
+          "sourceTab": "Custom"
+        }
+      ]
+    },
+    {
+      "name": "Later",
+      "color": "#8b5cf6",
+      "slots": []
+    }
+  ],
+  "branding": null,
+  "presets": {
+    "hiddenTabs": [
+      "Analyze"
+    ],
+    "disableUnusedAddins": false
+  },
+  "cleanupTargets": [
+    {
+      "id": "rst.cleanup.temp",
+      "name": "Temp",
+      "path": "%LocalAppData%\\Temp",
+      "kind": "directory",
+      "enabled": true
+    },
+    {
+      "id": "rst.cleanup.pacCache",
+      "name": "PacCache",
+      "path": "%LocalAppData%\\Autodesk\\Revit\\PacCache",
+      "kind": "directory",
+      "enabled": true
+    },
+    {
+      "id": "rst.cleanup.journals",
+      "name": "Journals",
+      "path": "%LocalAppData%\\Autodesk\\Revit\\{revit-version}\\Journals",
+      "kind": "directory",
+      "enabled": true
+    },
+    {
+      "id": "rst.cleanup.collabCache",
+      "name": "Collaboration Cache",
+      "path": "%LocalAppData%\\Autodesk\\Revit\\{revit-version}\\CollaborationCache",
+      "kind": "directory",
+      "enabled": true
+    },
+    {
+      "id": "rst.cleanup.recentFiles",
+      "name": "Recent File List",
+      "path": "%AppData%\\Autodesk\\Revit\\{revit-version}\\Revit.ini",
+      "kind": "iniRecentFiles",
+      "enabled": true
+    },
+    {
+      "id": "rst.cleanup.rstLogs",
+      "name": "RST Logs",
+      "path": "%AppData%\\RST\\logs",
+      "kind": "directory",
+      "enabled": true
+    }
+  ]
+}
