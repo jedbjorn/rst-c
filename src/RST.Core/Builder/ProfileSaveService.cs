@@ -100,6 +100,9 @@ public sealed class ProfileSaveService
     {
         ArgumentNullException.ThrowIfNull(edited);
         var profile = ProfileEditing.Clone(edited);
+        // Spec #17: as the save, a stack no panel places is left out.
+        foreach (var orphan in ProfileEditing.RemoveOrphanStacks(profile))
+            _log.Warning(null, "Builder.export_profile: stack {Stack} is not on any panel; left out of {Name}", orphan, profile.ProfileName);
         var (logoPath, url) = BrandingDefaults.Resolve(profile);
         try
         {
