@@ -13,6 +13,8 @@ public partial class AddinReportWindow : Window
         InitializeComponent();
         DarkTitleBar.Attach(this);
         DataContext = model;
+        // Set directly: a binding on the window's own Title resolves only once the window is shown.
+        Title = model.Title;
     }
 
     // DialogResult from the click handler closes the window after the click; nothing runs in Closing.
