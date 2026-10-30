@@ -186,16 +186,27 @@ Run per-user `RST.msi` as the user, not from an elevated prompt, so that the res
 `RST-Machine.msi` (or `RST-Setup.exe`, "Everyone on this PC") installs the tray once, in `C:\Program Files\RST\Tray\`, and the `HKLM` Run value starts it for every user at sign-in. Each user still gets their own tray process, settings, log and add-in choices. Details of the package are in [installer/README.md](../installer/README.md#per-machine-install-rst-machinemsi).
 
 ```powershell
-# elevated prompt, or the deployment tool's system account
+# a deployment tool (SCCM, Intune: runs as SYSTEM) or an elevated prompt
+Stop-Process -Name RST.Tray -Force -ErrorAction SilentlyContinue   # upgrades only: see below
 msiexec /i RST-Machine.msi /qn /norestart /l*v "%TEMP%\RST-Machine.log"
+
+# an administrator signed in at the PC (also installs ticked companions for that account)
 RST-Setup.exe /quiet /norestart InstallScope=machine
 ```
+
+Deploy `RST-Machine.msi` on its own as SYSTEM. Run as SYSTEM, `RST-Setup.exe` would register itself, and install companions, for no real user.
 
 - **When the tray starts:** the installer never starts it. A tray started by an elevated installer would run elevated, and its icon would not come back after Explorer restarts. Each user's tray starts at their next sign-in, or when Revit starts it. A repair or upgrade asks a running tray on the installer's desktop to exit, and does not restart it, for the same reason. It comes back at the next sign-in, or with Revit.
 - **Updates are an administrator's job.** A user's tray tells them a newer RST is out, but it does not install a per-machine RST, because that needs an administrator. Deploy the new `RST-Machine.msi`; it upgrades in place. Companions stay per user, so each user's tray keeps them up to date for that user.
 - **Update checks:** to turn them off for every user, set `HKLM\Software\Designs-OS\RST\Tray` `UpdateChecks` = `0` ([below](#turning-update-checks-off-for-everyone-it)).
-- **Signed-in users during an upgrade:** an installer asks each tray on its own desktop to exit. Other users' trays in other sessions keep running, and the installer may wait up to 10 seconds for each one. Their open files can then make the upgrade need a restart (exit code `3010`). Upgrade when users are signed out, or schedule the restart.
-- **Installed twice:** a user who also has their own `RST.msi` runs their own copy. Revit lets a per-user add-in of the same name win. RST logs it at every Revit start, and the tray tells that user once: "RST is installed twice … To use the shared one, remove "RST" in Settings > Apps, and keep "RST (all users)"." Their profiles and settings stay. `RST-Machine.msi` refuses to install while the installing administrator has their own copy, and `RST-Setup.exe`'s "Everyone on this PC" removes it for them first.
+- **Signed-in users during an upgrade:** the installer asks only trays on its own desktop to exit. A deployment tool running as SYSTEM has no user's desktop, so it closes no tray at all. Any signed-in user's tray keeps its files in `C:\Program Files\RST\Tray\` open, and the upgrade then returns `3010` (restart needed). The installer may also wait up to 10 seconds for each tray. To avoid that, end every user's tray first; as SYSTEM this reaches every session:
+
+  ```powershell
+  Stop-Process -Name RST.Tray -Force -ErrorAction SilentlyContinue   # or: taskkill /f /im RST.Tray.exe
+  ```
+
+  Each tray comes back at that user's next sign-in, or when Revit starts it. Until then the icon may linger until the pointer passes over it. Revit open in any session still holds RST's engine files, and needs the restart as any add-in does.
+- **Installed twice:** a user who also has their own `RST.msi` runs their own copy. Revit lets a per-user add-in of the same name win. RST logs it at every Revit start, and the tray tells that user once: "RST is installed twice … To use the shared one, remove "RST" in Settings > Apps, and keep "RST (all users)"." Their profiles and settings stay. `RST-Machine.msi` refuses to install while the installing administrator has their own copy, and `RST-Setup.exe`'s "Everyone on this PC" removes it for them first. Setup checks first that Revit is closed and that every copy can be removed; if not, it changes nothing.
 - **Going back to per user** is uninstall, then install: remove "RST (all users)", then install `RST.msi`.
 
 ## Allowlisting (AppLocker, antivirus)
@@ -211,7 +222,7 @@ Per-machine mode puts every RST program file under Program Files. AppLocker's de
 
 ## Uninstalling
 
-Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app, the `RST` Run value and `%LocalAppData%\RST\Tray\` (the download cache, the updater copy and the install logs). The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
+Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app and the `RST` Run value. `RST.msi` also removes `%LocalAppData%\RST\Tray\` (the download cache, the updater copy and the install logs). `RST-Machine.msi` leaves each user's `%LocalAppData%\RST\Tray\`, which is per-user data an administrator's uninstall cannot reach and must not delete. The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
 
 A repair or an upgrade also closes a running tray while its files are replaced. If Windows shows a **Files in Use** dialog, the default choice closes the tray, and Windows starts it again, hidden in the notification area, when the install finishes. An installer only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone.
 

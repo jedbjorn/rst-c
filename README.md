@@ -147,12 +147,16 @@ From v3.1 rst-c installs one of two ways. Both are the same RST, with the same t
 Each user still has their own profiles, settings, tray and add-in choices. A per-machine install shares only the program files and grants nothing extra: no permission changes and no service. Gantt-It and Splash-It always install per user; on a per-machine PC, each user adds them from the RST tray.
 
 ```powershell
-# IT: for everyone, silently (elevated)
+# IT, from a deployment tool (SCCM, Intune: runs as SYSTEM) or an elevated prompt
 msiexec /i RST-Machine.msi /qn /norestart
+
+# an administrator at the PC, also installing Gantt-It for their own account
 RST-Setup.exe /quiet /norestart InstallScope=machine InstallGanttIt=1
 ```
 
-**Both installed:** if a user also has their own `RST.msi`, Revit loads their own copy. "Everyone on this PC" in `RST-Setup.exe` removes the installing user's own copy first. A bare `RST-Machine.msi` refuses to install until that copy is removed. Any other user is told once by their tray how to remove theirs.
+Deploy `RST-Machine.msi` on its own as SYSTEM. `RST-Setup.exe` is for an administrator signed in at the PC: as SYSTEM it would register itself, and install companions, for no real user.
+
+**Both installed:** if a user also has their own `RST.msi`, Revit loads their own copy. "Everyone on this PC" in `RST-Setup.exe` removes the installing user's own copies first (including the retired Revit 2027 preview). It changes nothing if Revit is open or a copy can't be removed. A bare `RST-Machine.msi` refuses to install until that copy is removed. Any other user is told once by their tray how to remove theirs.
 
 **Switching back** to just for me is uninstall, then install: remove "RST (all users)", then install `RST.msi`. Details: [`installer/README.md`](installer/README.md#per-machine-install-rst-machinemsi) and [docs/tray.md](docs/tray.md#installed-for-everyone-on-this-pc-it).
 
