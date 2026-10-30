@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "companions": [
+    {
+      "id": "gantt-it",
+      "name": "Gantt-It",
+      "description": "Gantt charts as native Revit legend views",
+      "repo": "jedbjorn/gantt-it",
+      "status": "in_development",
+      "revitYears": [2025, 2026, 2027],
+      "addinClientId": "9920fb42-542b-4ce1-9659-a078489af6b0",
+      "vendorId": "DSOS",
+      "defaultSelected": false,
+      "release": null
+    },
+    {
+      "id": "splash-it",
+      "name": "Splash-It",
+      "description": "Colors Revit view tabs by file",
+      "repo": "jedbjorn/splash-it",
+      "status": "in_development",
+      "revitYears": [2025, 2026, 2027],
+      "addinClientId": "0b1cc712-e936-4da1-9680-2d9a95f88271",
+      "vendorId": "DSOS",
+      "defaultSelected": false,
+      "release": null
+    }
+  ]
+}
