@@ -275,14 +275,16 @@
                                       ToolTip="{x:Static res:UiStrings.Builder_ProfileSelectorTip}"
                                       AutomationProperties.AutomationId="Builder.ProfileButton"
                                       AutomationProperties.Name="{x:Static res:UiStrings.Builder_ProfileSelectorTip}">
-                            <DockPanel>
+                            <!-- The name, "(loaded)" right after it (as the spike), the chevron at the right edge. -->
+                            <DockPanel LastChildFill="False">
                                 <TextBlock DockPanel.Dock="Right" Text="▾" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="8,0,0,0" />
-                                <TextBlock DockPanel.Dock="Right" Text="{x:Static res:UiStrings.Builder_LoadedMark}" Style="{StaticResource MutedText}"
+                                <TextBlock x:Name="ProfileButtonName" DockPanel.Dock="Left" Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis"
+                                           AutomationProperties.AutomationId="Builder.ProfileButtonName" />
+                                <TextBlock DockPanel.Dock="Left" Text="{x:Static res:UiStrings.Builder_LoadedMark}" Style="{StaticResource MutedText}"
                                            Margin="6,0,0,0" VerticalAlignment="Center"
                                            Visibility="{Binding IsLoadedProfile, Converter={StaticResource BoolToVisible}}"
                                            AutomationProperties.AutomationId="Builder.LoadedMark" />
-                                <TextBlock x:Name="ProfileButtonName" Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="Builder.ProfileButtonName" />
                             </DockPanel>
                             <ToggleButton.ContextMenu>
                                 <ContextMenu x:Name="ProfileMenu" Closed="OnMenuClosed" MinWidth="300"
