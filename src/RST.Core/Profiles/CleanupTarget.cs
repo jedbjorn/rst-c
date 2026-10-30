@@ -21,7 +21,7 @@
 //                           semantics as the legacy `recentFiles` option.
 //
 // Backwards-compat: a profile with no `cleanupTargets` field falls back
-// to CleanupDefaults at HealthBridge.GetCleanupTargets time. Saving the
+// to CleanupDefaults at HealthService.GetCleanupTargets time. Saving the
 // profile through Builder will write the field, upgrading in place.
 
 using System.Text.Json.Serialization;

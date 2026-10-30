@@ -1,14 +1,357 @@
+<!--
+    rst-c's own (not vendored). The Health window (spec #16, WU2), native WPF on the family theme,
+    replacing the WebView2 page health_viewer.html one for one: the header (title, Health / Activity
+    tabs, Device and Captured), the Health tab's four collapsible sections, the Activity tab's stat
+    cards, range pills and charts, the per-tab footer, the Junk modal, the Cleaning overlay and the
+    toast. The view-model is HealthViewModel.
+-->
 <Window x:Class="RST.UI.Health.HealthWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:wv="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="RST — Health"
-        Width="900"
-        Height="800"
-        WindowStartupLocation="CenterScreen"
-        Background="#0f1117"
-        ResizeMode="CanResize">
-    <Grid>
-        <wv:WebView2 x:Name="WebView" />
+        xmlns:res="clr-namespace:RST.UI.Resources"
+        xmlns:health="clr-namespace:RST.UI.Health"
+        xmlns:controls="clr-namespace:RST.UI.Controls"
+        xmlns:core="clr-namespace:RST.Core.Health;assembly=RST.Core"
+        Title="{x:Static res:UiStrings.Health_WindowTitle}"
+        Width="900" Height="800" MinWidth="640" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- A section's severity dot (the HTML's rst-section__dot classes). -->
+            <Style x:Key="SeverityDot" TargetType="Ellipse">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Height" Value="8" />
+                <Setter Property="Margin" Value="0,0,10,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Fill" Value="{StaticResource MutedTextBrush}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Ok}">
+                        <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.WarnSoft}">
+                        <Setter Property="Fill" Value="{StaticResource CautionTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Warn}">
+                        <Setter Property="Fill" Value="{StaticResource WarningTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Danger}">
+                        <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Info}">
+                        <Setter Property="Fill" Value="{StaticResource AccentForegroundBrush}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- A row's value (rst-section__row-value): severity color, bold total, "—" muted and italic. -->
+            <Style x:Key="RowValue" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding ValueBold}" Value="True">
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.Ok}">
+                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.WarnSoft}">
+                        <Setter Property="Foreground" Value="{StaticResource CautionTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.Warn}">
+                        <Setter Property="Foreground" Value="{StaticResource WarningTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.Danger}">
+                        <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                        <Setter Property="FontStyle" Value="Italic" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- One row: a 160 px label column, the value and its sub-lines; a divider above every row but the first. -->
+            <DataTemplate x:Key="RowTemplate" DataType="{x:Type health:HealthRow}">
+                <Border x:Name="Line" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="0,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,12,0"
+                                   VerticalAlignment="Top" TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Value}" Style="{StaticResource RowValue}" AutomationProperties.AutomationId="Health.RowValue" />
+                            <ItemsControl ItemsSource="{Binding Subs}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock health:HealthText.Runs="{Binding}" Foreground="{StaticResource MutedTextBrush}"
+                                                   FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                        <Setter TargetName="Line" Property="BorderThickness" Value="0" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!-- A collapsible section (collapsed by default): the dot and title in the header, the rows in the body. -->
+            <DataTemplate x:Key="SectionTemplate" DataType="{x:Type health:HealthSection}">
+                <Expander Style="{StaticResource SectionExpander}" Header="{Binding}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                          AutomationProperties.AutomationId="Health.Section">
+                    <Expander.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Style="{StaticResource SeverityDot}"
+                                         Visibility="{Binding HasDot, Converter={StaticResource BoolToVisible}}" />
+                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </Expander.HeaderTemplate>
+                    <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource RowTemplate}" Focusable="False" />
+                </Expander>
+            </DataTemplate>
+
+            <!-- An Activity stat card. -->
+            <DataTemplate x:Key="StatCardTemplate" DataType="{x:Type health:StatCard}">
+                <Border Style="{StaticResource Panel}" Padding="12,10" Margin="4,0">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                   TextWrapping="Wrap" MinHeight="30" />
+                        <TextBlock Text="{Binding Value}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                   Margin="0,2,0,0" AutomationProperties.AutomationId="Health.StatValue" />
+                        <TextBlock Text="{Binding Sub}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" MinHeight="15" Margin="0,2,0,0" />
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+
+            <!-- An Activity chart card: the chart, an empty state, or a single dot and its hint. -->
+            <DataTemplate x:Key="ChartCardTemplate" DataType="{x:Type health:ChartCard}">
+                <Border Style="{StaticResource Panel}" Padding="18,14,18,10" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <controls:ActivityChart Layout="{Binding Chart}"
+                                                Visibility="{Binding HasChart, Converter={StaticResource BoolToVisible}}"
+                                                LineBrush="{StaticResource AccentForegroundBrush}"
+                                                GridBrush="{StaticResource DividerBrush}"
+                                                LabelBrush="{StaticResource MutedTextBrush}"
+                                                DotStrokeBrush="{StaticResource SurfaceBrush}"
+                                                AutomationProperties.AutomationId="Health.Chart" />
+                        <StackPanel x:Name="Empty" Margin="12,24">
+                            <TextBlock Text="{Binding EmptyTitle}" FontSize="13" Foreground="{StaticResource MutedTextBrush}"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,4"
+                                       Visibility="{Binding HasEmptyTitle, Converter={StaticResource BoolToVisible}}"
+                                       AutomationProperties.AutomationId="Health.ChartEmptyTitle" />
+                            <TextBlock Text="{Binding EmptyHint}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                       Visibility="{Binding HasEmptyHint, Converter={StaticResource BoolToVisible}}"
+                                       AutomationProperties.AutomationId="Health.ChartEmptyHint" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding HasEmptyTitle}" Value="False" />
+                            <Condition Binding="{Binding HasEmptyHint}" Value="False" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter TargetName="Empty" Property="Visibility" Value="Collapsed" />
+                    </MultiDataTrigger>
+                    <DataTrigger Binding="{Binding HasChart}" Value="True">
+                        <Setter TargetName="Empty" Property="Margin" Value="12,2,12,4" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!-- A cleanup target in the Junk modal: name, path hint, toggle (on by default). -->
+            <DataTemplate x:Key="JunkRowTemplate" DataType="{x:Type health:JunkTargetItem}">
+                <Border x:Name="Line" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="0,10">
+                    <DockPanel>
+                        <CheckBox DockPanel.Dock="Right" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                  VerticalAlignment="Center" Margin="14,0,0,0"
+                                  AutomationProperties.Name="{Binding DisplayName}" AutomationProperties.AutomationId="Health.JunkToggle" />
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding PathHint}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                        <Setter TargetName="Line" Property="BorderThickness" Value="0" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- The root carries the window color itself: the screenshot tests render it unclipped by the window. -->
+    <Grid x:Name="Root" Background="{StaticResource WindowBrush}">
+        <Grid x:Name="Main" IsEnabled="{Binding IsMainEnabled}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header: title, Health / Activity tabs, Device and Captured. -->
+            <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1"
+                    Padding="18,10,18,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:UiStrings.Health_Heading}" Style="{StaticResource HeadingText}"
+                               VerticalAlignment="Center" Margin="0,0,24,10" />
+                    <TabControl x:Name="Tabs" Grid.Column="1" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}"
+                                IsEnabled="{Binding IsIdle}" Padding="0" BorderThickness="0" VerticalAlignment="Bottom"
+                                AutomationProperties.AutomationId="Health.Tabs">
+                        <TabItem Header="{x:Static res:UiStrings.Health_TabHealth}" AutomationProperties.AutomationId="Health.TabHealth" />
+                        <TabItem Header="{x:Static res:UiStrings.Health_TabActivity}" AutomationProperties.AutomationId="Health.TabActivity" />
+                    </TabControl>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,10">
+                        <TextBlock Margin="0,0,18,0" AutomationProperties.AutomationId="Health.Device">
+                            <Run Text="{x:Static res:UiStrings.Health_Device}" Foreground="{StaticResource MutedTextBrush}" />
+                            <Run Text="{Binding Device, Mode=OneWay}" FontWeight="SemiBold" />
+                        </TextBlock>
+                        <TextBlock AutomationProperties.AutomationId="Health.Captured">
+                            <Run Text="{x:Static res:UiStrings.Health_Captured}" Foreground="{StaticResource MutedTextBrush}" />
+                            <Run Text="{Binding Captured, Mode=OneWay}" FontWeight="SemiBold" />
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Health tab: the four sections. -->
+            <ScrollViewer x:Name="HealthPane" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="18,16,18,8"
+                          Visibility="{Binding IsHealthTab, Converter={StaticResource BoolToVisible}}" Focusable="False">
+                <ItemsControl x:Name="Sections" ItemsSource="{Binding Sections}" ItemTemplate="{StaticResource SectionTemplate}"
+                              MaxWidth="820" Focusable="False" />
+            </ScrollViewer>
+
+            <!-- Activity tab: six stat cards, the range pills and three charts. -->
+            <ScrollViewer x:Name="ActivityPane" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="18,16,18,8"
+                          Visibility="{Binding IsActivityTab, Converter={StaticResource BoolToVisible}}" Focusable="False">
+                <StackPanel MaxWidth="820">
+                    <ItemsControl ItemsSource="{Binding StatCards}" ItemTemplate="{StaticResource StatCardTemplate}" Margin="-4,0,-4,10"
+                                  Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" Columns="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <Border Style="{StaticResource RangePillGroup}" Margin="0,0,0,10">
+                        <ItemsControl ItemsSource="{Binding Ranges}" IsEnabled="{Binding IsIdle}" Focusable="False"
+                                      AutomationProperties.AutomationId="Health.Ranges">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type health:RangeOption}">
+                                    <RadioButton Style="{StaticResource RangePill}" GroupName="HealthRange" Content="{Binding Label}"
+                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Charts}" ItemTemplate="{StaticResource ChartCardTemplate}" Focusable="False" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Footer: secondary actions on the left; Close, then the Primary, on the right. -->
+            <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource DividerBrush}"
+                    BorderThickness="0,1,0,0" Padding="18,10">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button x:Name="CloseButton" Content="{x:Static res:UiStrings.Health_Close}" Command="{Binding CloseCommand}"
+                                MinWidth="80" AutomationProperties.AutomationId="Health.Close" />
+                        <Button x:Name="ScanButton" Style="{StaticResource PrimaryButton}" Command="{Binding ScanCommand}" Margin="8,0,0,0"
+                                MinWidth="120" Visibility="{Binding IsHealthTab, Converter={StaticResource BoolToVisible}}"
+                                AutomationProperties.AutomationId="Health.Scan">
+                            <StackPanel Orientation="Horizontal">
+                                <ProgressBar Style="{StaticResource BusySpinner}" Foreground="{StaticResource OnAccentBrush}" Margin="0,0,8,0"
+                                             Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisible}}" />
+                                <TextBlock Text="{Binding ScanLabel}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <Grid>
+                        <Button x:Name="CleanButton" Content="{x:Static res:UiStrings.Health_CleanJunkFiles}" Command="{Binding CleanCommand}"
+                                HorizontalAlignment="Left" Visibility="{Binding IsHealthTab, Converter={StaticResource BoolToVisible}}"
+                                AutomationProperties.AutomationId="Health.Clean" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                    Visibility="{Binding IsActivityTab, Converter={StaticResource BoolToVisible}}">
+                            <CheckBox x:Name="CollectionToggle" Style="{StaticResource ToggleSwitch}"
+                                      Content="{x:Static res:UiStrings.Health_Collection}"
+                                      IsChecked="{Binding TelemetryEnabled, Mode=TwoWay}" IsEnabled="{Binding IsIdle}"
+                                      AutomationProperties.AutomationId="Health.Collection" />
+                            <TextBlock Text="{Binding TelemetryStatusLine}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"
+                                       AutomationProperties.AutomationId="Health.CollectionStatus" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- The Junk modal (the HTML's in-page overlay): every target on by default, or the empty state. -->
+        <Grid x:Name="JunkOverlay" Background="{StaticResource ScrimBrush}" Panel.ZIndex="50"
+              Visibility="{Binding IsJunkOpen, Converter={StaticResource BoolToVisible}}">
+            <Border x:Name="JunkCard" Style="{StaticResource Panel}" Width="480" MaxWidth="820" Padding="24,20"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.AutomationId="Health.JunkModal">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.3" />
+                </Border.Effect>
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="{x:Static res:UiStrings.Health_JunkTitle}" Style="{StaticResource HeadingText}" FontSize="14" />
+                        <TextBlock Text="{x:Static res:UiStrings.Health_JunkSubtitle}" Foreground="{StaticResource MutedTextBrush}"
+                                   TextWrapping="Wrap" Margin="0,4,0,12" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                        <Button Content="{x:Static res:UiStrings.Health_JunkCancel}" Command="{Binding JunkCancelCommand}" MinWidth="88"
+                                AutomationProperties.AutomationId="Health.JunkCancel" />
+                        <Button Content="{x:Static res:UiStrings.Health_JunkRun}" Command="{Binding JunkRunCommand}" Margin="8,0,0,0"
+                                Style="{StaticResource PrimaryButton}" AutomationProperties.AutomationId="Health.JunkRun" />
+                    </StackPanel>
+                    <Grid>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="420" Focusable="False"
+                                      Visibility="{Binding HasJunkTargets, Converter={StaticResource BoolToVisible}}">
+                            <ItemsControl ItemsSource="{Binding JunkTargets}" ItemTemplate="{StaticResource JunkRowTemplate}" Focusable="False" />
+                        </ScrollViewer>
+                        <StackPanel Margin="0,10" Visibility="{Binding HasJunkTargets, Converter={StaticResource BoolToCollapsed}}"
+                                    AutomationProperties.AutomationId="Health.JunkEmpty">
+                            <TextBlock Text="{x:Static res:UiStrings.Health_JunkEmptyTitle}" FontSize="13" />
+                            <TextBlock Text="{x:Static res:UiStrings.Health_JunkEmptyHint}" Foreground="{StaticResource MutedTextBrush}"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <ContentControl x:Name="BusyOverlay" Style="{StaticResource BusyOverlay}" Content="{Binding Busy}" />
+        <ContentControl x:Name="Toast" Style="{StaticResource TransientBanner}" Content="{Binding Toast}" />
     </Grid>
 </Window>
