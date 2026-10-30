@@ -41,21 +41,25 @@ Each checkbox is a Burn variable named after the companion's registry id: `gantt
 
 ```powershell
 # rst-c + both companions, no UI
-RST-Setup.exe /quiet InstallGanttIt=1 InstallSplashIt=1
+RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1
 
 # rst-c only (same as the bare RST.msi)
-RST-Setup.exe /quiet
+RST-Setup.exe /quiet /norestart
 
 # with a log
-RST-Setup.exe /quiet InstallGanttIt=1 InstallSplashIt=1 /log "%TEMP%\RST-Setup.log"
+RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1 /log "%TEMP%\RST-Setup.log"
 
 # uninstall rst-c (companions stay)
-RST-Setup.exe /uninstall /quiet
+RST-Setup.exe /uninstall /quiet /norestart
 ```
 
-`/passive` shows progress without prompts. Exit code `0` is success; `3010` means a restart is needed (no current package asks for one).
+**Always pass `/norestart` with `/quiet` or `/passive`.** Without it, the standard bootstrapper restarts the computer by itself, with no prompt, if any package asks for a restart, and in quiet mode it asks Windows Installer to close the applications holding files. With `/norestart` nothing restarts: a needed restart is reported as exit code `3010`, to be done later. Exit code `0` is success. No current package asks for a restart.
 
-**Adding a companion later:** re-running the setup's UI on a computer where it is installed shows Repair/Uninstall, not the checkboxes. Run the companion's own MSI, or `RST-Setup.exe /quiet InstallGanttIt=1`.
+**Run the setup with Revit closed.** rst-c's and the companions' files are loaded by Revit while it runs.
+
+`/passive` shows progress without prompts; it takes the same `/norestart`.
+
+**Adding a companion later:** re-running the setup's UI on a computer where it is installed shows Repair/Uninstall, not the checkboxes. Run the companion's own MSI, or `RST-Setup.exe /quiet /norestart InstallGanttIt=1`.
 
 ## Install-order behavior
 
@@ -78,12 +82,12 @@ What the bundle smoke (`ci-bundle-smoke.ps1 -Mode Chain`, with the test-only fix
 Observed on CI (`ci-bundle-smoke.ps1 -Mode BareMsiFirst`, first in PR #134, run 40999336203). The leg now asserts each of these, so a change fails the build:
 
 1. `msiexec /i RST.msi /qn`: one "RST" product with its own visible Settings → Apps entry.
-2. `RST-Setup.exe /quiet` (the same `RST.msi` inside, same ProductCode):
+2. `RST-Setup.exe /quiet /norestart` (the same `RST.msi` inside, same ProductCode):
    - Burn detects `RST` as `state: Present, install registration state: Ignored` (installed, but not by this bundle).
    - It plans `execute: None` (nothing reinstalled, no files touched) with `dependency: Register, expected install registration state: Present`. **The bundle adopts the existing RST.msi as its own.**
    - There is still exactly one RST product. Because the MSI is not re-run, its own ARP entry stays visible, so **Settings → Apps shows two "RST" entries**: the bundle's and the bare MSI's.
    - Ticked companions install normally.
-3. Uninstalling the bundle (Settings → Apps → the bundle's "RST", or `RST-Setup.exe /uninstall /quiet`): Burn plans `RST` as `execute: Uninstall`. **The adopted RST.msi is removed**: no RST product, no RST files, and no "RST" entry left. Companions stay, as always.
+3. Uninstalling the bundle (Settings → Apps → the bundle's "RST", or `RST-Setup.exe /uninstall /quiet /norestart`): Burn plans `RST` as `execute: Uninstall`. **The adopted RST.msi is removed**: no RST product, no RST files, and no "RST" entry left. Companions stay, as always.
 
 4. The other way out (recorded, not asserted): bare `RST.msi`, then the bundle, then the MSI's own entry removed (`msiexec /x`). rst-c is removed, but **the bundle's "RST" entry stays behind** with nothing under it. Uninstalling that leftover entry succeeds (Burn plans `RST` as `state: Absent, execute: None`) and removes it.
 
@@ -120,7 +124,7 @@ dotnet build installer-bundle\RST.Setup.wixproj -c Release
   - `BareMsiFirst`: AC5.
   - `Companions`: the real `RST-Setup.exe` with both companions ticked. Both install silently with their own entries and `.addin` files, survive the bundle's uninstall, uninstall with `msiexec /x`, and install alone without rst-c.
 
-  Every leg also asserts the bundle registered per-user and never launched an elevated engine.
+  `Chain` and `Companions` also assert from the Burn log that the bundle registered per-user and never launched an elevated engine. Every silent run uses `/quiet /norestart`, the documented form.
 
 None of this loads anything in Revit. That a real companion works in Revit after the setup is the one-time VM check (AC6, skill `rst_c_vm`), not CI.
 

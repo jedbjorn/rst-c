@@ -63,6 +63,6 @@
   <String Id="FilesInUseIgnoreButton" Value="&amp;Ignore" />
   <String Id="FilesInUseExitButton" Value="E&amp;xit" />
   <String Id="CompanionsHeader" Value="Optional Designs/OS add-ins. Each one is a separate product with its own entry in Settings &gt; Apps, and it stays installed if you uninstall RST later." />
-  <String Id="SuccessCompanionsInstallText" Value="Any add-ins you ticked were installed as separate products, each with its own entry in Settings &gt; Apps. They stay installed if you uninstall RST." />
+  <String Id="SuccessCompanionsInstallText" Value="Add-ins you ticked are separate products, each with its own entry in Settings &gt; Apps. They stay installed if you uninstall RST." />
   <String Id="SuccessCompanionsUninstallText" Value="RST was removed. Any add-ins installed with it are separate products and stay installed; remove each one from Settings &gt; Apps." />
 </WixLocalization>

@@ -117,15 +117,15 @@ rst-c writes a Serilog session log under `%AppData%\RST\logs\` for every Revit l
 
 A ticked add-in is installed from its own released MSI, unchanged. It is a separate product: it gets its own entry in Settings → Apps and upgrades through its own installer. An add-in that is already installed at the same or a newer version is left as it is; an older one is upgraded.
 
-**Companions are permanent.** Uninstalling RST (the "RST" entry in Settings → Apps, or `RST-Setup.exe /uninstall /quiet`) leaves them installed; remove each one from Settings → Apps.
+**Companions are permanent.** Uninstalling RST (the "RST" entry in Settings → Apps, or `RST-Setup.exe /uninstall /quiet /norestart`) leaves them installed; remove each one from Settings → Apps.
 
-Silent install for IT, rst-c plus both add-ins (leave a variable out for an add-in you do not want):
+Silent install for IT, rst-c plus both add-ins (leave a variable out for an add-in you do not want). Always pass `/norestart`; without it the setup may restart the computer by itself, with no prompt. Run it with Revit closed:
 
 ```powershell
-RST-Setup.exe /quiet InstallGanttIt=1 InstallSplashIt=1
+RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1
 ```
 
-Use either `RST.msi` or `RST-Setup.exe` on a computer, not both. If `RST.msi` is already installed, the setup adopts it, Settings → Apps shows two "RST" entries, and removing either one removes rst-c. Details: [`installer-bundle/README.md`](installer-bundle/README.md).
+Use either `RST.msi` or `RST-Setup.exe` on a computer, not both. If the **same version** of `RST.msi` is already installed, the setup adopts it: Settings → Apps shows two "RST" entries, and removing either one removes rst-c. An older `RST.msi` (for example v2.2.0) is upgraded in place, leaving one entry. Details: [`installer-bundle/README.md`](installer-bundle/README.md).
 
 The installer is per-user — no admin elevation required. User data (profiles, logs, branding, active-profile state) lives at `%AppData%\RST\` and is preserved across reinstalls.
 

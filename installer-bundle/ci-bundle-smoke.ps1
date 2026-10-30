@@ -192,12 +192,13 @@ function Assert-PerUser([string]$Log, [string]$Label) {
 }
 
 # Uninstalls the bundle the way a user does: its Add/Remove Programs entry's
-# QuietUninstallString (the cached RST-Setup.exe /uninstall /quiet).
+# QuietUninstallString (the cached RST-Setup.exe /uninstall /quiet), plus
+# /norestart as documented for silent use.
 function Uninstall-BundleViaArp([string]$Name) {
   $e = Get-BundleArp
   Assert ($e.Count -eq 1) "[$Name] exactly one RST-Setup bundle ARP entry before uninstall"
   if ($e[0].QuietUninstall -notmatch '^"([^"]+)"\s*(.*)$') { throw "unexpected QuietUninstallString: $($e[0].QuietUninstall)" }
-  $log = Invoke-Bundle $Matches[1] @($Matches[2] -split '\s+' | Where-Object { $_ }) $Name
+  $log = Invoke-Bundle $Matches[1] (@($Matches[2] -split '\s+' | Where-Object { $_ }) + '/norestart') $Name
   Assert ((Get-BundleArp).Count -eq 0) "[$Name] bundle ARP entry removed"
   return $log
 }
@@ -259,7 +260,7 @@ if ($Mode -eq 'Chain') {
   Assert ((Get-BundleArp).Count -eq 0) '[start] no bundle registered'
 
   # A - ticked install.
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=1') 'A-ticked'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=1') 'A-ticked'
   Show-State 'A'
   Assert-PerUser $log 'A'
   Assert-Rst $true 'A'
@@ -271,7 +272,7 @@ if ($Mode -eq 'Chain') {
   # B - re-run, same command: nothing changes.
   $before = (Get-Item $FixtureTxt).LastWriteTimeUtc
   $rstBefore = (Get-Related $RstCode)[0].ProductCode
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=1') 'B-rerun'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=1') 'B-rerun'
   Show-State 'B'
   Assert-Rst $true 'B'
   Assert ((Get-Related $RstCode)[0].ProductCode -eq $rstBefore) '[B] same RST product'
@@ -288,7 +289,7 @@ if ($Mode -eq 'Chain') {
 
   # D - unticked (default): fixture never installed. Then installed from its
   # own MSI: a normal install, RST unaffected. Bundle uninstall leaves it.
-  $log = Invoke-Bundle $Bundle @('/quiet') 'D-unticked'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart') 'D-unticked'
   Show-State 'D'
   Assert-Rst $true 'D'
   Assert-Fixture $null 'D unticked'
@@ -305,7 +306,7 @@ if ($Mode -eq 'Chain') {
   # InstallCondition would wrongly install here.)
   Invoke-Msiexec '/i' $f100 'fixture-E-older'
   $pc100 = (Get-Related $FixtureCode)[0].ProductCode
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=0') 'E-explicit-0'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=0') 'E-explicit-0'
   Show-State 'E'
   Assert-Rst $true 'E'
   Assert-Fixture '1.0.0' 'E untouched' $pc100
@@ -313,7 +314,7 @@ if ($Mode -eq 'Chain') {
   # F - ticked, older installed: upgraded in place (one product, 1.1.0).
   # The bundle is installed (E), so this is an install over an installed
   # bundle with the box now ticked.
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=1') 'F-upgrade'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=1') 'F-upgrade'
   Show-State 'F'
   Assert-Rst $true 'F'
   Assert-Fixture '1.1.0' 'F upgraded in place' $pc110
@@ -325,7 +326,7 @@ if ($Mode -eq 'Chain') {
   # G - ticked, newer installed: left alone, the bundle still succeeds.
   Invoke-Msiexec '/i' $f200 'fixture-G-newer'
   $pc200 = (Get-Related $FixtureCode)[0].ProductCode
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=1') 'G-newer'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=1') 'G-newer'
   Show-State 'G'
   Assert-Rst $true 'G'
   Assert-Fixture '2.0.0' 'G newer left alone' $pc200
@@ -339,7 +340,7 @@ if ($Mode -eq 'Chain') {
   # detected present and skipped.
   Invoke-Msiexec '/i' $f110 'fixture-H-same'
   $before = (Get-Item $FixtureTxt).LastWriteTimeUtc
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=1') 'H-same'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=1') 'H-same'
   Show-State 'H'
   Assert (Select-String -Path $log -Pattern 'Detected package: CompanionFixture, state: Present' -SimpleMatch -Quiet) '[H] Burn detected the fixture as present'
   Assert-Fixture '1.1.0' 'H skipped' $pc110
@@ -367,7 +368,7 @@ if ($Mode -eq 'BareMsiFirst') {
   Assert ((Get-Related $RstCode)[0].ProductCode -eq $pcBare) "[bare] RST product is $pcBare"
   Assert ((Get-ArpVisible 'RST').Count -eq 1) '[bare] one visible "RST" entry (the MSI)'
 
-  $log = Invoke-Bundle $Bundle @('/quiet', 'InstallCompanionFixture=1') 'bundle-over-bare'
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallCompanionFixture=1') 'bundle-over-bare'
   Show-State 'bundle over bare'
   Assert-Rst $true 'bundle over bare'
   Assert ((Get-Related $RstCode)[0].ProductCode -eq $pcBare) '[bundle over bare] one RST product, the same one (detected, not reinstalled)'
@@ -407,7 +408,7 @@ if ($Mode -eq 'BareMsiFirst') {
   # The other way out: bare RST.msi, then the bundle, then the user removes
   # the MSI's own "RST" entry. Recorded (OBSERVED), not asserted.
   Invoke-Msiexec '/i' $RstMsi 'bare-rst-2'
-  Invoke-Bundle $Bundle @('/quiet') 'bundle-over-bare-2' | Out-Null
+  Invoke-Bundle $Bundle @('/quiet', '/norestart') 'bundle-over-bare-2' | Out-Null
   Invoke-Msiexec '/x' $pcBare 'bare-rst-2-remove-msi'
   Show-State 'MSI entry removed under the bundle'
   Observe "after msiexec /x of the adopted RST.msi: RST products $((Get-Related $RstCode).Count), bundle entries $((Get-BundleArp).Count), visible 'RST' entries $((Get-ArpVisible 'RST').Count)"
@@ -469,7 +470,7 @@ foreach ($c in $companions) { Assert-Companion $c $false 'start' }
 
 # Both ticked, silently, exactly as documented for IT.
 $vars = @($companions | ForEach-Object { "Install$(PascalId $_.id)=1" })
-$log = Invoke-Bundle $Bundle (@('/quiet') + $vars) 'companions-ticked'
+$log = Invoke-Bundle $Bundle (@('/quiet', '/norestart') + $vars) 'companions-ticked'
 Show-State 'ticked' $codes
 Assert-PerUser $log 'ticked'
 Assert-Rst $true 'ticked'
