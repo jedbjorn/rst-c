@@ -5,6 +5,7 @@
 //   ProfileSerializer.Write(profile, stream)
 //   ProfileSerializer.WriteString(profile) → string           (pretty-printed)
 //   ProfileSerializer.Validate(profile)    → IList<string>    (path-style locators)
+//   ProfileSerializer.Warnings(profile)    → IList<string>    (problems that do not fail a read)
 
 using System;
 using System.Collections.Generic;
@@ -128,18 +129,65 @@ public static class ProfileSerializer
             }
         }
 
+        // Stacks (spec #17): a name, 2-3 items, and each item a tool with a command id: only push
+        // buttons (a Revit command or a URL: button) can be stacked, as with AddStackedItems.
         foreach (var kvp in profile.Stacks)
         {
             var loc = $"profile.stacks[\"{kvp.Key}\"]";
-            var n = kvp.Value.Tools.Count;
+            if (string.IsNullOrWhiteSpace(kvp.Key))
+                errors.Add($"{loc}: stack name required, non-empty");
+            var tools = kvp.Value?.Tools ?? new List<Slot>();
+            var n = tools.Count;
             if (n is < 2 or > 3)
                 errors.Add($"{loc}.tools: must contain 2-3 tools (got {n})");
+            for (int t = 0; t < tools.Count; t++)
+            {
+                var tool = tools[t];
+                var toolLoc = $"{loc}.tools[{t}]";
+                if (tool is null)
+                {
+                    errors.Add($"{toolLoc}: null");
+                    continue;
+                }
+                if (tool.SlotType != "tool")
+                    errors.Add($"{toolLoc}.type: must be 'tool' (got '{tool.SlotType}')");
+                if (string.IsNullOrEmpty(tool.CommandId))
+                    errors.Add($"{toolLoc}.commandId: required for a stack tool");
+            }
         }
 
         if (profile.PanelOpacity is < 10 or > 100)
             errors.Add($"profile.panelOpacity: must be 10-100 (got {profile.PanelOpacity})");
 
         return errors;
+    }
+
+    /// <summary>
+    /// Problems that do not fail a read or a save (path-style locators, empty when none): a stack
+    /// no panel slot refers to (an orphan). The Builder's save removes orphans
+    /// (<see cref="OrphanStacks"/>).
+    /// </summary>
+    public static IList<string> Warnings(Profile profile)
+    {
+        var warnings = new List<string>();
+        if (profile is null) return warnings;
+        foreach (var name in OrphanStacks(profile))
+            warnings.Add($"profile.stacks[\"{name}\"]: not referenced by any panel slot");
+        return warnings;
+    }
+
+    /// <summary>The names of the stacks no panel slot (<c>type: "stack"</c>) refers to, in stack order.</summary>
+    public static IReadOnlyList<string> OrphanStacks(Profile profile)
+    {
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var panel in profile.Panels)
+            foreach (var slot in panel?.Slots ?? new List<Slot>())
+                if (slot is { SlotType: "stack" }) referenced.Add(slot.Name ?? "");
+        var orphans = new List<string>();
+        foreach (var name in profile.Stacks.Keys)
+            if (!referenced.Contains(name)) orphans.Add(name);
+        return orphans;
     }
 
     /// <summary>

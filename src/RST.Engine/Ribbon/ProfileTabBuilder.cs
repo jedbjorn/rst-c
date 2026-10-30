@@ -21,8 +21,14 @@
 // IExternalCommand pipeline (which requires PushButtonData wiring at
 // OnStartup). We use AwRibbonButton.CommandHandler = SlotInvokeCommand
 // (WPF ICommand) to route URL slots to Process.Start and Command slots
-// to UIApplication.PostCommand. Same effect as Slot###/SlotRegistry,
-// constructed per-button instead of via a static index pool.
+// to UIApplication.PostCommand, one per button (large or stacked).
+//
+// Layout (feature #15, spec #17): RST.Core.Ribbon.RibbonLayoutPlanner
+// decides what each panel shows: large buttons, stacks of 2-3 small
+// buttons (an AdWindows RibbonRowPanel, see RibbonItemFactory: the
+// equivalent of AddStackedItems, which only works during OnStartup), and
+// the slots it skips. Every skip is logged with its reason. Row panels
+// live inside the managed panels, so Teardown removes them with them.
 //
 // Thread model: every method here mutates ComponentManager.Ribbon and
 // must run on the Revit UI thread. Callers are responsible for that —
@@ -35,13 +41,12 @@ using System.Collections.Generic;
 using Autodesk.Revit.UI;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
+using RST.Core.Ribbon;
 using Serilog;
 using AwComponentManager = Autodesk.Windows.ComponentManager;
 using AwRibbonTab = Autodesk.Windows.RibbonTab;
 using AwRibbonPanel = Autodesk.Windows.RibbonPanel;
 using AwRibbonPanelSource = Autodesk.Windows.RibbonPanelSource;
-using AwRibbonButton = Autodesk.Windows.RibbonButton;
-using AwRibbonItemSize = Autodesk.Windows.RibbonItemSize;
 
 namespace RST.Engine.Ribbon;
 
@@ -97,16 +102,31 @@ internal static class ProfileTabBuilder
             Log.Information("ProfileTabBuilder: opacity override active for profile={Id} admin={Admin} user={User}",
                             profile.Id, profile.PanelOpacity, userOverride.Value);
         }
+        // One SlotInvokeCommand per button, large or stacked.
+        Func<SlotTarget, System.Windows.Input.ICommand> handler = target => new SlotInvokeCommand(uiApp, target);
         int panelIndex = 0;
         int slotCount = 0;
+        int buttonCount = 0;
+        int stackCount = 0;
+        int skippedCount = 0;
+        int failedCount = 0;
+
+        // Spec #17 (review N5): problems that do not stop a profile loading, such as a stack no
+        // panel places (it is not drawn), are logged when the profile is built.
+        foreach (var warning in ProfileSerializer.Warnings(profile))
+            Log.Warning("ProfileTabBuilder: profile={Name} warning: {Warning}", profile.ProfileName, warning);
 
         foreach (var panelDef in profile.Panels)
         {
-            var panel = BuildPanel(uiApp, panelDef, panelIndex);
+            var layout = RibbonLayoutPlanner.PlanPanel(profile, panelDef, panelIndex);
+            var panel = BuildPanel(layout, handler, _ => failedCount++);
             tab.Panels.Add(panel);
             _managedPanels.Add(panel);
-            PanelStyling.ApplyColor(panel, panelDef.Color, alpha);
+            PanelStyling.ApplyColor(panel, panelDef.Color, alpha, RibbonLayoutPlanner.EstimatePanelWidth(layout));
             slotCount += panel.Source?.Items.Count ?? 0;
+            buttonCount += layout.ButtonCount;
+            stackCount += layout.StackCount;
+            skippedCount += layout.Skipped.Count();
             panelIndex++;
         }
 
@@ -140,8 +160,8 @@ internal static class ProfileTabBuilder
         // profile tab on the next Loader open.
         RstManagedTabs.Add(tabName);
 
-        Log.Information("ProfileTabBuilder built: profile={Name}, tab={Tab}, panels={PanelCount}, slots={Slots}",
-                        profile.ProfileName, tabName, profile.Panels.Count, slotCount);
+        Log.Information("ProfileTabBuilder built: profile={Name}, tab={Tab}, panels={PanelCount}, slots={Slots}, buttons={Buttons}, stacks={Stacks}, skipped={Skipped}, failed={Failed}",
+                        profile.ProfileName, tabName, profile.Panels.Count, slotCount, buttonCount, stackCount, skippedCount, failedCount);
     }
 
     /// <summary>
@@ -217,52 +237,69 @@ internal static class ProfileTabBuilder
         return tab;
     }
 
-    private static AwRibbonPanel BuildPanel(UIApplication uiApp, Panel panelDef, int panelIndex)
+    /// <summary>
+    /// One profile panel from its layout: large buttons and stacks in slot
+    /// order, and a log line per skipped slot or stack item. Touches no
+    /// Revit API type (the click handler comes from the caller), so
+    /// RST.RuntimeTests builds panels with it outside Revit.
+    /// </summary>
+    /// <param name="layout">The panel's layout.</param>
+    /// <param name="handler">A button's click handler.</param>
+    /// <param name="failed">Told about each item that threw while it was built (it is skipped).</param>
+    internal static AwRibbonPanel BuildPanel(PanelLayout layout, Func<SlotTarget, System.Windows.Input.ICommand> handler, Action<RibbonLayoutItem>? failed = null)
     {
         var source = new AwRibbonPanelSource
         {
-            Title = panelDef.Name ?? "",
-            Id = ManagedPanelIdPrefix + panelIndex.ToString("D3"),
+            Title = layout.Name,
+            Id = ManagedPanelIdPrefix + layout.PanelIndex.ToString("D3"),
         };
         var panel = new AwRibbonPanel { Source = source };
 
-        int slotInPanel = 0;
-        foreach (var slot in panelDef.Slots)
+        foreach (var item in layout.Items)
         {
-            if (slot.SlotType != "tool") continue;
-            if (string.IsNullOrEmpty(slot.CommandId)) continue;
-
-            var target = ParseTarget(slot.CommandId!, slot.Name);
-            // Precedence: explicit pack icon (admin override) → branded
-            // icon for RST native tools → generic default.
-            var icon = IconAssets.ResolveSlotIcon(slot.IconFile)
-                    ?? IconAssets.ResolveNativeToolIcon(slot.CommandId)
-                    ?? IconAssets.Default32;
-            var btn = new AwRibbonButton
+            // One item that fails to build (AdWindows throwing for a row panel, an icon, a handler)
+            // is skipped and logged; the rest of the panel, the other panels and the branding still
+            // build (spec #17, review N4). The item is added only once it is complete.
+            try
             {
-                Text = RST.Core.Ribbon.ButtonLabel.Wrap(slot.Name),
-                Id = $"RST_ProfileBtn_{panelIndex:D3}_{slotInPanel:D3}",
-                ShowText = true,
-                Size = AwRibbonItemSize.Large,
-                Image = icon,
-                LargeImage = icon,
-                Orientation = System.Windows.Controls.Orientation.Vertical,
-                ToolTip = target.Kind == SlotKind.Url
-                    ? "Open: " + target.Payload
-                    : "Posts: " + target.Payload,
-                CommandHandler = new SlotInvokeCommand(uiApp, target),
-            };
-            source.Items.Add(btn);
-            slotInPanel++;
+                switch (item)
+                {
+                    case LargeButtonItem large:
+                        source.Items.Add(RibbonItemFactory.LargeButton(large.Button, Icon32(large.Button), handler(large.Button.Target)));
+                        break;
+
+                    case StackItem stack:
+                        source.Items.Add(RibbonItemFactory.Stack(stack, Icon16, Icon32, b => handler(b.Target)));
+                        Log.Information("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot}: stack '{Stack}' with {Count} buttons ({Id})",
+                                  layout.PanelIndex, layout.Name, stack.SlotIndex, stack.StackName, stack.Buttons.Count, stack.Id);
+                        break;
+
+                    case SkippedItem skipped:
+                        Log.Warning("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot} skipped: {Reason}",
+                                    layout.PanelIndex, layout.Name, skipped.SlotIndex, skipped.Reason);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                failed?.Invoke(item);
+                Log.Warning(ex, "ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot} skipped: building it failed",
+                            layout.PanelIndex, layout.Name, item.SlotIndex);
+            }
         }
 
         return panel;
     }
 
-    private static SlotTarget ParseTarget(string commandId, string displayName)
-    {
-        if (commandId.StartsWith("URL:", StringComparison.OrdinalIgnoreCase))
-            return new SlotTarget(SlotKind.Url, commandId.Substring(4), displayName);
-        return new SlotTarget(SlotKind.Command, commandId, displayName);
-    }
+    // Precedence: explicit pack icon (admin override) → branded icon for
+    // RST native tools → generic default.
+    internal static System.Windows.Media.ImageSource? Icon32(PlannedButton b) =>
+        IconAssets.ResolveSlotIcon(b.IconFile)
+        ?? IconAssets.ResolveNativeToolIcon(b.CommandId)
+        ?? IconAssets.Default32;
+
+    internal static System.Windows.Media.ImageSource? Icon16(PlannedButton b) =>
+        IconAssets.ResolveSlotIcon16(b.IconFile)
+        ?? IconAssets.ResolveNativeToolIcon16(b.CommandId)
+        ?? IconAssets.Default16;
 }

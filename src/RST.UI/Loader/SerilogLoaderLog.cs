@@ -31,4 +31,7 @@ public static class LoaderAssets
 
     /// <summary>Assets\icons\pack, the colored icon pack (pack:&lt;name&gt;_&lt;color&gt; values).</summary>
     public static string IconPackDirectory => Path.Combine(BaseDirectory, "Assets", "icons", "pack");
+
+    /// <summary>Assets\icons\default_16.png, the ribbon's 16 px default icon (spec #17: the previews' stack rows use it too).</summary>
+    public static string DefaultIcon16Path => Path.Combine(BaseDirectory, "Assets", "icons", "default_16.png");
 }
