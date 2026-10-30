@@ -8,6 +8,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace RST.UI.Dialogs;
 
@@ -53,7 +54,7 @@ public static class WindowPlacement
         // before the cap applied, the window could start outside the work area, with its title bar
         // off screen (WU1 review N3): both modes are moved back inside. WPF may still re-centre the
         // window after Loaded, once its size is known, so the clamp runs again after the first render.
-        window.Loaded += (_, _) => KeepInside(window, area);
+        window.Loaded += (_, _) => window.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => KeepInside(window, area));
         window.ContentRendered += (_, _) => KeepInside(window, area);
     }
 

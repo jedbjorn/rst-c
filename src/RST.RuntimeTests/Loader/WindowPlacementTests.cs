@@ -19,7 +19,7 @@ public class WindowPlacementTests
         // No Revit handle: CenterScreen. A 1450 x 900 window on an 800 x 600 work area must not
         // start with its title bar above or left of the work area.
         var area = new Rect(0, 0, 800, 600);
-        var window = new Window { Width = 1450, Height = 900, ShowActivated = false, ShowInTaskbar = false, Title = "placement" };
+        var window = new Window { Width = 1450, Height = 900, ShowActivated = false, ShowInTaskbar = false, Title = "placement", Content = new System.Windows.Controls.Border() };
         try
         {
             WindowPlacement.Own(window, IntPtr.Zero);
