@@ -95,6 +95,12 @@ public sealed class MessageTemplateTests
     }
 
     [Fact]
+    public void A_positional_index_too_large_for_an_int_is_an_unmatched_token_and_the_rest_still_renders()
+    {
+        R("{0} and {99999999999}", "a").Should().Be("a and {99999999999}");
+    }
+
+    [Fact]
     public void Escaped_braces_are_literal()
     {
         R("{{literal}} {A} }} {{", 1).Should().Be("{literal} 1 } {");

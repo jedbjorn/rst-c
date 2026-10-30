@@ -64,7 +64,9 @@ public static class MessageTemplate
                     sb.Append(t.Text);
                     continue;
                 }
-                var index = parsed.Positional ? int.Parse(t.Name, NumberStyles.None, CultureInfo.InvariantCulture) : next++;
+                int index;
+                if (!parsed.Positional) index = next++;
+                else if (!int.TryParse(t.Name, NumberStyles.None, CultureInfo.InvariantCulture, out index)) index = -1; // {99999999999}: unmatched
                 if (index < 0 || index >= values.Count)
                 {
                     sb.Append(t.Text);

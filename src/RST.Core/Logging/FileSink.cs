@@ -8,7 +8,10 @@
 //   - RetainedFileCountLimit: after a roll, only the newest N files of this sink's own pattern are kept
 //     (the current one included). Other files in the folder are never touched.
 //   - Shared: several processes may append to one file (two trays of one user); each write takes a
-//     named mutex, seeks to the end and flushes.
+//     session-local named mutex, seeks to the end and flushes. A wait that times out drops the event.
+//   - The file is opened without FileShare.Delete (Serilog's FileShare.Read, or ReadWrite when shared):
+//     while it is open, Health's clean-up, a second Revit's prune and the tray's retention cannot
+//     delete it, and skip it as in use.
 // UTF-8 without a BOM; every event is flushed to the OS as it is written. Opening or writing failing
 // never throws: the event is dropped and the file is retried at most every few seconds.
 
@@ -52,6 +55,12 @@ public sealed class FileSinkOptions
 
     public bool Shared { get; init; }
 
+    /// <summary>How long a shared write waits for the other writer's mutex before it drops the event (Serilog: 10 s).</summary>
+    public TimeSpan SharedWaitTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>After a timed-out wait, how long writes skip the mutex.</summary>
+    public TimeSpan SharedBackoff { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>The clock (tests move it across midnight).</summary>
     public Func<DateTimeOffset>? Now { get; init; }
 }
@@ -77,6 +86,7 @@ public sealed class FileSink : ILogSink
     private DateTime _currentPeriod;
     private int _currentSequence;
     private DateTimeOffset _retryAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _mutexBackoffUntil = DateTimeOffset.MinValue;
     private bool _disposed;
 
     public FileSink(FileSinkOptions options)
@@ -95,13 +105,10 @@ public sealed class FileSink : ILogSink
         _now = options.Now ?? (() => DateTimeOffset.Now);
         if (options.Shared)
         {
-            // Global\: one user's trays in two sessions share the file. Local when Global is refused.
-            try { _mutex = new Mutex(false, @"Global\" + MutexName(full)); }
-            catch
-            {
-                try { _mutex = new Mutex(false, MutexName(full)); }
-                catch { _mutex = null; }
-            }
+            // Session-local, as Serilog's was (review B3): only a process in this user's own session
+            // can hold it. A Global\ name could be pre-created and held by another user.
+            try { _mutex = new Mutex(false, SharedMutexName(full)); }
+            catch { _mutex = null; }
         }
         lock (_lock) TryOpen(_now());
     }
@@ -137,10 +144,17 @@ public sealed class FileSink : ILogSink
             var taken = false;
             try
             {
-                if (_mutex is not null)
+                if (_mutex is not null && now >= _mutexBackoffUntil)
                 {
-                    try { taken = _mutex.WaitOne(TimeSpan.FromSeconds(10)); }
+                    try { taken = _mutex.WaitOne(_options.SharedWaitTimeout); }
                     catch (AbandonedMutexException) { taken = true; }
+                    if (!taken)
+                    {
+                        // A stuck holder: drop this event, as Serilog did, and write without the mutex
+                        // for a while, so it costs one stall, not one per line.
+                        _mutexBackoffUntil = now + _options.SharedBackoff;
+                        return;
+                    }
                 }
                 var stream = _stream!;
                 if (_options.Shared) stream.Seek(0, SeekOrigin.End);
@@ -196,9 +210,10 @@ public sealed class FileSink : ILogSink
                 try
                 {
                     // A shared writer seeks to the end before each write, which FileMode.Append forbids.
+                    // No FileShare.Delete (review B1): the live log cannot be deleted while it is open.
                     var stream = _options.Shared
-                        ? new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.None)
-                        : new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read | FileShare.Delete, 4096, FileOptions.None);
+                        ? new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.None)
+                        : new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, FileOptions.None);
                     stream.Seek(0, SeekOrigin.End);
                     _stream = stream;
                     _currentPath = path;
@@ -289,11 +304,14 @@ public sealed class FileSink : ILogSink
         try { _mutex?.Dispose(); } catch { /* best effort */ }
     }
 
-    /// <summary>A per-file mutex name (the path, case-folded and hashed: a name cannot hold a backslash).</summary>
-    internal static string MutexName(string fullPath)
+    /// <summary>
+    /// The shared-mode mutex: <c>Local\RST.Log.&lt;hash&gt;</c>, session-local (review B3), one per file (the
+    /// path, case-folded and hashed: a name cannot hold another backslash).
+    /// </summary>
+    internal static string SharedMutexName(string fullPath)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(fullPath.ToUpperInvariant()));
-        return "RST.Log." + Convert.ToHexString(hash, 0, 16);
+        return @"Local\RST.Log." + Convert.ToHexString(hash, 0, 16);
     }
 }
 

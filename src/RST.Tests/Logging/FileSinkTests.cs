@@ -182,6 +182,58 @@ public sealed class FileSinkTests : IDisposable
     }
 
     [Fact]
+    public void The_shared_mutex_is_session_local_and_one_per_file()
+    {
+        var a = FileSink.SharedMutexName(Path.Combine(_dir, "tray_.log"));
+        a.Should().StartWith(@"Local\RST.Log.", "review B3: never Global\\, which another user could hold");
+        a.Should().Be(FileSink.SharedMutexName(Path.Combine(_dir, "TRAY_.LOG")));
+        a.Should().NotBe(FileSink.SharedMutexName(Path.Combine(_dir, "other_.log")));
+    }
+
+    [Fact]
+    public void A_stuck_mutex_holder_costs_one_dropped_event_then_writes_skip_the_mutex_for_a_while()
+    {
+        var path = Path.Combine(_dir, TrayPaths.LogFileBaseName);
+        using var held = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = new Thread(() =>
+        {
+            using var m = new Mutex(false, FileSink.SharedMutexName(Path.GetFullPath(path)));
+            m.WaitOne();
+            held.Set();
+            release.Wait();
+            m.ReleaseMutex();
+        });
+        holder.Start();
+        held.Wait();
+        try
+        {
+            using var sink = new FileSink(new FileSinkOptions
+            {
+                Path = path,
+                OutputTemplate = "{Message}{NewLine}",
+                RollingInterval = RollingInterval.Day,
+                Shared = true,
+                SharedWaitTimeout = TimeSpan.FromMilliseconds(200),
+                SharedBackoff = TimeSpan.FromMinutes(1),
+                Now = () => _now,
+            });
+            sink.Emit(Event("dropped after the wait"), NoProps);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            sink.Emit(Event("written without waiting"), NoProps);
+            sw.Elapsed.Should().BeLessThan(TimeSpan.FromMilliseconds(150), "the back-off skips the mutex");
+            _now = _now.AddMinutes(2);
+            sink.Emit(Event("waits again after the back-off"), NoProps); // dropped: still held
+            ReadShared(Path.Combine(_dir, DayName(_now))).Should().Be("written without waiting" + Environment.NewLine);
+        }
+        finally
+        {
+            release.Set();
+            holder.Join();
+        }
+    }
+
+    [Fact]
     public void Concurrent_writes_from_many_threads_keep_every_line_whole()
     {
         var path = Path.Combine(_dir, "rst_threads.log");
