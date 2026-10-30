@@ -53,13 +53,13 @@
     match RST.Engine's per Revit major. RST.Engine itself is unchanged (PrivateAssets=all, not shipped).
   -->
   <ItemGroup Condition="'$(RevitVersion)' == '2025'">
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2025.4.41" VersionOverride="2025.4.41" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2025.0.2" VersionOverride="2025.0.2" PrivateAssets="all" GeneratePathProperty="true" />
   </ItemGroup>
   <ItemGroup Condition="'$(RevitVersion)' == '2026'">
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2026.4.0" VersionOverride="2026.4.0" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2026.0.4" VersionOverride="2026.0.4" PrivateAssets="all" GeneratePathProperty="true" />
   </ItemGroup>
   <ItemGroup Condition="'$(RevitVersion)' == '2027'">
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2027.0.10" VersionOverride="2027.0.10" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="2027.0.0" VersionOverride="2027.0.0" PrivateAssets="all" GeneratePathProperty="true" />
   </ItemGroup>
   <ItemGroup Condition="'$(PkgNice3point_Revit_Api_AdWindows)' != ''">
     <None Include="$(PkgNice3point_Revit_Api_AdWindows)\ref\*\AdWindows.dll" Link="AdWindows.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />

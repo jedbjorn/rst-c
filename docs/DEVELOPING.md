@@ -375,8 +375,8 @@ API that a later update added. A user on that first update would otherwise get a
 | 2027 | `2027.0.0` | 27.0.0.0 |
 
 The pins are inline in `src/RST.Engine/RST.Engine.csproj` and `src/RST.Bootstrap/RST.Bootstrap.csproj`
-(RevitAPI, RevitAPIUI and, in the engine, AdWindows), and in the test add-ins under
-`tests/fixtures/`. Each item sets both `Version` and `VersionOverride`. The `Test (xunit)` CI job
+(RevitAPI, RevitAPIUI and, in the engine, AdWindows), in `src/RST.RuntimeTests/RST.RuntimeTests.csproj`
+(AdWindows, for the ribbon mapping tests), and in the test add-ins under `tests/fixtures/`. Each item sets both `Version` and `VersionOverride`. The `Test (xunit)` CI job
 runs `build/check-revit-api-floor.py` first. It reads every tracked `.csproj`, `.props` and
 `.targets` file and fails on any `Nice3point.Revit.Api.*` version above the floor, on an item
 with no version, and on a Revit year that has no floor.
