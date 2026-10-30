@@ -18,6 +18,11 @@
                               fixture only.
   Also builds the fixture companion at 1.0.0, 1.1.0 and 2.0.0 for the smoke.
 
+  Every bundle also chains RST-Machine.msi and the RemoveUserRst helper
+  (feature #17, spec #20 §7: the "Everyone on this PC" path), so each
+  expected chain holds RST, RemoveUserRst and RSTMachine besides the
+  companions.
+
   Every build gets its own IntermediateOutputPath: the WiX build is
   incremental on its sources, so variants sharing obj\Release\ could reuse
   each other's compiled output.
@@ -29,7 +34,8 @@
 #>
 param(
   [string]$Version = '',
-  [string]$RstMsi = 'installer/bin/Release/RST.msi'
+  [string]$RstMsi = 'installer/bin/Release/RST.msi',
+  [string]$RstMachineMsi = 'installer/bin/Release/RST-Machine.msi'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +44,8 @@ Set-StrictMode -Version Latest
 $Here = $PSScriptRoot
 $Root = (Resolve-Path (Join-Path $Here '..')).Path
 $RstMsi = (Resolve-Path $RstMsi).Path
+$RstMachineMsi = (Resolve-Path $RstMachineMsi).Path
+$Helper = Join-Path $Here 'obj\helper\RST.RemoveUserRst.exe'
 $Proj = Join-Path $Here 'RST.Setup.wixproj'
 $Gen = Join-Path $Here 'obj\gen'
 $Ci = Join-Path $Here 'bin\ci'
@@ -54,7 +62,7 @@ function Invoke-Dotnet([string[]]$DotnetArgs) {
   if ($LASTEXITCODE -ne 0) { throw "dotnet $($DotnetArgs -join ' ') exited $LASTEXITCODE" }
 }
 function Build-Bundle([string]$Name, [string[]]$Extra) {
-  Invoke-Dotnet (@('build', $Proj, '-c', 'Release', '--nologo', "-p:RstMsi=$RstMsi", "-p:RstBundleVersion=$Version", "-p:OutputName=$Name", "-p:IntermediateOutputPath=obj\$Name\") + $Extra)
+  Invoke-Dotnet (@('build', $Proj, '-c', 'Release', '--nologo', "-p:RstMsi=$RstMsi", "-p:RstMachineMsi=$RstMachineMsi", "-p:RstBundleVersion=$Version", "-p:OutputName=$Name", "-p:IntermediateOutputPath=obj\$Name\") + $Extra)
   $exe = Join-Path $Here "bin\Release\$Name.exe"
   Assert (Test-Path $exe) "$Name.exe built ($([math]::Round((Get-Item $exe).Length / 1MB, 2)) MB)"
   $keep = Join-Path $Ci "generated\$Name"
@@ -106,7 +114,11 @@ $reg = Get-Content -Raw -Encoding UTF8 $registry | ConvertFrom-Json
 $ship = @($reg.companions | Where-Object { $_.status -eq 'shippable' })
 $exe = Build-Bundle 'RST-Setup' @()
 $rstHash = (Get-FileHash $RstMsi -Algorithm SHA256).Hash
-$expect = @{ RST = $rstHash }
+# The scope packages every bundle chains (feature #17): RST-Machine.msi as built, and the helper the first build compiled.
+Assert (Test-Path $Helper) "the RemoveUserRst helper was built ($Helper)"
+$scope = @{ RSTMachine = (Get-FileHash $RstMachineMsi -Algorithm SHA256).Hash; RemoveUserRst = (Get-FileHash $Helper -Algorithm SHA256).Hash }
+function With-Scope([hashtable]$Packages) { $all = $scope.Clone(); foreach ($k in $Packages.Keys) { $all[$k] = $Packages[$k] }; return $all }
+$expect = With-Scope @{ RST = $rstHash }
 foreach ($c in $ship) { $expect[(PascalId $c.id)] = $c.release.sha256 }
 Assert-Embeds $exe $expect @($ship | ForEach-Object { "Install$(PascalId $_.id)" })
 
@@ -115,7 +127,7 @@ $none = Join-Path $Tmp 'companions-none.json'
 foreach ($c in $reg.companions) { $c.status = 'in_development'; $c.release = $null }
 $reg | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $none
 $exe = Build-Bundle 'RST-Setup-none' @("-p:CompanionRegistry=$none")
-Assert-Embeds $exe @{ RST = $rstHash } @()
+Assert-Embeds $exe (With-Scope @{ RST = $rstHash }) @()
 
 # 3. Fixture companion builds and the smoke's test bundle.
 foreach ($v in '1.0.0', '1.1.0', '2.0.0') {
@@ -149,6 +161,6 @@ $testRegistry = [ordered]@{
 $testRegistryPath = Join-Path $Ci 'test\companions.fixture.json'
 $testRegistry | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $testRegistryPath
 $exe = Build-Bundle 'RST-Setup-Fixture' @("-p:CompanionRegistry=$testRegistryPath", "-p:CompanionPayloadDir=$payload")
-Assert-Embeds $exe @{ RST = $rstHash; CompanionFixture = (Get-FileHash $fixtureMsi -Algorithm SHA256).Hash } @('InstallCompanionFixture')
+Assert-Embeds $exe (With-Scope @{ RST = $rstHash; CompanionFixture = (Get-FileHash $fixtureMsi -Algorithm SHA256).Hash }) @('InstallCompanionFixture')
 Copy-Item $exe "$Ci\test\"
 Write-Host 'ci-bundle-build: done'

@@ -2,7 +2,8 @@
 //
 //   { "theme": "system" | "light" | "dark",
 //     "checkForUpdates": true,
-//     "updateNoticeShownUtc": null }
+//     "updateNoticeShownUtc": null,
+//     "shadowNoticeShownUtc": null }      (F17 WU5: "your own copy shadows the shared one", told once)
 //
 // Read semantics follow TelemetryPrefs: a truly missing file (or folder) is a first run and gives the
 // defaults (checks on, as spec #20 §4 sets); a file that exists but cannot be read or parsed fails CLOSED
@@ -39,6 +40,12 @@ public sealed class TraySettings
 
     /// <summary>Set (UTC) once the first-run update-check notice has been shown, however it was dismissed. Null: not yet.</summary>
     public DateTimeOffset? UpdateNoticeShownUtc { get; set; }
+
+    /// <summary>
+    /// Set (UTC) once the tray has told this user that their own RST hides the one installed for everyone
+    /// (spec #20 §7; F17 WU5). Null: not yet.
+    /// </summary>
+    public DateTimeOffset? ShadowNoticeShownUtc { get; set; }
 
     /// <summary>True when the file existed but could not be read or parsed (the defaults then fail closed).</summary>
     [JsonIgnore]
@@ -83,6 +90,7 @@ public sealed class TraySettings
                 Theme = ParseTheme(dto.Theme),
                 CheckForUpdates = dto.CheckForUpdates ?? true,
                 UpdateNoticeShownUtc = dto.UpdateNoticeShownUtc,
+                ShadowNoticeShownUtc = dto.ShadowNoticeShownUtc,
             };
         }
         catch (Exception ex)
@@ -123,6 +131,7 @@ public sealed class TraySettings
         Theme = Theme.ToString().ToLowerInvariant(),
         CheckForUpdates = CheckForUpdates,
         UpdateNoticeShownUtc = UpdateNoticeShownUtc,
+        ShadowNoticeShownUtc = ShadowNoticeShownUtc,
     }, JsonOptions);
 
     private static TrayThemeChoice ParseTheme(string? value) => value?.Trim().ToLowerInvariant() switch
@@ -175,5 +184,8 @@ public sealed class TraySettings
 
         [JsonPropertyName("updateNoticeShownUtc")]
         public DateTimeOffset? UpdateNoticeShownUtc { get; set; }
+
+        [JsonPropertyName("shadowNoticeShownUtc")]
+        public DateTimeOffset? ShadowNoticeShownUtc { get; set; }
     }
 }

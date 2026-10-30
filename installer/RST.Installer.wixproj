@@ -1,10 +1,11 @@
 <Project Sdk="WixToolset.Sdk/6.0.2">
 
   <!--
-    RST.Installer — produces RST.msi (Revit 2025, 2026 and 2027).
+    RST.Installer — produces RST.msi (Revit 2025, 2026 and 2027), and
+    RST-Machine.msi from the same sources with -p:RstScope=machine (below).
 
-    Build: from this directory, `dotnet build` (or `wix build Product.wxs`
-    directly). Output: bin/<Configuration>/RST.msi.
+    Build: from this directory, `dotnet build`. Output:
+    bin/<Configuration>/RST.msi, or bin/<Configuration>/RST-Machine.msi.
 
     The per-Revit-year components are generated from the staged trees
     ../build/R{25,26,27}/{addins,app}/ by gen-revit-years.ps1 (target
@@ -43,8 +44,25 @@
     <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    Install scope (feature #17, spec #20 §7, decision #15): one source, two
+    packages. RstScope=user (the default) builds RST.msi, per user;
+    RstScope=machine builds RST-Machine.msi, per machine, with its own
+    UpgradeCode (Product.wxs). The scope goes to the .wxs files as the
+    preprocessor variable Scope and to gen-revit-years.ps1 as -Scope. A
+    machine build gets its own intermediate folder and generated sources, so
+    the two builds never reuse each other's output:
+      dotnet build installer/RST.Installer.wixproj -c Release -p:RstScope=machine
+  -->
   <PropertyGroup>
-    <OutputName>RST</OutputName>
+    <RstScope Condition="'$(RstScope)' == ''">user</RstScope>
+    <DefineConstants>$(DefineConstants);Scope=$(RstScope)</DefineConstants>
+    <IntermediateOutputPath Condition="'$(RstScope)' == 'machine' and '$(IntermediateOutputPath)' == ''">obj\machine\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <OutputName Condition="'$(RstScope)' != 'machine'">RST</OutputName>
+    <OutputName Condition="'$(RstScope)' == 'machine'">RST-Machine</OutputName>
     <OutputType>Package</OutputType>
     <!-- WiX v4+ emits MSI by default; keep the project explicit. -->
     <Configurations>Debug;Release</Configurations>
@@ -91,10 +109,14 @@
        **\*.wxs glob) and it is compiled from there. Regenerated on every
        build so it always matches the staged trees. -->
   <PropertyGroup>
-    <RstRevitYearsWxs>$(MSBuildProjectDirectory)\obj\RevitYears.g.wxs</RstRevitYearsWxs>
+    <RstRevitYearsWxs Condition="'$(RstScope)' != 'machine'">$(MSBuildProjectDirectory)\obj\RevitYears.g.wxs</RstRevitYearsWxs>
+    <RstRevitYearsWxs Condition="'$(RstScope)' == 'machine'">$(MSBuildProjectDirectory)\obj\machine\RevitYears.g.wxs</RstRevitYearsWxs>
   </PropertyGroup>
+  <Target Name="RstCheckScope" BeforeTargets="RstGenerateRevitYears">
+    <Error Condition="'$(RstScope)' != 'user' and '$(RstScope)' != 'machine'" Text="RstScope must be user or machine (got '$(RstScope)')." />
+  </Target>
   <Target Name="RstGenerateRevitYears" BeforeTargets="CoreCompile">
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-revit-years.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstRevitYearsWxs)&quot;" />
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-revit-years.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstRevitYearsWxs)&quot; -Scope $(RstScope)" />
     <ItemGroup>
       <Compile Include="$(RstRevitYearsWxs)" />
     </ItemGroup>
@@ -110,7 +132,8 @@
     <PackageReference Include="WixToolset.Util.wixext" />
   </ItemGroup>
   <PropertyGroup>
-    <RstTrayWxs>$(MSBuildProjectDirectory)\obj\Tray.g.wxs</RstTrayWxs>
+    <RstTrayWxs Condition="'$(RstScope)' != 'machine'">$(MSBuildProjectDirectory)\obj\Tray.g.wxs</RstTrayWxs>
+    <RstTrayWxs Condition="'$(RstScope)' == 'machine'">$(MSBuildProjectDirectory)\obj\machine\Tray.g.wxs</RstTrayWxs>
   </PropertyGroup>
   <Target Name="RstGenerateTray" BeforeTargets="CoreCompile">
     <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-tray.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstTrayWxs)&quot;" />

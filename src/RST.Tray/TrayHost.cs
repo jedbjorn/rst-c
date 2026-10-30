@@ -12,6 +12,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
+using RST.Core.Configuration;
 using RST.Core.Tray;
 using RST.Core.Updates;
 using RST.Tray.Resources;
@@ -27,6 +28,8 @@ namespace RST.Tray;
 internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposable
 {
     public const string NoticeAutomationId = "TrayUpdateNotice";
+
+    public const string ShadowNoticeAutomationId = "TrayShadowNotice";
 
     private readonly TrayArguments _args;
     private readonly SingleInstance _instance;
@@ -233,7 +236,11 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         }));
 
         if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
-        _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowNoticeIfDue);
+        _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            ShowNoticeIfDue();
+            ShowShadowNoticeIfDue();
+        });
     }
 
     /// <summary>
@@ -560,6 +567,40 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         catch (Exception ex)
         {
             Log.Warning(ex, "update-check notice failed");
+        }
+    }
+
+    /// <summary>
+    /// F17 WU5 (spec #20 §7): when RST is installed both for this user and for everyone on the PC, Revit loads the
+    /// user's own copy. Logged at every start; the user is told once. Information only. Never throws.
+    /// </summary>
+    private void ShowShadowNoticeIfDue()
+    {
+        try
+        {
+            if (_quitting) return;
+            var shadows = InstallLayout.FindShadows();
+            foreach (var shadow in shadows) Log.Information("{Shadow}", InstallLayout.Describe(shadow));
+            if (!TrayShadowNotice.ShouldShow(_settings, shadows.Count)) return;
+            var dialog = new MessageDialog(
+                new MessageDialogModel(TrayStrings.Notice_Title, TrayStrings.Shadow_Heading, TrayStrings.Shadow_Message, []),
+                ShadowNoticeAutomationId)
+            {
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                ShowInTaskbar = true,
+                Icon = TrayWindow.WindowIcon(),
+            };
+            if (_window is { IsVisible: true } owner) dialog.Owner = owner;
+            Log.Information("showing the installed-twice notice");
+            dialog.ShowDialog();
+            if (TrayShadowNotice.MarkShown(DateTimeOffset.UtcNow, log: m => Log.Warning("{Message}", m)))
+                _settings = TraySettings.Read(log: m => Log.Warning("{Message}", m));
+            else
+                Log.Warning("installed-twice notice shown but not recorded; it shows again next start");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "installed-twice notice failed");
         }
     }
 
