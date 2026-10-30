@@ -261,6 +261,9 @@ jobs:
   #                silent install, own ARP entries, .addin files, survive the
   #                bundle's uninstall, install alone without RST. Revit is a
   #                stub here; loading in Revit is the VM's check (AC6).
+  #   UI           the real RST-Setup.exe driven through its own UI (UI
+  #                Automation): the companion checkboxes, the finish page's
+  #                "companions stay installed" note; screenshots uploaded.
   bundle-smoke:
     name: Bundle smoke (${{ matrix.mode }})
     needs: bundle
@@ -268,7 +271,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [Chain, BareMsiFirst, Companions]
+        mode: [Chain, BareMsiFirst, Companions, UI]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -284,7 +287,7 @@ jobs:
           name: bundle-test
           path: bundle-test/
       - name: Download and verify companion pins
-        if: matrix.mode == 'Companions'
+        if: matrix.mode == 'Companions' || matrix.mode == 'UI'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -292,8 +295,10 @@ jobs:
       - name: Smoke (${{ matrix.mode }})
         shell: pwsh
         run: |
-          $bundle = if ('${{ matrix.mode }}' -eq 'Companions') { 'setup/RST-Setup.exe' } else { 'bundle-test/test/RST-Setup-Fixture.exe' }
-          installer-bundle/ci-bundle-smoke.ps1 -Mode ${{ matrix.mode }} -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test
+          $mode = '${{ matrix.mode }}'
+          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe; exit $LASTEXITCODE }
+          $bundle = if ($mode -eq 'Companions') { 'setup/RST-Setup.exe' } else { 'bundle-test/test/RST-Setup-Fixture.exe' }
+          installer-bundle/ci-bundle-smoke.ps1 -Mode $mode -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test
       - name: Upload Burn and msiexec logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -302,4 +307,5 @@ jobs:
           path: |
             ${{ runner.temp }}/bundle-*.log
             ${{ runner.temp }}/*.log
+            ${{ runner.temp }}/bundle-ui/*.png
           if-no-files-found: ignore
