@@ -69,10 +69,9 @@
     elevated helper; add-in switching stays per user. A first install is
     refused while the installing user still has RST installed just for
     them (that copy would shadow this one; RST-Setup.exe removes it
-    first). Restart Manager only detects files in use here
-    (MSIRESTARTMANAGERCONTROL=DisableShutdown): it never closes and
-    restarts a tray, because a tray restarted by this elevated installer
-    would run elevated (WU1 review N8).
+    first). Restart Manager is off here (MSIRESTARTMANAGERCONTROL=Disable):
+    it would restart a closed tray from this elevated installer, and that
+    tray would run elevated (WU1 review N8).
 -->
 <?if $(var.Scope) = "user" ?>
   <?define RstPackageName = "RST" ?>
@@ -221,12 +220,16 @@
     <Launch Condition="Installed OR NOT RSTUSERCOPY"
             Message="RST is already installed just for you ([RSTUSERCOPY]) and would be used instead of this copy. Remove &quot;RST&quot; in Settings &gt; Apps (or delete that file), then try again. RST-Setup.exe does this for you: choose &quot;Everyone on this PC&quot;." />
 
-    <!-- Detect files in use, never close or restart applications: a tray
-         Restart Manager restarted from this elevated install would run
-         elevated (WU1 review N8). util:CloseApplication (Tray.wxs) still
-         asks a running tray on the installer's desktop to exit; it starts
-         again at the user's next sign-in, or when Revit starts it. -->
-    <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" />
+    <!-- Restart Manager off. Under /qn it would close a running tray and
+         then restart it from this elevated msiexec, so the tray would run
+         elevated (WU1 review N8; CI showed "DisableShutdown" is not honoured
+         in no-UI installs). It would also close other users' applications,
+         Revit included, in their sessions. util:CloseApplication (Tray.wxs)
+         asks a running tray on the installer's desktop to exit, and nothing
+         restarts it: it starts again at the user's next sign-in, or when
+         Revit starts it. Files still in use elsewhere make the install ask
+         for a restart (3010), as any per-machine MSI does. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
     <?endif?>
 
     <!-- An administrative install (msiexec /a) only unpacks the files to a

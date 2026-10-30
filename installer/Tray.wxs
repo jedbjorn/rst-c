@@ -48,7 +48,7 @@
     - No RemoveFolderEx: the download cache is per user, and an uninstall by
       one administrator cannot reach every user's.
     - The tray is never started by the installer, and Restart Manager does not
-      restart it (Product.wxs, MSIRESTARTMANAGERCONTROL=DisableShutdown), so it
+      restart it (Product.wxs, MSIRESTARTMANAGERCONTROL=Disable), so it
       never runs elevated (WU1 review N8). It starts at each user's next
       sign-in, or when Revit starts it.
 -->

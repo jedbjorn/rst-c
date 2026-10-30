@@ -10,7 +10,7 @@
     - identity: UpgradeCode 79C25959-..., per machine (ALLUSERS=1), name
       "RST (all users)"; RemoveExistingProducts inside the transaction (the
       MajorUpgrade rule of RST.msi, decision #9); the same launch conditions
-      plus the per-user-copy check; Restart Manager DisableShutdown (N8)
+      plus the per-user-copy check; Restart Manager off (N8)
     - components: each Revit year's carry 'REVIT<year>FOUND OR
       REMOVE~="ALL"' and Transitive (decision #10), per-year and tray counts
       match the staged files; NO ComponentId is shared with RST.msi (N6);
@@ -240,7 +240,7 @@ Assert ((Get-MsiProperty $Msi 'UpgradeCode') -eq $MachineUpgradeCode) "UpgradeCo
 Assert ((Get-MsiProperty $Msi 'UpgradeCode') -ne (Get-MsiProperty $UserMsi 'UpgradeCode')) 'its UpgradeCode differs from RST.msi''s (two products by design, decision #15)'
 Assert ((Get-MsiProperty $Msi 'ALLUSERS') -eq '1') 'ALLUSERS=1: a per-machine package'
 Assert ((Get-MsiProperty $Msi 'ProductName') -eq 'RST (all users)') "ProductName is 'RST (all users)'"
-Assert ((Get-MsiProperty $Msi 'MSIRESTARTMANAGERCONTROL') -eq 'DisableShutdown') 'MSIRESTARTMANAGERCONTROL=DisableShutdown: Restart Manager never restarts a tray from this elevated install (N8)'
+Assert ((Get-MsiProperty $Msi 'MSIRESTARTMANAGERCONTROL') -eq 'Disable') 'MSIRESTARTMANAGERCONTROL=Disable: Restart Manager never restarts a tray from this elevated install (N8)'
 
 $seq = @{}
 foreach ($row in (Get-MsiQuery $Msi 'SELECT `Action`, `Sequence` FROM `InstallExecuteSequence`' 2)) { $seq[$row[0]] = [int]$row[1] }
@@ -397,7 +397,7 @@ if ($OlderMsi) {
   Assert ($t.ExitCode -eq 0) "(g) it exited cleanly (exit $($t.ExitCode))"
   $exitLine = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' | ForEach-Object { Get-Content $_.FullName } | Where-Object { $_.Contains("[$($t.Id)]") -and $_.Contains('RST tray exited') })
   Write-Host "  tray log: $($exitLine -join ' / ')"
-  Assert (@($exitLine | Where-Object { $_ -match 'WM_CLOSE' }).Count -eq 1) '(g) it was closed by util:CloseApplication''s WM_CLOSE (Restart Manager only detects here)'
+  Assert (@($exitLine | Where-Object { $_ -match 'WM_CLOSE' }).Count -eq 1) '(g) it was closed by util:CloseApplication''s WM_CLOSE (Restart Manager is off here)'
   Start-Sleep -Seconds 10
   $again = Get-Trays
   $again | ForEach-Object { Write-Host "  unexpected tray pid $($_.Id): $((Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)").CommandLine)" }
