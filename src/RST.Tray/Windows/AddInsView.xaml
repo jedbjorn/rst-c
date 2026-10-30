@@ -56,8 +56,9 @@
             <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" />
         </Border>
 
-        <!-- The active profile, and Apply a profile. -->
-        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.ProfilePanel">
+        <!-- The active profile, and Apply a profile (shown once the page has read the disk: before that, nothing is known). -->
+        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.ProfilePanel"
+                Visibility="{Binding IsLoaded, Converter={StaticResource BoolToVisible}}">
             <StackPanel>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{x:Static res:AddInsStrings.ActiveProfileLabel}" Style="{StaticResource MutedText}"
@@ -94,7 +95,8 @@
         </Border>
 
         <!-- Restore All Add-ins: only RST's own switches. -->
-        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.RestorePanel">
+        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.RestorePanel"
+                Visibility="{Binding IsLoaded, Converter={StaticResource BoolToVisible}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

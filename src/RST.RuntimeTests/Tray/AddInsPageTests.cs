@@ -112,12 +112,26 @@ internal sealed class AddInsFixture : IDisposable
             var probe27 = FakeAddinSwitching.Item(2027, "RST-Probe", off: true);
             var revizto27 = FakeAddinSwitching.Item(2027, "Revizto", off: true, adminLock: AdminLock.AlwaysDisabled);
             var kinship27 = FakeAddinSwitching.Item(2027, "Kinship");
-            var inventory = FakeAddinSwitching.InventoryOf(probe26, di26, align26, enscape26, probe27, revizto27, kinship27);
-            Switching.InventoryResult = new AddinInventory(
-                [inventory.Years[0], inventory.Years[1] with { UserDisableAll = false, AdminDisableAll = true }],
-                inventory.Items);
-            Switching.Ledger = new ActivationLedger(new[] { probe26, di26, probe27, revizto27 }
-                .Select(i => new LedgerEntry(i.Year, i.AddinIds[0], i.Name, LedgerKind.Setting, i.ManifestPath, DateTime.UtcNow)));
+            Switching.InventoryResult = FakeAddinSwitching.InventoryOf(probe26, di26, align26, enscape26, probe27, revizto27, kinship27);
+            Switching.Ledger = new ActivationLedger(new[] { probe26, di26, probe27, revizto27 }.Select(Entry));
+            // The machine follows what ran: a switch made is in the settings and RST's record afterwards, so the page
+            // read after Apply or Restore All shows the result, as on a real machine.
+            Switching.OnExecute = plan =>
+            {
+                var report = FakeAddinSwitching.AllDone(plan);
+                var items = Switching.InventoryResult.Items.ToList();
+                foreach (var done in report.Done)
+                {
+                    var i = items.FindIndex(x => x.Year == done.Year && x.ManifestPath == done.ManifestPath);
+                    if (i < 0) continue;
+                    var item = items[i];
+                    items[i] = item with { DisabledIds = done.Action == PlanAction.Disable ? item.AddinIds : [] };
+                    if (done.Action == PlanAction.Disable) Switching.Ledger.Add(Entry(item));
+                    else Switching.Ledger.Remove(ActivationLedger.KeyOf(Entry(item)));
+                }
+                Switching.InventoryResult = new AddinInventory(Switching.InventoryResult.Years, items);
+                return report;
+            };
 
             var lean = TempLoaderRoot.Profile("F16 Lean", LeanId, "F16 Lean");
             var needsProbe = TempLoaderRoot.Profile("F16 Needs Probe", ProbeId, "F16 Probe");
@@ -130,6 +144,9 @@ internal sealed class AddInsFixture : IDisposable
         Service = new TrayAddinService(Root.Paths, Switching);
         Backend = new ScriptedAddinsBackend(Service);
     }
+
+    private static LedgerEntry Entry(InventoryItem i) =>
+        new(i.Year, i.AddinIds[0], i.Name, LedgerKind.Setting, i.ManifestPath, new DateTime(2026, 10, 30, 9, 0, 0, DateTimeKind.Utc));
 
     public TempLoaderRoot Root { get; }
 
@@ -186,7 +203,7 @@ public class AddInsViewModelTests
         Assert.True(y27.IsRunning);
         Assert.Equal(new[] { "RST-Probe" }, y27.SwitchedOff);
         Assert.Equal(new[] { "Revizto (2027): locked off by your administrator" }, y27.CouldNotChange);
-        Assert.Equal(new[] { ActivationWording.AdminDisableAllNote(2027) }, y27.Notes);
+        Assert.Empty(y27.Notes);
         // The active profile is picked; its saved choice seeds the switch (none saved: off).
         Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
         Assert.False(vm.DisableUnused);
@@ -228,6 +245,8 @@ public class AddInsViewModelTests
 
         Assert.Equal(AddInsStrings.Applied("F16 Lean"), vm.ResultText);
         Assert.Equal("F16 Lean", vm.ActiveProfileText);
+        Assert.Equal(new[] { "RST-Probe", "DiRoots.One", "Enscape" }, vm.Years[0].SwitchedOff);
+        Assert.Equal(new[] { "RST-Probe", "Kinship" }, vm.Years[1].SwitchedOff);
         Assert.Equal("F16 Lean", ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).ProfileName);
     }
 
@@ -286,6 +305,9 @@ public class AddInsViewModelTests
                      report.Notes.Where(n => n.Contains("is open")));
         Assert.Equal(PlanAction.Enable, f.Switching.Executed.Single().Changes.Select(c => c.Action).Distinct().Single());
         Assert.Equal(AddInsStrings.Restored, vm.ResultText);
+        Assert.True(vm.Years[0].IsClear);
+        Assert.Empty(vm.Years[1].SwitchedOff);
+        Assert.Equal(new[] { "Revizto (2027): locked off by your administrator" }, vm.Years[1].CouldNotChange);
     }
 
     [Fact]
@@ -497,6 +519,11 @@ public class AddInsPageScreenshotTests
         var vm = f.ViewModel();
         vm.RefreshAsync().GetAwaiter().GetResult();
         Capture(vm, theme, "error", window =>
-            Assert.Contains(AddInsStrings.ReadFailed("Access to the path 'AddInsSettings.json' is denied."), Visible(window.AddInsView).Select(t => t.Text)));
+        {
+            var texts = Visible(window.AddInsView).Select(t => t.Text).ToList();
+            Assert.Contains(AddInsStrings.ReadFailed("Access to the path 'AddInsSettings.json' is denied."), texts);
+            Assert.DoesNotContain(AddInsStrings.ActiveProfileNone, texts); // nothing is known: nothing is claimed
+            Assert.False(window.AddInsView.RestoreAllButton.IsVisible);
+        });
     });
 }
