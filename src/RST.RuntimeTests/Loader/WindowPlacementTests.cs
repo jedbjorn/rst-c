@@ -25,10 +25,11 @@ public class WindowPlacementTests
             window.SourceInitialized += (_, _) => WindowPlacement.CapToWorkArea(window, area);
             window.Show();
             WindowCapture.DoEvents();
+            WindowCapture.DoEvents();
 
             Assert.Equal(800, window.MaxWidth);
             Assert.Equal(600, window.MaxHeight);
-            Assert.True(window.Left >= area.Left && window.Top >= area.Top, $"window at {window.Left},{window.Top}");
+            Assert.True(window.Left >= area.Left && window.Top >= area.Top, $"window at {window.Left},{window.Top}, {window.ActualWidth}x{window.ActualHeight}");
             Assert.True(window.Left + window.ActualWidth <= area.Right + 1, $"right edge {window.Left + window.ActualWidth}");
             Assert.True(window.Top + window.ActualHeight <= area.Bottom + 1, $"bottom edge {window.Top + window.ActualHeight}");
         }

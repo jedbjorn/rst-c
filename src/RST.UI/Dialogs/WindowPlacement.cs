@@ -49,22 +49,26 @@ public static class WindowPlacement
         if (area.Width > 0) window.MaxWidth = area.Width;
         // A window placed by hand (Manual: the screenshot tests' off-screen windows) stays where it was put.
         if (window.WindowStartupLocation == WindowStartupLocation.Manual) return;
-        window.Loaded += (_, _) =>
-        {
-            // Centred on a tall or wide owner, or (with no owner) centred on the screen at its full
-            // size before the cap applied, the window could start outside the work area, with its
-            // title bar off screen (WU1 review N3): both modes are moved back inside. A centred
-            // window's Left/Top can still be NaN here, so the bounds come from the window itself.
-            if (Bounds(window) is not { } b) return;
-            var top = b.Top;
-            var left = b.Left;
-            if (top + b.Height > area.Bottom) top = area.Bottom - b.Height;
-            if (top < area.Top) top = area.Top;
-            if (left + b.Width > area.Right) left = area.Right - b.Width;
-            if (left < area.Left) left = area.Left;
-            if (top != b.Top) window.Top = top;
-            if (left != b.Left) window.Left = left;
-        };
+        // Centred on a tall or wide owner, or (with no owner) centred on the screen at its full size
+        // before the cap applied, the window could start outside the work area, with its title bar
+        // off screen (WU1 review N3): both modes are moved back inside. WPF may still re-centre the
+        // window after Loaded, once its size is known, so the clamp runs again after the first render.
+        window.Loaded += (_, _) => KeepInside(window, area);
+        window.ContentRendered += (_, _) => KeepInside(window, area);
+    }
+
+    private static void KeepInside(Window window, Rect area)
+    {
+        // A centred window's Left/Top can still be NaN here, so the bounds come from Win32.
+        if (Bounds(window) is not { } b) return;
+        var top = b.Top;
+        var left = b.Left;
+        if (top + b.Height > area.Bottom) top = area.Bottom - b.Height;
+        if (top < area.Top) top = area.Top;
+        if (left + b.Width > area.Right) left = area.Right - b.Width;
+        if (left < area.Left) left = area.Left;
+        if (Math.Abs(top - b.Top) > 0.5) window.Top = top;
+        if (Math.Abs(left - b.Left) > 0.5) window.Left = left;
     }
 
     /// <summary>The window's on-screen bounds in DIPs (from Win32), or null before it has a handle.</summary>
