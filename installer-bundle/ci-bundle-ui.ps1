@@ -13,7 +13,7 @@
        page -> screenshot; assert the companions were installed
     3. RST-Setup.exe /uninstall -> Success page -> screenshot; assert RST
        is gone and the companions remain; then remove them (msiexec /x)
-  Driven through UI Automation (TogglePattern / InvokePattern), captured
+  Found through UI Automation, driven by BM_CLICK, captured
   with Graphics.CopyFromScreen of the setup window.
 #>
 param(
@@ -59,16 +59,25 @@ function Find-Window([string]$Caption = 'RST Setup', [int]$TimeoutSec = 60) {
   $top = $Root.FindAll([Windows.Automation.TreeScope]::Children, [Windows.Automation.Condition]::TrueCondition) | ForEach-Object { "'$($_.Current.Name)'" }
   throw "no '$Caption' window after $TimeoutSec s; top-level windows: $($top -join ', ')"
 }
-function Find-Control($Window, [Windows.Automation.ControlType]$Type, [string]$NameLike) {
-  $all = $Window.FindAll([Windows.Automation.TreeScope]::Descendants,
-    (New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, $Type)))
-  foreach ($e in $all) { if ($e.Current.Name -like $NameLike -and -not $e.Current.IsOffscreen) { return $e } }
+# thmutil's controls are plain Win32 BUTTON windows that UI Automation
+# reports as Panes (no Toggle/Invoke pattern), so find them by name and
+# drive them by window message: BM_GETCHECK reads a checkbox, BM_CLICK
+# clicks it (the BA's own click handler then sets the Burn variable).
+Add-Type -Namespace RstCi -Name User32 -MemberDefinition @'
+[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+'@
+$BM_GETCHECK = 0x00F0; $BM_CLICK = 0x00F5
+function Find-Control($Window, [string]$NameLike) {
+  $all = $Window.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)
+  # NativeWindowHandle != 0: the theme's own controls, not the title bar's
+  # Close/Minimize buttons, which UI Automation also exposes.
+  foreach ($e in $all) { if ($e.Current.Name -like $NameLike -and -not $e.Current.IsOffscreen -and $e.Current.NativeWindowHandle -ne 0) { return $e } }
   return $null
 }
-function Wait-Control($Window, [Windows.Automation.ControlType]$Type, [string]$NameLike, [int]$TimeoutSec = 300) {
+function Wait-Control($Window, [string]$NameLike, [int]$TimeoutSec = 300) {
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   while ((Get-Date) -lt $deadline) {
-    $e = Find-Control $Window $Type $NameLike
+    $e = Find-Control $Window $NameLike
     if ($e) { return $e }
     Start-Sleep -Seconds 1
   }
@@ -77,15 +86,16 @@ function Wait-Control($Window, [Windows.Automation.ControlType]$Type, [string]$N
     Write-Host "  $($e.Current.ControlType.ProgrammaticName) | $($e.Current.Name) | $($e.Current.IsOffscreen) | $($e.Current.IsEnabled)"
   }
   try { Save-Shot $Window 'failure' } catch { Write-Host "screenshot failed: $_" }
-  throw "no $($Type.ProgrammaticName) '$NameLike' after $TimeoutSec s"
+  throw "no control '$NameLike' after $TimeoutSec s"
 }
-function Get-Toggle($e) { $e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState }
+function Send([object]$e, [int]$Msg) { [RstCi.User32]::SendMessage([IntPtr]$e.Current.NativeWindowHandle, [uint32]$Msg, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() }
+function Test-Ticked($e) { (Send $e $BM_GETCHECK) -eq 1 }
 function Set-Ticked($e) {
-  if ((Get-Toggle $e) -ne [Windows.Automation.ToggleState]::On) { $e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle() }
+  if (-not (Test-Ticked $e)) { Send $e $BM_CLICK | Out-Null }
   Start-Sleep -Milliseconds 300
-  Assert ((Get-Toggle $e) -eq [Windows.Automation.ToggleState]::On) "ticked '$($e.Current.Name)'"
+  Assert (Test-Ticked $e) "ticked '$($e.Current.Name)'"
 }
-function Invoke-Button($e) { $e.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke() }
+function Invoke-Button($e) { Send $e $BM_CLICK | Out-Null }
 function Save-Shot($Window, [string]$Name) {
   Start-Sleep -Milliseconds 800
   try { $Window.SetFocus() } catch { }
@@ -108,13 +118,13 @@ function Show-Texts($Window, [string]$Label) {
 # 1. Install page.
 $p = Start-Process $Bundle -ArgumentList @('/log', "`"$LogDir\bundle-ui-install.log`"") -PassThru
 $w = Find-Window
-$eula = Wait-Control $w ([Windows.Automation.ControlType]::CheckBox) '*license terms*' 60
+$eula = Wait-Control $w '*license terms*' 60
 Show-Texts $w 'install page' | Out-Null
 $boxes = @{}
 foreach ($c in $companions) {
-  $b = Find-Control $w ([Windows.Automation.ControlType]::CheckBox) "$($c.name) $($c.release.version)*"
+  $b = Find-Control $w "$($c.name) $($c.release.version)*"
   Assert ($null -ne $b) "Install page has a '$($c.name) $($c.release.version)' checkbox"
-  Assert ((Get-Toggle $b) -eq [Windows.Automation.ToggleState]::Off) "'$($b.Current.Name)' starts unticked (defaultSelected false)"
+  Assert (-not (Test-Ticked $b)) "'$($b.Current.Name)' starts unticked (defaultSelected false)"
   $boxes[$c.id] = $b
 }
 Save-Shot $w '1-install-page'
@@ -123,8 +133,8 @@ Save-Shot $w '1-install-page'
 Set-Ticked $eula
 foreach ($c in $companions) { Set-Ticked $boxes[$c.id] }
 Save-Shot $w '2-install-page-ticked'
-Invoke-Button (Wait-Control $w ([Windows.Automation.ControlType]::Button) 'Install' 10)
-$close = Wait-Control $w ([Windows.Automation.ControlType]::Button) 'Close' 600
+Invoke-Button (Wait-Control $w 'Install' 10)
+$close = Wait-Control $w 'Close' 600
 $t = Show-Texts $w 'success page (install)'
 Assert (@($t | Where-Object { $_ -like '*stay installed if you uninstall RST*' }).Count -ge 1) 'install finish page says companions stay installed if RST is uninstalled'
 Save-Shot $w '3-success-install'
@@ -139,8 +149,8 @@ $w = Find-Window
 # /uninstall with full UI may first show the Modify page (Repair / Uninstall).
 $deadline = (Get-Date).AddSeconds(600); $close = $null
 while (-not $close -and (Get-Date) -lt $deadline) {
-  $close = Find-Control $w ([Windows.Automation.ControlType]::Button) 'Close'
-  $un = Find-Control $w ([Windows.Automation.ControlType]::Button) 'Uninstall'
+  $close = Find-Control $w 'Close'
+  $un = Find-Control $w 'Uninstall'
   if (-not $close -and $un) { Show-Texts $w 'modify page' | Out-Null; Invoke-Button $un }
   Start-Sleep -Seconds 1
 }
