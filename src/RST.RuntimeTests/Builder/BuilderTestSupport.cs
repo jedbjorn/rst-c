@@ -90,6 +90,19 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
         return new SaveOutcome(true, null, fileName, copy);
     }
 
+    public List<string> Removed { get; } = [];
+
+    public OpResult RemoveResult { get; set; } = OpResult.Success;
+
+    /// <summary>As the real one: the library entry read from that file goes (unless the removal is scripted to fail).</summary>
+    public OpResult RemoveSupersededFile(string fileName)
+    {
+        Calls.Add("RemoveSupersededFile");
+        Removed.Add(fileName);
+        if (RemoveResult.Ok) Library.RemoveAll(e => e.FileName == fileName);
+        return RemoveResult;
+    }
+
     public OpResult Export(Profile profile, string path)
     {
         Calls.Add("Export");
