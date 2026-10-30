@@ -48,7 +48,7 @@ public sealed class ProfileBuilderDataCompatibilityTests : IDisposable
         File.Exists(LoaderAssets.LookupPath).Should().BeTrue("the shipped addin_lookup.json is next to RST.UI.dll");
         var scheduler = new FakeScheduler();
         var backend = new ProfileBuilderBackend("2026", Scanned(), scheduler, ["Architecture", "Enscape", "Kinship"],
-            LoaderPaths.Under(_ported), new FakeAddinPasses(), LoaderAssets.LookupPath);
+            LoaderPaths.Under(_ported), LoaderAssets.LookupPath);
         backend.Catalog.Should().BeEquivalentTo(V220BuilderReference.Catalog(), "get_catalog's promotion gives the fixture's shape");
 
         var dialogs = new FakeDialogs();

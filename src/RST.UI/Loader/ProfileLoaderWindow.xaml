@@ -268,16 +268,17 @@
                                                         </DockPanel>
                                                     </Border>
                                                     <DataTemplate.Triggers>
-                                                        <!-- The HTML's pill classes: Native, Loaded and Installed were "present" (green);
-                                                             Disabled and Not Found were amber (the WarningPill default above). -->
+                                                        <!-- The HTML's pill classes: Native and Loaded are "present" (green);
+                                                             Disabled and Not Found are amber (the WarningPill default above);
+                                                             Locked (by the administrator, spec #18) is red. -->
                                                         <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Native}">
                                                             <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource SuccessPill}" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Loaded}">
                                                             <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource SuccessPill}" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Installed}">
-                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource SuccessPill}" />
+                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Locked}">
+                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource ErrorPill}" />
                                                         </DataTrigger>
                                                     </DataTemplate.Triggers>
                                                 </DataTemplate>

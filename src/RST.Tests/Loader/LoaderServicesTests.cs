@@ -1,11 +1,11 @@
 // rst-c's own (not vendored): the Loader services extracted from LoaderBridge (spec #16, WU3):
 // prefs (read, migration, write, opacity clamp), the library (list, active, import, delete), the
-// load orchestration (QA, auto-restore, disable pass, schedule, restart) and unload, and the
-// add-in maintenance calls (disable preview by id, restore all, the manifest scan).
+// load orchestration (the confirmed add-in plan, schedule, restart), the ribbon-only reload and
+// unload, the required-add-in check, and the add-in maintenance calls (plan by id, restore all, migration).
 
 using System.IO;
 using FluentAssertions;
-using RST.Core.AddIns;
+using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -179,13 +179,13 @@ public sealed class ProfileLoadServiceTests : IDisposable
     private static readonly DateTime Now = new(2026, 10, 30, 9, 15, 0, DateTimeKind.Unspecified);
 
     private readonly TempLoaderRoot _root = new();
-    private readonly FakeAddinPasses _passes = new();
+    private readonly FakeAddinSwitching _switching = new();
     private readonly FakeScheduler _scheduler = new();
 
     public void Dispose() => _root.Dispose();
 
     private ProfileLoadService Service(IProfileSwitchScheduler? scheduler = null, bool noScheduler = false) =>
-        new(_root.Paths, ["Kinship"], noScheduler ? null : scheduler ?? _scheduler, _passes, clock: () => Now);
+        new(_root.Paths, noScheduler ? null : scheduler ?? _scheduler, _switching, clock: () => Now);
 
     private Profile AddProfile(params RequiredAddin[] required)
     {
@@ -195,6 +195,8 @@ public sealed class ProfileLoadServiceTests : IDisposable
         return p;
     }
 
+    private ActivationPlan PlanFor(Profile p, bool disable) => _switching.Plan(_switching.InventoryResult, ActivationPolicy.Load(p.RequiredAddins, disable));
+
     [Fact]
     public void Load_writes_the_active_profile_and_prefs_and_schedules_the_switch()
     {
@@ -202,8 +204,8 @@ public sealed class ProfileLoadServiceTests : IDisposable
         var result = Service().Load(new LoadRequest("Arch", p.Id, false, ["Analyze"]));
 
         result.Ok.Should().BeTrue();
-        result.RestartNeeded.Should().BeFalse("the live switch is scheduled");
-        result.Qa!.AllClear.Should().BeTrue();
+        result.RestartNeeded.Should().BeFalse("the live switch is scheduled and no add-in changed");
+        result.AddinChanges.Should().BeEmpty();
         _scheduler.Scheduled.Should().ContainSingle().Which!.Id.Should().Be(p.Id);
 
         var ap = ActiveProfile.Read(_root.Paths.ActiveProfileFile);
@@ -225,10 +227,10 @@ public sealed class ProfileLoadServiceTests : IDisposable
     [Fact]
     public void An_unknown_profile_fails_with_the_bridge_warning_and_writes_nothing()
     {
-        var result = Service().Load(new LoadRequest("Ghost", null, false, []));
+        var result = Service().Load(new LoadRequest("Ghost", null, false, [], ActivationPlan.Nothing));
         result.Should().BeEquivalentTo(LoadResult.Fail("Profile not found: Ghost"));
         File.Exists(_root.Paths.ActiveProfileFile).Should().BeFalse();
-        _passes.Calls.Should().BeEmpty();
+        _switching.Calls.Should().BeEmpty();
         _scheduler.Scheduled.Should().BeEmpty();
     }
 
@@ -240,70 +242,56 @@ public sealed class ProfileLoadServiceTests : IDisposable
     }
 
     [Fact]
-    public void Qa_lists_restored_and_missing_add_ins_and_a_restore_forces_a_restart()
+    public void Load_runs_exactly_the_confirmed_plan_and_any_change_forces_a_restart()
     {
-        var p = AddProfile(
-            new RequiredAddin { TabName = "Kinship", AddinFile = "Kinship.addin" },
-            new RequiredAddin { TabName = "Lumion", AddinFile = "Lumion.addin", Url = "https://lumion.com" },
-            new RequiredAddin { TabName = "Enscape" });
-        var disabledManifest = FakeAddinPasses.Manifest("KinshipTools.addin", disabled: true);
-        _passes.OnClassify = req =>
-        [
-            new(req[0], RequiredAddinStatus.InstalledDisabled, disabledManifest),
-            new(req[1], RequiredAddinStatus.NotInstalled, null),
-            new(req[2], RequiredAddinStatus.InstalledActive, null),
-        ];
-        _passes.RestoreRequiredResult = new RestoreResult(1, 0, ["KinshipTools.addin"], []);
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(
+            FakeAddinSwitching.Item(2026, "Kinship"), FakeAddinSwitching.Item(2026, "Twinmotion"), FakeAddinSwitching.Item(2027, "Twinmotion"));
+        var p = AddProfile(new RequiredAddin { TabName = "Kinship", AddinFile = "Kinship.addin" });
+        var plan = PlanFor(p, disable: true);
 
-        var result = Service().Load(new LoadRequest("Arch", p.Id, false, []));
-        result.Qa!.Restored.Should().Equal(new QaRestoredItem("Kinship", "KinshipTools.addin"));
-        result.Qa.NotInstalled.Should().Equal(new QaMissingItem("Lumion", "Lumion.addin", "https://lumion.com"));
-        result.Qa.AllClear.Should().BeFalse();
-        result.RestartNeeded.Should().BeTrue();
-        _passes.RestoredRequired.Should().ContainSingle().Which.Select(r => r.TabName).Should().Equal("Kinship");
+        var result = Service().Load(new LoadRequest("Arch", p.Id, true, [], plan));
+
+        _switching.Executed.Should().ContainSingle().Which.Should().BeSameAs(plan);
+        result.AddinChanges.Select(o => (o.Name, o.Year, o.Action, o.Result)).Should().Equal(
+            ("Twinmotion", 2026, PlanAction.Disable, OutcomeResult.Done),
+            ("Twinmotion", 2027, PlanAction.Disable, OutcomeResult.Done));
+        result.RestartNeeded.Should().BeTrue("add-in changes apply at the next start");
+        result.Report.Intent.Should().Be(ActivationIntent.Load);
     }
 
     [Fact]
-    public void A_restore_that_renames_nothing_does_not_force_a_restart()
+    public void A_request_without_a_plan_or_a_plan_without_changes_touches_no_add_in()
     {
-        var p = AddProfile(new RequiredAddin { TabName = "Kinship" });
-        _passes.OnClassify = req => [new(req[0], RequiredAddinStatus.InstalledDisabled, null)];
-        var result = Service().Load(new LoadRequest("Arch", p.Id, false, []));
-        result.RestartNeeded.Should().BeFalse();
-        result.Qa!.Restored.Should().Equal(new QaRestoredItem("Kinship", null));
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Kinship", off: true));
+        var p = AddProfile();
+        Service().Load(new LoadRequest("Arch", p.Id, true, []));
+        Service().Load(new LoadRequest("Arch", p.Id, true, [], PlanFor(p, disable: true)));
+        _switching.Executed.Should().BeEmpty();
     }
 
     [Fact]
-    public void A_qa_that_throws_still_loads()
+    public void An_executor_that_throws_reports_every_change_as_not_changed()
     {
-        var p = AddProfile(new RequiredAddin { TabName = "Kinship" });
-        _passes.ClassifyThrows = new IOException("scan failed");
-        var result = Service().Load(new LoadRequest("Arch", p.Id, false, []));
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Twinmotion"));
+        _switching.ExecuteThrows = new IOException("disk gone");
+        var p = AddProfile();
+        var result = Service().Load(new LoadRequest("Arch", p.Id, true, [], PlanFor(p, disable: true)));
         result.Ok.Should().BeTrue();
-        result.Qa!.AllClear.Should().BeTrue();
+        result.AddinChanges.Should().ContainSingle().Which.Should().Match<ActivationOutcome>(o =>
+            o.Result == OutcomeResult.NotChanged && o.Reason == ChangeReason.Other && o.Detail == "disk gone");
     }
 
     [Fact]
-    public void The_disable_pass_runs_only_when_asked_and_reports_failures_and_forces_a_restart()
+    public void Reload_is_ribbon_only_even_with_a_plan()
     {
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Twinmotion"));
         var p = AddProfile();
-        Service().Load(new LoadRequest("Arch", p.Id, false, []));
-        _passes.Calls.Should().NotContain("DisableNonRequired");
-
-        _passes.DisableResult = new DisableResult(2, 1, 0, 1, ["A.addin", "B.addin"], ["C.addin"]);
-        var result = Service().Load(new LoadRequest("Arch", p.Id, true, []));
-        result.FailedDisables.Should().Equal(new FailedDisable("C.addin"));
-        result.RestartNeeded.Should().BeTrue();
-    }
-
-    [Fact]
-    public void A_disable_pass_that_throws_reports_the_subsystem_failure()
-    {
-        var p = AddProfile();
-        _passes.DisableThrows = new UnauthorizedAccessException("denied");
-        var result = Service().Load(new LoadRequest("Arch", p.Id, true, []));
-        result.FailedDisables.Should().Equal(new FailedDisable("(disable subsystem failure)", Error: "denied"));
-        result.RestartNeeded.Should().BeTrue();
+        var result = Service().Reload(new LoadRequest("Arch", p.Id, true, ["Analyze"], PlanFor(p, disable: true)));
+        result.Ok.Should().BeTrue();
+        result.AddinChanges.Should().BeEmpty();
+        _switching.Executed.Should().BeEmpty();
+        _scheduler.Scheduled.Should().ContainSingle();
+        ActiveProfile.Read(_root.Paths.ActiveProfileFile).DisableNonRequired.Should().BeTrue("the flag is kept for the next Load Profile");
     }
 
     [Fact]
@@ -320,14 +308,17 @@ public sealed class ProfileLoadServiceTests : IDisposable
     [Fact]
     public async Task The_three_steps_equal_one_load_and_the_add_in_pass_can_run_on_another_thread()
     {
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Twinmotion"));
         var p = AddProfile();
+        var plan = PlanFor(p, disable: true);
         var service = Service();
-        var start = service.Begin(new LoadRequest("Arch", p.Id, true, ["Analyze"]));
+        var start = service.Begin(new LoadRequest("Arch", p.Id, true, ["Analyze"], plan));
         start.Failure.Should().BeNull();
         var passes = await Task.Run(() => service.RunAddinPasses(start));
+        _switching.ExecuteThreadId.Should().NotBe(Environment.CurrentManagedThreadId);
         var stepped = service.Finish(start, passes);
 
-        var whole = Service().Load(new LoadRequest("Arch", p.Id, true, ["Analyze"]));
+        var whole = Service().Load(new LoadRequest("Arch", p.Id, true, ["Analyze"], plan));
         stepped.Should().BeEquivalentTo(whole);
     }
 
@@ -335,42 +326,83 @@ public sealed class ProfileLoadServiceTests : IDisposable
     public void A_failed_begin_skips_the_passes_and_finish_returns_the_failure()
     {
         var service = Service();
-        var start = service.Begin(new LoadRequest("Ghost", null, true, []));
-        service.RunAddinPasses(start).Should().Be(new AddinPassResult(QaCheck.Clear, false, [], false));
-        service.Finish(start, new AddinPassResult(QaCheck.Clear, false, [], false)).Should().BeSameAs(start.Failure);
-        _passes.Calls.Should().BeEmpty();
+        var start = service.Begin(new LoadRequest("Ghost", null, true, [], ActivationPlan.Nothing));
+        service.RunAddinPasses(start).Should().BeSameAs(AddinPassResult.None);
+        service.Finish(start, AddinPassResult.None).Should().BeSameAs(start.Failure);
+        _switching.Calls.Should().BeEmpty();
     }
 
     [Fact]
-    public void Unload_blanks_the_pointer_and_schedules_the_teardown()
+    public void Unload_blanks_the_pointer_schedules_the_teardown_and_switches_back_on_what_rst_c_switched_off()
     {
+        var mine = FakeAddinSwitching.Item(2026, "Twinmotion", off: true);
+        var users = FakeAddinSwitching.Item(2026, "Lumion", off: true);
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(mine, users);
+        _switching.Ledger.Add(new LedgerEntry(2026, mine.AddinIds[0], "Twinmotion", SwitchMechanism.SettingsFile, mine.ManifestPath, DateTime.UtcNow));
         var p = AddProfile();
         Service().Load(new LoadRequest("Arch", p.Id, false, []));
-        Service().Unload().Ok.Should().BeTrue();
+
+        var result = Service().Unload();
+
+        result.Ok.Should().BeTrue();
         ActiveProfile.Read(_root.Paths.ActiveProfileFile).IsBlank.Should().BeTrue();
         _scheduler.Scheduled.Last().Should().BeNull();
+        _switching.Policies.Last().Intent.Should().Be(ActivationIntent.Unload);
+        result.Addins.Outcomes.Should().ContainSingle().Which.Should().Match<ActivationOutcome>(o =>
+            o.Name == "Twinmotion" && o.Action == PlanAction.Enable && o.Result == OutcomeResult.Done);
     }
 
     [Fact]
-    public void Unload_survives_a_failing_scheduler()
+    public void Unload_survives_a_failing_scheduler_and_a_failing_scan()
     {
         var failing = new FakeScheduler { Throws = new InvalidOperationException("x") };
-        Service(failing).Unload().Ok.Should().BeTrue();
+        _switching.InventoryThrows = new IOException("scan");
+        var result = Service(failing).Unload();
+        result.Ok.Should().BeTrue();
+        result.Addins.Notes.Should().ContainSingle().Which.Should().Contain("scan");
         ActiveProfile.Read(_root.Paths.ActiveProfileFile).IsBlank.Should().BeTrue();
+    }
+}
+
+public sealed class QaCheckTests
+{
+    [Fact]
+    public void The_check_lists_missing_add_ins_of_the_running_year_and_required_add_ins_left_off()
+    {
+        var kinship = FakeAddinSwitching.Item(2026, "Kinship", off: true);
+        var inventory = FakeAddinSwitching.InventoryOf(kinship, FakeAddinSwitching.Item(2027, "Lumion"));
+        var profile = TempLoaderRoot.Profile("Arch");
+        profile.RequiredAddins =
+        [
+            new RequiredAddin { TabName = "Architecture" },
+            new RequiredAddin { TabName = "Kinship", AddinFile = "Kinship.addin" },
+            new RequiredAddin { TabName = "Lumion", AddinFile = "Lumion.addin" },
+            new RequiredAddin { TabName = "Enscape" },
+        ];
+        var lookup = new Dictionary<string, AddinLookupEntry> { ["Lumion"] = new("Lumion LiveSync", "Lumion.addin", "https://lumion.com") };
+        var session = AddinSessionContext.For("2026", inventory, ["Enscape"], lookup);
+        var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.Load(profile.RequiredAddins, false), new ActivationLedger());
+
+        var qa = QaCheck.For(profile, session, plan);
+
+        qa.NotInstalled.Should().Equal(new QaMissingItem("Lumion", "Lumion.addin", "https://lumion.com"));
+        qa.RequiredOff.Should().ContainSingle().Which.Should().StartWith("Kinship (2026) is required by this profile, but it is switched off in Autodesk's Add-Ins Manager");
+        qa.AllClear.Should().BeFalse();
+        QaCheck.Clear.AllClear.Should().BeTrue();
     }
 }
 
 public sealed class AddinMaintenanceServiceTests : IDisposable
 {
     private readonly TempLoaderRoot _root = new();
-    private readonly FakeAddinPasses _passes = new();
+    private readonly FakeAddinSwitching _switching = new();
 
     public void Dispose() => _root.Dispose();
 
-    private AddinMaintenanceService Service() => new(_root.Paths, _passes);
+    private AddinMaintenanceService Service() => new(_root.Paths, _switching);
 
     [Fact]
-    public void Disable_preview_resolves_by_id_before_name()
+    public void The_load_plan_resolves_the_profile_by_id_before_name()
     {
         // Two profiles share a name (Planner default 5): the id picks the right one.
         var first = TempLoaderRoot.Profile("Same");
@@ -379,76 +411,56 @@ public sealed class AddinMaintenanceServiceTests : IDisposable
         second.RequiredAddins = [new RequiredAddin { TabName = "Second" }];
         _root.Add(first);
         _root.Add(second);
-        IReadOnlyList<RequiredAddin>? asked = null;
-        var entry = new AddinPreviewEntry("Kinship.addin", @"C:\Addins\Kinship.addin", "k.dll", "id", AddinPathKind.UserAddins);
-        _passes.PreviewResult = new DisablePreview([entry], [entry with { FileName = "Other.addin" }], [], []);
-        var passes = new RecordingPreview(_passes, r => asked = r);
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Second"), FakeAddinSwitching.Item(2026, "Other"));
 
-        var result = new AddinMaintenanceService(_root.Paths, passes).Preview("Same", second.Id);
-        asked!.Single().TabName.Should().Be("Second");
+        var result = Service().PlanLoad("Same", second.Id, disableUnused: true);
+
         result.Error.Should().BeNull();
-        result.Staying.Should().Equal(new DisablePreviewItem("Kinship", "Kinship.addin", @"C:\Addins\Kinship.addin", "id", "k.dll", "UserAddins"));
-        result.Disabling.Single().DisplayName.Should().Be("Other");
+        _switching.Policies.Single().Required.Single().TabName.Should().Be("Second");
+        result.Plan!.Changes.Select(e => e.Name).Should().Equal("Other");
     }
 
     [Fact]
-    public void Disable_preview_of_an_unknown_profile_is_an_error()
+    public void The_load_plan_of_an_unknown_profile_is_an_error()
     {
-        var result = Service().Preview("Ghost", null);
+        var result = Service().PlanLoad("Ghost", null, true);
         result.Error.Should().Be("Profile not found: Ghost");
-        result.Staying.Should().BeEmpty();
+        result.Plan.Should().BeNull();
     }
 
     [Fact]
-    public void Restore_all_reports_the_restored_files_and_whether_to_restart()
+    public void Restore_all_switches_back_on_what_rst_c_switched_off_and_reports_it()
     {
-        _passes.RestoreAllResult = new RestoreResult(2, 0, ["A.addin", "B.addin"], []);
-        Service().RestoreAll().Should().BeEquivalentTo(new RestoreOutcome(true, null, true, ["A.addin", "B.addin"], []));
+        var mine = FakeAddinSwitching.Item(2027, "Twinmotion", off: true);
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(mine, FakeAddinSwitching.Item(2027, "Lumion", off: true));
+        _switching.Ledger.Add(new LedgerEntry(2027, mine.AddinIds[0], "Twinmotion", SwitchMechanism.SettingsFile, mine.ManifestPath, DateTime.UtcNow));
 
-        _passes.RestoreAllResult = new RestoreResult(0, 0, [], []);
+        var result = Service().RestoreAll();
+
+        result.Ok.Should().BeTrue();
+        result.RestartNeeded.Should().BeTrue();
+        result.Addins!.Outcomes.Select(o => (o.Name, o.Action)).Should().Equal(("Twinmotion", PlanAction.Enable));
+
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf();
         Service().RestoreAll().RestartNeeded.Should().BeFalse();
 
-        _passes.RestoreAllThrows = new IOException("busy");
-        Service().RestoreAll().Should().BeEquivalentTo(new RestoreOutcome(false, "busy", false, [], []));
+        _switching.ExecuteThrows = new IOException("busy");
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(mine);
+        Service().RestoreAll().Should().BeEquivalentTo(new RestoreOutcome(false, "busy", null));
     }
 
     [Fact]
-    public void Scan_maps_manifests_to_the_loaded_add_in_shape()
+    public void The_inventory_falls_back_to_empty_and_the_migration_reports_only_when_something_moved()
     {
-        _passes.ScanResult =
-        [
-            FakeAddinPasses.Manifest("Kinship.addin", name: "Kinship Tools", id: "k-id"),
-            new AddinManifest(@"C:\x\Bare.addin", "Bare.addin", true, []),
-        ];
-        var loaded = Service().ScanLoaded();
-        loaded[0].Should().Be(new LoadedAddin("Kinship.addin", _passes.ScanResult[0].FilePath, false, "Kinship Tools", "k-id", "x.dll"));
-        loaded[1].DisplayName.Should().Be("Bare", "no entry name: the file stem");
-        loaded[1].IsDisabled.Should().BeTrue();
-    }
+        _switching.InventoryThrows = new IOException("x");
+        Service().Inventory().Should().BeSameAs(AddinInventory.Empty);
+        Service().MigrateLegacy().Should().BeNull();
 
-    [Fact]
-    public void User_config_is_the_empty_stub()
-    {
-        Service().GetUserConfig().Addins.Should().BeEmpty();
-    }
-
-    private sealed class RecordingPreview(FakeAddinPasses inner, Action<IReadOnlyList<RequiredAddin>> onPreview) : IAddinPasses
-    {
-        public IReadOnlyList<RequiredAddinQaResult> Classify(IReadOnlyList<RequiredAddin> required, IReadOnlyList<string> ribbonTabs) => inner.Classify(required, ribbonTabs);
-
-        public RestoreResult RestoreRequired(IReadOnlyList<RequiredAddin> disabledRequired, Action<string, Exception> onError) => inner.RestoreRequired(disabledRequired, onError);
-
-        public DisableResult DisableNonRequired(IReadOnlyList<RequiredAddin> required, Action<string, Exception> onError) => inner.DisableNonRequired(required, onError);
-
-        public DisablePreview Preview(IReadOnlyList<RequiredAddin> required)
-        {
-            onPreview(required);
-            return inner.Preview(required);
-        }
-
-        public RestoreResult RestoreAll(Action<string, Exception> onError) => inner.RestoreAll(onError);
-
-        public IReadOnlyList<AddinManifest> Scan(Action<string, Exception> onSkip) => inner.Scan(onSkip);
+        _switching.InventoryThrows = null;
+        _switching.InventoryResult = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Old", renamed: true));
+        var report = Service().MigrateLegacy();
+        report!.Intent.Should().Be(ActivationIntent.MigrateLegacy);
+        report.Outcomes.Should().ContainSingle().Which.Migrated.Should().BeTrue();
     }
 }
 

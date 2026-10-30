@@ -1,11 +1,19 @@
 // rst-c's own (not vendored): a C# port of profile_loader.html's required-add-in rules
-// (spec #16, WU3): normalizeRequiredAddins (955-968), BUILTIN_TABS / isNativeTab /
-// isAddinLoaded / getLoadedAddinName (986-1059), the four-state status logic and the add-in
-// row (1297-1365), getNotFoundAddins (1560-1568) and the not-found warning (1667-1675).
-// Behavior is unchanged; the matching is case-insensitive substring matching, the same rule as
-// RequiredAddinQa's tier 3 (live ribbon tab, then manifest display name / file stem).
+// (spec #16, WU3): normalizeRequiredAddins (955-968), BUILTIN_TABS / isNativeTab (986-1059), the
+// add-in row (1297-1365), getNotFoundAddins (1560-1568) and the not-found warning (1667-1675).
+//
+// Spec #18 (feature #16, In Scope 7; decision #16.6) replaced the status logic: the get_user_config
+// stub is gone, and the row's state comes from the add-in inventory of the running Revit year,
+// matched by the one required-add-in matcher (RST.Core.Activation.RequiredAddinMatch):
+//   Native     a built-in Revit tab;
+//   Locked     every matching add-in is locked off by the administrator (AdminSettings.json);
+//   Disabled   every matching add-in is switched off (the settings file, or a v3.0 rename);
+//   Loaded     a matching add-in is on, or (with no installed match) its tab is on the ribbon;
+//   Not Found  nothing matches.
+// A switched-off add-in never shows "Loaded", even while its tab is still on this session's ribbon.
 
 using System.Text.Json;
+using RST.Core.Activation;
 using RST.Core.Profiles;
 
 namespace RST.Core.Loader;
@@ -18,9 +26,9 @@ public enum AddinRowStatus
 {
     Native,
     Loaded,
-    Installed,
     Disabled,
     NotFound,
+    Locked,
 }
 
 /// <summary>
@@ -41,30 +49,38 @@ public sealed class AddinSessionContext
 {
     public AddinSessionContext(
         IReadOnlyList<string>? allTabs = null,
-        IReadOnlyList<LoadedAddin>? loadedAddins = null,
         IReadOnlyDictionary<string, AddinLookupEntry>? lookup = null,
-        UserAddinConfig? userConfig = null)
+        int? runningYear = null,
+        IReadOnlyList<InventoryItem>? installed = null)
     {
         AllTabs = allTabs ?? [];
-        LoadedAddins = loadedAddins ?? [];
         Lookup = lookup ?? new Dictionary<string, AddinLookupEntry>();
-        UserConfig = userConfig ?? UserAddinConfig.Empty;
+        RunningYear = runningYear;
+        Installed = installed ?? [];
     }
 
     /// <summary>The ribbon's tab titles, captured before the window opened (<c>ALL_TABS</c>).</summary>
     public IReadOnlyList<string> AllTabs { get; }
 
-    /// <summary>The scanned manifests (<c>LOADED_ADDINS</c>).</summary>
-    public IReadOnlyList<LoadedAddin> LoadedAddins { get; }
-
     /// <summary>addin_lookup.json (<c>ADDIN_LOOKUP</c>).</summary>
     public IReadOnlyDictionary<string, AddinLookupEntry> Lookup { get; }
 
-    /// <summary>The get_user_config stub (<c>USER_CONFIG</c>).</summary>
-    public UserAddinConfig UserConfig { get; }
+    /// <summary>The running Revit year, when known.</summary>
+    public int? RunningYear { get; }
+
+    /// <summary>The running year's add-ins from the inventory.</summary>
+    public IReadOnlyList<InventoryItem> Installed { get; }
 
     public AddinLookupEntry? LookupFor(string tabName) =>
         Lookup.TryGetValue(tabName, out var entry) ? entry : null;
+
+    /// <summary>The context for <paramref name="revitVersion"/> ("2026") over <paramref name="inventory"/>.</summary>
+    public static AddinSessionContext For(string? revitVersion, AddinInventory? inventory, IReadOnlyList<string>? allTabs, IReadOnlyDictionary<string, AddinLookupEntry>? lookup)
+    {
+        int? year = int.TryParse(revitVersion, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var y) ? y : null;
+        var items = year is { } yr && inventory is not null ? inventory.For(yr).ToList() : [];
+        return new AddinSessionContext(allTabs, lookup, year, items);
+    }
 }
 
 public static class RequiredAddinRules
@@ -122,49 +138,37 @@ public static class RequiredAddinRules
         return result;
     }
 
-    /// <summary>
-    /// <c>isAddinLoaded</c>: native tabs count as loaded; then a live ribbon tab that contains the
-    /// tab name or is contained by it; then a scanned manifest whose display name or file stem
-    /// does the same, or contains the lookup file's stem. Case-insensitive.
-    /// </summary>
-    public static bool IsAddinLoaded(string tabName, AddinSessionContext context)
+    /// <summary>The running year's add-ins that satisfy <paramref name="addin"/> (the one matcher).</summary>
+    public static IReadOnlyList<InventoryItem> Matches(NormalizedRequiredAddin addin, AddinSessionContext context) =>
+        RequiredAddinMatch.Match(new RequiredAddin { TabName = addin.TabName, AddinFile = addin.AddinFile }, context.Installed);
+
+    /// <summary>A live ribbon tab that contains the tab name or is contained by it (case-insensitive).</summary>
+    public static bool IsOnRibbon(string tabName, AddinSessionContext context)
     {
-        if (IsNativeTab(tabName)) return true;
+        if (string.IsNullOrEmpty(tabName)) return false;
         foreach (var raw in context.AllTabs)
         {
             var t = raw ?? "";
             if (t.Length == 0) continue;
-            if (Contains(t, tabName) || Contains(tabName, t)) return true;
+            if (t.Contains(tabName, StringComparison.OrdinalIgnoreCase) || tabName.Contains(t, StringComparison.OrdinalIgnoreCase)) return true;
         }
-        return MatchManifest(tabName, context) is not null;
+        return false;
     }
 
-    /// <summary><c>getLoadedAddinName</c>: the first matching manifest's label, or "".</summary>
-    public static string GetLoadedAddinName(string tabName, AddinSessionContext context)
-    {
-        var match = MatchManifest(tabName, context);
-        if (match is null) return "";
-        return FirstNonEmpty(match.DisplayName, match.FileName) ?? "";
-    }
-
-    /// <summary>The row the detail pane shows for one required add-in (the four-state logic).</summary>
+    /// <summary>The row the detail pane shows for one required add-in.</summary>
     public static RequiredAddinRow Describe(NormalizedRequiredAddin addin, AddinSessionContext context)
     {
         var tabName = addin.TabName;
         var native = IsNativeTab(tabName) || addin.Native;
         var known = context.LookupFor(tabName);
-        var loaded = !native && IsAddinLoaded(tabName, context);
-        var matchedName = !native && loaded ? GetLoadedAddinName(tabName, context) : "";
+        var matches = native ? [] : Matches(addin, context);
+        var year = context.RunningYear?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        var url = FirstNonEmpty(addin.Url, known?.Url) ?? "";
+        var matchedName = matches.Count > 0 ? matches[0].Name : "";
         var fileColumn = native ? NativeFileColumn
             : addin.AddinFile is { Length: > 0 } file ? file
             : matchedName.Length > 0 ? matchedName
             : known is not null ? known.File ?? "" : "";
-
-        // Four states: the user config decides Installed / Disabled (always empty: the stub).
-        var config = context.UserConfig.For(tabName);
-        var isDisabled = config is { Enabled: false };
-        var isInstalled = config is { Enabled: true };
-        var url = FirstNonEmpty(addin.Url, known?.Url) ?? "";
 
         AddinRowStatus status;
         string label, tooltip;
@@ -172,20 +176,27 @@ public static class RequiredAddinRules
         {
             (status, label, tooltip) = (AddinRowStatus.Native, "Native", "Built-in Revit feature — always available");
         }
-        else if (loaded)
+        else if (matches.Count > 0 && matches.All(m => m.Lock == AdminLock.AlwaysDisabled))
         {
+            (status, label) = (AddinRowStatus.Locked, "Locked");
+            tooltip = matchedName + " is locked off by your administrator" + (year.Length > 0 ? " for Revit " + year : "") + ".";
+        }
+        else if (matches.Count > 0 && matches.All(m => m.IsOff))
+        {
+            (status, label) = (AddinRowStatus.Disabled, "Disabled");
+            tooltip = matchedName + " is switched off" + (year.Length > 0 ? " for Revit " + year : "")
+                      + ". It loads again once it is switched back on (Restore All Add-ins, or Autodesk's Add-Ins Manager) and Revit restarts.";
+        }
+        else if (matches.Count > 0)
+        {
+            var on = matches.First(m => !m.IsOff);
             (status, label) = (AddinRowStatus.Loaded, "Loaded");
-            tooltip = "Loaded in current Revit session" + (matchedName.Length > 0 ? " (" + matchedName + ")" : "");
+            tooltip = "Installed and on" + (year.Length > 0 ? " for Revit " + year : "") + " (" + on.Name + ")"
+                      + (on.Lock == AdminLock.AlwaysEnabled ? "; locked on by your administrator" : "");
         }
-        else if (isInstalled)
+        else if (IsOnRibbon(tabName, context))
         {
-            (status, label) = (AddinRowStatus.Installed, "Installed");
-            tooltip = "Installed (" + (FirstNonEmpty(config!.AddinFile, tabName) ?? "") + ")";
-        }
-        else if (isDisabled)
-        {
-            (status, label, tooltip) = (AddinRowStatus.Disabled, "Disabled",
-                "Add-in is disabled (.addin.RSTdisabled) — enable via Restore All Add-ins");
+            (status, label, tooltip) = (AddinRowStatus.Loaded, "Loaded", "Loaded in current Revit session");
         }
         else
         {
@@ -193,13 +204,12 @@ public static class RequiredAddinRules
             tooltip = url.Length > 0 ? "Click to download" : "Not found on this machine";
         }
 
-        var origin = config is not null ? config.Origin ?? "" : native ? "native" : "";
-        var nativeOrigin = origin == "native";
+        // The origin badge came only from the retired get_user_config stub, so it stays hidden.
         return new RequiredAddinRow(
             tabName,
             fileColumn,
-            !nativeOrigin && url.Length > 0 ? url : null,
-            origin.Length > 0 && !nativeOrigin ? origin : null,
+            !native && url.Length > 0 ? url : null,
+            null,
             status,
             label,
             tooltip);
@@ -209,53 +219,16 @@ public static class RequiredAddinRules
     public static IReadOnlyList<RequiredAddinRow> Rows(Profile profile, AddinSessionContext context) =>
         Normalize(profile.RequiredAddins).Select(a => Describe(a, context)).ToList();
 
-    /// <summary>
-    /// <c>getNotFoundAddins</c>: required add-ins that are not native, not loaded and have no
-    /// user-config entry.
-    /// </summary>
+    /// <summary><c>getNotFoundAddins</c>: required add-ins that are not native and not found (installed or on the ribbon).</summary>
     public static IReadOnlyList<NormalizedRequiredAddin> NotFound(Profile profile, AddinSessionContext context) =>
         Normalize(profile.RequiredAddins)
-            .Where(a => !(a.Native || IsNativeTab(a.TabName) || IsAddinLoaded(a.TabName, context)))
-            .Where(a => context.UserConfig.For(a.TabName) is null)
+            .Where(a => Describe(a, context).Status == AddinRowStatus.NotFound)
             .ToList();
 
     /// <summary>The warning a not-found add-in adds to the "Loading …" text.</summary>
     public static string NotFoundWarning(string tabName, string? revitVersion) =>
         tabName + " not found. If you experience issues with using tools from this add-in please install for Revit "
         + (string.IsNullOrEmpty(revitVersion) ? "your version" : revitVersion) + " and retry.";
-
-    private static LoadedAddin? MatchManifest(string tabName, AddinSessionContext context)
-    {
-        if (context.LoadedAddins.Count == 0) return null;
-        var stem = context.LookupFor(tabName)?.File is { Length: > 0 } file ? StripSuffix(file, ".addin") : "";
-        foreach (var addin in context.LoadedAddins)
-        {
-            foreach (var field in NameFields(addin))
-            {
-                if (field.Length == 0) continue;
-                if (Contains(field, tabName) || Contains(tabName, field)) return addin;
-                if (stem.Length > 0 && Contains(field, stem)) return addin;
-            }
-        }
-        return null;
-    }
-
-    // _addinNameFields: the display name, then the file name without .addin / .addin.RSTdisabled.
-    private static IEnumerable<string> NameFields(LoadedAddin addin)
-    {
-        if (!string.IsNullOrEmpty(addin.DisplayName)) yield return addin.DisplayName;
-        if (!string.IsNullOrEmpty(addin.FileName))
-            yield return addin.FileName.EndsWith(".addin.RSTdisabled", StringComparison.OrdinalIgnoreCase)
-                ? addin.FileName[..^".addin.RSTdisabled".Length]
-                : StripSuffix(addin.FileName, ".addin");
-    }
-
-    private static string StripSuffix(string s, string suffix) =>
-        s.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ? s[..^suffix.Length] : s;
-
-    // JS: haystack.toLowerCase().indexOf(needle.toLowerCase()) !== -1 (an empty needle matches).
-    private static bool Contains(string haystack, string needle) =>
-        haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
     private static string? FirstNonEmpty(params string?[] values) => values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
 

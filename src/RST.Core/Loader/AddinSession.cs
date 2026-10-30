@@ -1,11 +1,10 @@
-// rst-c's own (not vendored): the add-in facts the Loader reads at boot (spec #16, WU3): the
-// curated lookup (addin_lookup.json), the scanned manifests (get_loaded_addins) and the
-// get_user_config stub. Shapes follow profile_loader.html's ADDIN_LOOKUP, LOADED_ADDINS and
-// USER_CONFIG, and LoaderBridge's GetAddinLookup / GetLoadedAddins / GetUserConfig.
+// rst-c's own (not vendored): the curated add-in lookup the Loader reads at boot (spec #16, WU3),
+// addin_lookup.json, in the shape of profile_loader.html's ADDIN_LOOKUP and LoaderBridge's
+// GetAddinLookup. Spec #18 (feature #16) retired the scanned-manifest list (get_loaded_addins) and
+// the get_user_config stub: the Loader's add-in states now come from RST.Core.Activation's inventory.
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using RST.Core.Scanning;
 
 namespace RST.Core.Loader;
 
@@ -68,46 +67,4 @@ public sealed class AddinLookupService
             return new Dictionary<string, AddinLookupEntry>();
         }
     }
-}
-
-/// <summary>
-/// One scanned .addin manifest (get_loaded_addins' DTO): the canonical file name, whether it is
-/// disabled on disk, and a display name (the first entry's Name, else the file stem).
-/// </summary>
-public sealed record LoadedAddin(
-    string FileName,
-    string FilePath,
-    bool IsDisabled,
-    string DisplayName,
-    string? AddinId,
-    string? Assembly)
-{
-    public static LoadedAddin FromManifest(AddinManifest m)
-    {
-        var first = m.Entries.Count > 0 ? m.Entries[0] : null;
-        var displayName = !string.IsNullOrWhiteSpace(first?.Name)
-            ? first!.Name!
-            : Path.GetFileNameWithoutExtension(m.FileName);
-        return new LoadedAddin(m.FileName, m.FilePath, m.IsDisabled, displayName, first?.AddinId, first?.AssemblyPath);
-    }
-}
-
-/// <summary>A per-add-in user override (<c>USER_CONFIG.addins[tab]</c>): enabled, origin, add-in file.</summary>
-public sealed record UserAddinConfigEntry(bool? Enabled, string? Origin, string? AddinFile);
-
-/// <summary>
-/// The user's add-in config. <c>get_user_config</c> is still a stub (spec #16, Out of Scope), so
-/// in practice <see cref="Addins"/> is always empty and the Installed / Disabled pills and the
-/// origin badges stay unreachable, exactly as in v2.2.0.
-/// </summary>
-public sealed class UserAddinConfig
-{
-    public static readonly UserAddinConfig Empty = new(new Dictionary<string, UserAddinConfigEntry>());
-
-    public UserAddinConfig(IReadOnlyDictionary<string, UserAddinConfigEntry> addins) => Addins = addins;
-
-    public IReadOnlyDictionary<string, UserAddinConfigEntry> Addins { get; }
-
-    public UserAddinConfigEntry? For(string tabName) =>
-        Addins.TryGetValue(tabName, out var entry) ? entry : null;
 }

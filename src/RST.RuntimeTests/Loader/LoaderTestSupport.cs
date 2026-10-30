@@ -1,10 +1,13 @@
 // rst-c's own (not vendored): fakes for the Profile Loader view-model and window tests
-// (spec #16, WU3): a scripted backend, one ordered log for every dialog, and a manual clock.
+// (spec #16, WU3; the add-in plan and report of spec #18): a scripted backend whose plans come from
+// the real planner over a scripted inventory, one ordered log for every dialog, and a manual clock.
 
+using RST.Core.Activation;
 using RST.Core.Colors;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Tests.Loader;
 using RST.UI.Dialogs;
 using RST.UI.Loader;
 
@@ -25,9 +28,11 @@ public sealed class FakeLoaderBackend : IProfileLoaderBackend
 
     public Dictionary<string, AddinLookupEntry> Lookup { get; } = new();
 
-    public List<LoadedAddin> Loaded { get; } = [];
+    /// <summary>The add-ins of every installed year.</summary>
+    public AddinInventory Inventory { get; set; } = AddinInventory.Empty;
 
-    public UserAddinConfig Config { get; set; } = UserAddinConfig.Empty;
+    /// <summary>rst-c's own record, for the default plan.</summary>
+    public ActivationLedger Ledger { get; set; } = new();
 
     public List<string> Calls { get; } = [];
 
@@ -37,18 +42,23 @@ public sealed class FakeLoaderBackend : IProfileLoaderBackend
 
     public List<LoadRequest> LoadRequests { get; } = [];
 
+    public List<ActivationPlan> Plans { get; } = [];
+
     public Func<string, ImportOutcome> OnImport { get; set; } = _ => ImportOutcome.Fail("not scripted");
 
-    public Func<string, string?, DisablePreviewOutcome> OnPreview { get; set; } = (_, _) => new DisablePreviewOutcome(null, [], [], [], []);
+    /// <summary>Null plans with the real planner over <see cref="Inventory"/> and <see cref="Ledger"/>.</summary>
+    public Func<string, string?, bool, LoadPlanOutcome>? OnPlan { get; set; }
 
-    public Func<LoadRequest, Task<LoadResult>> OnLoad { get; set; } =
-        _ => Task.FromResult(new LoadResult(true, [], false, [], QaCheck.Clear));
+    /// <summary>Null reports every change of the request's plan Done.</summary>
+    public Func<LoadRequest, Task<LoadResult>>? OnLoad { get; set; }
 
-    public Func<OpResult> OnUnload { get; set; } = () => OpResult.Success;
+    public Func<UnloadOutcome> OnUnload { get; set; } = () => new UnloadOutcome(true, null, ActivationReport.Empty(ActivationIntent.Unload));
 
     public Func<string, string?, DeleteOutcome> OnDelete { get; set; } = (_, _) => new DeleteOutcome(true, null, false);
 
-    public Func<RestoreOutcome> OnRestore { get; set; } = () => new RestoreOutcome(true, null, false, [], []);
+    public Func<RestoreOutcome> OnRestore { get; set; } = () => new RestoreOutcome(true, null, ActivationReport.Empty(ActivationIntent.RestoreAll));
+
+    public Func<ActivationReport?> OnMigrate { get; set; } = () => null;
 
     public IReadOnlyList<ProfileEntry> GetProfiles()
     {
@@ -74,16 +84,10 @@ public sealed class FakeLoaderBackend : IProfileLoaderBackend
         return Lookup;
     }
 
-    public IReadOnlyList<LoadedAddin> GetLoadedAddins()
+    public AddinInventory GetAddinInventory()
     {
-        Calls.Add("GetLoadedAddins");
-        return Loaded;
-    }
-
-    public UserAddinConfig GetUserConfig()
-    {
-        Calls.Add("GetUserConfig");
-        return Config;
+        Calls.Add("GetAddinInventory");
+        return Inventory;
     }
 
     public OpResult RecordPrefs(string profileId, IReadOnlyList<string> hiddenTabs, bool disableUnused, bool presetsAdopted)
@@ -106,20 +110,28 @@ public sealed class FakeLoaderBackend : IProfileLoaderBackend
         return OnImport(zipPath);
     }
 
-    public DisablePreviewOutcome GetDisablePreview(string name, string? id)
+    public LoadPlanOutcome PlanLoad(string name, string? id, bool disableUnused)
     {
-        Calls.Add("GetDisablePreview");
-        return OnPreview(name, id);
+        Calls.Add("PlanLoad");
+        if (OnPlan is not null) return OnPlan(name, id, disableUnused);
+        var profile = Profiles.Select(p => p.Profile).FirstOrDefault(p => !string.IsNullOrEmpty(id) && p.Id == id)
+                      ?? Profiles.Select(p => p.Profile).FirstOrDefault(p => p.ProfileName == name);
+        if (profile is null) return new LoadPlanOutcome("Profile not found: " + name, null);
+        var plan = ActivationPlanner.Plan(Inventory, ActivationPolicy.Load(profile.RequiredAddins, disableUnused), Ledger);
+        Plans.Add(plan);
+        return new LoadPlanOutcome(null, plan);
     }
 
     public Task<LoadResult> LoadAsync(LoadRequest request)
     {
         Calls.Add("Load");
         LoadRequests.Add(request);
-        return OnLoad(request);
+        if (OnLoad is not null) return OnLoad(request);
+        var report = request.Plan is null ? ActivationReport.Empty(ActivationIntent.Load) : FakeAddinSwitching.AllDone(request.Plan);
+        return Task.FromResult(new LoadResult(true, [], report.AnyDone, report.Outcomes, null, report.Notes));
     }
 
-    public OpResult Unload()
+    public UnloadOutcome Unload()
     {
         Calls.Add("Unload");
         return OnUnload();
@@ -135,6 +147,12 @@ public sealed class FakeLoaderBackend : IProfileLoaderBackend
     {
         Calls.Add("RestoreAll");
         return OnRestore();
+    }
+
+    public ActivationReport? MigrateLegacy()
+    {
+        Calls.Add("MigrateLegacy");
+        return OnMigrate();
     }
 
     public FakeLoaderBackend With(params Profile[] profiles)
@@ -165,13 +183,13 @@ public sealed class LoaderTestDialogs : IDialogService, ILoaderDialogs
 
     public List<ConfirmAddinChangesModel> AddinChanges { get; } = [];
 
-    public List<AddinCheckModel> AddinChecks { get; } = [];
+    public List<AddinReportModel> AddinReports { get; } = [];
 
     public string? OpenResult { get; set; }
 
     public List<(string Title, string Filter)> Opens { get; } = [];
 
-    public Action? DuringAddinCheck { get; set; }
+    public Action? DuringAddinReport { get; set; }
 
     public void ShowMessage(string title, string message, string automationId = MessageDialog.MessageId)
     {
@@ -210,11 +228,11 @@ public sealed class LoaderTestDialogs : IDialogService, ILoaderDialogs
         return ConfirmAddinChangesAnswer;
     }
 
-    public void ShowAddinCheck(AddinCheckModel model)
+    public void ShowAddinReport(AddinReportModel model)
     {
-        Log.Add("AddinCheck");
-        AddinChecks.Add(model);
-        DuringAddinCheck?.Invoke();
+        Log.Add("AddinReport:" + model.Title);
+        AddinReports.Add(model);
+        DuringAddinReport?.Invoke();
     }
 }
 
@@ -311,6 +329,7 @@ public static class LoaderFixtures
             new RequiredAddin { TabName = "pyRevit", AddinFile = "pyRevit.addin", Url = "https://github.com/pyrevitlabs/pyRevit/releases" },
             new RequiredAddin { TabName = "Lumion", AddinFile = "Lumion.addin", Url = "https://lumion.com" },
             new RequiredAddin { TabName = "Guardian" },
+            new RequiredAddin { TabName = "Twinmotion", Url = "https://twinmotion.com" },
         ],
         Panels =
         [
@@ -345,21 +364,48 @@ public static class LoaderFixtures
     };
 
     /// <summary>
+    /// The add-ins of Revit 2026 and 2027 behind the fixture: RST and Autodesk's Batch Print
+    /// (protected), pyRevit and Enscape on, Lumion switched off by the user, Guardian locked off and
+    /// (2027) Revizto locked on by the administrator, DiRoots.One (machine-wide) and Ideate on.
+    /// </summary>
+    public static AddinInventory Inventory() => FakeAddinSwitching.InventoryOf(
+        FakeAddinSwitching.Item(2026, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "RSTC"),
+        FakeAddinSwitching.Item(2026, "Batch Print", AddinScope.Machine, vendor: "ADSK"),
+        FakeAddinSwitching.Item(2026, "PyRevitLoader", AddinScope.Machine, fileName: "pyRevit.addin"),
+        FakeAddinSwitching.Item(2026, "Enscape", AddinScope.Machine),
+        FakeAddinSwitching.Item(2026, "Lumion LiveSync", fileName: "Lumion.addin", off: true),
+        FakeAddinSwitching.Item(2026, "Guardian", AddinScope.Machine, adminLock: AdminLock.AlwaysDisabled),
+        FakeAddinSwitching.Item(2026, "DiRoots.One", AddinScope.Machine, vendor: "www.diroots.com"),
+        FakeAddinSwitching.Item(2026, "Ideate BIMLink", fileName: "IdeateBIMLink.addin"),
+        FakeAddinSwitching.Item(2027, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "RSTC"),
+        FakeAddinSwitching.Item(2027, "Enscape", AddinScope.Machine),
+        FakeAddinSwitching.Item(2027, "DiRoots.One", AddinScope.Machine, vendor: "www.diroots.com"),
+        FakeAddinSwitching.Item(2027, "Ideate BIMLink", fileName: "IdeateBIMLink.addin"),
+        FakeAddinSwitching.Item(2027, "Revizto", adminLock: AdminLock.AlwaysEnabled));
+
+    /// <summary>
     /// Architecture is active; Structure has saved prefs (Massing &amp; Site hidden, disable on);
-    /// MEP has none. Lookup, scanned manifests and ribbon tabs put Structure's add-ins in every
-    /// reachable status: Native, Loaded (manifest), Loaded (ribbon), Not Found with and without a link.
+    /// MEP has none. Lookup, the add-in inventory and ribbon tabs put Structure's add-ins in every
+    /// state: Native, Loaded (on the ribbon), Loaded (installed and on), Disabled, Locked, Not Found.
     /// </summary>
     public static FakeLoaderBackend Backend()
     {
-        var backend = new FakeLoaderBackend { AllTabs = Ribbon }.With(Architecture(), Structure(), Mep());
+        var backend = new FakeLoaderBackend { AllTabs = Ribbon, Inventory = Inventory() }.With(Architecture(), Structure(), Mep());
         backend.ActiveIs(Architecture(), ["Analyze"]);
         backend.Prefs.Profiles[ArchId] = new UserProfilePrefsEntry { HiddenTabs = ["Analyze"], PresetsAdopted = true, PanelOpacityOverride = 70 };
         backend.Prefs.Profiles[StructId] = new UserProfilePrefsEntry { HiddenTabs = ["Massing & Site"], DisableUnusedAddins = true, PresetsAdopted = true };
         backend.Lookup["Kinship"] = new AddinLookupEntry("Kinship", "Kinship.addin", "");
         backend.Lookup["Lumion"] = new AddinLookupEntry("Lumion LiveSync", "Lumion.addin", "https://lumion.com");
         backend.Lookup["Guardian"] = new AddinLookupEntry("Guardian", "Guardian.addin", "");
-        backend.Loaded.Add(new LoadedAddin("pyRevit.addin", @"C:\ProgramData\Autodesk\Revit\Addins\2026\pyRevit.addin", false, "PyRevitLoader", null, null));
-        backend.Loaded.Add(new LoadedAddin("Enscape.addin", @"C:\ProgramData\Autodesk\Revit\Addins\2026\Enscape.addin", false, "Enscape", null, null));
         return backend;
+    }
+
+    /// <summary>rst-c switched Ideate BIMLink off in both years (its record says so).</summary>
+    public static void IdeateSwitchedOffByRst(FakeLoaderBackend backend)
+    {
+        var items = backend.Inventory.Items.Select(i => i.Name == "Ideate BIMLink" ? i with { DisabledIds = i.AddinIds } : i).ToList();
+        backend.Inventory = new AddinInventory(backend.Inventory.Years, items);
+        foreach (var i in items.Where(i => i.Name == "Ideate BIMLink"))
+            backend.Ledger.Add(new LedgerEntry(i.Year, i.AddinIds[0], i.Name, SwitchMechanism.SettingsFile, i.ManifestPath, DateTime.UtcNow));
     }
 }

@@ -1,15 +1,18 @@
 // rst-c's own (not vendored); the capture helpers follow Gallery/StyleGalleryScreenshotTests.
 // AC3 for the Profile Loader (spec #16, WU3): the window and its dialogs rendered off-screen to
 // PNG in light and dark, driven by the view-model over the three-profile fixture set: the main
-// view (one profile active, another selected), no profiles, Confirm Add-in Changes, the Add-in
-// Check (all clear, and restored + missing), the busy "Loading …" state, a toast and the
-// destructive delete confirm. Each capture also samples the pixels that prove its state.
+// view (one profile active, another selected, its add-in pills in every state), no profiles, the
+// busy "Loading …" state, a toast and the destructive delete confirm. Spec #18 (AC4): Confirm Add-in
+// Changes from a real two-year plan, and the one add-in report (the Load's Add-in Check all clear
+// and with every section, Unload, the RST 3.0 move, Restore All). Each capture also samples the
+// pixels that prove its state.
 
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using RST.Core.Activation;
 using RST.Core.Loader;
 using RST.Core.Theming;
 using RST.RuntimeTests.Support;
@@ -144,16 +147,17 @@ public class ProfileLoaderScreenshotTests
             Assert.Equal(6, images.Count(i => !ReferenceEquals(i.Source, PackIcons.Default16)));
             Assert.Equal(3, images.Count(i => ReferenceEquals(i.Source, PackIcons.Default16)));
 
-            // The RSTify switches are on and off; the add-in rows show every reachable status.
+            // The RSTify switches are on and off; the add-in rows show every state (spec #18, In Scope 7).
             Assert.Contains(opened.Model.TabToggles, t => t.IsHidden);
             Assert.Contains(opened.Model.TabToggles, t => !t.IsHidden);
-            Assert.Equal(new[] { "Native", "Loaded", "Loaded", "Not Found", "Not Found" }, opened.Model.RequiredAddins.Select(r => r.StatusLabel));
+            Assert.Equal(new[] { "Native", "Loaded", "Loaded", "Disabled", "Locked", "Not Found" }, opened.Model.RequiredAddins.Select(r => r.StatusLabel));
 
-            // Review N2: the HTML's pill colors: Native and Loaded green ("present"), Not Found amber.
+            // Review N2: the HTML's pill colors: Native and Loaded green ("present"), Disabled and Not
+            // Found amber; Locked (by the administrator) red.
             var pills = WindowCapture.Descendants<ContentControl>(opened.Window.Root)
                 .Where(c => System.Windows.Automation.AutomationProperties.GetAutomationId(c) == "Loader.AddinStatus").ToList();
-            Assert.Equal(5, pills.Count);
-            var expected = new[] { UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.WarningSoft, UiPalette.WarningSoft };
+            Assert.Equal(6, pills.Count);
+            var expected = new[] { UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.WarningSoft, UiPalette.ErrorSoft, UiPalette.WarningSoft };
             for (var i = 0; i < pills.Count; i++)
                 AssertColor(Palette(theme, expected[i]), At(bitmap, pills[i], root, 4, pills[i].ActualHeight / 2), $"status pill {i} fill");
         }
@@ -217,12 +221,16 @@ public class ProfileLoaderScreenshotTests
     {
         RstTheme.Apply(theme);
         var backend = LoaderFixtures.Backend();
-        backend.OnRestore = () => new RestoreOutcome(true, null, true, ["Kinship.addin", "Enscape.addin"], []);
-        var opened = Open(backend, (vm, _) => vm.RestoreCommand.Execute(null));
+        backend.OnImport = _ => ImportOutcome.Fail("Not a profile package.");
+        var opened = Open(backend, (vm, dialogs) =>
+        {
+            dialogs.OpenResult = @"C:\Downloads\shared.zip";
+            vm.ImportCommand.Execute(null);
+        });
         try
         {
             Assert.True(opened.Model.Toast.IsOpen);
-            Assert.Equal("Please Restart Revit", opened.Model.Toast.Title);
+            Assert.Equal("Import Failed", opened.Model.Toast.Title);
             CaptureLoader(opened, theme, "loader-toast");
         }
         finally
@@ -231,30 +239,46 @@ public class ProfileLoaderScreenshotTests
         }
     });
 
+    /// <summary>The Structure load's plan over the fixture's 2026 and 2027 add-ins (Disable on).</summary>
+    private static (FakeLoaderBackend Backend, ActivationPlan Plan) StructurePlan()
+    {
+        var backend = LoaderFixtures.Backend();
+        LoaderFixtures.IdeateSwitchedOffByRst(backend);
+        var structure = backend.Profiles.Single(p => p.Profile.Id == LoaderFixtures.StructId).Profile;
+        // Structure requires Ideate too, so rst-c's own switch-off of it is undone.
+        structure.RequiredAddins.Add(new RST.Core.Profiles.RequiredAddin { TabName = "Ideate", AddinFile = "IdeateBIMLink.addin" });
+        return (backend, backend.PlanLoad(structure.ProfileName, structure.Id, disableUnused: true).Plan!);
+    }
+
     [Theory]
     [MemberData(nameof(Themes))]
-    public void Confirm_addin_changes_renders_its_three_columns(UiTheme theme) => Sta(() =>
+    public void Confirm_addin_changes_shows_the_plan_per_year(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
-        var model = new ConfirmAddinChangesModel(
-            ["Kinship", "pyRevit", "Enscape", "RST"],
-            ["Twinmotion", "Lumion LiveSync", "Dynamo Player", "BIM 360 Glue Connector for Revit"],
-            ["FormIt Converter", "eTransmit"]);
+        var model = ConfirmAddinChangesModel.From(StructurePlan().Plan);
+        Assert.Equal(new[] { "Enscape (2026, 2027)", "DiRoots.One (2026, 2027)" }, model.SwitchingOff);
+        Assert.Equal(new[] { "Ideate BIMLink (2026, 2027)" }, model.SwitchingOn);
+        Assert.Equal(new[] { "PyRevitLoader (2026)" }, model.Staying);
+        Assert.Equal(new[] { "Revizto (2027): locked on by your administrator" }, model.CannotChange);
         var dialog = new ConfirmAddinChangesWindow(model);
         Assert.Equal("Confirm Add-in Changes", dialog.Title);
-        // Review N1: renaming add-in files is destructive, so Enter means Cancel.
+        Assert.False(dialog.ShowInTaskbar);
+        // Review N1: changing add-ins is destructive, so Enter means Cancel.
         Assert.False(((Button)dialog.FindName("ConfirmButton")).IsDefault);
         Assert.True(((Button)dialog.FindName("CancelButton")).IsDefault);
-        Assert.Equal(Visibility.Visible, ((FrameworkElement)dialog.FindName("TryPanel")).Visibility);
+        Assert.Equal(Visibility.Visible, ((FrameworkElement)dialog.FindName("CannotChangePanel")).Visibility);
+        // "Try Disable" is gone (spec #18, In Scope 5).
+        Assert.Null(dialog.FindName("TryPanel"));
         CaptureDialog(dialog, theme, "loader-confirm-addin-changes");
 
-        // Without Try Disable entries the column is gone and "None" fills an empty column.
-        var plain = new ConfirmAddinChangesWindow(new ConfirmAddinChangesModel(["Kinship"], [], []));
+        // Nothing known to be blocked: no "Can't Be Changed" panel; "None" fills an empty column.
+        var plain = new ConfirmAddinChangesWindow(new ConfirmAddinChangesModel(["Twinmotion (2026)"], [], [], [], [2026]));
         WindowCapture.ShowOffScreen(plain);
         try
         {
-            Assert.Equal(Visibility.Collapsed, ((FrameworkElement)plain.FindName("TryPanel")).Visibility);
+            Assert.Equal(Visibility.Collapsed, ((FrameworkElement)plain.FindName("CannotChangePanel")).Visibility);
             Assert.Contains(WindowCapture.Descendants<TextBlock>(plain), t => t.Text == "None" && t.IsVisible);
+            Assert.Contains(WindowCapture.Descendants<TextBlock>(plain), t => t.Text == "For your Windows user, in Revit 2026." && t.IsVisible);
         }
         finally
         {
@@ -264,17 +288,64 @@ public class ProfileLoaderScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void Addin_check_renders_all_clear_and_with_issues(UiTheme theme) => Sta(() =>
+    public void The_add_in_report_renders_all_clear_and_with_every_section(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
-        CaptureDialog(new AddinCheckWindow(new AddinCheckModel("Architecture", QaCheck.Clear, _ => { })), theme, "loader-addin-check-clear");
+        var clear = new AddinReportWindow(AddinReportModel.ForLoad("Architecture", ActivationReport.Empty(ActivationIntent.Load), QaCheck.Clear, _ => { }));
+        Assert.Equal("Add-in Check", clear.Title);
+        CaptureDialog(clear, theme, "loader-addin-check-clear");
 
-        var qa = new QaCheck(
-            [new QaRestoredItem("Kinship", "KinshipTools.addin"), new QaRestoredItem("Ideate", "Ideate.BIMLink.addin")],
-            [new QaMissingItem("Lumion", "Lumion.addin", "https://lumion.com"), new QaMissingItem("Guardian", "Guardian.addin", "")]);
-        var issues = new AddinCheckWindow(new AddinCheckModel("Structure", qa, _ => { }));
-        Assert.Equal("Add-in Check", issues.Title);
+        // The Structure load: switched off, back on (required), locked, missing, required but off.
+        var (backend, plan) = StructurePlan();
+        var structure = backend.Profiles.Single(p => p.Profile.Id == LoaderFixtures.StructId).Profile;
+        var session = AddinSessionContext.For("2026", backend.Inventory, LoaderFixtures.Ribbon, backend.Lookup);
+        var report = RST.Tests.Loader.FakeAddinSwitching.AllDone(plan);
+        var model = AddinReportModel.ForLoad(structure.ProfileName, report, QaCheck.For(structure, session, plan), _ => { });
+        Assert.Equal(new[] { "Enscape (2026, 2027)", "DiRoots.One (2026, 2027)" }, model.SwitchedOff);
+        Assert.Equal(new[] { "Ideate BIMLink (2026, 2027) — required" }, model.SwitchedOn);
+        Assert.Equal(new[] { "Revizto (2027): locked on by your administrator" }, model.NotChanged);
+        Assert.Equal(2, model.RequiredOff.Count);
+        Assert.Single(model.Missing);
+        var issues = new AddinReportWindow(model);
         CaptureDialog(issues, theme, "loader-addin-check-issues");
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void The_same_report_serves_unload_restore_all_and_the_rst_3_move(UiTheme theme) => Sta(() =>
+    {
+        RstTheme.Apply(theme);
+        var item = LoaderFixtures.Inventory().Items.First(i => i.Name == "DiRoots.One");
+        var entry = new PlanEntry(2026, "DiRoots.One", null, AddinScope.Machine, SwitchMechanism.SettingsFile, item.ManifestPath, item.FileName, item.AddinIds,
+            PlanAction.Enable, null, false, false, false, null);
+        var unload = new ActivationReport(ActivationIntent.Unload,
+        [
+            ActivationOutcome.For(entry, OutcomeResult.Done),
+            ActivationOutcome.For(entry with { Year = 2027 }, OutcomeResult.Done),
+            ActivationOutcome.For(entry with { Name = "Old Tool", Year = 2025, Mechanism = SwitchMechanism.Rename }, OutcomeResult.NotChanged, ChangeReason.NeedsAdmin),
+        ], ["Revit 2027: \u201CDisable all Add-Ins\u201D is ticked in Autodesk's Add-Ins Manager, so no add-in loads there."]);
+        var unloadModel = AddinReportModel.ForUnload(unload);
+        Assert.Equal(new[] { "DiRoots.One (2026, 2027)" }, unloadModel.SwitchedOn);
+        Assert.Equal(new[] { "Old Tool (2025): installed for all users; changing it needs administrator rights" }, unloadModel.NotChanged);
+        CaptureDialog(new AddinReportWindow(unloadModel), theme, "loader-addin-report-unload");
+
+        var moved = new ActivationReport(ActivationIntent.MigrateLegacy,
+            [ActivationOutcome.For(entry with { Action = PlanAction.Disable, Migrate = true, Name = "Kinship" }, OutcomeResult.Done)], []);
+        var migration = new AddinReportWindow(AddinReportModel.ForMigration(moved));
+        Assert.Equal("Add-ins Switched Off by RST 3.0", migration.Title);
+        CaptureDialog(migration, theme, "loader-addin-report-migration");
+
+        var restore = new AddinReportWindow(AddinReportModel.ForRestoreAll(ActivationReport.Empty(ActivationIntent.RestoreAll)));
+        WindowCapture.ShowOffScreen(restore);
+        try
+        {
+            Assert.Contains(WindowCapture.Descendants<TextBlock>(restore), t => t.Text == "No add-in needed changing." && t.IsVisible);
+            Assert.Contains(WindowCapture.Descendants<TextBlock>(restore), t => t.Text == "Add-in changes apply the next time Revit starts." && t.IsVisible);
+        }
+        finally
+        {
+            restore.Close();
+        }
     });
 
     [Theory]

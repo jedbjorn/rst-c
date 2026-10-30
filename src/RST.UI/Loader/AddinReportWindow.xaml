@@ -1,96 +1,156 @@
 <!--
     rst-c's own (not vendored); laid out after the kit's MessageDialog (splash-it
     src/SplashIt.UI/Dialogs/MessageDialog.xaml, splash-it commit ba86a71, MIT, same owner).
-    The Loader's "Add-in Check" QA overlay (profile_loader.html 869-881, 1476-1543) as a family
-    dialog (spec #16, WU3): the subtitle, "Auto-Restored (Was Disabled)", "Missing — Not
-    Installed" with download links or "(no link)", the all-clear line, the restart note when
-    something was restored, and a single Continue.
+    The one add-in report (spec #18, feature #16, In Scope 5) for Load Profile (as the "Add-in
+    Check", profile_loader.html 869-881, 1476-1543), Unload, Restore All Add-ins and the one-time
+    move of RST 3.0's renamed manifests: Switched Off, Switched Back On, Moved from RST 3.0, Could
+    Not Change (with the reason and year), the required add-ins that are missing (download links or
+    "(no link)") or switched off, notes per year, the empty-state line, the next-start note on every
+    report, and a single Continue.
 -->
-<Window x:Class="RST.UI.Loader.AddinCheckWindow"
+<Window x:Class="RST.UI.Loader.AddinReportWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:res="clr-namespace:RST.UI.Resources"
-        Title="{x:Static res:UiStrings.Loader_QaTitle}"
-        SizeToContent="Height" Width="520" MinHeight="160"
+        Title="{Binding Title}"
+        SizeToContent="Height" Width="600" MinHeight="160"
         ResizeMode="NoResize" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}"
-        AutomationProperties.AutomationId="AddinCheckDialog">
+        AutomationProperties.AutomationId="AddinReportDialog">
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <DataTemplate x:Key="LineRow">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2" AutomationProperties.Name="{Binding}" />
+            </DataTemplate>
+            <Style x:Key="ReportPanel" TargetType="Border" BasedOn="{StaticResource Panel}">
+                <Setter Property="Padding" Value="10,8" />
+                <Setter Property="Margin" Value="0,10,0,0" />
+            </Style>
+            <Style x:Key="ReportHeading" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Margin" Value="0,0,0,6" />
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
     <Grid Background="{StaticResource WindowBrush}">
         <DockPanel Margin="16">
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                <Button Content="{x:Static res:UiStrings.Loader_QaContinue}" IsDefault="True" IsCancel="True"
+                <Button x:Name="ContinueButton" Content="{x:Static res:UiStrings.Loader_QaContinue}" IsDefault="True" IsCancel="True"
                         Style="{StaticResource PrimaryButton}" Click="OnContinue" MinWidth="88"
-                        AutomationProperties.AutomationId="AddinCheck.Continue" />
+                        AutomationProperties.AutomationId="AddinReport.Continue" />
             </StackPanel>
 
-            <StackPanel>
-                <TextBlock Text="{x:Static res:UiStrings.Loader_QaTitle}" Style="{StaticResource SectionText}" FontSize="14"
-                           AutomationProperties.AutomationId="AddinCheck.Heading" />
+            <Border DockPanel.Dock="Bottom" Style="{StaticResource WarningBanner}" Margin="0,12,0,0">
+                <TextBlock Text="{Binding NextStartNote}" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}"
+                           AutomationProperties.AutomationId="AddinReport.NextStart" />
+            </Border>
+
+            <StackPanel DockPanel.Dock="Top">
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionText}" FontSize="14"
+                           AutomationProperties.AutomationId="AddinReport.Heading" />
                 <TextBlock Text="{Binding Subtitle}" Style="{StaticResource MutedText}" TextWrapping="Wrap" TextTrimming="None"
-                           AutomationProperties.AutomationId="AddinCheck.Subtitle" />
-
-                <Border Style="{StaticResource Panel}" Padding="10,8" Margin="0,12,0,0"
-                        Visibility="{Binding HasRestored, Converter={StaticResource BoolToVisible}}">
-                    <StackPanel>
-                        <TextBlock Text="{x:Static res:UiStrings.Loader_QaRestored}" Style="{StaticResource SuccessText}"
-                                   FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <ItemsControl ItemsSource="{Binding Restored}" Focusable="False" AutomationProperties.AutomationId="AddinCheck.Restored">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2" AutomationProperties.Name="{Binding Text}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource Panel}" Padding="10,8" Margin="0,12,0,0"
-                        Visibility="{Binding HasMissing, Converter={StaticResource BoolToVisible}}">
-                    <StackPanel>
-                        <TextBlock Text="{x:Static res:UiStrings.Loader_QaMissing}" Style="{StaticResource ErrorText}"
-                                   FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <ItemsControl ItemsSource="{Binding Missing}" Focusable="False" AutomationProperties.AutomationId="AddinCheck.Missing">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <WrapPanel Margin="0,2" AutomationProperties.Name="{Binding Text}">
-                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,6,0" />
-                                        <TextBlock Visibility="{Binding HasUrl, Converter={StaticResource BoolToVisible}}">
-                                            <Hyperlink Command="{Binding DataContext.OpenUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                       CommandParameter="{Binding Url}" Style="{StaticResource LoaderLink}" ToolTip="{Binding Url}"
-                                                       AutomationProperties.Name="{x:Static res:UiStrings.Loader_QaDownload}">
-                                                <Run Text="{x:Static res:UiStrings.Loader_QaDownload}" />
-                                            </Hyperlink>
-                                        </TextBlock>
-                                        <TextBlock Text="{x:Static res:UiStrings.Loader_QaNoLink}" Style="{StaticResource MutedText}"
-                                                   Visibility="{Binding HasUrl, Converter={StaticResource BoolToCollapsed}}" />
-                                    </WrapPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <TextBlock Text="{x:Static res:UiStrings.Loader_QaNothing}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                           HorizontalAlignment="Center" Margin="0,14"
-                           Visibility="{Binding AllClear, Converter={StaticResource BoolToVisible}}"
-                           AutomationProperties.AutomationId="AddinCheck.AllClear" />
-
-                <Border Style="{StaticResource WarningBanner}" Margin="0,12,0,0"
-                        Visibility="{Binding ShowRestartNote, Converter={StaticResource BoolToVisible}}">
-                    <TextBlock Text="{x:Static res:UiStrings.Loader_QaRestart}" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}"
-                               AutomationProperties.AutomationId="AddinCheck.Restart" />
-                </Border>
+                           AutomationProperties.AutomationId="AddinReport.Subtitle" />
             </StackPanel>
+
+            <ScrollViewer MaxHeight="460" VerticalScrollBarVisibility="Auto" Focusable="False">
+                <StackPanel>
+                    <Border x:Name="SwitchedOffPanel" Style="{StaticResource ReportPanel}"
+                            Visibility="{Binding HasSwitchedOff, Converter={StaticResource BoolToVisible}}">
+                        <StackPanel>
+                            <TextBlock Text="{x:Static res:UiStrings.Loader_ReportSwitchedOff}" Style="{StaticResource ReportHeading}"
+                                       Foreground="{StaticResource WarningTextBrush}" />
+                            <ItemsControl ItemsSource="{Binding SwitchedOff}" ItemTemplate="{StaticResource LineRow}" Focusable="False"
+                                          AutomationProperties.AutomationId="AddinReport.SwitchedOff" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="SwitchedOnPanel" Style="{StaticResource ReportPanel}"
+                            Visibility="{Binding HasSwitchedOn, Converter={StaticResource BoolToVisible}}">
+                        <StackPanel>
+                            <TextBlock Text="{x:Static res:UiStrings.Loader_ReportSwitchedOn}" Style="{StaticResource ReportHeading}"
+                                       Foreground="{StaticResource SuccessBrush}" />
+                            <ItemsControl ItemsSource="{Binding SwitchedOn}" ItemTemplate="{StaticResource LineRow}" Focusable="False"
+                                          AutomationProperties.AutomationId="AddinReport.SwitchedOn" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="MovedPanel" Style="{StaticResource ReportPanel}"
+                            Visibility="{Binding HasMoved, Converter={StaticResource BoolToVisible}}">
+                        <StackPanel>
+                            <TextBlock Text="{x:Static res:UiStrings.Loader_ReportMoved}" Style="{StaticResource ReportHeading}" />
+                            <ItemsControl ItemsSource="{Binding Moved}" ItemTemplate="{StaticResource LineRow}" Focusable="False"
+                                          AutomationProperties.AutomationId="AddinReport.Moved" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="NotChangedPanel" Style="{StaticResource ReportPanel}"
+                            Visibility="{Binding HasNotChanged, Converter={StaticResource BoolToVisible}}">
+                        <StackPanel>
+                            <TextBlock Text="{x:Static res:UiStrings.Loader_ReportNotChanged}" Style="{StaticResource ErrorText}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <ItemsControl ItemsSource="{Binding NotChanged}" ItemTemplate="{StaticResource LineRow}" Focusable="False"
+                                          AutomationProperties.AutomationId="AddinReport.NotChanged" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="MissingPanel" Style="{StaticResource ReportPanel}"
+                            Visibility="{Binding HasMissing, Converter={StaticResource BoolToVisible}}">
+                        <StackPanel>
+                            <TextBlock Text="{x:Static res:UiStrings.Loader_QaMissing}" Style="{StaticResource ErrorText}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <ItemsControl ItemsSource="{Binding Missing}" Focusable="False" AutomationProperties.AutomationId="AddinReport.Missing">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <WrapPanel Margin="0,2" AutomationProperties.Name="{Binding Text}">
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,6,0" />
+                                            <TextBlock Visibility="{Binding HasUrl, Converter={StaticResource BoolToVisible}}">
+                                                <Hyperlink Command="{Binding DataContext.OpenUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                           CommandParameter="{Binding Url}" Style="{StaticResource LoaderLink}" ToolTip="{Binding Url}"
+                                                           AutomationProperties.Name="{x:Static res:UiStrings.Loader_QaDownload}">
+                                                    <Run Text="{x:Static res:UiStrings.Loader_QaDownload}" />
+                                                </Hyperlink>
+                                            </TextBlock>
+                                            <TextBlock Text="{x:Static res:UiStrings.Loader_QaNoLink}" Style="{StaticResource MutedText}"
+                                                       Visibility="{Binding HasUrl, Converter={StaticResource BoolToCollapsed}}" />
+                                        </WrapPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="RequiredOffPanel" Style="{StaticResource ReportPanel}"
+                            Visibility="{Binding HasRequiredOff, Converter={StaticResource BoolToVisible}}">
+                        <StackPanel>
+                            <TextBlock Text="{x:Static res:UiStrings.Loader_QaRequiredOff}" Style="{StaticResource ReportHeading}"
+                                       Foreground="{StaticResource WarningTextBrush}" />
+                            <ItemsControl ItemsSource="{Binding RequiredOff}" ItemTemplate="{StaticResource LineRow}" Focusable="False"
+                                          AutomationProperties.AutomationId="AddinReport.RequiredOff" />
+                        </StackPanel>
+                    </Border>
+
+                    <ItemsControl ItemsSource="{Binding Notes}" Focusable="False" Margin="0,10,0,0"
+                                  Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisible}}"
+                                  AutomationProperties.AutomationId="AddinReport.Notes">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource InfoBanner}" Margin="0,0,0,6">
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="{Binding NothingText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" Margin="0,14"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisible}}"
+                               AutomationProperties.AutomationId="AddinReport.Nothing" />
+                </StackPanel>
+            </ScrollViewer>
         </DockPanel>
     </Grid>
 </Window>
