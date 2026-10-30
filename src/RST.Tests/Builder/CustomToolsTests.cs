@@ -86,6 +86,15 @@ public sealed class CustomToolsTests : IDisposable
     private static IEnumerable<Slot> AllTools(Profile p) => p.Panels.SelectMany(x => x.Slots).SelectMany(s =>
         PanelStacks.IsStack(s) ? PanelStacks.ToolsOf(p, s) : [s]);
 
+    /// <summary>Writes <paramref name="profile"/> under a file name of the test's choosing (a legacy or stale copy).</summary>
+    private void WriteAs(string fileName, Profile profile)
+    {
+        using var fs = File.Create(Path.Combine(_dir, fileName));
+        ProfileSerializer.Write(profile, fs);
+    }
+
+    private string[] Files() => Directory.GetFiles(_dir).Select(f => Path.GetFileName(f)!).Order(StringComparer.Ordinal).ToArray();
+
     private sealed class RecordingLog : ILoaderLog
     {
         public List<string> Lines { get; } = [];
@@ -150,6 +159,23 @@ public sealed class CustomToolsTests : IDisposable
     }
 
     // ── create ──
+
+    [Fact]
+    public void A_link_s_scheme_case_does_not_split_a_tool()
+    {
+        CustomTools.LinkOf(Url("x", "MAILTO:bob@x.com")).Should().Be("mailto:bob@x.com");
+        CustomTools.LinkOf(Url("x", "bob@x.com")).Should().Be("mailto:bob@x.com");
+        CustomTools.LinkOf(Url("x", "HTTPS://Wiki.example.com/Page")).Should().Be("https://Wiki.example.com/Page", "only the scheme is folded");
+        CustomTools.Opens("MAILTO:Bob@x.com").Should().Be("mailto:Bob@x.com");
+        CustomTools.NewSlot(new CustomToolEdit("B", "MAILTO:bob@x.com", null)).CommandId.Should().Be("URL:mailto:bob@x.com");
+    }
+
+    [Theory]
+    [InlineData("mailto:")]
+    [InlineData(" MAILTO: ")]
+    [InlineData("https://")]
+    public void A_bare_scheme_is_not_an_address(string address) =>
+        CustomTools.Check(new CustomToolEdit("X", address, null)).Should().Be("Address required");
 
     [Fact]
     public void Create_checks_label_and_address_and_adds_to_the_selected_or_first_panel()
@@ -264,6 +290,118 @@ public sealed class CustomToolsTests : IDisposable
         arch.Stacks.Should().BeEmpty();
         arch.Panels[0].Slots.Select(s => (s.SlotType, s.CommandId)).Should().Equal(("tool", "URL:" + Support), ("tool", "ID_WALL"));
         OnDisk(StructId).Panels[0].Slots.Select(s => s.CommandId).Should().Equal("URL:" + StructDocs, "ID_BEAM");
+    }
+
+    [Fact]
+    public void An_edit_that_changes_nothing_writes_nothing()
+    {
+        var editor = Editor();
+        var docs = editor.Derive(null).Single(t => t.Link == StructDocs);
+        var edit = new CustomToolEdit("Struct docs", StructDocs, null);
+        editor.Edit(docs, edit, null, null).Written.Should().HaveCount(1, "the first edit sets the base name");
+
+        var working = ProfileEditing.ForEditing(OnDisk(StructId));
+        var file = Path.Combine(_dir, FileOf(StructId));
+        var bytes = File.ReadAllText(file);
+        var stamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, stamp);
+
+        docs = Editor().Derive(working).Single(t => t.Link == StructDocs);
+        var result = Editor().Edit(docs, edit, working, activeProfileId: StructId);
+        result.Ok.Should().BeTrue();
+        result.Written.Should().BeEmpty();
+        result.WorkingCopyChanged.Should().BeFalse();
+        result.ActiveProfileChanged.Should().BeFalse("nothing was written, so the ribbon does not reload");
+        File.ReadAllText(file).Should().Be(bytes);
+        File.GetLastWriteTimeUtc(file).Should().Be(stamp, "the file was not rewritten");
+    }
+
+    [Fact]
+    public void Remove_on_a_saved_file_with_a_shared_stack_turns_each_slot_into_a_plain_tool()
+    {
+        var shared = Make("d-shared", "Shared", new() { ["S"] = new Stack { Tools = [Url("Wiki", Wiki), Command("ID_WALL")] } },
+            PanelStacks.StackSlot("S"), Command("ID_DOOR"), PanelStacks.StackSlot("S"));
+        ProfileStore.Save(shared, _dir);
+        OnDisk("d-shared").Panels[0].Slots.Count(PanelStacks.IsStack).Should().Be(2, "the read path lets a shared stack through");
+
+        var result = Editor().Remove(Wiki, null, null);
+
+        result.Ok.Should().BeTrue();
+        result.Written.Select(w => w.ProfileName).Should().Equal("Arch", "Shared", "Struct");
+        var back = OnDisk("d-shared");
+        back.Stacks.Should().BeEmpty();
+        back.Panels[0].Slots.Select(s => (s.SlotType, s.CommandId)).Should().Equal(("tool", "ID_WALL"), ("tool", "ID_DOOR"), ("tool", "ID_WALL"));
+        ProfileSerializer.Validate(back).Should().BeEmpty();
+    }
+
+    // ── files that are never written ──
+
+    [Fact]
+    public void A_profile_file_without_an_id_is_reported_and_left_as_it_is()
+    {
+        var legacy = Make("", "Legacy", new(), Url("Wiki", Wiki));
+        legacy.Id = null;
+        WriteAs("Legacy_2024-05-01.json", legacy);
+        var before = File.ReadAllText(Path.Combine(_dir, "Legacy_2024-05-01.json"));
+        var files = Files();
+
+        var editor = Editor();
+        var wiki = editor.Derive(null).Single(t => t.Link == Wiki);
+        foreach (var result in new[]
+                 {
+                     editor.Edit(wiki, new CustomToolEdit("Knowledge", "wiki2.example.com", null), null, null),
+                     Editor().Remove("https://wiki2.example.com", null, null),
+                     Editor().Remove(Wiki, null, null),
+                 })
+        {
+            Files().Should().Equal(files, "no second copy is minted beside the id-less file");
+            result.Failed.Where(f => f.FileName == "Legacy_2024-05-01.json").Should().HaveCountLessThanOrEqualTo(1);
+        }
+        var failure = Editor().Remove(Wiki, null, null).Failed.Should().ContainSingle().Subject;
+        (failure.ProfileName, failure.ProfileId, failure.FileName).Should().Be(("Legacy", (string?)null, "Legacy_2024-05-01.json"));
+        failure.Error.Should().Contain("no id");
+        File.ReadAllText(Path.Combine(_dir, "Legacy_2024-05-01.json")).Should().Be(before);
+        Editor().Derive(null).Single(t => t.Link == Wiki).UsedIn.Should().ContainSingle().Which.Should().Be("Legacy", "it still holds the tool, and the list says so");
+        AllTools(OnDisk(ArchId)).Should().NotContain(s => s.CommandId == "URL:" + Wiki, "the other profiles were changed");
+    }
+
+    [Fact]
+    public void Files_that_share_an_id_are_all_reported_and_none_is_written()
+    {
+        var current = FileOf(ArchId);
+        var stale = Arch();
+        stale.Panels[0].Name = "Stale";
+        WriteAs("Arch_2024-05-01.json", stale);
+        var bytes = Files().ToDictionary(f => f, f => File.ReadAllText(Path.Combine(_dir, f)));
+
+        var editor = Editor();
+        var wiki = editor.Derive(null).Single(t => t.Link == Wiki);
+        var result = editor.Edit(wiki, new CustomToolEdit("Knowledge", Wiki, null), null, activeProfileId: ArchId);
+
+        result.Failed.Select(f => (f.FileName, f.ProfileId)).Should().BeEquivalentTo([("Arch_2024-05-01.json", ArchId), (current, ArchId)]);
+        result.Failed.Should().OnlyContain(f => f.Error.Contains("2 files share this profile's id"));
+        result.Written.Select(w => w.ProfileName).Should().Equal("Struct");
+        result.ActiveProfileChanged.Should().BeFalse();
+        File.ReadAllText(Path.Combine(_dir, "Arch_2024-05-01.json")).Should().Be(bytes["Arch_2024-05-01.json"]);
+        File.ReadAllText(Path.Combine(_dir, current)).Should().Be(bytes[current]);
+    }
+
+    [Fact]
+    public void A_file_that_is_locked_is_reported_as_not_checked()
+    {
+        var structFile = FileOf(StructId);
+        var editor = Editor();
+        var wiki = editor.Derive(null).Single(t => t.Link == Wiki);
+        CustomToolUpdate result;
+        using (new FileStream(Path.Combine(_dir, structFile), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            result = editor.Edit(wiki, new CustomToolEdit("Knowledge", Wiki, null), null, null);
+
+        result.Ok.Should().BeFalse();
+        var failure = result.Failed.Should().ContainSingle().Subject;
+        failure.FileName.Should().Be(structFile);
+        failure.Error.Should().StartWith("Could not be read, so it was not checked");
+        result.Written.Select(w => w.ProfileName).Should().Equal("Arch");
+        OnDisk(StructId).Panels[0].Slots[0].Name.Should().Be("Wiki", "the locked file was not changed");
     }
 
     // ── partial failure ──

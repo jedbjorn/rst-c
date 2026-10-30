@@ -5,8 +5,10 @@
 // of the first occurrence, ordered by profile name; the kind is EMAIL for mailto:, URL otherwise;
 // "Used in" is the names of the profiles that hold it. Edit everywhere and Remove everywhere apply
 // to every saved profile file that holds the link, each validated and written through
-// ProfileSaveService, and to the working copy in memory. A partial failure keeps what was written
-// and reports (and logs) each profile that failed; nothing is skipped silently.
+// ProfileSaveService, and to the working copy in memory. Only profiles the change actually alters
+// are written. A partial failure keeps what was written and reports (and logs) each profile that
+// failed; nothing is skipped silently: a file that cannot be read (locked, in use), a file with no
+// id, and files that share one id are reported as failures and left unwritten.
 
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -62,21 +64,39 @@ public static class CustomTools
 
     /// <summary>A custom tool slot's normalised link ("" for any other slot).</summary>
     public static string LinkOf(Slot? slot) =>
-        IsCustom(slot) ? BuilderRules.NormalizeUrl(slot!.CommandId![BuilderRules.UrlCommandPrefix.Length..]) : "";
+        IsCustom(slot) ? Normalize(slot!.CommandId![BuilderRules.UrlCommandPrefix.Length..]) : "";
+
+    /// <summary>
+    /// A link's identity: <see cref="BuilderRules.NormalizeUrl"/>, with the scheme lower-cased so
+    /// "MAILTO:bob@x.com" and "bob@x.com" are one tool. The rest of the link keeps its case.
+    /// </summary>
+    public static string Normalize(string? address)
+    {
+        var link = BuilderRules.NormalizeUrl(address);
+        var colon = link.IndexOf(':');
+        if (colon <= 0 || !link[..colon].All(c => char.IsAsciiLetterOrDigit(c) || c is '+' or '-' or '.')) return link;
+        return link[..colon].ToLowerInvariant() + link[colon..];
+    }
 
     /// <summary>EMAIL for a mailto: link, URL otherwise.</summary>
     public static CustomToolKind KindOf(string? link) =>
         (link ?? "").StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ? CustomToolKind.Email : CustomToolKind.Url;
 
     /// <summary>The dialog's "Opens: …" line: the address normalised ("" while it is blank).</summary>
-    public static string Opens(string? address) => BuilderRules.NormalizeUrl(address);
+    public static string Opens(string? address) => Normalize(address);
 
-    /// <summary>The dialog's checks: a label, then an address. Null when both are given.</summary>
+    /// <summary>
+    /// The dialog's checks: a label, then an address (a bare scheme such as "mailto:" or "https://"
+    /// is not one). Null when both are given.
+    /// </summary>
     public static string? Check(CustomToolEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
         if (string.IsNullOrWhiteSpace(edit.Label)) return "Label required";
-        if (BuilderRules.NormalizeUrl(edit.Address).Length == 0) return "Address required";
+        var link = Normalize(edit.Address);
+        var colon = link.IndexOf(':');
+        var rest = colon < 0 ? link : link[(colon + 1)..].TrimStart('/');
+        if (rest.Trim().Length == 0) return "Address required";
         return null;
     }
 
@@ -90,7 +110,7 @@ public static class CustomTools
             SlotType = PanelStacks.ToolType,
             Name = label,
             BaseName = label,
-            CommandId = BuilderRules.UrlCommandPrefix + BuilderRules.NormalizeUrl(edit.Address),
+            CommandId = BuilderRules.UrlCommandPrefix + Normalize(edit.Address),
             IconFile = string.IsNullOrEmpty(edit.IconFile) ? null : edit.IconFile,
         };
     }
@@ -158,7 +178,8 @@ public static class CustomTools
     /// Edit, in one profile: every slot with the tool's link gets the new link, BaseName and icon;
     /// a slot's Name changes only where it still equals its old base name (its BaseName, or the
     /// tool's old label when it has none), so names given on a panel are kept. Returns how many
-    /// slots changed.
+    /// slots hold the link (an edit that sets what is already there still counts them; the editor
+    /// compares snapshots to decide what to write).
     /// </summary>
     public static int ApplyEdit(Profile profile, CustomTool tool, CustomToolEdit edit)
     {
@@ -166,7 +187,7 @@ public static class CustomTools
         ArgumentNullException.ThrowIfNull(tool);
         ArgumentNullException.ThrowIfNull(edit);
         var label = edit.Label.Trim();
-        var commandId = BuilderRules.UrlCommandPrefix + BuilderRules.NormalizeUrl(edit.Address);
+        var commandId = BuilderRules.UrlCommandPrefix + Normalize(edit.Address);
         var icon = string.IsNullOrEmpty(edit.IconFile) ? null : edit.IconFile;
         var changed = 0;
         foreach (var slot in CustomSlots(profile).Where(s => LinkOf(s) == tool.Link).ToList())
@@ -213,8 +234,13 @@ public static class CustomTools
 /// <summary>
 /// Edit everywhere and Remove everywhere over the profiles folder (decision #20): each saved profile
 /// that holds the link is changed, validated and written through <see cref="ProfileSaveService"/>
-/// in profile-name order, and the working copy is changed in memory. A failure does not stop the
-/// rest: the files written stay written, and each failure is logged and reported.
+/// in profile-name order, and the working copy is changed in memory. Only profiles the change
+/// actually alters are written. A failure does not stop the rest: the files written stay written,
+/// and each failure is logged and reported. Never written, and reported as failures instead:
+///   - a file that could not be read (locked or in use), since it may hold the link;
+///   - a file with no id (a save would mint one and write a second file beside it);
+///   - files that share one id (saving one would delete the other).
+/// Files that fail validation stay hidden and logged, as everywhere in the Builder.
 /// </summary>
 public sealed class CustomToolEditor
 {
@@ -233,8 +259,7 @@ public sealed class CustomToolEditor
     }
 
     /// <summary>The saved profiles (files that cannot be read are logged and left out, as everywhere in the Builder).</summary>
-    public IReadOnlyList<ProfileEntry> Saved() =>
-        ProfileStore.List(_profilesDir, (path, ex) => _log.Warning(ex, "Builder.custom_tools: unreadable profile {Path} left out", path));
+    public IReadOnlyList<ProfileEntry> Saved() => Read(out _);
 
     /// <summary>The Custom Tools list from the profiles folder and the working copy.</summary>
     public IReadOnlyList<CustomTool> Derive(Profile? working) => CustomTools.Derive(Saved().Select(e => e.Profile), working);
@@ -258,7 +283,7 @@ public sealed class CustomToolEditor
         ArgumentNullException.ThrowIfNull(edit);
         if (CustomTools.Check(edit) is { } error) throw new ArgumentException(error, nameof(edit));
         _log.Information("Builder.custom_tools: edit {Link} → {NewLink} ({Label})", tool.Link, CustomTools.Opens(edit.Address), edit.Label);
-        return Apply(tool.Link, p => CustomTools.ApplyEdit(p, tool, edit) > 0, working, activeProfileId, "edit");
+        return Apply(tool.Link, p => CustomTools.ApplyEdit(p, tool, edit), working, activeProfileId, "edit");
     }
 
     /// <summary>Remove everywhere: every slot with the link, from every saved profile and the working copy.</summary>
@@ -266,43 +291,93 @@ public sealed class CustomToolEditor
     {
         ArgumentNullException.ThrowIfNull(link);
         _log.Information("Builder.custom_tools: remove {Link}", link);
-        return Apply(link, p => CustomTools.ApplyRemove(p, link) > 0, working, activeProfileId, "remove");
+        return Apply(link, p => CustomTools.ApplyRemove(p, link), working, activeProfileId, "remove");
     }
 
-    private CustomToolUpdate Apply(string link, Func<Profile, bool> change, Profile? working, string? activeId, string verb)
+    /// <summary>The profiles folder, read; <paramref name="unread"/> gets the files that could not be read (I/O), not the invalid ones.</summary>
+    private IReadOnlyList<ProfileEntry> Read(out List<(string Path, Exception Error)> unread)
+    {
+        var skipped = new List<(string, Exception)>();
+        var entries = ProfileStore.List(_profilesDir, (path, ex) =>
+        {
+            _log.Warning(ex, "Builder.custom_tools: unreadable profile {Path} left out", path);
+            if (ex is not ProfileLoadException) skipped.Add((path, ex));
+        });
+        unread = skipped;
+        return entries;
+    }
+
+    /// <summary>Applies <paramref name="change"/> and says whether the profile's JSON is different afterwards.</summary>
+    private static bool Changes(Profile profile, Action<Profile> change)
+    {
+        var before = ProfileEditing.Snapshot(profile);
+        change(profile);
+        return ProfileEditing.Snapshot(profile) != before;
+    }
+
+    private CustomToolUpdate Apply(string link, Action<Profile> change, Profile? working, string? activeId, string verb)
     {
         var written = new List<CustomToolWrite>();
         var failed = new List<CustomToolFailure>();
-        var holders = Saved()
+        void Fail(string name, string? id, string file, string error)
+        {
+            _log.Warning(null, "Builder.custom_tools: {Verb} not written for {Name} ({File}): {Error}", verb, name, file, error);
+            failed.Add(new CustomToolFailure(name, id, file, error));
+        }
+
+        var saved = Read(out var unread);
+        foreach (var (path, error) in unread)
+            Fail(Path.GetFileNameWithoutExtension(path), null, Path.GetFileName(path), "Could not be read, so it was not checked: " + error.Message);
+
+        // Files sharing one id: saving one would delete the others (ProfileStore.Save), so none is written.
+        var shared = saved
+            .Where(e => !string.IsNullOrEmpty(e.Profile.Id))
+            .GroupBy(e => e.Profile.Id!, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.FileName).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
+
+        var holders = saved
             .Where(e => CustomTools.Holds(e.Profile, link))
             .OrderBy(e => e.Profile.ProfileName ?? "", StringComparer.OrdinalIgnoreCase)
             .ThenBy(e => e.FileName, StringComparer.Ordinal);
+        var reportedIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in holders)
         {
             var profile = entry.Profile;
             var name = profile.ProfileName ?? "";
-            if (!change(profile)) continue;
-            SaveOutcome outcome;
+            if (string.IsNullOrEmpty(profile.Id))
+            {
+                Fail(name, null, entry.FileName, "This profile file has no id, so it was not changed. Open it in the Builder and save it once, then try again.");
+                continue;
+            }
+            if (shared.TryGetValue(profile.Id, out var files))
+            {
+                if (!reportedIds.Add(profile.Id)) continue;
+                var message = $"{files.Count} files share this profile's id ({string.Join(", ", files)}), so none was changed. Remove the stale copy, then try again.";
+                foreach (var file in files)
+                {
+                    var other = saved.First(e => e.FileName == file).Profile;
+                    Fail(other.ProfileName ?? "", profile.Id, file, message);
+                }
+                continue;
+            }
             try
             {
-                outcome = _saver.Save(profile);
+                if (!Changes(profile, change)) continue;
+                var outcome = _saver.Save(profile);
+                if (outcome.Ok)
+                    written.Add(new CustomToolWrite(name, outcome.Saved?.Id ?? profile.Id, outcome.FileName ?? entry.FileName));
+                else
+                    Fail(name, profile.Id, entry.FileName, outcome.Error ?? "unknown");
             }
             catch (Exception ex)
             {
                 _log.Error(ex, "Builder.custom_tools: {Verb} failed for {Name} ({File})", verb, name, entry.FileName);
                 failed.Add(new CustomToolFailure(name, profile.Id, entry.FileName, ex.Message));
-                continue;
             }
-            if (outcome.Ok)
-            {
-                written.Add(new CustomToolWrite(name, outcome.Saved?.Id ?? profile.Id, outcome.FileName ?? entry.FileName));
-                continue;
-            }
-            _log.Warning(null, "Builder.custom_tools: {Verb} not written for {Name} ({File}): {Error}", verb, name, entry.FileName, outcome.Error);
-            failed.Add(new CustomToolFailure(name, profile.Id, entry.FileName, outcome.Error ?? "unknown"));
         }
 
-        var workingChanged = working is not null && change(working);
+        var workingChanged = working is not null && Changes(working, change);
         var activeChanged = !string.IsNullOrEmpty(activeId) && written.Any(w => w.ProfileId == activeId);
         _log.Information("Builder.custom_tools: {Verb} {Link}: written={Written} failed={Failed} working={Working} active={Active}",
             verb, link, written.Count, failed.Count, workingChanged, activeChanged);
