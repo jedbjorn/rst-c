@@ -375,6 +375,16 @@ if ($Mode -eq 'BareMsiFirst') {
   Observe "Burn plan:   $((Select-String -Path $log -Pattern 'Planned package: RST,' -SimpleMatch | Select-Object -First 1).Line)"
   $visible = Get-ArpVisible 'RST'
   Observe "visible 'RST' entries after the bundle: $($visible.Count) ($(($visible | ForEach-Object { "$($_.Hive)\$($_.Key)" }) -join ', '))"
+  # The behavior first observed in PR #134 (installer-bundle/README.md, AC5),
+  # pinned so a Burn or packaging change that alters it fails here:
+  # Burn adopts the RST.msi it did not install (detected "install
+  # registration state: Ignored", planned to "Present": the bundle takes
+  # ownership), leaves its visible ARP entry as it was, and so Settings >
+  # Apps shows two "RST" entries.
+  Assert (Select-String -Path $log -Pattern 'Detected package: RST, state: Present, cached: No, install registration state: Ignored' -SimpleMatch -Quiet) '[AC5] Burn detects the bare RST.msi as present and not its own (registration Ignored)'
+  Assert (Select-String -Path $log -Pattern 'Planned package: RST, state: Present, default requested: Present, ba requested: Present, execute: None' -SimpleMatch -Quiet) '[AC5] Burn does not reinstall it (execute: None)'
+  Assert (Select-String -Path $log -Pattern 'Planned package: RST,.*expected install registration state: Present' -Quiet) '[AC5] Burn adopts it (expected install registration state: Present)'
+  Assert ($visible.Count -eq 2) '[AC5] Settings > Apps shows two "RST" entries: the bundle and the bare MSI'
 
   $log = Uninstall-BundleViaArp 'uninstall-bundle'
   Show-State 'bundle uninstalled'
@@ -383,12 +393,30 @@ if ($Mode -eq 'BareMsiFirst') {
   Observe "RST products after the bundle's uninstall: $($left.Count)"
   Observe "RST files after the bundle's uninstall: $(if (Test-Path (Join-Path $AppData 'RST\R26\app\RST.Engine.dll')) { 'present' } else { 'gone' })"
   Observe "visible 'RST' entries after the bundle's uninstall: $((Get-ArpVisible 'RST').Count)"
+  # Pinned (AC5): uninstalling the bundle removes the adopted RST.msi too.
+  Assert (Select-String -Path $log -Pattern 'Planned package: RST, state: Present, default requested: Absent, ba requested: Absent, execute: Uninstall' -SimpleMatch -Quiet) '[AC5] the bundle uninstall plans RST.msi for removal'
+  Assert-Rst $false '[AC5] after the bundle uninstall: the bare-installed RST is removed'
+  Assert ((Get-ArpVisible 'RST').Count -eq 0) '[AC5] no "RST" entry left in Settings > Apps'
   Assert-Fixture '1.1.0' 'after bundle uninstall'
 
-  # Cleanup, whatever was observed.
   foreach ($p in $left) { Invoke-Msiexec '/x' $p.ProductCode 'bare-rst-remove' }
   Assert-Rst $false 'cleanup'
   Remove-Fixture 'cleanup'
+
+  # The other way out: bare RST.msi, then the bundle, then the user removes
+  # the MSI's own "RST" entry. Recorded (OBSERVED), not asserted.
+  Invoke-Msiexec '/i' $RstMsi 'bare-rst-2'
+  Invoke-Bundle $Bundle @('/quiet') 'bundle-over-bare-2' | Out-Null
+  Invoke-Msiexec '/x' $pcBare 'bare-rst-2-remove-msi'
+  Show-State 'MSI entry removed under the bundle'
+  Observe "after msiexec /x of the adopted RST.msi: RST products $((Get-Related $RstCode).Count), bundle entries $((Get-BundleArp).Count), visible 'RST' entries $((Get-ArpVisible 'RST').Count)"
+  if ((Get-BundleArp).Count -gt 0) {
+    $log = Uninstall-BundleViaArp 'uninstall-orphan-bundle'
+    Observe "orphaned bundle uninstall plan: $((Select-String -Path $log -Pattern 'Planned package: RST,' -SimpleMatch | Select-Object -First 1).Line)"
+    Observe "after the orphaned bundle's uninstall: RST products $((Get-Related $RstCode).Count), bundle entries $((Get-BundleArp).Count)"
+  }
+  foreach ($p in Get-Related $RstCode) { Invoke-Msiexec '/x' $p.ProductCode 'bare-rst-2-cleanup' }
+  Assert-Rst $false 'final cleanup'
   exit 0
 }
 

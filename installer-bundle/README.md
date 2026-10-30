@@ -75,7 +75,17 @@ What the bundle smoke (`ci-bundle-smoke.ps1 -Mode Chain`, with the test-only fix
 
 ### Bare `RST.msi` first, then the setup (AC5)
 
-AC5_PENDING
+Observed on CI (`ci-bundle-smoke.ps1 -Mode BareMsiFirst`, first in PR #134, run 40999336203). The leg now asserts each of these, so a change fails the build:
+
+1. `msiexec /i RST.msi /qn`: one "RST" product with its own visible Settings → Apps entry.
+2. `RST-Setup.exe /quiet` (the same `RST.msi` inside, same ProductCode):
+   - Burn detects `RST` as `state: Present, install registration state: Ignored` (installed, but not by this bundle).
+   - It plans `execute: None` (nothing reinstalled, no files touched) with `dependency: Register, expected install registration state: Present`. **The bundle adopts the existing RST.msi as its own.**
+   - There is still exactly one RST product. Because the MSI is not re-run, its own ARP entry stays visible, so **Settings → Apps shows two "RST" entries**: the bundle's and the bare MSI's.
+   - Ticked companions install normally.
+3. Uninstalling the bundle (Settings → Apps → the bundle's "RST", or `RST-Setup.exe /uninstall /quiet`): Burn plans `RST` as `execute: Uninstall`. **The adopted RST.msi is removed**: no RST product, no RST files, and no "RST" entry left. Companions stay, as always.
+
+So after `RST.msi` then `RST-Setup.exe`, there is one product behind two entries, and removing either one removes rst-c. Uninstalling the MSI entry directly leaves the bundle's entry behind, pointing at an rst-c that is gone; that path is not covered by the smoke. This is Burn's default for a package it did not install. No workaround is applied; it was returned to the Planner (PLN1) as the spec asks.
 
 ## Build
 
