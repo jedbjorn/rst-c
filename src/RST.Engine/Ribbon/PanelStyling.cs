@@ -45,7 +45,7 @@ using AwRibbonPanel = Autodesk.Windows.RibbonPanel;
 using AwRibbonPanelSource = Autodesk.Windows.RibbonPanelSource;
 using AwRibbonLabel = Autodesk.Windows.RibbonLabel;
 using RST.Core.Configuration;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Ribbon;
 

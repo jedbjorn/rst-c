@@ -2,8 +2,9 @@
 //
 // Captures RAM (kernel32 GlobalMemoryStatusEx), CPU (kernel32
 // GetSystemTimes + HKLM CentralProcessor), Disk (DriveInfo C:\),
-// OS (Environment + RuntimeInformation), GPU + network + disk media +
-// monitors (System.Management WMI/CIM in-process), and Revit-side
+// OS (Environment + RuntimeInformation), GPUs, disk media, monitors and
+// resolution (Win32 and the registry, HealthNative; System.Management's
+// WMI until decision #33), network (NetworkInterface), and Revit-side
 // HardwareAcceleration (Revit.ini [Graphics] UseGraphicsHardware).
 //
 // Same JSON schema as upstream, so a saved snapshot reads back unchanged
@@ -14,13 +15,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Management;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
 using RST.Core.Health;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Health;
 
@@ -53,9 +53,8 @@ public static class HealthScanner
             Os = ReadOs(),
         };
 
-        // One WMI batch — every CIM query goes through Local in-proc
-        // System.Management. Errors degrade per-section; missing CIM data
-        // leaves the relevant snapshot fields null/empty.
+        // Win32 and registry reads (HealthNative). Errors degrade per-section;
+        // missing data leaves the relevant snapshot fields null/empty.
         snap.Gpus = ReadGpus();
         snap.Gpu  = snap.Gpus.Count > 0 ? snap.Gpus[0] : new Gpu();
         var (mediaType, busType, friendlyName) = ReadDiskMedia();
@@ -392,81 +391,102 @@ public static class HealthScanner
         return os;
     }
 
-    // ─── GPU (WMI) ──────────────────────────────────────────────────────
+    // ─── GPU (present display-class devices; EnumDisplayDevices for the primary) ──
 
     /// <summary>
-    /// Enumerate every display adapter (integrated + discrete) via WMI, each
-    /// with its real 64-bit VRAM matched from the registry by name. The first
-    /// entry is the primary adapter (Win32_VideoController order); callers use
-    /// it for the backward-compatible single <see cref="Gpu"/> field.
+    /// Every installed display adapter (integrated + discrete, and a remote
+    /// display adapter in an RDP session), each with its own driver version
+    /// and real 64-bit VRAM. The first entry is the primary adapter; callers
+    /// use it for the backward-compatible single <see cref="Gpu"/> field.
     /// </summary>
     private static List<Gpu> ReadGpus()
     {
-        var gpus = new List<Gpu>();
         try
         {
-            // All adapters' real (64-bit) VRAM, keyed by DriverDesc.
-            var adapters = ReadAdapterVramTable();
-
-            using var searcher = new ManagementObjectSearcher(
-                "SELECT Name, DriverVersion, AdapterRAM FROM Win32_VideoController");
-            foreach (var mo in searcher.Get().Cast<ManagementObject>())
-            {
-                var name = mo["Name"]?.ToString() ?? "";
-                // Skip nameless / virtual adapters (RDP mirror, Basic Display)
-                // so the list is real cards only — no empty "GPU n" rows.
-                if (string.IsNullOrWhiteSpace(name)) continue;
-
-                var gpu = new Gpu
-                {
-                    Name          = name,
-                    DriverVersion = mo["DriverVersion"]?.ToString() ?? "",
-                };
-                // WMI AdapterRAM is uint32 and saturates at 4 GB — first guess.
-                if (mo["AdapterRAM"] is uint ram)
-                    gpu.VramTotalMB = (long)Math.Round(ram / (1024.0 * 1024.0));
-
-                // Prefer the 64-bit registry size for THIS adapter, matched by
-                // name so a multi-GPU box never reports one card's VRAM for
-                // another. AdapterRAM caps at ~4096 MB, so any 6/8/12/24 GB card
-                // needs the registry QWORD for its true size.
-                var vram64 = adapters.FirstOrDefault(a =>
-                    !string.IsNullOrEmpty(gpu.Name) &&
-                    string.Equals(a.Desc, gpu.Name, StringComparison.OrdinalIgnoreCase)).Mb;
-                if (vram64 > 0) gpu.VramTotalMB = vram64;
-
-                gpus.Add(gpu);
-            }
-
-            // Unambiguous single-adapter fallback: exactly one GPU and exactly
-            // one sized registry adapter that didn't name-match (DriverDesc can
-            // differ from the WMI Name on some single-GPU rigs). Safe because
-            // there is only one card it could be.
-            if (gpus.Count == 1 && adapters.Count == 1
-                && (gpus[0].VramTotalMB is null || gpus[0].VramTotalMB <= 4096))
-                gpus[0].VramTotalMB = adapters[0].Mb;
+            var debug = (Action<Exception, string>)((ex, what) => Log.Debug(ex, "HealthScanner.ReadGpus: {What} failed", what));
+            var devices = HealthNative.PresentDisplayDevices(debug);
+            var outputs = HealthNative.DisplayAdapters();
+            return ComposeGpus(devices, outputs, devices.Count == 0 ? ReadAdapterTable() : []);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "HealthScanner.ReadGpus (Win32_VideoController) failed");
+            Log.Warning(ex, "HealthScanner.ReadGpus failed");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// The GPU rows (review B2). Normally one per present display-class device (<paramref name="devices"/>,
+    /// each with the values of its own driver key), the one driving the primary monitor first. Only when
+    /// setupapi lists nothing: one per session output (<paramref name="outputs"/>), matched to
+    /// <paramref name="classTable"/> by name, and a lone unmatched adapter takes the lone sized class entry
+    /// only when it has no class entry of its own (so a remote display adapter never takes the physical
+    /// card's VRAM).
+    /// </summary>
+    /// <summary>A software-enumerated display device (instance ID <c>SWD\…</c>), not a physical adapter.</summary>
+    internal static bool IsSoftwareDevice(HealthNative.PresentDevice device) =>
+        device.InstanceId.StartsWith(@"SWD\", StringComparison.OrdinalIgnoreCase);
+
+    internal static List<Gpu> ComposeGpus(
+        IReadOnlyList<HealthNative.PresentDevice> devices,
+        IReadOnlyList<HealthNative.Adapter> outputs,
+        IReadOnlyList<(string Desc, long Mb, string? DriverVersion)> classTable)
+    {
+        static long? Mb(long bytes) => bytes > 0 ? (long)Math.Round(bytes / (1024.0 * 1024.0)) : null;
+
+        if (devices.Count > 0)
+        {
+            // The primary first; then physical devices, then software-enumerated ones (SWD\, such as
+            // the remote display adapter), so with no primary match (over RDP) a remote adapter never
+            // becomes the legacy single Gpu field. setupapi's own order is kept within each group.
+            var primary = HealthNative.PrimaryIndex(devices, outputs);
+            var order = Enumerable.Range(0, devices.Count)
+                .OrderBy(i => i == primary ? 0 : IsSoftwareDevice(devices[i]) ? 2 : 1)
+                .ThenBy(i => i);
+            return order.Select(i => new Gpu
+            {
+                Name = devices[i].Name,
+                DriverVersion = devices[i].DriverVersion,
+                VramTotalMB = Mb(devices[i].VramBytes),
+            }).ToList();
+        }
+
+        var gpus = new List<Gpu>();
+        foreach (var output in outputs)
+        {
+            var match = classTable.FirstOrDefault(a => string.Equals(a.Desc, output.Name, StringComparison.OrdinalIgnoreCase));
+            gpus.Add(new Gpu
+            {
+                Name = output.Name,
+                DriverVersion = match.DriverVersion ?? "",
+                VramTotalMB = match.Mb > 0 ? match.Mb : null,
+            });
+        }
+        var sized = classTable.Where(a => a.Mb > 0).ToList();
+        if (gpus.Count == 1 && sized.Count == 1 && gpus[0].VramTotalMB is null
+            && !classTable.Any(a => string.Equals(a.Desc, gpus[0].Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            gpus[0].VramTotalMB = sized[0].Mb;
+            if (string.IsNullOrEmpty(gpus[0].DriverVersion)) gpus[0].DriverVersion = sized[0].DriverVersion ?? "";
         }
         return gpus;
     }
 
     // Display-adapter class GUID — every GPU's registry key lives under here as
-    // a 4-digit subkey (0000, 0001, …) carrying DriverDesc + memory size.
+    // a 4-digit subkey (0000, 0001, …) carrying DriverDesc, DriverVersion and
+    // the memory size.
     private const string DisplayClassKey =
         @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 
     /// <summary>
-    /// Read each display adapter's <c>DriverDesc</c> + total VRAM (MB) from the
-    /// 64-bit <c>HardwareInformation.qwMemorySize</c> registry value. One entry
-    /// per numbered adapter subkey that reports a usable size; empty on error.
-    /// Callers match an entry to a WMI GPU by <c>DriverDesc</c> == GPU name.
+    /// Read each display adapter's <c>DriverDesc</c>, <c>DriverVersion</c> and
+    /// total VRAM (MB; 0 when not reported) from its registry key. One entry
+    /// per numbered adapter subkey; empty on error. Callers match an entry to
+    /// an adapter by <c>DriverDesc</c> == adapter name.
     /// </summary>
-    private static List<(string Desc, long Mb)> ReadAdapterVramTable()
+    private static List<(string Desc, long Mb, string? DriverVersion)> ReadAdapterTable()
     {
-        var list = new List<(string Desc, long Mb)>();
+        var list = new List<(string Desc, long Mb, string? DriverVersion)>();
         try
         {
             using var root = Registry.LocalMachine.OpenSubKey(DisplayClassKey);
@@ -481,20 +501,19 @@ public static class HealthScanner
                 if (sub is null) continue;
 
                 var bytes = ReadMemorySizeBytes(sub);
-                if (bytes <= 0) continue;
-                var mb = (long)Math.Round(bytes / (1024.0 * 1024.0));
+                var mb = bytes > 0 ? (long)Math.Round(bytes / (1024.0 * 1024.0)) : 0;
                 var desc = sub.GetValue("DriverDesc")?.ToString() ?? "";
-                list.Add((desc, mb));
+                list.Add((desc, mb, sub.GetValue("DriverVersion")?.ToString()));
             }
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "HealthScanner.ReadAdapterVramTable failed");
+            Log.Debug(ex, "HealthScanner.ReadAdapterTable failed");
         }
         return list;
     }
 
-    private static long ReadMemorySizeBytes(RegistryKey adapter)
+    internal static long ReadMemorySizeBytes(RegistryKey adapter)
     {
         // qwMemorySize is the modern 64-bit QWORD; .NET surfaces REG_QWORD as a
         // boxed long, but some drivers store it as an 8-byte REG_BINARY.
@@ -505,76 +524,35 @@ public static class HealthScanner
             case int i when i > 0: return i;
             case byte[] b when b.Length == 8: return BitConverter.ToInt64(b, 0);
         }
+        // The older 32-bit MemorySize (what WMI's AdapterRAM reported; it
+        // saturates at 4 GB): a DWORD, or a 4-byte REG_BINARY.
+        switch (adapter.GetValue("HardwareInformation.MemorySize"))
+        {
+            case int i when i != 0: return (uint)i;
+            case long l when l > 0: return l;
+            case byte[] b when b.Length >= 4: return BitConverter.ToUInt32(b, 0);
+        }
         return 0;
     }
 
-    // ─── Disk media (WMI MSFT_PhysicalDisk; Win32_DiskDrive fallback) ──
+    // ─── Disk media (DeviceIoControl on C:'s physical disk) ────────────
 
     private static (string mediaType, string busType, string friendlyName) ReadDiskMedia()
     {
-        // MSFT_PhysicalDisk lives in the Storage namespace and is the
-        // canonical source of MediaType (3=HDD, 4=SSD, 5=SCM, 0=Unspec).
         try
         {
-            using var searcher = new ManagementObjectSearcher(
-                @"\\.\ROOT\Microsoft\Windows\Storage",
-                "SELECT FriendlyName, MediaType, BusType FROM MSFT_PhysicalDisk");
-            foreach (var mo in searcher.Get().Cast<ManagementObject>())
-            {
-                var friendly = mo["FriendlyName"]?.ToString() ?? "";
-                var mediaCode = ReadUInt16Like(mo["MediaType"]);
-                var busCode = ReadUInt16Like(mo["BusType"]);
-                return (
-                    mediaType: MapMediaType(mediaCode),
-                    busType: MapBusType(busCode),
-                    friendlyName: friendly);
-            }
+            var media = HealthNative.SystemDiskMedia((ex, what) => Log.Debug(ex, "HealthScanner.ReadDiskMedia: {What} failed", what));
+            if (media is not null) return (media.MediaType, media.BusType, media.FriendlyName);
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "HealthScanner.ReadDiskMedia: MSFT_PhysicalDisk failed; falling back to Win32_DiskDrive");
+            Log.Debug(ex, "HealthScanner.ReadDiskMedia failed");
         }
-
-        // Win32_DiskDrive has no MediaType code that distinguishes SSD/HDD,
-        // but Model + InterfaceType give us enough for friendlyName/busType.
-        try
-        {
-            using var searcher = new ManagementObjectSearcher(
-                "SELECT Model, InterfaceType FROM Win32_DiskDrive WHERE DeviceID LIKE '%PHYSICALDRIVE0%'");
-            foreach (var mo in searcher.Get().Cast<ManagementObject>())
-            {
-                return (
-                    mediaType: "Unknown",
-                    busType: mo["InterfaceType"]?.ToString() ?? "",
-                    friendlyName: mo["Model"]?.ToString() ?? "");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Debug(ex, "HealthScanner.ReadDiskMedia: Win32_DiskDrive fallback failed");
-        }
-
         return ("", "", "");
     }
 
-    private static int ReadUInt16Like(object? v) => v switch
-    {
-        ushort u => u,
-        short s  => s,
-        int i    => i,
-        uint u32 => (int)u32,
-        _        => 0,
-    };
-
-    private static string MapMediaType(int code) => code switch
-    {
-        3 => "HDD",
-        4 => "SSD",
-        5 => "SCM",
-        _ => "Unknown",
-    };
-
-    private static string MapBusType(int code) => code switch
+    /// <summary>STORAGE_BUS_TYPE (the same codes MSFT_PhysicalDisk's BusType used).</summary>
+    internal static string MapBusType(int code) => code switch
     {
         0 => "Unknown",
         1 => "SCSI",
@@ -594,43 +572,16 @@ public static class HealthScanner
         _ => $"Bus{code}",
     };
 
-    // ─── Display (WMI) ──────────────────────────────────────────────────
+    // ─── Display (GetSystemMetrics + EnumDisplaySettings) ──────────────
 
     private static Display ReadDisplay()
     {
         var disp = new Display();
         try
         {
-            using var monSearcher = new ManagementObjectSearcher(
-                "SELECT ScreenWidth, ScreenHeight FROM Win32_DesktopMonitor");
-            int count = 0;
-            int firstW = 0, firstH = 0;
-            foreach (var mo in monSearcher.Get().Cast<ManagementObject>())
-            {
-                count++;
-                if (firstW == 0)
-                {
-                    firstW = ReadUInt16Like(mo["ScreenWidth"]);
-                    firstH = ReadUInt16Like(mo["ScreenHeight"]);
-                }
-            }
-            disp.MonitorCount = count;
-
-            // Win32_DesktopMonitor often returns 0 — fall back to
-            // CurrentHorizontalResolution on Win32_VideoController.
-            if (firstW == 0 || firstH == 0)
-            {
-                using var vcSearcher = new ManagementObjectSearcher(
-                    "SELECT CurrentHorizontalResolution, CurrentVerticalResolution FROM Win32_VideoController");
-                foreach (var mo in vcSearcher.Get().Cast<ManagementObject>())
-                {
-                    firstW = ReadUInt16Like(mo["CurrentHorizontalResolution"]);
-                    firstH = ReadUInt16Like(mo["CurrentVerticalResolution"]);
-                    if (firstW > 0 && firstH > 0) break;
-                }
-            }
-
-            disp.PrimaryResolution = (firstW > 0 && firstH > 0) ? $"{firstW}x{firstH}" : "";
+            // Monitors on the desktop, and the primary monitor's current mode.
+            disp.MonitorCount = HealthNative.MonitorCount();
+            disp.PrimaryResolution = HealthNative.PrimaryResolution();
         }
         catch (Exception ex)
         {

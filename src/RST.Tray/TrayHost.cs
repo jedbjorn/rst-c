@@ -23,7 +23,7 @@ using RST.Tray.Windows;
 using RST.UI.Dialogs;
 using RST.UI.Loader;
 using RST.UI.Theming;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Tray;
 

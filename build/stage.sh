@@ -4,10 +4,11 @@
 # Layout produced (RST-033 split):
 #   build/R<NN>/addins/{RST.addin, RST.Bootstrap.dll, RST.Bootstrap.pdb}
 #       → drops into %AppData%\Autodesk\Revit\Addins\<ver>\
-#   build/R<NN>/app/{RST.Engine.dll, RST.UI.dll, RST.Core.dll, Serilog*,
-#                    System.Management.dll, runtimes/, Assets/,
+#   build/R<NN>/app/{RST.Engine.dll, RST.UI.dll, RST.Core.dll, Assets/,
 #                    *.deps.json, *.pdb}
 #       → drops into %AppData%\RST\R<NN>\app\
+#   No third-party DLL (decision #33): CI runs build/check-shipped-dlls.sh
+#   on every staged folder.
 #
 # Usage: build/stage.sh R25|R26|R27 [Release|Debug]
 #        build/stage.sh tray [Release|Debug]
@@ -16,8 +17,7 @@
 # The tray target (feature #17, spec #20 §1) publishes RST.Tray.exe ONCE, not
 # per Revit year, into build/Tray/ (-> %LocalAppData%\Programs\RST\Tray\):
 #   build/Tray/{RST.Tray.exe, RST.Tray.dll, RST.Tray.runtimeconfig.json,
-#               RST.Tray.deps.json, RST.UI.dll, RST.Core.dll, Serilog*,
-#               System.Management.dll, *.pdb}
+#               RST.Tray.deps.json, RST.UI.dll, RST.Core.dll, *.pdb}
 # framework-dependent net8.0-windows (RollForward=Major), win-x64 apphost.
 # It is built with the R25 configuration, where RST.UI is net8.0-windows
 # too. RST_VERSION (a.b.c, optional) stamps the tray's version, which its
@@ -95,16 +95,6 @@ cp -r "$ENGINE_BIN/." "$OUT/app/"
 rm -f "$OUT/app/RST.Bootstrap.dll" \
       "$OUT/app/RST.Bootstrap.pdb" \
       "$OUT/app/RST.Bootstrap.deps.json"
-
-# RST-038: drop the netstandard placeholder for System.Management. The
-# Windows-specific implementation lives at runtimes/win/lib/net8.0/. With
-# the bin-root stub present, AssemblyLoadContext.Default finds it FIRST
-# and our AssemblyDependencyResolver fallback never fires — the stub
-# throws PlatformNotSupportedException on every WMI query. Removing it
-# forces the resolver to read RST.Engine.deps.json and return the
-# runtime-specific path. (Same risk applies to any future package that
-# ships both a netstandard ref + a runtimes/win-* implementation.)
-rm -f "$OUT/app/System.Management.dll"
 
 echo "==> staged:"
 ( cd "$OUT" && find addins app -type f | sort | sed 's/^/    /' )

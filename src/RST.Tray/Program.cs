@@ -14,7 +14,7 @@ using System.Windows;
 using System.Windows.Threading;
 using RST.Core.Tray;
 using RST.Tray.Shell;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Tray;
 

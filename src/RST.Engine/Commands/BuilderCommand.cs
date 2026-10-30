@@ -15,7 +15,7 @@ using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
 using RST.Engine.Theming;
 using RST.UI.Builder;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Commands;
 

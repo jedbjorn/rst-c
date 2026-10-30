@@ -14,7 +14,7 @@ using System.IO;
 using RST.Core.Tray;
 using RST.Core.Updates;
 using RST.Tray.Shell;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Tray.Updates;
 

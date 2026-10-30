@@ -1,5 +1,5 @@
 // Copied from splash-it src/SplashIt.UI/Swatches/ScreenColorPicker.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Swatches/ScreenColorPicker.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); comments say RST; HideSplashItWindows is named HideRstWindows; the two Trace.TraceWarning calls are Serilog Log.Warning (rst-c's logger).
+// Changes: namespaces (SplashIt.* to RST.*); comments say RST; HideSplashItWindows is named HideRstWindows; the two Trace.TraceWarning calls are Log.Warning (rst-c's logger, RST.Core.Logging).
 
 using System.Windows;
 using System.Windows.Input;
@@ -10,7 +10,7 @@ using System.Windows.Threading;
 using RST.Core.Colors;
 using RST.Core.Picking;
 using RST.UI.Resources;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Swatches;
 

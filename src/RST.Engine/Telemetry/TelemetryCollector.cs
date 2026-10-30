@@ -12,7 +12,7 @@
 //     against a LocalPathGuard-verified local path;
 //   - telemetry never takes Revit down — every handler body is guarded;
 //     on failure the event drops, the first failure per site logs once
-//     (via the injected callback → Serilog), and collection keeps going.
+//     (via the injected callback → Log), and collection keeps going.
 //
 // Enable/disable semantics (spec Consent & Config): handlers pre-check
 // the lifecycle's flag and return; nothing is ever unsubscribed while

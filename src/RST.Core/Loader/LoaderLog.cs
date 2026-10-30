@@ -1,7 +1,7 @@
 // rst-c's own (not vendored): the logging seam for the Loader services (spec #16, WU3).
 //
 // RST.Core has no logging package; the services extracted from LoaderBridge log through this
-// interface instead, with Serilog-style message templates. RST.UI passes a Serilog adapter, so
+// interface instead, with Serilog-style message templates. RST.UI passes an adapter to RST.Core.Logging.Log, so
 // the lines land in the same rst_*.log file the bridge wrote to. Tests pass nothing.
 
 namespace RST.Core.Loader;

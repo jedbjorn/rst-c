@@ -25,7 +25,7 @@ using System.Collections.Generic;
 using System.Windows.Media;
 using AwComponentManager = Autodesk.Windows.ComponentManager;
 using AwRibbonItem = Autodesk.Windows.RibbonItem;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Ribbon;
 

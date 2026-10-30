@@ -12,7 +12,7 @@ using System;
 using System.Collections.Generic;
 using Autodesk.Revit.UI;
 using RST.Core.Scanning;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Scanning;
 

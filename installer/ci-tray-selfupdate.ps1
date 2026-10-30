@@ -203,6 +203,11 @@ Assert ($newTray.ParentProcessId -eq $updaterPid) "(2) the updater (pid $updater
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewVersion)): installed" }).Count -gt 0 } 30 '(2) the new tray shows the updater''s result'
 Assert (-not (Test-Path (Join-Path $LocalRoot 'selfupdate.json'))) '(2) the result is shown once (selfupdate.json consumed)'
 Assert (-not (Test-Path (Join-Path $LocalRoot 'updater\RST.Tray.exe'))) '(2) the updater copy never holds RST.Tray.exe'
+# Decision #33: the updater copy (RST.TrayUpdater.exe and the installed tray's files) ships no third-party DLL.
+$updaterDlls = @(Get-ChildItem (Join-Path $LocalRoot 'updater') -Recurse -Filter *.dll -ErrorAction SilentlyContinue)
+$updaterForeign = @($updaterDlls | Where-Object { $_.Name -notmatch '^RST(\..+)?\.dll$' } | ForEach-Object { $_.Name })
+Write-Host "(2) updater copy DLLs: $(($updaterDlls | ForEach-Object { $_.Name }) -join ', ')"
+Assert ($updaterDlls.Count -gt 0 -and $updaterForeign.Count -eq 0) "(2) the updater copy ships no third-party DLL (decision #33)$(if ($updaterForeign) { ': ' + ($updaterForeign -join ', ') })"
 Assert-OneRst $NewVersion '(2) after the self-update'
 Show-State '(2)'
 

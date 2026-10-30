@@ -6,7 +6,7 @@ using RST.Core.Configuration;
 using RST.Core.Profiles;
 using RST.Core.Scanning;
 using RST.UI.Dialogs;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Loader;
 

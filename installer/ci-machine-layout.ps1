@@ -55,6 +55,15 @@ function Assert-MachineYears([string[]]$Present, [string]$Label) {
       Assert (-not (Test-Path $engine)) "[$Label] no $engine"
     }
   }
+  if ($Present.Count -gt 0) { Assert-MachineNoForeignDlls $Label }
+}
+
+# Decision #33: Program Files\RST (each year's bootstrap and app\, and the tray) holds only RST's own DLLs.
+function Assert-MachineNoForeignDlls([string]$Label) {
+  $dlls = @(Get-ChildItem $MachineRoot -Recurse -Filter *.dll -ErrorAction SilentlyContinue)
+  $foreign = @($dlls | Where-Object { $_.Name -notmatch '^RST(\..+)?\.dll$' } | ForEach-Object { $_.FullName.Substring($MachineRoot.Length + 1) })
+  Write-Host "[$Label] $MachineRoot DLLs: $(($dlls | ForEach-Object { $_.FullName.Substring($MachineRoot.Length + 1) }) -join ', ')"
+  Assert ($dlls.Count -gt 0 -and $foreign.Count -eq 0) "[$Label] $MachineRoot ships no third-party DLL (decision #33)$(if ($foreign) { ': ' + ($foreign -join ', ') })"
 }
 
 function Assert-MachineTray([bool]$Present, [string]$Label) {

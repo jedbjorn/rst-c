@@ -1,6 +1,6 @@
 ---
 title: Logging
-tags: [rst-c, logging, diagnostics, serilog]
+tags: [rst-c, logging, diagnostics]
 date: 2026-10-30
 project: rst-c
 purpose: Where rst-c logs live and what they contain
@@ -12,7 +12,7 @@ purpose: Where rst-c logs live and what they contain
 
 ## Overview
 
-rst-c writes structured logs using Serilog. The engine and rst-c's windows (the Loader, the Builder and Health) run in Revit's own process and write to the same session log, so a single file captures the full picture of a session when something goes wrong.
+rst-c writes plain-text logs through its own small logger (it ships no third-party logging library, so no other add-in's copy of one can interfere with it). The engine and rst-c's windows (the Loader, the Builder and Health) run in Revit's own process and write to the same session log, so a single file captures the full picture of a session when something goes wrong.
 
 ## Log location
 
@@ -57,7 +57,7 @@ The Loader, the Builder and Health are native windows in the same process, so th
 
 ### Bootstrap log
 
-Before the main Serilog sink is initialised, the bootstrap process (the thin `RST.Bootstrap` thunk that loads the engine from `%AppData%\RST\R<NN>\app\`) writes to a separate early-boot log at the same location. This log captures DLL resolution steps and is the first place to look if rst-c does not appear in Revit's ribbon at all.
+Before the engine's logger starts, the bootstrap process (the thin `RST.Bootstrap` thunk that loads the engine from `%AppData%\RST\R<NN>\app\`) writes to a separate early-boot log at the same location. This log captures DLL resolution steps and is the first place to look if rst-c does not appear in Revit's ribbon at all. After the engine starts, it records `Third-party DLLs shipped: none (…)`: rst-c's app folder holds only rst-c's own DLLs. If that line is a `WRN` naming other files, they were added to the folder outside the installer (by hand, or by an older non-MSI install); delete them.
 
 ## Reading the log
 

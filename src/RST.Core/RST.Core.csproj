@@ -14,9 +14,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Text.Json" />
-  </ItemGroup>
+  <!-- No package references (decision #33): System.Text.Json comes with the shared framework
+       (net8.0 and up), and logging is RST.Core.Logging, so RST ships no third-party DLL into
+       Revit's load context. build/check-shipped-dlls.sh enforces it on the staged folders. -->
 
   <ItemGroup>
     <!-- The RST tray's product catalog (feature #17, spec #20 §6; Updates/ProductCatalog.cs): the companion

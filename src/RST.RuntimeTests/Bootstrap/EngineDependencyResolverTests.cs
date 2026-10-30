@@ -1,4 +1,4 @@
-// rst-c's own (not vendored): the bootstrap's assembly resolver (decisions #27 and #32, research M3).
+// rst-c's own (not vendored): the bootstrap's assembly resolver (decisions #27, #32 and #33, research M3).
 
 using System.IO; // not in WPF's implicit usings
 using System.Reflection;
@@ -10,19 +10,21 @@ namespace RST.RuntimeTests.Bootstrap;
 
 /// <summary>
 /// Every branch of <see cref="EngineDependencyResolver"/>, the bootstrap's process-wide
-/// <c>AssemblyLoadContext.Default.Resolving</c> handler: not ours, nothing loaded and requested
-/// newer than shipped, a compatible copy already loaded, an older same-major copy already loaded
-/// (handed over with one warning per session, decision #32), an older different-major copy (refused),
-/// a fresh load by path, a request without a version, and every failure (it must never throw from
-/// inside the event). Plus the startup "Serilog bound" line, the requester lookup, and the
-/// production wiring over a real deps.json resolver.
+/// <c>AssemblyLoadContext.Default.Resolving</c> handler: a third-party name (never answered,
+/// decision #33), not ours, nothing loaded and requested newer than shipped, a compatible copy
+/// already loaded, an older same-major copy already loaded (handed over with one warning per
+/// session, decision #32), an older different-major copy (refused), a fresh load by path, a request
+/// without a version, and every failure (it must never throw from inside the event). Plus the
+/// startup "Third-party DLLs shipped" line, the requester lookup, and the production wiring over a
+/// real deps.json resolver. The loaded assemblies the branches use are RST.Core and RST.UI, which
+/// this test process has loaded.
 /// </summary>
 public class EngineDependencyResolverTests
 {
-    private const string SerilogPath = @"C:\Users\u\AppData\Roaming\RST\R26\app\Serilog.dll";
+    private const string CorePath = @"C:\Users\u\AppData\Roaming\RST\R26\app\RST.Core.dll";
 
-    /// <summary>A loaded, non-dynamic assembly whose version and path the tests can read.</summary>
-    private static readonly Assembly Loaded = typeof(Assert).Assembly; // xunit.assert
+    /// <summary>A loaded, non-dynamic RST assembly whose version and path the tests can read.</summary>
+    private static readonly Assembly Loaded = typeof(RST.Core.Logging.Log).Assembly; // RST.Core
 
     private static Version LoadedVersion => Loaded.GetName().Version!;
 
@@ -32,7 +34,7 @@ public class EngineDependencyResolverTests
         public List<string> Warn { get; } = new();
         public List<string> LoadedPaths { get; } = new();
 
-        public Func<AssemblyName, string?> PathFor { get; set; } = _ => SerilogPath;
+        public Func<AssemblyName, string?> PathFor { get; set; } = _ => CorePath;
         public Func<string, Version?> VersionAt { get; set; } = _ => new Version(4, 0, 0, 0);
         public Func<IEnumerable<Assembly>> InContext { get; set; } = () => Array.Empty<Assembly>();
         public Func<string, Assembly>? Load { get; set; }
@@ -55,18 +57,61 @@ public class EngineDependencyResolverTests
             () => Requester());
     }
 
-    /// <summary>A version above the loaded one with the same major (a 4.0 loaded, 4.2 asked).</summary>
+    /// <summary>A version above the loaded one with the same major (a 0.1 loaded, 0.3 asked).</summary>
     private static Version SameMajorNewer => new(LoadedVersion.Major, LoadedVersion.Minor + 2, 0, 0);
 
     private static AssemblyName Name(string name, string? version) =>
         new(version is null ? name : $"{name}, Version={version}");
+
+    [Theory]
+    [InlineData("Serilog")]
+    [InlineData("Serilog.Sinks.File")]
+    [InlineData("System.Management")]
+    [InlineData("System.Text.Json")]
+    [InlineData("Newtonsoft.Json")]
+    [InlineData("RSTX")] // the prefix without its dot is not RST's
+    [InlineData("AAA-SerilogProbe")]
+    public void ThirdPartyName_IsNeverAnswered_EvenWhenTheDepsJsonWouldResolveIt(string name)
+    {
+        // Decision #33: RST ships no third-party DLL, so a request for one is another add-in's
+        // business. Declined before the deps.json is asked, without loading or logging.
+        var asked = 0;
+        var h = new Harness
+        {
+            PathFor = _ =>
+            {
+                asked++;
+                return @"C:\Users\u\AppData\Roaming\RST\R26\app\" + name + ".dll";
+            },
+            InContext = () => new[] { Loaded },
+        };
+
+        Assert.Null(h.Build().Resolve(Name(name, "4.0.0.0")));
+        Assert.Equal(0, asked);
+        Assert.Empty(h.LoadedPaths);
+        Assert.Empty(h.Info);
+        Assert.Empty(h.Warn);
+    }
+
+    [Theory]
+    [InlineData("RST", true)]
+    [InlineData("RST.Core", true)]
+    [InlineData("RST.UI", true)]
+    [InlineData("rst.engine", true)]
+    [InlineData("RST.UI.resources", true)]
+    [InlineData("RSTX", false)]
+    [InlineData("Serilog", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsRstAssembly_IsRstAndRstDotAnything(string? name, bool expected) =>
+        Assert.Equal(expected, EngineDependencyResolver.IsRstAssembly(name));
 
     [Fact]
     public void NotAnEngineDependency_ReturnsNull_WithoutLoadingOrLogging()
     {
         var h = new Harness { PathFor = _ => null };
 
-        var result = h.Build().Resolve(Name("Newtonsoft.Json", "13.0.0.0"));
+        var result = h.Build().Resolve(Name("RST.NotShipped", "1.0.0.0"));
 
         Assert.Null(result);
         Assert.Empty(h.LoadedPaths);
@@ -77,27 +122,26 @@ public class EngineDependencyResolverTests
     [Fact]
     public void NothingLoaded_RequestedNewerThanShipped_Declines_AndWarnsWithBothVersionsAndPath()
     {
-        // Nothing has loaded Serilog yet and a requester wants 4.2 while RST ships 4.0: decline, so
-        // the requester's own 4.2 can load (RST then binds up to it).
+        // Nothing has loaded RST.Core yet and a requester wants 4.2 while RST ships 4.0: decline.
         var h = new Harness();
 
-        var result = h.Build().Resolve(Name("Serilog", "4.2.0.0"));
+        var result = h.Build().Resolve(Name("RST.Core", "4.2.0.0"));
 
         Assert.Null(result);
         Assert.Empty(h.LoadedPaths);
         var warning = Assert.Single(h.Warn);
-        Assert.Contains("Serilog", warning);
+        Assert.Contains("RST.Core", warning);
         Assert.Contains("4.2.0.0", warning);
         Assert.Contains("4.0.0.0", warning);
-        Assert.Contains(SerilogPath, warning);
+        Assert.Contains(CorePath, warning);
         Assert.Contains("ZZZ-SerilogProbe", warning);
     }
 
     [Fact]
     public void LoadedOlderSameMajor_IsHandedOver_WithAWarningNamingRequestedGivenAndRequester()
     {
-        // Decision #32: RST's Serilog 4.0 is loaded and ZZZ asks for 4.2. Refusing makes ZZZ fail
-        // to load at all; handing over 4.0 lets it run.
+        // Decision #32: an older copy of the same major is loaded and a newer minor is asked for.
+        // Refusing makes the requester fail to load at all; handing over the loaded copy lets it run.
         var h = new Harness { InContext = () => new[] { typeof(object).Assembly, Loaded } };
         var requested = SameMajorNewer;
 
@@ -114,7 +158,7 @@ public class EngineDependencyResolverTests
     [Fact]
     public void SameMajorHandOver_WarnsOncePerAssemblyPerSession()
     {
-        var other = typeof(FactAttribute).Assembly; // xunit.core: a second loaded assembly
+        var other = typeof(RST.UI.Health.HealthScanner).Assembly; // RST.UI: a second loaded assembly
         var otherVersion = other.GetName().Version!;
         var h = new Harness { InContext = () => new[] { Loaded, other } };
         var resolver = h.Build();
@@ -162,7 +206,7 @@ public class EngineDependencyResolverTests
         // And the default wiring uses it: the requester here is this test assembly.
         var warn = new List<string>();
         var resolver = new EngineDependencyResolver(
-            _ => SerilogPath, _ => new Version(4, 0, 0, 0), () => new[] { Loaded },
+            _ => CorePath, _ => new Version(4, 0, 0, 0), () => new[] { Loaded },
             _ => typeof(object).Assembly, _ => { }, warn.Add);
         resolver.Resolve(Name(Loaded.GetName().Name!, SameMajorNewer.ToString()));
         Assert.Contains("requested by RST.RuntimeTests;", Assert.Single(warn));
@@ -173,7 +217,7 @@ public class EngineDependencyResolverTests
     [InlineData(1)] // a lower version than loaded
     public void AlreadyLoadedAtOrAboveRequested_ReturnsThatCopy_WithoutLoadingByPath(int lower)
     {
-        var requested = lower == 0 ? LoadedVersion : new Version(Math.Max(0, LoadedVersion.Major - 1), 0, 0, 0);
+        var requested = lower == 0 ? LoadedVersion : new Version(LoadedVersion.Major, 0, 0, 0);
         var h = new Harness
         {
             VersionAt = _ => new Version(LoadedVersion.Major + 10, 0, 0, 0),
@@ -191,7 +235,6 @@ public class EngineDependencyResolverTests
     [Fact]
     public void LoadedOlderDifferentMajor_IsRefused_AndWarnsWithBothVersionsAndLoadedPath()
     {
-        // A neighbour loaded Serilog 3.1.1 (assembly 2.0.0.0) first; RST's engine asks for 4.0.
         // A different major is not handed over, and loading ours by path would throw
         // FileLoadException inside the event.
         var requested = new Version(LoadedVersion.Major + 1, 0, 0, 0);
@@ -233,14 +276,14 @@ public class EngineDependencyResolverTests
     [Fact]
     public void NotLoaded_AndRequestedAtOrBelowShipped_LoadsOurCopyByPath()
     {
-        var h = new Harness { InContext = () => new[] { Loaded } };
+        var h = new Harness { InContext = () => new[] { typeof(object).Assembly } };
 
-        var result = h.Build().Resolve(Name("Serilog", "4.0.0.0"));
+        var result = h.Build().Resolve(Name("RST.Core", "4.0.0.0"));
 
         Assert.Same(h.LoadResult, result);
-        Assert.Equal(new[] { SerilogPath }, h.LoadedPaths);
+        Assert.Equal(new[] { CorePath }, h.LoadedPaths);
         Assert.Empty(h.Warn);
-        Assert.Contains(h.Info, m => m.Contains("Serilog", StringComparison.Ordinal) && m.Contains(SerilogPath, StringComparison.Ordinal));
+        Assert.Contains(h.Info, m => m.Contains("RST.Core", StringComparison.Ordinal) && m.Contains(CorePath, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -248,10 +291,10 @@ public class EngineDependencyResolverTests
     {
         var h = new Harness();
 
-        var result = h.Build().Resolve(Name("Serilog", null));
+        var result = h.Build().Resolve(Name("RST.Core", null));
 
         Assert.Same(h.LoadResult, result);
-        Assert.Equal(new[] { SerilogPath }, h.LoadedPaths);
+        Assert.Equal(new[] { CorePath }, h.LoadedPaths);
     }
 
     [Fact]
@@ -259,7 +302,7 @@ public class EngineDependencyResolverTests
     {
         var h = new Harness { VersionAt = _ => null };
 
-        var result = h.Build().Resolve(Name("Serilog", "4.0.0.0"));
+        var result = h.Build().Resolve(Name("RST.Core", "4.0.0.0"));
 
         Assert.Same(h.LoadResult, result);
     }
@@ -286,90 +329,84 @@ public class EngineDependencyResolverTests
         }
 
         var resolver = h.Build();
-        var ex = Record.Exception(() => resolver.Resolve(Name("Serilog", "4.0.0.0")));
+        var ex = Record.Exception(() => resolver.Resolve(Name("RST.Core", "4.0.0.0")));
 
         Assert.Null(ex);
-        Assert.Null(resolver.Resolve(Name("Serilog", "4.0.0.0")));
-        Assert.Contains(h.Warn, m => m.Contains("failed, declining", StringComparison.Ordinal) && m.Contains("Serilog", StringComparison.Ordinal));
+        Assert.Null(resolver.Resolve(Name("RST.Core", "4.0.0.0")));
+        Assert.Contains(h.Warn, m => m.Contains("failed, declining", StringComparison.Ordinal) && m.Contains("RST.Core", StringComparison.Ordinal));
     }
 
     [Fact]
     public void ThrowingLogger_DoesNotBreakResolution()
     {
         var resolver = new EngineDependencyResolver(
-            _ => SerilogPath,
+            _ => CorePath,
             _ => new Version(4, 0, 0, 0),
             Array.Empty<Assembly>,
             _ => typeof(object).Assembly,
             _ => throw new IOException("log file locked"),
             _ => throw new IOException("log file locked"));
 
-        Assert.Same(typeof(object).Assembly, resolver.Resolve(Name("Serilog", "4.0.0.0")));
-        Assert.Null(resolver.Resolve(Name("Serilog", "4.2.0.0")));
+        Assert.Same(typeof(object).Assembly, resolver.Resolve(Name("RST.Core", "4.0.0.0")));
+        Assert.Null(resolver.Resolve(Name("RST.Core", "4.2.0.0")));
     }
 
     [Fact]
     public void FindLoaded_SkipsDynamicAssemblies()
     {
         var dynamic = System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
-            new AssemblyName("Serilog"), System.Reflection.Emit.AssemblyBuilderAccess.Run);
+            new AssemblyName("RST.Core"), System.Reflection.Emit.AssemblyBuilderAccess.Run);
 
-        Assert.Null(EngineDependencyResolver.FindLoaded(new Assembly[] { dynamic }, "Serilog"));
+        Assert.Null(EngineDependencyResolver.FindLoaded(new Assembly[] { dynamic }, "RST.Core"));
         Assert.Null(EngineDependencyResolver.FindLoaded(new[] { Loaded }, null));
         Assert.Same(Loaded, EngineDependencyResolver.FindLoaded(new Assembly[] { dynamic, Loaded }, Loaded.GetName().Name));
     }
 
-    // --- the startup "Serilog bound" line ------------------------------------------------------
+    // --- the startup "Third-party DLLs shipped" line --------------------------------------------
 
     [Fact]
-    public void DescribeBinding_SameAsCompiled_IsInfo()
+    public void DescribeShipped_OnlyRstDlls_IsInfoSayingNone()
     {
-        var (warn, message) = EngineDependencyResolver.DescribeBinding("Serilog", new Version(4, 0, 0, 0), new Version(4, 0, 0, 0), SerilogPath);
+        var (warn, message) = EngineDependencyResolver.DescribeShipped(
+            new[] { "RST.Engine.dll", "RST.UI.dll", "RST.Core.dll", @"en\RST.UI.resources.dll" });
 
         Assert.False(warn);
-        Assert.Equal($"Serilog bound: 4.0.0.0 at {SerilogPath} (engine compiled against 4.0.0.0)", message);
+        Assert.Equal("Third-party DLLs shipped: none (4 RST DLLs in the app folder; decision #33)", message);
     }
 
     [Fact]
-    public void DescribeBinding_NewerThanCompiled_IsInfo()
+    public void DescribeShipped_AThirdPartyDll_IsAWarningNamingEachOne()
     {
-        var (warn, message) = EngineDependencyResolver.DescribeBinding("Serilog", new Version(4, 0, 0, 0), new Version(4, 2, 0, 0), @"C:\x\Serilog.dll");
+        var (warn, message) = EngineDependencyResolver.DescribeShipped(
+            new[] { "RST.Engine.dll", "Serilog.dll", @"runtimes\win\lib\net8.0\System.Management.dll", "RST.Core.dll" });
+
+        Assert.True(warn);
+        Assert.Equal(
+            @"Third-party DLLs shipped: 2 (runtimes\win\lib\net8.0\System.Management.dll, Serilog.dll); RST should ship none (decision #33)",
+            message);
+    }
+
+    [Fact]
+    public void DescribeShipped_EmptyFolder_IsInfo()
+    {
+        var (warn, message) = EngineDependencyResolver.DescribeShipped(Array.Empty<string>());
 
         Assert.False(warn);
-        Assert.Contains("4.2.0.0", message);
-    }
-
-    [Fact]
-    public void DescribeBinding_OlderThanCompiled_IsWarning()
-    {
-        var (warn, message) = EngineDependencyResolver.DescribeBinding("Serilog", new Version(4, 0, 0, 0), new Version(2, 0, 0, 0), @"C:\neighbour\Serilog.dll");
-
-        Assert.True(warn);
-        Assert.Contains("2.0.0.0", message);
-        Assert.Contains("4.0.0.0", message);
-        Assert.Contains(@"C:\neighbour\Serilog.dll", message);
-        Assert.Contains("OLDER", message);
-    }
-
-    [Fact]
-    public void DescribeBinding_NotLoaded_IsWarning()
-    {
-        var (warn, message) = EngineDependencyResolver.DescribeBinding("Serilog", new Version(4, 0, 0, 0), null, null);
-
-        Assert.True(warn);
-        Assert.Contains("not loaded", message);
+        Assert.Contains("none", message);
     }
 
     // --- the production wiring -----------------------------------------------------------------
 
     [Fact]
-    public void ForEngine_OverARealDepsJson_ReusesTheLoadedCopy_AndDeclinesANewerRequest()
+    public void ForEngine_OverARealDepsJson_ReusesTheLoadedCopy_DeclinesANewerRequest_AndNeverAThirdPartyOne()
     {
-        // This test assembly's own deps.json lists xunit.assert, which is already loaded into the
-        // default context: the same shape as the engine's deps.json listing Serilog.
+        // This test assembly's own deps.json lists RST.Core (a project reference), which is already
+        // loaded into the default context: the same shape as the engine's deps.json. It also lists
+        // xunit.assert, a third-party package, which the resolver must not answer for.
         var info = new List<string>();
         var warn = new List<string>();
         var deps = new AssemblyDependencyResolver(typeof(EngineDependencyResolverTests).Assembly.Location);
+        Assert.NotNull(deps.ResolveAssemblyToPath(typeof(Assert).Assembly.GetName()));
         var resolver = EngineDependencyResolver.ForEngine(deps, AssemblyLoadContext.Default, info.Add, warn.Add);
         var name = Loaded.GetName().Name!;
 
@@ -382,6 +419,8 @@ public class EngineDependencyResolverTests
         Assert.Contains(newer.ToString(), warning);
         Assert.Contains(LoadedVersion.ToString(), warning);
 
+        Assert.Null(resolver.Resolve(typeof(Assert).Assembly.GetName()));
         Assert.Null(resolver.Resolve(Name("RST.NotADependency", "1.0.0.0")));
+        Assert.Single(warn);
     }
 }

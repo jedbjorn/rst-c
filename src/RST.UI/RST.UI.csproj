@@ -24,11 +24,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog" />
-    <PackageReference Include="System.Management" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
   </ItemGroup>
 

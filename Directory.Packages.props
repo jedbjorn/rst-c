@@ -19,17 +19,10 @@
     <!-- net48 reference assemblies for cross-platform builds. -->
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
 
-    <!-- JSON / model. -->
-    <PackageVersion Include="System.Text.Json" Version="8.0.5" />
-
-    <!-- Logging. -->
-    <PackageVersion Include="Serilog"               Version="4.0.1" />
-    <PackageVersion Include="Serilog.Sinks.File"    Version="6.0.0" />
-    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
-
-    <!-- Diagnostics (RST-010 health panel). -->
-    <PackageVersion Include="System.Management"     Version="8.0.0" />
-
+    <!-- Decision #33: no runtime packages. RST ships no third-party DLL into Revit's load
+         context: logging is RST.Core.Logging, Health reads Win32 and the registry, and
+         System.Text.Json is the shared framework's. The SerilogProbe test fixtures pin their
+         own Serilog with VersionOverride. -->
 
     <!-- Installer UI — WixUI dialog set for the branded MSI setup. Tracks
          the WixToolset.Sdk version pinned in the installer .wixproj files. -->

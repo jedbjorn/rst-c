@@ -99,14 +99,15 @@ The bitmaps are generated from the bundled `src/RST.Engine/Assets/branding.png` 
   RST.Engine.dll
   RST.UI.dll
   RST.Core.dll
-  Serilog*.dll
   RST.Engine.deps.json
   Assets\**\*
-  runtimes\win\lib\net8.0\System.Management.dll  (RST-038: stub at bin
-                                                  root removed at stage
-                                                  time)
   *.pdb
 ```
+
+No third-party DLL ships in either tree (decision #33): RST runs in Revit's shared load context,
+where another add-in's copy of a same-named DLL can bind in place of RST's. CI's
+`build/check-shipped-dlls.sh` fails the Stage jobs on any DLL that is not `RST.*` and not on
+`build/third-party-allowlist.txt` (empty), and `ci-smoke.ps1` checks the installed trees.
 
 `RST.msi` carries three pairs of trees: Addins\2025 + RST\R25\app, Addins\2026 + RST\R26\app, and Addins\2027 + RST\R27\app. R25 and R26 carry the `net8.0-windows` engine. R27 carries the `net10.0-windows` engine, with its own `RST.Engine.deps.json`.
 

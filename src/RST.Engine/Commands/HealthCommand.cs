@@ -23,7 +23,7 @@ using RST.Core.Health;
 using RST.Core.Telemetry;
 using RST.Engine.Theming;
 using RST.UI.Health;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Commands;
 

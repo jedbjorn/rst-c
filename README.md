@@ -94,7 +94,7 @@ Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, dis
 
 ### Logging
 
-rst-c writes a Serilog session log under `%AppData%\RST\logs\` for every Revit launch. The engine and rst-c's windows run in the same process and log to the same file, so a single log captures the full picture when something misbehaves. The latest log is the first place to look when a profile behaves unexpectedly.
+rst-c writes a session log under `%AppData%\RST\logs\` for every Revit launch. The engine and rst-c's windows run in the same process and log to the same file, so a single log captures the full picture when something misbehaves. The latest log is the first place to look when a profile behaves unexpectedly.
 
 **[Logging docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/logging.md)**
 

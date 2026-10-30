@@ -24,7 +24,7 @@ using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
 using RST.Engine.Telemetry;
 using RST.Engine.Tray;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine;
 
@@ -375,7 +375,7 @@ public sealed class RstApplication : IExternalApplication
         catch (Exception ex) { Log.Debug(ex, "Switch scheduler dispose failed (non-fatal)"); }
         _switchScheduler = null;
         // Drain + join the telemetry writer (bounded) BEFORE the log
-        // sink closes — the collector logs through Serilog.
+        // sink closes — the collector logs through Log.
         try { _telemetry?.Shutdown(); }
         catch (Exception ex) { Log.Debug(ex, "Telemetry shutdown failed (non-fatal)"); }
         _telemetry = null;
@@ -387,10 +387,10 @@ public sealed class RstApplication : IExternalApplication
     /// Hard cap on session logs we keep on disk. Each Revit launch produces
     /// two files under <c>%AppData%\RST\logs\</c> with a shared timestamp
     /// prefix: <c>rst_&lt;ts&gt;_boot.log</c> (written by RST.Bootstrap, see
-    /// RST-033) and <c>rst_&lt;ts&gt;.log</c> (Serilog session log). The
+    /// RST-033) and <c>rst_&lt;ts&gt;.log</c> (the engine session log). The
     /// prune glob <c>rst_*.log</c> matches both, so the cap is sized at
-    /// 10 = 5 sessions × {boot, engine}. Serilog's own
-    /// <c>retainedFileCountLimit</c> doesn't help — it only prunes
+    /// 10 = 5 sessions × {boot, engine}. The file sink's own
+    /// <c>RetainedFileCountLimit</c> doesn't help — it only prunes
     /// size-rolled files derived from the same base path. RST-032: also
     /// surfaced as an OOB cleanup target in <see cref="CleanupDefaults"/>
     /// so users have a hard exit via the Health tool if the boot-time
@@ -432,7 +432,7 @@ public sealed class RstApplication : IExternalApplication
             logsDir,
             $"rst_{DateTime.Now:yyyy-MM-dd_HHmmss}.log");
 
-        // Prune BEFORE Serilog opens its file handle so we don't fight
+        // Prune BEFORE the file sink opens its handle so we don't fight
         // the writer. The new file isn't on disk yet — the path string
         // we just minted is excluded defensively in case it survived
         // a prior crashed launch with the same second.
@@ -441,13 +441,20 @@ public sealed class RstApplication : IExternalApplication
         // DEBUG minimum during dev so per-step traces (catalog stages, window
         // actions, the theme detected) land in the file. Promote to
         // Information once the loader/builder are stable.
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .Enrich.WithProperty("Component", "RST.Engine")
-            .WriteTo.File(sessionLog,
-                          outputTemplate: "{Timestamp:HH:mm:ss.fff} {Level:u3} {Message:lj}{NewLine}{Exception}",
-                          rollingInterval: RollingInterval.Infinite)
-            .CreateLogger();
+        // One file per session, no roll, Serilog's default 1 GB cap (decision #33: the in-house
+        // logger keeps the Serilog configuration's file, format and limits).
+        Log.Logger = new Logger(
+            LogLevel.Debug,
+            new ILogSink[]
+            {
+                new FileSink(new FileSinkOptions
+                {
+                    Path = sessionLog,
+                    OutputTemplate = "{Timestamp:HH:mm:ss.fff} {Level:u3} {Message:lj}{NewLine}{Exception}",
+                    RollingInterval = RollingInterval.Infinite,
+                }),
+            },
+            new Dictionary<string, object?> { ["Component"] = "RST.Engine" });
     }
 
     private static void PruneOldSessionLogs(string logsDir, string newSessionPath)

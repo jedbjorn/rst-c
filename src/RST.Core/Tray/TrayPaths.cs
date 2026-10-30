@@ -35,12 +35,12 @@ public static class TrayPaths
     public const string UpdateChecksValueName = "UpdateChecks";
 
     /// <summary>
-    /// The Serilog base path's file name: Serilog's daily roll inserts the date before the extension, so the
+    /// The log's base path file name: the file sink's daily roll (RST.Core.Logging.FileSink) inserts the date before the extension, so the
     /// files are <c>tray_20261030.log</c> (and <c>tray_20261030_001.log</c> past the size limit).
     /// </summary>
     public const string LogFileBaseName = "tray_.log";
 
-    /// <summary>How many tray log files are kept (Serilog's retainedFileCountLimit).</summary>
+    /// <summary>How many tray log files are kept (the file sink's RetainedFileCountLimit).</summary>
     public const int LogFilesKept = 10;
 
     /// <summary>
@@ -58,7 +58,7 @@ public static class TrayPaths
     /// <summary>%AppData%\RST\logs\ (shared with the engine's session logs).</summary>
     public static string LogsDir => Path.Combine(AppDataPaths.Root, "logs");
 
-    /// <summary>The Serilog base path, <c>%AppData%\RST\logs\tray_.log</c>.</summary>
+    /// <summary>The log's base path, <c>%AppData%\RST\logs\tray_.log</c>.</summary>
     public static string LogFileBase => Path.Combine(LogsDir, LogFileBaseName);
 
     /// <summary>%LocalAppData%\RST\Tray\ (non-roaming tray state: the download cache from WU4).</summary>

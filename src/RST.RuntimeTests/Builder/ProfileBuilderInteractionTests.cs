@@ -148,9 +148,9 @@ public class ProfileBuilderInteractionTests
     [Fact]
     public void A_broken_variant_image_is_disabled_and_logged_once()
     {
-        var events = new List<Serilog.Events.LogEvent>();
-        var previous = Serilog.Log.Logger;
-        Serilog.Log.Logger = new Serilog.LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(new ListSink(events)).CreateLogger();
+        var events = new List<RST.Core.Logging.LogEvent>();
+        var previous = RST.Core.Logging.Log.Logger;
+        RST.Core.Logging.Log.Logger = new RST.Core.Logging.Logger(RST.Core.Logging.LogLevel.Verbose, new ListSink(events));
         var empty = Path.Combine(Path.GetTempPath(), "rst-pack-empty-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(empty);
         try
@@ -161,23 +161,27 @@ public class ProfileBuilderInteractionTests
             picker.TileCommand.Execute(design);
             picker.Rows.Single(r => r.IsVariantRow).Variants.Should().OnlyContain(v => !v.IsEnabled, "no image file: every variant is disabled");
             picker.Key(PickerKey.Right); // re-render: still logged once per variant
-            var logged = events.Where(e => e.Level == Serilog.Events.LogEventLevel.Error && e.RenderMessage().Contains(design, StringComparison.Ordinal)).ToList();
+            var logged = events.Where(e => e.Level == RST.Core.Logging.LogLevel.Error && e.RenderMessage().Contains(design, StringComparison.Ordinal)).ToList();
             logged.Should().HaveCount(7, "each broken variant is logged once");
             picker.VariantCommand.Execute("orange");
             picker.Model.Outcome.Should().BeNull("a disabled variant never applies");
         }
         finally
         {
-            Serilog.Log.Logger = previous;
+            RST.Core.Logging.Log.Logger = previous;
             Directory.Delete(empty, recursive: true);
         }
     }
 
-    private sealed class ListSink(List<Serilog.Events.LogEvent> events) : Serilog.Core.ILogEventSink
+    private sealed class ListSink(List<RST.Core.Logging.LogEvent> events) : RST.Core.Logging.ILogSink
     {
-        public void Emit(Serilog.Events.LogEvent logEvent)
+        public void Emit(RST.Core.Logging.LogEvent logEvent, IReadOnlyDictionary<string, object?> properties)
         {
             lock (events) events.Add(logEvent);
+        }
+
+        public void Dispose()
+        {
         }
     }
 

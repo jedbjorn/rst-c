@@ -13,7 +13,7 @@ using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
 using RST.Engine.Theming;
 using RST.UI.Loader;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Commands;
 

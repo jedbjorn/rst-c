@@ -13,7 +13,7 @@
 
 using System;
 using Autodesk.Revit.UI;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Engine.Ribbon;
 

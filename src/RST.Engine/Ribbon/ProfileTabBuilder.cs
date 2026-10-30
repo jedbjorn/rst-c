@@ -42,7 +42,7 @@ using Autodesk.Revit.UI;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
 using RST.Core.Ribbon;
-using Serilog;
+using RST.Core.Logging;
 using AwComponentManager = Autodesk.Windows.ComponentManager;
 using AwRibbonTab = Autodesk.Windows.RibbonTab;
 using AwRibbonPanel = Autodesk.Windows.RibbonPanel;

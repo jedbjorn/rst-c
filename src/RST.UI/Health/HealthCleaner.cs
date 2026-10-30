@@ -23,7 +23,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using RST.Core.Profiles;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.UI.Health;
 
