@@ -103,6 +103,7 @@ public partial class ProfileBuilderWindow : Window
     /// <summary>The saved profiles go between the heading and the divider: the current one ticked, a note with the tab.</summary>
     private void FillProfileMenu()
     {
+        Model.RefreshProfiles(); // another Revit session may have saved, renamed or removed one
         foreach (var item in _profileItems) ProfileMenu.Items.Remove(item);
         _profileItems.Clear();
         var at = ProfileMenu.Items.IndexOf(ProfileMenuDivider);

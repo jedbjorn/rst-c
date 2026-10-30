@@ -220,7 +220,20 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         var previous = selectKey ?? _selectedOption?.Key;
         ProfileOptions.Clear();
         foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId));
-        SetCurrent(ProfileOptions.FirstOrDefault(o => o.Key == previous) ?? ProfileOptionViewModel.New());
+        // The profile in the editor stays current even when its file is gone from the list (another session removed it).
+        var current = ProfileOptions.FirstOrDefault(o => o.Key == previous)
+                      ?? (_selectedOption is { } held && held.Key == previous ? held : ProfileOptionViewModel.New());
+        SetCurrent(current);
+    }
+
+    /// <summary>
+    /// Re-reads the saved profiles (another Revit session may have saved, renamed or removed one
+    /// since): before the name checks of Save, Rename… and Duplicate…, and when the profile menu opens.
+    /// </summary>
+    public void RefreshProfiles()
+    {
+        _library = Safe(_backend.GetProfiles, _library, "get_profiles");
+        PopulateOptions();
     }
 
     private void SetCurrent(ProfileOptionViewModel option)
@@ -394,6 +407,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     private void Rename()
     {
+        RefreshProfiles();
         var saved = SavedProfiles();
         NameCheck Check(string? n) => ProfileNaming.Check(n, _profile.Id, saved);
         var dialog = ProfileNameDialogModel.ForRename(ProfileName, Check);
@@ -411,6 +425,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private void Duplicate()
     {
         if (!_editMode || IsWorking) return;
+        RefreshProfiles();
         var saved = SavedProfiles();
         NameCheck Check(string? n) => ProfileNaming.Check(n, null, saved);
         var dialog = ProfileNameDialogModel.ForDuplicate(ProfileNaming.DefaultDuplicateName(ProfileName, saved), Check);
@@ -945,13 +960,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// True when the profile was saved.
     /// </summary>
     /// <remarks>
-    /// Rename… already refuses a taken name. Save checks again as a safety net, for a name another
-    /// profile took since (a second Revit session saving): a rename in edit mode
-    /// (<see cref="ProfileEditing.PlanSave"/>), and a new profile's first save (WU1 review F5).
+    /// Rename… already refuses a taken name. Save re-reads the saved profiles and checks again, as a
+    /// safety net for a name another profile took since (a second Revit session saving): a rename in
+    /// edit mode (<see cref="ProfileEditing.PlanSave"/>), and a new profile's first save (WU1 review F5).
     /// </remarks>
     public async Task<bool> SaveAsync()
     {
         if (IsWorking) return false;
+        RefreshProfiles();
         var library = SavedProfiles();
         var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, library);
         if (plan == SavePlanKind.InPlace && !_editMode && ProfileNaming.IsTaken(_profile.ProfileName, _profile.Id, library))
@@ -966,7 +982,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 return false;
             case SavePlanKind.NameCollision:
                 Log.Warning("Builder: save aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
-                ShowToast(UiStrings.Builder_NameCollision(_profile.ProfileName), BannerKind.Error);
+                ShowToast(UiStrings.Builder_NameCollision((_profile.ProfileName ?? "").Trim()), BannerKind.Error);
                 return false;
         }
 

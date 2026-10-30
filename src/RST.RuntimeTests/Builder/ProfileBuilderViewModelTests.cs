@@ -627,9 +627,80 @@ public class ProfileBuilderViewModelTests
         h.Model.SelectedProfileOption = h.Option("Structure");
         h.Model.ProfileName = " architecture ";
         (await h.Model.SaveAsync()).Should().BeFalse();
-        AssertToast(h, "A profile named \" architecture \" already exists. Choose a different name.", BannerKind.Error);
+        AssertToast(h, "A profile named \"architecture\" already exists. Choose a different name.", BannerKind.Error);
         h.Backend.Saved.Should().BeEmpty();
         h.Model.Profile.Id.Should().Be(BuilderFixtures.StructId);
+    }
+
+    [Fact]
+    public async Task Renaming_the_loaded_profile_keeps_it_loaded_under_its_id()
+    {
+        // "Same profile, new name. Users who have it loaded keep it." (review N2)
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Architecture");
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        h.Modals.Names.Enqueue("Architecture 2027");
+        h.Model.RenameCommand.Execute(null);
+        (await h.Model.SaveAsync()).Should().BeTrue();
+
+        h.Backend.Saved.Single().Id.Should().Be(BuilderFixtures.ArchId);
+        h.Backend.Loads.Single().Should().BeEquivalentTo(new LoadRequest("Architecture 2027", BuilderFixtures.ArchId, true, ["Analyze"]),
+            "the ribbon reloads the same id under its new name");
+        h.Model.IsLoadedProfile.Should().BeTrue("(loaded) stays");
+        var option = h.Option("Architecture 2027");
+        option.IsLoaded.Should().BeTrue();
+        option.IsCurrent.Should().BeTrue();
+        option.Note.Should().Be("loaded · tab \"Studio Arch\"");
+        AssertToast(h, "Saved & ribbon reloaded.", BannerKind.Success);
+    }
+
+    [Fact]
+    public async Task Save_rereads_the_saved_profiles_so_a_name_taken_by_another_session_is_refused()
+    {
+        // Review N1: the list is read again at Save, not only at boot.
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Modals.Names.Enqueue("Site");
+        h.Model.RenameCommand.Execute(null);
+        h.Model.ProfileName.Should().Be("Site");
+
+        // Another Revit session saves a new profile named "Site" meanwhile.
+        h.Backend.With(new Profile { Id = "other-session", ProfileName = "Site", Tab = "T" });
+        (await h.Model.SaveAsync()).Should().BeFalse();
+        AssertToast(h, "A profile named \"Site\" already exists. Choose a different name.", BannerKind.Error);
+        h.Backend.Saved.Should().BeEmpty();
+        h.Model.ProfileOptions.Select(o => o.Display).Should().Contain("Site", "the menu's list was refreshed too");
+    }
+
+    [Fact]
+    public void Rename_and_Duplicate_check_against_a_fresh_list()
+    {
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Backend.With(new Profile { Id = "other-session", ProfileName = "Site", Tab = "T" });
+
+        h.Modals.Names.Enqueue("site");
+        h.Model.RenameCommand.Execute(null);
+        h.Modals.Refusals.Should().Equal("A profile named \"site\" already exists. Choose a different name.");
+
+        h.Modals.Names.Enqueue("SITE");
+        h.Model.DuplicateCommand.Execute(null);
+        h.Modals.Refusals.Should().HaveCount(2);
+        h.Backend.Saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Refreshing_the_menu_lists_new_profiles_and_keeps_the_current_one()
+    {
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Backend.With(new Profile { Id = "other-session", ProfileName = "Site", Tab = "T" });
+        h.Backend.Library.RemoveAll(e => e.Profile.Id == BuilderFixtures.StructId); // another session removed the open one
+        h.Model.RefreshProfiles();
+        h.Model.ProfileOptions.Select(o => o.Display).Should().Equal("Architecture", "Site");
+        h.Model.SelectedProfileOption!.Key.Should().Be(BuilderFixtures.StructId, "the editor still holds Structure");
+        h.Model.SelectedProfileOption.IsNew.Should().BeFalse();
+        h.Model.IsEditMode.Should().BeTrue();
     }
 
     [Fact]
@@ -641,7 +712,7 @@ public class ProfileBuilderViewModelTests
         h.Model.ProfileName = "STRUCTURE ";
         h.Model.ProfileTab = "T";
         (await h.Model.SaveAsync()).Should().BeFalse();
-        AssertToast(h, "A profile named \"STRUCTURE \" already exists. Choose a different name.", BannerKind.Error);
+        AssertToast(h, "A profile named \"STRUCTURE\" already exists. Choose a different name.", BannerKind.Error);
         h.Backend.Saved.Should().BeEmpty();
         h.Model.IsEditMode.Should().BeFalse();
     }
