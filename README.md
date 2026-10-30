@@ -34,10 +34,9 @@ It ships as a single managed add-in for Revit 2025 through 2027, installs into t
 
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
-- `RST.msi` — Revit 2025 + 2026
-- `RST-R27.msi` — Revit 2027
+- `RST.msi` — Revit 2025, 2026 and 2027
 
-Per-user install; no admin rights required. Run the matching MSI, then launch Revit — the rst-c tab appears on the ribbon.
+Per-user install; no admin rights required. Run the MSI, then launch Revit — the rst-c tab appears on the ribbon.
 
 ### Why rst-c
 
@@ -97,20 +96,22 @@ rst-c writes Serilog rolling files under `%AppData%\RST\logs\`. Both C#-side and
 
 ## Install
 
-MSIs ship as GitHub Release assets. The unified `RST.msi` covers Revit 2025 + 2026; `RST-R27.msi` covers Revit 2027.
+`RST.msi` ships as a GitHub Release asset and covers Revit 2025, 2026 and 2027 in one installer.
 
 1. Grab the latest from the [Releases](https://github.com/jedbjorn/rst-c/releases) page.
 2. Close Revit (the engine DLLs are locked while it is running).
 3. Run the MSI — double-click or `msiexec /i RST.msi`.
 4. Launch Revit. The RST tools appear on the Add-Ins tab.
 
-Both installers are per-user — no admin elevation required. User data (profiles, logs, branding, active-profile state) lives at `%AppData%\RST\` and is preserved across reinstalls.
+The installer is per-user — no admin elevation required. User data (profiles, logs, branding, active-profile state) lives at `%AppData%\RST\` and is preserved across reinstalls.
 
 | Revit version | Installer | TFM |
 |---|---|---|
 | 2025 | `RST.msi` | `net8.0-windows` |
 | 2026 | `RST.msi` | `net8.0-windows` |
-| 2027 | `RST-R27.msi` | `net10.0-windows` |
+| 2027 | `RST.msi` | `net10.0-windows` |
+
+**If you installed the Revit 2027 preview:** releases v1.0.0 to v2.2.0 shipped Revit 2027 as a separate preview MSI. Revit 2027 is now included in `RST.msi`, and installing it removes the "RST (Revit 2027 preview)" entry from Settings → Apps automatically, including under `msiexec /qn`. Your profiles and settings are kept.
 
 **If you previously installed an older layout:**
 
@@ -139,7 +140,7 @@ build/stage.sh R25              # Release config by default → build/R25/{addin
 build/stage.sh R26 Debug        # Debug build for VM diagnostics
 ```
 
-For an MSI build, run `dotnet build installer\RST.Installer.wixproj` (unified R25 + R26) or `dotnet build installer-r27\RST.Installer.R27.wixproj` on Windows after staging.
+For an MSI build, stage all three majors (`build/stage.sh R25`, `R26`, `R27`), then run `dotnet build installer\RST.Installer.wixproj` on Windows. It produces one `RST.msi` covering Revit 2025–2027.
 
 ## License
 
