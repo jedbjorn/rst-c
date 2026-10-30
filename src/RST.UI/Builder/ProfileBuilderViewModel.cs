@@ -335,9 +335,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     /// <summary>
     /// The profile differs from the clean baseline (boot, a profile switch, the last save): the
-    /// header's unsaved-changes dot and text show, and Save is enabled.
+    /// header's unsaved-changes dot and text show, and Save is enabled. A saved profile read without
+    /// an id (a legacy file) counts as changed until Save gives it one, so "open it in the Builder and
+    /// save it once" works with no edit (review N7); the id the save assigns clears it.
     /// </summary>
-    public bool IsDirty => ProfileEditing.Snapshot(_profile) != _pristine;
+    public bool IsDirty => ProfileEditing.Snapshot(_profile) != _pristine || (_editMode && string.IsNullOrEmpty(_profile.Id));
 
     private void SnapshotPristine()
     {
@@ -1019,7 +1021,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             _activeIdlessFile = null;
         }
         var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
-        var oldFileKept = RemoveSupersededFile(result.FileName);
+        // The loaded legacy profile's old file goes only once the reload has re-pointed
+        // active_profile.json at the new one (review N8a); any other goes now.
+        var oldFileKept = wasActiveIdless ? null : RemoveSupersededFile(result.FileName);
 
         _library = Safe(_backend.GetProfiles, _library, "get_profiles");
         PopulateOptions(_profile.Id);
@@ -1041,14 +1045,43 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         IsWorking = true;
         try
         {
-            var load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
-            if (!load.Ok) ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
-            else if (oldFileKept is null) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success); // else the warning stays
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Builder: auto-reload threw");
-            ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+            LoadResult load;
+            try
+            {
+                load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Builder: auto-reload threw");
+                load = LoadResult.Fail(ex.Message);
+            }
+            if (!load.Ok)
+            {
+                if (wasActiveIdless && _supersededFile is { } old)
+                {
+                    // The pointer may still name the old file: keep it, so the loaded profile still resolves.
+                    _supersededFile = null;
+                    Log.Warning("Builder: auto-reload failed; kept {Old}, which active_profile.json may still name", old);
+                    ShowToast(UiStrings.Builder_SavedReloadFailedOldKept(result.FileName, old), BannerKind.Warning);
+                }
+                else
+                {
+                    ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+                }
+                return true;
+            }
+            if (wasActiveIdless)
+            {
+                oldFileKept = RemoveSupersededFile(result.FileName);
+                _library = Safe(_backend.GetProfiles, _library, "get_profiles");
+                PopulateOptions(_profile.Id);
+                if (oldFileKept is { } late)
+                {
+                    ShowToast(UiStrings.Builder_SavedOldFileKept(result.FileName, late.File, late.Error), BannerKind.Warning);
+                    return true;
+                }
+            }
+            if (oldFileKept is null) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success); // else the warning stays
         }
         finally
         {

@@ -314,6 +314,96 @@ public sealed class ProfileBuilderShellTests : IDisposable
         h.Model.IsLoadedProfile.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task An_id_less_profile_can_be_saved_with_no_edit_and_is_then_clean_with_one_file()
+    {
+        // Review N7: "open it in the Builder and save it once" needs Save enabled with no edit.
+        var backend = RealBackend();
+        var legacy = ProfileEditing.ForEditing(LoaderFixtures.Structure());
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        using (var fs = File.Create(Path.Combine(ProfilesDir, "Legacy_2024-05-01.json")))
+            ProfileSerializer.Write(legacy, fs);
+
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Model.IsDirty.Should().BeTrue("a profile with no id counts as changed until it is saved");
+        h.Model.SaveCommand.CanExecute(null).Should().BeTrue("no edit is needed");
+
+        // Switching away asks first, as for any unsaved change.
+        h.Model.SelectedProfileOption = h.Option("Structure"); // Cancel (no answer scripted)
+        h.Dialogs.ChooseCalls.Should().ContainSingle();
+        h.Model.ProfileName.Should().Be("Legacy");
+
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        h.Model.Profile.Id.Should().NotBeNullOrEmpty();
+        h.Model.IsDirty.Should().BeFalse("the id the save assigned clears it");
+        h.Model.SaveCommand.CanExecute(null).Should().BeFalse();
+        Files().Should().HaveCount(3).And.ContainSingle(f => f.StartsWith("Legacy_", StringComparison.Ordinal));
+        Read(Path.Combine(ProfilesDir, Files().Single(f => f.StartsWith("Legacy_", StringComparison.Ordinal)))).Id.Should().Be(h.Model.Profile.Id);
+    }
+
+    /// <summary>The fixture backend with a loaded legacy profile: no id, and the active pointer names its file.</summary>
+    private static FakeBuilderBackend LoadedLegacy()
+    {
+        var backend = BuilderFixtures.Backend();
+        var legacy = LoaderFixtures.Structure();
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        backend.Library.Add(new ProfileEntry("Legacy.json", legacy));
+        backend.Active = ActiveProfile.FromProfile(legacy, "Legacy.json", ["Analyze"], true);
+        return backend;
+    }
+
+    [Fact]
+    public async Task The_loaded_legacy_file_is_removed_only_after_the_reload_has_re_pointed_the_active_profile()
+    {
+        // Review N8a: the reload first, then the removal.
+        var h = BuilderHarness.Create(LoadedLegacy());
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        h.Backend.Calls.SkipWhile(c => c != "Save").Should().ContainInOrder("Save", "Load", "RemoveSupersededFile");
+        h.Backend.Loads.Single().Id.Should().Be(h.Model.Profile.Id);
+        h.Backend.Removed.Should().Equal("Legacy.json");
+        h.Model.Toast.Text.Should().Be("Saved & ribbon reloaded.");
+        h.Model.ProfileOptions.Count(o => o.Display == "Legacy").Should().Be(1);
+        h.Model.IsLoadedProfile.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_failed_reload_keeps_the_loaded_legacy_file_and_warns(bool throws)
+    {
+        var backend = LoadedLegacy();
+        backend.OnLoad = _ => throws
+            ? Task.FromException<LoadResult>(new IOException("active_profile.json is locked"))
+            : Task.FromResult(LoadResult.Fail("Failed to write active profile: locked"));
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+
+        var events = new List<RST.Core.Logging.LogEvent>();
+        var previous = RST.Core.Logging.Log.Logger;
+        RST.Core.Logging.Log.Logger = new RST.Core.Logging.Logger(RST.Core.Logging.LogLevel.Verbose, new ListSink(events));
+        try
+        {
+            (await h.Model.SaveAsync()).Should().BeTrue("the save stands");
+        }
+        finally
+        {
+            RST.Core.Logging.Log.Logger = previous;
+        }
+        h.Backend.Removed.Should().BeEmpty("the pointer may still name the old file");
+        h.Model.Toast.Kind.Should().Be(BannerKind.Warning);
+        h.Model.Toast.Text.Should().Be("Saved as Legacy_new-1.json, but the ribbon could not be reloaded, so the old file Legacy.json was kept: "
+                                       + "the loaded profile may still point at it. Load the profile again in the Loader, then delete the old file.");
+        lock (events)
+            events.Should().Contain(e => e.Level == RST.Core.Logging.LogLevel.Warning
+                                         && e.RenderMessage().Contains("kept Legacy.json", StringComparison.Ordinal));
+        h.Model.IsDirty.Should().BeFalse();
+        h.Model.IsWorking.Should().BeFalse();
+    }
+
     private sealed class ListSink(List<RST.Core.Logging.LogEvent> events) : RST.Core.Logging.ILogSink
     {
         public void Emit(RST.Core.Logging.LogEvent logEvent, IReadOnlyDictionary<string, object?> properties)

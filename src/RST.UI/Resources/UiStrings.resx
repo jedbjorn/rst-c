@@ -1063,4 +1063,8 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>Saved as {0}, but the old file {1} could not be removed ({2}). Delete it to avoid a duplicate.</value>
     <comment>{0} the saved file; {1} the file the profile (with no id) was read from; {2} the error.</comment>
   </data>
+  <data name="Builder_SavedReloadFailedOldKept" xml:space="preserve">
+    <value>Saved as {0}, but the ribbon could not be reloaded, so the old file {1} was kept: the loaded profile may still point at it. Load the profile again in the Loader, then delete the old file.</value>
+    <comment>{0} the saved file; {1} the file the loaded profile (with no id) was read from.</comment>
+  </data>
 </root>

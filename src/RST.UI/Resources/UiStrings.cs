@@ -689,5 +689,7 @@ public static class UiStrings
 
     public static string Builder_CleanupPathTip(object? arg0) => Format(nameof(Builder_CleanupPathTip), arg0);
 
+    public static string Builder_SavedReloadFailedOldKept(object? arg0, object? arg1) => Format(nameof(Builder_SavedReloadFailedOldKept), arg0, arg1);
+
     public static string Builder_SavedOldFileKept(object? arg0, object? arg1, object? arg2) => Format(nameof(Builder_SavedOldFileKept), arg0, arg1, arg2);
 }
