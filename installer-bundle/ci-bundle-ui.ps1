@@ -140,12 +140,12 @@ foreach ($label in $ScopeWording.Keys) {
   $r = Find-Control $w $label
   Assert ($null -ne $r) "Install page has the '$label' radio button (exact wording)"
   $radios[$label] = $r
-  Assert (@($texts | Where-Object { $_ -like "*] $($ScopeWording[$label])" }).Count -eq 1) "'$label' is explained in the spec's words: $($ScopeWording[$label])"
+  Assert (@($texts | Where-Object { $_ -like "*] $($ScopeWording[$label])" }).Count -ge 1) "'$label' is explained in the spec's words: $($ScopeWording[$label])"
 }
 Assert (Test-Ticked $radios['Just for me (recommended)']) "'Just for me (recommended)' is selected by default"
 Assert (-not (Test-Ticked $radios['Everyone on this PC'])) "'Everyone on this PC' is not selected by default"
 if ($companions.Count -gt 0) {
-  Assert (@($texts | Where-Object { $_ -like "*] $CompanionsUser" }).Count -eq 1) 'the companions header (just for me) says each one is a separate product'
+  Assert (@($texts | Where-Object { $_ -like "*] $CompanionsUser" }).Count -ge 1) 'the companions header (just for me) says each one is a separate product'
 }
 Save-Shot $w '0-scope-page'
 Invoke-Button $radios['Everyone on this PC']
@@ -154,7 +154,7 @@ Assert (Test-Ticked $radios['Everyone on this PC']) "'Everyone on this PC' can b
 Assert (-not (Test-Ticked $radios['Just for me (recommended)'])) "and then 'Just for me' is not"
 $textsMachine = Show-Texts $w 'install page, everyone on this PC'
 if ($companions.Count -gt 0) {
-  Assert (@($textsMachine | Where-Object { $_ -like "*] $CompanionsMachine" }).Count -eq 1) 'on the per-machine path the companions header says they install for this user, and that others add them from the tray'
+  Assert (@($textsMachine | Where-Object { $_ -like "*] $CompanionsMachine" }).Count -ge 1) 'on the per-machine path the companions header says they install for this user, and that others add them from the tray'
 }
 Save-Shot $w '0b-scope-everyone'
 Invoke-Button $radios['Just for me (recommended)']

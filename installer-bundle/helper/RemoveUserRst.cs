@@ -31,7 +31,7 @@ internal static class RemoveUserRst
 {
     private const string RstUpgradeCode = "{AF0331FC-5280-492A-94BD-95EDF108BE74}";
 
-    private const int MsiInstallContextUserUnmanaged = 1;
+    private const int MsiInstallContextUserUnmanaged = 2; // MSIINSTALLCONTEXT_USERUNMANAGED (1 is USERMANAGED, 4 MACHINE)
     private const int InstallUiLevelNone = 2;
     private const int InstallLevelDefault = 0;
     private const int InstallStateAbsent = 2;
@@ -89,10 +89,11 @@ internal static class RemoveUserRst
             int removed = 0;
             foreach (string productCode in found)
             {
-                string version = PerUserVersion(productCode);
+                uint infoResult;
+                string version = PerUserVersion(productCode, out infoResult);
                 if (version == null)
                 {
-                    Write(log, productCode + ": not installed per user for this user; left alone");
+                    Write(log, productCode + ": not installed per user for this user (MsiGetProductInfoEx returned " + infoResult + "); left alone");
                     continue;
                 }
                 string msiLog = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(log)) ?? Path.GetTempPath(),
@@ -127,12 +128,12 @@ internal static class RemoveUserRst
     }
 
     /// <summary>The product's version when it is installed per user for the current user, otherwise null.</summary>
-    private static string PerUserVersion(string productCode)
+    private static string PerUserVersion(string productCode, out uint result)
     {
         uint length = 64;
-        StringBuilder value = new StringBuilder((int)length);
-        uint r = MsiGetProductInfoEx(productCode, null, MsiInstallContextUserUnmanaged, "VersionString", value, ref length);
-        return r == ErrorSuccess ? value.ToString() : null;
+        StringBuilder value = new StringBuilder((int)length + 1);
+        result = MsiGetProductInfoEx(productCode, null, MsiInstallContextUserUnmanaged, "VersionString", value, ref length);
+        return result == ErrorSuccess ? value.ToString() : null;
     }
 
     /// <summary>True when this process holds the Administrators group (elevated, or UAC off).</summary>

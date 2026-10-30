@@ -301,7 +301,7 @@ $cas = @((Get-MsiQuery $Msi 'SELECT `Action`, `Type`, `Source`, `Target` FROM `C
 $cas | ForEach-Object { Write-Host "  CustomAction: $($_ -join ' | ')" }
 $unexpected = @($cas | Where-Object { $_[0] -notmatch '^(Wix4(Sched|Exec)XmlFile.*|Wix4ExecXmlFileRollback.*|Wix4CloseApplications.*|Wix4CheckRebootRequired.*|WixUI.*|WIXUI.*)$' })
 Assert ($unexpected.Count -eq 0) "every custom action is one of WiX's XmlFile, CloseApplication or WixUI actions ($($unexpected | ForEach-Object { $_[0] }))"
-$reg = @(Get-MsiQuery $Msi 'SELECT `Root`, `Key`, `Name`, `Value` FROM `Registry`' 4)
+$reg = Get-MsiQuery $Msi 'SELECT `Root`, `Key`, `Name`, `Value` FROM `Registry`' 4   # not @(...): a one-row result must stay one row
 $reg | ForEach-Object { Write-Host "  Registry: $($_ -join ' | ')" }
 Assert ($reg.Count -eq 1 -and $reg[0][0] -eq '-1' -and $reg[0][1] -eq 'Software\Microsoft\Windows\CurrentVersion\Run' -and $reg[0][2] -eq 'RST' -and $reg[0][3] -eq '"[TrayDir]RST.Tray.exe" --startup') 'the only registry row is the HKMU (HKLM here) Run value RST'
 $xml = @((Get-Tables $Msi) | Where-Object { $_ -match 'XmlFile' })
