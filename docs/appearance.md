@@ -28,7 +28,7 @@ The branding panel sits at the leading edge of the tab so the curated ribbon is 
 
 ### Setting a logo
 
-Branding is a setting for the machine (per Windows user), not part of a profile. Set it in the Builder: click **Branding ▾**, then **Pick…** and choose an image (PNG, JPG, SVG or BMP). rst-c resizes it to 85×85 pixels and saves it as `%AppData%\RST\branding.png`; the original file is not changed. **×** clears it. The dot on the Branding button is filled while a logo or URL is set.
+Branding is a setting for the machine (per Windows user), not part of a profile. Set it in the Builder: click **Branding ▾**, then **Pick…** and choose an image. rst-c resizes a PNG, JPG or BMP to 85×85 pixels and saves it as `%AppData%\RST\branding.png`; the original file is not changed. The dialog also offers SVG, but an SVG is copied as picked, without resizing, and the ribbon may not display it. **×** clears it. The dot on the Branding button is filled while a logo or URL is set.
 
 The logo appears on every profile tab on this machine that does not carry its own logo (see below), the next time the tab is built. On first launch with no logo set, rst-c seeds `branding.png` with the bundled RST logo.
 
@@ -82,7 +82,7 @@ The effect is purely visual: colour changes nothing about how commands behave.
 
 - Colours are applied when the profile tab is built, and update when a new profile is loaded.
 - If a hex colour cannot be read, rst-c falls back to a plain colour without rounded corners rather than failing the whole load.
-- The Builder converts the picked logo to an 85×85 PNG. If it cannot read the image, it stores the file as picked, and the ribbon may not be able to show it; PNG is the safest choice.
+- The Builder converts the picked logo to an 85×85 PNG. If it cannot read the image (any SVG, or a damaged file), it stores the file as picked, unresized, and the ribbon may not be able to show it; PNG is the safest choice.
 - Per-profile branding in the profile JSON comes from imported (or hand-edited) profiles. The Builder itself never writes per-profile branding.
 - Opacity applies to the colour fill; the panel's icons and labels are not affected.
 - **rst-c's windows** take Revit's UI theme (Options → Colors → UI active theme, including "Use system setting") when they open. Change Revit's theme while one is open and it keeps its theme until you reopen it.

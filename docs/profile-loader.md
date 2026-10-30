@@ -32,7 +32,7 @@ Click **Loader** on the **RST** panel of the **Add-Ins** tab. The window, titled
 - **Details (right):** the selected profile's name (with **● Loaded** when it is the loaded one), its Tab, Min Revit and Updated date, and three sections:
   - **Tab Preview:** a read-only picture of the ribbon tab the profile builds: its panels, their colours and the tools' icons and names.
   - **RSTify: Hide These Tabs:** one switch per ribbon tab the profile can hide. See [Ribbon Tools](ribbon-tools.md).
-  - **Required Add-ins for this profile:** each add-in the profile depends on, with its file name, an **info ↗** link where the profile has one, and a status pill: **Native** (built into Revit), **Loaded**, **Installed**, **Disabled** or **Not Found**.
+  - **Required Add-ins for this profile:** each add-in the profile depends on, with its file name, an **info ↗** link where the profile has one, and a status pill: **Native** (built into Revit), **Loaded** or **Not Found**. A required add-in that rst-c has disabled (renamed to `.addin.RSTdisabled`) shows **Not Found** here; when you load the profile, the Add-in Check re-enables it.
 - **Footer:** **Unload Profile** and **Delete Profile** on the left; **Restore All Add-ins** and the **Disable unused add-ins** switch in the middle; **Load Profile →** and **Close** on the right.
 
 ### Browsing and previewing

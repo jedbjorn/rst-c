@@ -56,7 +56,7 @@ RSTify sets `IsVisible` on `Autodesk.Windows.RibbonTab` objects — the same pro
 
 ### What it does
 
-A profile can declare the add-ins it depends on; the Builder works this list out from the commands used when the profile is saved. The Loader shows each one's status (Native, Loaded, Installed, Disabled or Not Found) as soon as you select the profile. When the profile is loaded, rst-c checks the machine against that list and takes one of three actions per entry, then shows the result in the **Add-in Check** dialog:
+A profile can declare the add-ins it depends on; the Builder works this list out from the commands used when the profile is saved. The Loader shows each one's status (Native, Loaded or Not Found) as soon as you select the profile. A required add-in that rst-c has disabled (renamed to `.addin.RSTdisabled`) shows **Not Found** here; when you load the profile, the Add-in Check re-enables it. When the profile is loaded, rst-c checks the machine against that list and takes one of three actions per entry, then shows the result in the **Add-in Check** dialog:
 
 | Status | What happened | rst-c action |
 |---|---|---|

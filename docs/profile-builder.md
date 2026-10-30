@@ -87,7 +87,7 @@ The chosen icon shows on the tool's row, in the Live Preview and on the ribbon. 
 
 ### Properties
 
-- **Profile:** **Min Revit Version** (default `0.1.0`) and **Panel Opacity**, from 10 to 100 in steps of 5. Opacity sets how strongly every panel's colour is drawn; users can override it in the Loader.
+- **Profile:** **Min Revit Version** (default `0.1.0`; informational, see [Notes & limits](#notes--limits)) and **Panel Opacity**, from 10 to 100 in steps of 5. Opacity sets how strongly every panel's colour is drawn; users can override it in the Loader.
 - **Selected Panel:** the panel's **Name**; its **Color**, as a swatch and a hex box (`#RRGGBB`, applied when you press Enter or leave the box). The swatch opens the colour picker, with a palette, recent colours, a hex box and a tool to pick a colour from anywhere on screen. **+ URL Button** opens a small editor with **Button label** and **URL** boxes: **Add** appends a link button to the panel (see [Custom URL Slots](custom-url-slots.md)) and **Cancel** discards it. Both boxes are required.
 - **RST Presets:** a summary (for example "2 tabs hidden • Disable Unused: on") and **Configure**.
 - **Junk Cleanup:** a summary ("5 of 6 targets enabled.") and **Configure**.
@@ -127,7 +127,7 @@ When you save, the Builder works out which add-ins the profile depends on from t
 
 **Branding ▾** opens a small panel for the company branding. It is a setting for this machine, not part of a profile. The dot on the button is filled when a logo or URL is set.
 
-- **Logo:** **Pick…** chooses an image (PNG, JPG, SVG or BMP); rst-c resizes it to 85×85 and stores it as `%AppData%\RST\branding.png`. **×** clears it. The file name, or "(none)", is shown beside them.
+- **Logo:** **Pick…** chooses an image; rst-c resizes a PNG, JPG or BMP to 85×85 and stores it as `%AppData%\RST\branding.png`. The dialog also offers SVG, but an SVG is copied as picked, without resizing, and the ribbon may not display it. **×** clears it. The file name, or "(none)", is shown beside them.
 - **URL:** a link kept with the branding and included in exported profiles. It is saved when you press Enter or leave the box.
 - **Done**, a click outside the panel, or **Escape** closes it. The panel takes the keyboard focus when it opens, so Escape works straight away.
 
@@ -190,5 +190,5 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 - The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means the catalogue could not be read.
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
-- **Min Revit Version** records the oldest rst-c version the profile needs. Profiles that use newer features may not load on older installs.
+- **Min Revit Version** is informational: the Loader shows it on the profile's card and details ("Min Revit"), but rst-c does not check or enforce it when a profile is loaded.
 - The Builder makes plain panels of large buttons. It does not create stacks (grouped buttons). Stacks in a hand-edited profile still appear in the previews.
