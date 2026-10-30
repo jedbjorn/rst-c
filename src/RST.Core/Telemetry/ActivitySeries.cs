@@ -1,6 +1,6 @@
 // ActivitySeries.cs — the Activity tab's precomputed series, as returned
-// by ActivityAggregator. The bridge (RST.UI) serializes these to small
-// JSON payloads; the HTML never parses JSONL.
+// by ActivityAggregator. RST.UI's Health window reads these objects
+// directly (HealthService); only the aggregator parses the JSONL outbox.
 //
 // All timestamps stay UTC on the wire — the dashboard converts for
 // display. Per-day buckets are calendar days in the zone the caller
