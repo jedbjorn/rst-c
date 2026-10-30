@@ -1,5 +1,6 @@
 // Adapted from splash-it tests/SplashIt.RuntimeTests/Support/Fakes.cs (splash-it commit ba86a71), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); FakeDialogs and TempFolder only (splash-it's FakeHost fakes its settings host, which rst-c does not have).
+// Changes: namespaces (SplashIt.* to RST.*); FakeDialogs and TempFolder only (splash-it's FakeHost fakes its settings host, which rst-c does not have);
+// FakeDialogs answers Choose (the three-way prompt).
 
 using System.IO;
 using RST.Core.Colors;
@@ -35,6 +36,16 @@ public sealed class FakeDialogs : IDialogService
     {
         ConfirmCalls.Add((title, message, confirmText, danger, automationId));
         return ConfirmResult;
+    }
+
+    public Queue<DialogChoice> ChooseAnswers { get; } = new();
+
+    public List<(string Title, string Message, string PrimaryText, string SecondaryText, string AutomationId)> ChooseCalls { get; } = [];
+
+    public DialogChoice Choose(string title, string message, string primaryText, string secondaryText, string automationId)
+    {
+        ChooseCalls.Add((title, message, primaryText, secondaryText, automationId));
+        return ChooseAnswers.Count > 0 ? ChooseAnswers.Dequeue() : DialogChoice.Cancel;
     }
 
     public Rgb? PickColor(Rgb current, IReadOnlyList<Rgb> palette, string title)

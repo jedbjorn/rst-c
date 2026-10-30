@@ -1,6 +1,6 @@
 <!--
-    Copied from splash-it src/SplashIt.UI/Dialogs/MessageDialog.xaml (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/MessageDialog.xaml, gantt-it commit a96d0a1), MIT, same owner.
-    Changes: namespaces (SplashIt.* to RST.*).
+    Adapted from splash-it src/SplashIt.UI/Dialogs/MessageDialog.xaml (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/MessageDialog.xaml, gantt-it commit a96d0a1), MIT, same owner.
+    Changes: namespaces (SplashIt.* to RST.*); an optional second action button between Confirm and Cancel (SecondaryText).
 -->
 <Window x:Class="RST.UI.Dialogs.MessageDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -24,6 +24,9 @@
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button x:Name="ConfirmButton" Content="{Binding ConfirmText}" IsDefault="True" Click="OnConfirm"
                     AutomationProperties.AutomationId="Dialog.Confirm" MinWidth="88" />
+            <Button x:Name="SecondaryButton" Content="{Binding SecondaryText}" Click="OnSecondary" Margin="8,0,0,0" MinWidth="88"
+                    Visibility="{Binding HasSecondary, Converter={StaticResource BoolToVisible}}"
+                    AutomationProperties.AutomationId="Dialog.Secondary" />
             <Button x:Name="CancelButton" Content="{x:Static res:UiStrings.Common_Cancel}" IsCancel="True" Margin="8,0,0,0" MinWidth="88"
                     Visibility="{Binding HasCancel, Converter={StaticResource BoolToVisible}}"
                     AutomationProperties.AutomationId="Dialog.Cancel" />
