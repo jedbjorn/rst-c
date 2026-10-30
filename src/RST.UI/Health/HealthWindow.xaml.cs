@@ -1,7 +1,10 @@
 // rst-c's own (not vendored): the Health window's code-behind (spec #16, WU2). The window binds to a
 // HealthViewModel; HealthLauncher builds both, owns the window to Revit and shows it modally.
 
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Threading;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
 
@@ -17,9 +20,11 @@ public partial class HealthWindow : Window
         DarkTitleBar.Attach(this);
         DataContext = viewModel;
         viewModel.RequestClose += OnRequestClose;
+        viewModel.PropertyChanged += OnViewModelChanged;
         Closed += (_, _) =>
         {
             viewModel.RequestClose -= OnRequestClose;
+            viewModel.PropertyChanged -= OnViewModelChanged;
             viewModel.Dispose();
         };
     }
@@ -33,4 +38,11 @@ public partial class HealthWindow : Window
     }
 
     private void OnRequestClose(object? sender, EventArgs e) => Close();
+
+    /// <summary>The Junk modal takes the keyboard focus when it opens (the content behind it is disabled).</summary>
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(HealthViewModel.IsJunkOpen) || !ViewModel.IsJunkOpen) return;
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => JunkCard.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)));
+    }
 }

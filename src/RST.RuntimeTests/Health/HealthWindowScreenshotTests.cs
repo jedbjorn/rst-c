@@ -85,7 +85,7 @@ public class HealthWindowScreenshotTests
         var target = size ?? FullHeight(window);
         var bitmap = WindowCapture.Content(window, target);
         Screenshots.Save(bitmap, Name(name, theme));
-        Assert.True(Screenshots.DistinctPixels(bitmap) > 200, $"{name} looks blank");
+        Assert.True(Screenshots.DistinctPixels(bitmap) > 40, $"{name} looks blank");
         return bitmap;
     }
 

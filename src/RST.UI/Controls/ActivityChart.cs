@@ -29,7 +29,7 @@ public sealed class ActivityChart : Viewbox
     {
         Width = ActivityChartLayout.Width,
         Height = ActivityChartLayout.Height,
-        ClipToBounds = true,
+        ClipToBounds = false, // the end ticks' labels may run a few pixels past the box, as the SVG text could
         SnapsToDevicePixels = true,
     };
 
