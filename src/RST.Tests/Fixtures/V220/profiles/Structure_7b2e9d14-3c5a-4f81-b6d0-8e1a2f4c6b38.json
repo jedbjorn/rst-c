@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "7b2e9d14-3c5a-4f81-b6d0-8e1a2f4c6b38",
+  "profile": "Structure",
+  "tab": "Studio Struct",
+  "min_version": "2.1.0",
+  "exportDate": "2026-08-02",
+  "panelOpacity": 60,
+  "requiredAddins": [
+    {
+      "tabName": "Structure"
+    },
+    {
+      "tabName": "Ideate",
+      "displayName": "Ideate BIMLink",
+      "addinFile": "Ideate.BIMLink.addin",
+      "url": "https://ideatesoftware.com/ideatebimlink"
+    }
+  ],
+  "hideRules": [],
+  "stacks": {},
+  "panels": [
+    {
+      "name": "Frame",
+      "color": "#ef4444",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "Beam",
+          "commandId": "ID_OBJECTS_BEAM",
+          "sourceTab": "Structure",
+          "sourcePanel": "Structure",
+          "iconFile": "pack:parallel_red"
+        },
+        {
+          "type": "tool",
+          "name": "Column",
+          "commandId": "ID_OBJECTS_COLUMN",
+          "sourceTab": "Structure",
+          "sourcePanel": "Structure",
+          "iconFile": "pack:box_stack_dark_grey"
+        }
+      ]
+    },
+    {
+      "name": "Data",
+      "color": "#14b8a6",
+      "slots": [
+        {
+          "type": "tool",
+          "name": "BIMLink",
+          "commandId": "Ideate.BIMLink",
+          "sourceTab": "Ideate",
+          "sourcePanel": "Ideate",
+          "iconFile": "pack:sync_blue"
+        }
+      ]
+    }
+  ],
+  "presets": {
+    "hiddenTabs": [
+      "Massing & Site",
+      "Collaborate"
+    ],
+    "disableUnusedAddins": true
+  }
+}

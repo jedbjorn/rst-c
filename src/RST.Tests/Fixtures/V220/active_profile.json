@@ -1,0 +1,13 @@
+{
+  "profile": "Architecture",
+  "profile_id": "1f0c6a52-6b0e-4d6f-9a3e-2c8d4b7e9a10",
+  "profile_file": "Architecture_1f0c6a52-6b0e-4d6f-9a3e-2c8d4b7e9a10.json",
+  "tab": "Studio Arch",
+  "loaded_at": "2026-10-01T08:30:00.0000000",
+  "hidden_tabs": [
+    "Analyze"
+  ],
+  "disable_non_required": false,
+  "blank": false,
+  "IsBlank": false
+}
