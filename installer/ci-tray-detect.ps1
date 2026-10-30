@@ -2,7 +2,7 @@
   rst-c's own: AC5's fixture half (feature #17, spec #20 §6; F17 WU3). The tray's companion detection
   (RST.Tray's MsiProducts over msi.dll, then RST.Core's ProductDetection with the real manifest scan) against
   spec #15's fixture companion MSI, the test-only RST-CompanionFixture-<v>.msi the bundle job already builds
-  (installer-bundle/fixture, artifact bundle-test). No Revit and no real companion needed.
+  (installer-bundle/fixture; the tray-detect CI job builds 1.0.0, 1.1.0 and 2.0.0 from it). No Revit and no real companion needed.
 
   For each scenario this script installs or removes the fixture with msiexec, then writes what Windows
   Installer itself reports into an expectation file:

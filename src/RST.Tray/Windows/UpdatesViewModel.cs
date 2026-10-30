@@ -36,16 +36,21 @@ internal interface ITrayUpdatesHost
 /// <summary>One product's row (Apps page) or line (Updates page). Immutable: a new snapshot makes new rows.</summary>
 internal sealed class ProductRowViewModel
 {
-    public ProductRowViewModel(ProductStatus status, ICommand releasePage)
+    /// <param name="detected">Detection has run. Before it has, the row claims no state: no pill, no button.</param>
+    public ProductRowViewModel(ProductStatus status, ICommand releasePage, bool detected = true)
     {
         Status = status ?? throw new ArgumentNullException(nameof(status));
         ReleasePageCommand = releasePage;
         State = status.State;
+        IsKnown = detected;
     }
 
     public ProductStatus Status { get; }
 
     public ProductState State { get; }
+
+    /// <summary>Detection has run, so the state is real (false: "Looking for installed apps…").</summary>
+    public bool IsKnown { get; }
 
     public string Id => Status.Product.Id;
 
@@ -77,17 +82,17 @@ internal sealed class ProductRowViewModel
         _ => TrayStrings.State_NotInstalled,
     };
 
-    public bool IsUpToDate => State == ProductState.UpToDate;
+    public bool IsUpToDate => IsKnown && State == ProductState.UpToDate;
 
-    public bool IsUpdateAvailable => State == ProductState.UpdateAvailable;
+    public bool IsUpdateAvailable => IsKnown && State == ProductState.UpdateAvailable;
 
-    public bool IsManual => State == ProductState.InstalledManually;
+    public bool IsManual => IsKnown && State == ProductState.InstalledManually;
 
     /// <summary>Not installed, or installed with the latest not known: the neutral pill.</summary>
-    public bool IsNeutral => State is ProductState.NotInstalled or ProductState.Installed;
+    public bool IsNeutral => IsKnown && State is ProductState.NotInstalled or ProductState.Installed;
 
     /// <summary>Update (an update is out) or Install (a companion that is not installed); null: no button.</summary>
-    public string? ActionText => State switch
+    public string? ActionText => !IsKnown ? null : State switch
     {
         ProductState.UpdateAvailable => TrayStrings.App_Update,
         ProductState.NotInstalled when !Status.Product.IsRst => TrayStrings.App_Install,
@@ -215,7 +220,7 @@ internal sealed class UpdatesViewModel : ObservableObject
     }
 
     private IReadOnlyList<ProductRowViewModel> Build(UpdateSnapshot snapshot) =>
-        snapshot.Products.Select(s => new ProductRowViewModel(s, _releasePage)).ToList();
+        snapshot.Products.Select(s => new ProductRowViewModel(s, _releasePage, snapshot.Detected)).ToList();
 
     private void OnChanged(object? sender, EventArgs e) => Refresh();
 }

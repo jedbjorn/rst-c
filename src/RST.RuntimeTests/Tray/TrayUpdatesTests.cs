@@ -337,11 +337,18 @@ public class UpdatesViewModelTests
     public void An_RST_that_Windows_Installer_does_not_know_gets_no_Install_button()
     {
         var snapshot = UpdateSnapshot.Empty(ProductCatalog.Default, true);
-        var vm = new UpdatesViewModel(new FakeUpdatesHost { Current = snapshot }, () => new UpdateChecksState(true, false));
+        var host = new FakeUpdatesHost { Current = snapshot };
+        var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
+        Assert.True(vm.IsDetecting);
+        Assert.All(vm.Rows, r => Assert.Null(r.ActionText)); // before detection a row claims nothing
+        Assert.All(vm.Rows, r => Assert.False(r.IsNeutral || r.IsUpToDate || r.IsUpdateAvailable || r.IsManual));
+
+        host.Publish(snapshot with { Detected = true });
+        Assert.False(vm.IsDetecting);
         Assert.Null(vm.Rst.ActionText);
         Assert.Equal("RST", vm.RstHeadline);
-        Assert.True(vm.IsDetecting);
         Assert.Equal("Install", vm.Rows[1].ActionText);
+        Assert.True(vm.Rows[1].IsNeutral);
     }
 
     [Fact]

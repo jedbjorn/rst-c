@@ -44,7 +44,8 @@ name: _build (reusable)
 #   • release-sums — build/sha256sums.sh self-test over this build's
 #                    RST.msi and RST-Setup.exe (feature #17, spec #20 §8).
 #   • tray-detect  — Windows runner: the tray's companion detection against
-#                    the fixture companion MSI (installer/ci-tray-detect.ps1,
+#                    the fixture companion MSI, built in the job from the
+#                    bundle's fixture project (installer/ci-tray-detect.ps1,
 #                    feature #17 AC5).
 #
 # WiX MSI emission is officially Windows-only (installer/README.md). The
@@ -422,27 +423,35 @@ jobs:
       - run: build/sha256sums.sh self-test artifacts RST.msi RST-Setup.exe
 
   # Companion detection (feature #17, spec #20 §6, AC5's fixture half): the
-  # tray's MsiProducts and ProductDetection against the bundle job's fixture
-  # companion MSI (bundle-test artifact), installed per user, upgraded,
-  # installed per machine and hand-copied as a bare .addin. Each scenario's
-  # versions and context must match what Windows Installer reports.
+  # tray's MsiProducts and ProductDetection against spec #15's fixture
+  # companion MSI, installed per user, upgraded, installed per machine and
+  # hand-copied as a bare .addin. Each scenario's versions and context must
+  # match what Windows Installer reports. The fixture MSIs are built here from
+  # the same project, versions and options as the bundle job
+  # (installer-bundle/ci-bundle-build.ps1), so this job needs no RST.msi and
+  # runs beside the MSI and bundle smokes.
   tray-detect:
     name: Tray detection (fixture MSI)
-    needs: bundle
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - uses: actions/download-artifact@v4
-        with:
-          name: bundle-test
-          path: bundle-test/
+      - name: Build the fixture companion MSIs (1.0.0, 1.1.0, 2.0.0)
+        shell: pwsh
+        run: |
+          $out = New-Item -ItemType Directory -Force fixture-msi
+          foreach ($v in '1.0.0', '1.1.0', '2.0.0') {
+            dotnet build installer-bundle/fixture/RST.CompanionFixture.wixproj -c Release --nologo "-p:FixtureVersion=$v" "-p:IntermediateOutputPath=obj\v$v\"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item "installer-bundle/fixture/bin/Release/RST-CompanionFixture-$v.msi" $out
+          }
+          Get-ChildItem $out | Format-Table Name, Length
       - run: dotnet build src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
       - name: Detection smoke
         shell: pwsh
-        run: installer/ci-tray-detect.ps1 -FixtureDir bundle-test/test
+        run: installer/ci-tray-detect.ps1 -FixtureDir fixture-msi
       - name: Upload detection results and msiexec logs
         if: always()
         uses: actions/upload-artifact@v4
