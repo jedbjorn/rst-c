@@ -1,4 +1,8 @@
-// LoaderWindow.xaml.cs — WPF host for the WebView2-rendered loader UI.
+// LoaderWindow.xaml.cs — WPF host for the WebView2-rendered Profile Builder.
+//
+// Since spec #16 WU3 this window shows only profile_builder.html: the
+// Profile Loader is the native ProfileLoaderWindow. The Builder stays on
+// WebView2 until WU5.
 //
 // Boot sequence:
 //   1. Construct CoreWebView2Environment under %LocalAppData%\RST\WebView2
@@ -7,7 +11,7 @@
 //      relative paths exactly as it did under pywebview.
 //   3. Inject pywebview-shim.js at document_start.
 //   4. Register LoaderBridge as host object "api".
-//   5. Navigate to https://rst.ui/profile_loader.html.
+//   5. Navigate to https://rst.ui/profile_builder.html.
 
 using System;
 using System.Collections.Generic;
@@ -22,18 +26,15 @@ using Serilog;
 
 namespace RST.UI.Loader;
 
-public enum LoaderInitialPage { Loader, Builder }
-
 public partial class LoaderWindow : Window
 {
     private const string VirtualHost = "rst.ui";
+    private const string LandingFile = "profile_builder.html";
     private readonly LoaderBridge _bridge;
-    private readonly LoaderInitialPage _initialPage;
 
     public LoaderWindow(string revitVersion,
                         IReadOnlyList<ScannedCommand> catalog,
                         IProfileSwitchScheduler? switchScheduler = null,
-                        LoaderInitialPage initialPage = LoaderInitialPage.Loader,
                         IReadOnlyList<string>? allTabs = null)
     {
         InitializeComponent();
@@ -41,7 +42,6 @@ public partial class LoaderWindow : Window
                                    () => Dispatcher.BeginInvoke(new Action(Close)),
                                    switchScheduler,
                                    allTabs);
-        _initialPage = initialPage;
         Loaded += async (_, _) => await InitializeWebViewAsync();
     }
 
@@ -84,10 +84,7 @@ public partial class LoaderWindow : Window
                                 e.HttpStatusCode, e.WebErrorStatus);
             };
 
-            var landingFile = _initialPage == LoaderInitialPage.Builder
-                ? "profile_builder.html"
-                : "profile_loader.html";
-            var landing = $"https://{VirtualHost}/{landingFile}";
+            var landing = $"https://{VirtualHost}/{LandingFile}";
             Log.Information("WebView2 initialised: assetsDir={AssetsDir}, userData={UserData}, landing={Landing}",
                             assetsDir, userDataDir, landing);
             core.Navigate(landing);
