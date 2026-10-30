@@ -61,9 +61,14 @@
                    table; for files laid down by the MSI itself, normal
                    uninstall removes them — the RemoveFile table is for
                    files the *app* creates at runtime, which we don't.
+           ICE61 — warns that MajorUpgrade/@AllowSameVersionUpgrades also
+                   replaces an install of the same ProductVersion. That is
+                   deliberate (Product.wxs): an rc and its final share the
+                   numeric a.b.c, and must not end up side by side. Same
+                   suppression as gantt-it and splash-it.
          Combined with the repo-wide TreatWarningsAsErrors=true these
          block the build despite being non-issues for a perUser MSI. -->
-    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+    <SuppressIces>ICE38;ICE64;ICE91;ICE61</SuppressIces>
   </PropertyGroup>
 
   <!-- WixUI dialog set for the branded setup UI (WixUI_Minimal in
