@@ -334,18 +334,25 @@ public class ProfileBuilderWindowFlowTests
             w.Activate();
             ToggleBranding(w);
             Assert.True(w.BrandingPopup.IsOpen);
-            Assert.True(w.PickLogoButton.IsKeyboardFocused
-                || ReferenceEquals(System.Windows.Input.FocusManager.GetFocusedElement(w), w.PickLogoButton),
-                "opening focuses the popover's first control (Pick…)");
+            // Where a key press goes: the keyboard focus, or (when the off-screen test window cannot take
+            // keyboard focus) the window's logical focus. Without the fix this is outside the popover.
+            var focused = System.Windows.Input.Keyboard.FocusedElement as DependencyObject;
+            if (focused is null || !IsUnder(focused, w.BrandingPopover))
+                focused = System.Windows.Input.FocusManager.GetFocusedElement(w) as DependencyObject;
+            Assert.NotNull(focused);
+            Assert.True(IsUnder(focused, w.BrandingPopover), "opening moves focus inside the popover");
+            Assert.Same(w.PickLogoButton, focused);
 
+            // Escape at the focused element (as a real key press) reaches the popup's own key handler,
+            // which handles it and closes the popover. From outside the popover it would not.
             var args = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
-                PresentationSource.FromVisual(w.PickLogoButton) ?? PresentationSource.FromVisual(w)!, 0, System.Windows.Input.Key.Escape)
+                PresentationSource.FromVisual(focused as System.Windows.Media.Visual ?? w)!, 0, System.Windows.Input.Key.Escape)
             {
                 RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
             };
-            w.PickLogoButton.RaiseEvent(args);
+            ((System.Windows.IInputElement)focused).RaiseEvent(args);
             Settle();
-            Assert.True(args.Handled);
+            Assert.True(args.Handled, "the popover's key handler handled Escape");
             Assert.False(w.BrandingPopup.IsOpen, "the first Escape closes the popover");
             Assert.False(w.BrandingButton.IsChecked);
         }
