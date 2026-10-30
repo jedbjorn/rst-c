@@ -219,11 +219,12 @@ public class AddInsViewModelTests
         var vm = f.ViewModel();
         await vm.RefreshAsync();
         vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        // The plan the Loader makes for the same inputs, before anything runs.
+        var loaderPlan = new AddinMaintenanceService(f.Root.Paths, f.Switching).PlanLoad("F16 Lean", AddInsFixture.LeanId, true).Plan!;
 
         await vm.ApplyAsync();
 
-        // The same plan the Loader makes for the same inputs, and the Loader's Confirm model of it.
-        var loaderPlan = new AddinMaintenanceService(f.Root.Paths, f.Switching).PlanLoad("F16 Lean", AddInsFixture.LeanId, true).Plan!;
+        // The tray confirmed the Loader's plan, through the Loader's Confirm model of it.
         var confirm = Assert.Single(f.Dialogs.Confirmed);
         var expected = ConfirmAddinChangesModel.From(loaderPlan);
         Assert.Equal(expected.SwitchingOff, confirm.SwitchingOff);
