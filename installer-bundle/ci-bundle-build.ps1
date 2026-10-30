@@ -50,7 +50,7 @@ function Assert([bool]$Cond, [string]$What) {
 }
 function Invoke-Dotnet([string[]]$DotnetArgs) {
   Write-Host "dotnet $($DotnetArgs -join ' ')"
-  & dotnet @DotnetArgs
+  & dotnet @DotnetArgs | Out-Host   # never into the caller's return value
   if ($LASTEXITCODE -ne 0) { throw "dotnet $($DotnetArgs -join ' ') exited $LASTEXITCODE" }
 }
 function Build-Bundle([string]$Name, [string[]]$Extra) {
