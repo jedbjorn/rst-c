@@ -241,7 +241,7 @@ public sealed class ProfileBuilderStackTests : IDisposable
             return true;
         });
         h.Model.Panels[0].NewStackCommand.Execute(null);
-        Shape(h, 0).Should().Be("[Beam Wall],[Door Window Opening],[Level Grid]", "in the first pick's place, in pick order");
+        Shape(h, 0).Should().Be("[Door Window Opening],[Level Grid],[Beam Wall]", "in the first pick's place (Beam's), in pick order");
         h.Model.Profile.Stacks.Keys.Should().Contain("Stack 1");
         AssertConsistent(h.Model.Profile);
         h.Model.IsDirty.Should().BeTrue();
@@ -263,11 +263,11 @@ public sealed class ProfileBuilderStackTests : IDisposable
             m.Items.Single(i => i.Name == "Wall").LaterCommand.CanExecute(null).Should().BeFalse("already last");
             m.Items.Single(i => i.Name == "Wall").EarlierCommand.Execute(null);
             m.Items.Single(i => i.Name == "Door").LaterCommand.Execute(null);
-            m.Items.Where(i => i.IsChecked).OrderBy(i => i.Order).Select(i => i.Name).Should().Equal("Opening", "Door", "Wall");
+            m.Items.Where(i => i.IsChecked).OrderBy(i => i.Order).Select(i => i.Name).Should().Equal("Wall", "Door", "Opening");
             return true;
         });
         h.Model.Panels[0].StackAt(1).EditCommand.Execute(null);
-        Shape(h, 0).Should().Be("[Opening Door Wall],Window,[Level Grid]", "Window goes back on the panel right after the stack");
+        Shape(h, 0).Should().Be("[Wall Door Opening],Window,[Level Grid]", "Window goes back on the panel right after the stack");
         AssertConsistent(h.Model.Profile);
     }
 
