@@ -35,16 +35,17 @@ public sealed class ProfileBuilderShellTests : IDisposable
     private string[] Files() => Directory.GetFiles(ProfilesDir, "*.json").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray()!;
 
     /// <summary>The real backend on a temp folder holding Architecture and Structure, as the Builder writes them.</summary>
-    private ProfileBuilderBackend RealBackend()
+    private ProfileBuilderBackend RealBackend(FakeScheduler? scheduler = null)
     {
         Directory.CreateDirectory(ProfilesDir);
         foreach (var p in new[] { LoaderFixtures.Architecture(), LoaderFixtures.Structure() })
             ProfileStore.Save(ProfileEditing.ForEditing(p), ProfilesDir);
-        return Reopen();
+        return Reopen(scheduler);
     }
 
-    private ProfileBuilderBackend Reopen() =>
-        new("2026", [], new FakeScheduler(), LoaderFixtures.Ribbon, LoaderPaths.Under(_root), LoaderAssets.LookupPath);
+    /// <param name="scheduler">The live ribbon switch the auto-reload calls (recorded).</param>
+    private ProfileBuilderBackend Reopen(FakeScheduler? scheduler = null) =>
+        new("2026", [], scheduler ?? new FakeScheduler(), LoaderFixtures.Ribbon, LoaderPaths.Under(_root), LoaderAssets.LookupPath);
 
     private static BuilderHarness OpenStructure(IProfileBuilderBackend backend)
     {
@@ -231,16 +232,97 @@ public sealed class ProfileBuilderShellTests : IDisposable
         h.Model.SelectedProfileOption = h.Option("Legacy");
         h.Model.MinVersion = "3.1.0";
 
-        (await h.Model.SaveAsync()).Should().BeTrue("the save stands");
+        var events = new List<RST.Core.Logging.LogEvent>();
+        var previous = RST.Core.Logging.Log.Logger;
+        RST.Core.Logging.Log.Logger = new RST.Core.Logging.Logger(RST.Core.Logging.LogLevel.Verbose, new ListSink(events));
+        try
+        {
+            (await h.Model.SaveAsync()).Should().BeTrue("the save stands");
+        }
+        finally
+        {
+            RST.Core.Logging.Log.Logger = previous;
+        }
         h.Backend.Removed.Should().Equal("Legacy.json");
         h.Model.IsDirty.Should().BeFalse();
+        h.Model.Profile.Id.Should().Be("new-1");
         h.Model.Toast.Kind.Should().Be(BannerKind.Warning);
         h.Model.Toast.Text.Should().Be("Saved as Legacy_new-1.json, but the old file Legacy.json could not be removed (The file is in use). Delete it to avoid a duplicate.");
+        lock (events)
+            events.Should().Contain(e => e.Level == RST.Core.Logging.LogLevel.Warning
+                                         && e.RenderMessage().Contains("Legacy.json could not be removed", StringComparison.Ordinal)
+                                         && e.RenderMessage().Contains("The file is in use", StringComparison.Ordinal),
+                "the failed removal is logged");
 
         // A profile that had an id from the start never removes anything.
         h.Model.SelectedProfileOption = h.Option("Structure");
         h.Model.MinVersion = "3.1.0";
         (await h.Model.SaveAsync()).Should().BeTrue();
         h.Backend.Removed.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task The_file_just_written_is_never_removed_even_when_it_has_the_old_name()
+    {
+        // The fake save names the copy Legacy_new-1.json; the id-less original already has that name.
+        var backend = BuilderFixtures.Backend();
+        var legacy = LoaderFixtures.Structure();
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        backend.Library.Add(new ProfileEntry("Legacy_new-1.json", legacy));
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Model.MinVersion = "3.1.0";
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        h.Backend.Removed.Should().BeEmpty("the save wrote that very file");
+        h.Model.Toast.Kind.Should().Be(BannerKind.Success);
+        h.Model.ProfileOptions.Count(o => o.Display == "Legacy").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Saving_the_loaded_id_less_profile_repoints_the_active_profile_and_reloads_the_ribbon()
+    {
+        var scheduler = new FakeScheduler();
+        var backend = RealBackend(scheduler);
+        var legacy = ProfileEditing.ForEditing(LoaderFixtures.Structure());
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        using (var fs = File.Create(Path.Combine(ProfilesDir, "Legacy_2024-05-01.json")))
+            ProfileSerializer.Write(legacy, fs);
+        var paths = LoaderPaths.Under(_root);
+        ActiveProfile.FromProfile(legacy, "Legacy_2024-05-01.json", ["Analyze"], disableNonRequired: true).Write(paths.ActiveProfileFile);
+
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Modals.Names.Enqueue("Legacy Studio"); // renamed too: the old pointer's name would match nothing
+        h.Model.RenameCommand.Execute(null);
+        (await h.Model.SaveAsync()).Should().BeTrue();
+
+        var id = h.Model.Profile.Id;
+        id.Should().NotBeNullOrEmpty();
+        var file = Files().Single(f => f.StartsWith("Legacy_Studio_", StringComparison.Ordinal));
+        Files().Should().NotContain("Legacy_2024-05-01.json");
+        var active = ActiveProfile.Read(paths.ActiveProfileFile);
+        active.ProfileId.Should().Be(id, "the pointer follows the profile to its new id");
+        active.ProfileFile.Should().Be(file);
+        active.ProfileName.Should().Be("Legacy Studio");
+        active.HiddenTabs.Should().Equal("Analyze");
+        active.DisableNonRequired.Should().BeTrue();
+        ProfileStore.Resolve(active.ProfileName, active.ProfileId, ProfilesDir).Should().NotBeNull("the pointer resolves to a file on disk");
+        scheduler.Scheduled.Should().ContainSingle().Which!.Id.Should().Be(id, "the ribbon was rebuilt from the saved profile");
+        h.Model.Toast.Text.Should().Be("Saved & ribbon reloaded.");
+        h.Model.IsLoadedProfile.Should().BeTrue();
+    }
+
+    private sealed class ListSink(List<RST.Core.Logging.LogEvent> events) : RST.Core.Logging.ILogSink
+    {
+        public void Emit(RST.Core.Logging.LogEvent logEvent, IReadOnlyDictionary<string, object?> properties)
+        {
+            lock (events) events.Add(logEvent);
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }

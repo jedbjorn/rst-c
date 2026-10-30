@@ -69,6 +69,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private IReadOnlyDictionary<string, AddinLookupEntry> _lookup = new Dictionary<string, AddinLookupEntry>();
     private IReadOnlyList<ProfileEntry> _library = [];
     private string? _activeId;
+    // The loaded profile's file when the pointer has no id (a legacy profile with no id is loaded):
+    // its first save in the Builder gives it an id, and the pointer and ribbon follow (F6).
+    private string? _activeIdlessFile;
     private IReadOnlyList<string> _activeHiddenTabs = [];
     private bool _activeDisable;
 
@@ -173,6 +176,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _library = Safe(_backend.GetProfiles, [], "get_profiles");
         var active = Safe<ActiveProfile?>(_backend.GetActiveProfile, null, "get_active_profile");
         _activeId = active is { IsBlank: false } && !string.IsNullOrEmpty(active.ProfileId) ? active.ProfileId : null;
+        _activeIdlessFile = active is { IsBlank: false } && _activeId is null ? active.ProfileFile : null;
         _activeHiddenTabs = active is { IsBlank: false } ? active.HiddenTabs ?? [] : [];
         _activeDisable = active is { IsBlank: false } && active.DisableNonRequired;
         _lookup = Safe(_backend.GetAddinLookup, new Dictionary<string, AddinLookupEntry>(), "get_addin_lookup");
@@ -987,6 +991,17 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _originalName = _profile.ProfileName ?? "";
         OnPropertyChanged(nameof(IsEditMode));
         OnPropertyChanged(nameof(IsLoadedProfile));
+        // A loaded legacy profile with no id (the pointer names its file) is the active one too: the
+        // auto-reload below re-points active_profile.json at the new id and file and rebuilds the tab,
+        // so the pointer is never left on the file this save replaces (F6).
+        var wasActiveIdless = _supersededFile is { } from && _activeIdlessFile is { } activeFile
+                              && string.Equals(from, activeFile, StringComparison.OrdinalIgnoreCase);
+        if (wasActiveIdless)
+        {
+            Log.Information("Builder: the loaded profile had no id; it is now {Id}", _profile.Id);
+            _activeId = _profile.Id;
+            _activeIdlessFile = null;
+        }
         var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
         var oldFileKept = RemoveSupersededFile(result.FileName);
 
@@ -1011,8 +1026,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         try
         {
             var load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
-            if (load.Ok) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success);
-            else ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+            if (!load.Ok) ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+            else if (oldFileKept is null) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success); // else the warning stays
         }
         catch (Exception ex)
         {

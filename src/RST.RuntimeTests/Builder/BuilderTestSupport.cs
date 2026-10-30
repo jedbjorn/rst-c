@@ -85,7 +85,7 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
         if (string.IsNullOrEmpty(copy.ExportDate)) copy.ExportDate = "2026-10-30";
         Saved.Add(copy);
         var fileName = ProfileStore.CanonicalFileName(copy);
-        Library.RemoveAll(e => e.Profile.Id == copy.Id);
+        Library.RemoveAll(e => e.Profile.Id == copy.Id || e.FileName == fileName); // a write replaces a file of that name
         Library.Add(new ProfileEntry(fileName, copy));
         return new SaveOutcome(true, null, fileName, copy);
     }
