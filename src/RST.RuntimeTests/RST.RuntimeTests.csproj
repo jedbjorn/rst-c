@@ -81,6 +81,8 @@
     <ProjectReference Include="..\RST.Tray\RST.Tray.csproj" />
     <!-- F17 WU3: the Core tests' clock, counting handler and fake Windows Installer, shared as source. -->
     <Compile Include="..\RST.Tests\Updates\UpdateTestDoubles.cs" Link="Tray\Shared\UpdateTestDoubles.cs" />
+    <!-- F17 WU4: the fake GitHub (feed, SHA256SUMS.txt, API digest, redirects) and the scripted installers. -->
+    <Compile Include="..\RST.Tests\Updates\InstallTestDoubles.cs" Link="Tray\Shared\InstallTestDoubles.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(RevitVersion)' != '2025'">
     <Compile Remove="Tray\**" />

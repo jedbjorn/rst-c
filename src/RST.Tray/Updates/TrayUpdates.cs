@@ -16,7 +16,8 @@
 //
 // Everything the pages show is an immutable UpdateSnapshot, published through post() (the tray's dispatcher;
 // inline in tests). Building it reads no file and no registry: the "automatic checks" flag is cached, refreshed
-// at each slot (off the UI thread) and by AutomaticChecksChanged. Installs are WU4's: this delivery only notifies.
+// at each slot (off the UI thread) and by AutomaticChecksChanged. A failure's raw reason stays in the log and the
+// snapshot; the pages show only its kind in plain words (WU3 review D3). Installs are InstallCoordinator's (WU4).
 
 using System.Net.Http;
 using RST.Core.Tray;
@@ -41,7 +42,7 @@ internal sealed class TrayUpdates : IDisposable
     private readonly HashSet<string> _failureLogged = new(StringComparer.Ordinal);
     private readonly UpdateState _state;
     private Dictionary<string, ProductInstallation> _installs = new(StringComparer.Ordinal);
-    private string? _failureReason;
+    private FeedResult? _failure;
     private volatile bool _automaticChecks;
     private bool _detected;
     private bool _checking;
@@ -205,7 +206,7 @@ internal sealed class TrayUpdates : IDisposable
                     Apply(product, results[product.Id]);
                 var failures = _catalog.Products.Where(p => results[p.Id].Outcome == FeedOutcome.Failed).ToList();
                 // "Last checked" is the last SUCCESSFUL check: a failed one leaves it where it was.
-                _failureReason = failures.Count == 0 ? null : results[failures[0].Id].Reason ?? "unknown error";
+                _failure = failures.Count == 0 ? null : results[failures[0].Id];
                 if (failures.Count == 0) _state.LastCheckedUtc = _time.GetUtcNow();
                 snapshot = BuildLocked();
                 announce = _state.ToNotify(snapshot.Products);
@@ -273,7 +274,9 @@ internal sealed class TrayUpdates : IDisposable
         _checking,
         _automaticChecks,
         _detected,
-        _failureReason);
+        _failure is null ? null : _failure.Reason ?? "unknown error",
+        _failure?.Failure ?? NetFailure.Unexpected,
+        _failure?.Status);
 
     private void Publish()
     {

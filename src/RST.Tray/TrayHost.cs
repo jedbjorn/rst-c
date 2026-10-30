@@ -3,6 +3,8 @@
 // update-check notice, and it ends the process cleanly on Quit, on WM_CLOSE (Windows Installer's
 // util:CloseApplication) and at sign-out. Event-driven: no polling. Besides the icon's short add retries at sign-in,
 // its one timer is the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing.
+// Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, never while Revit runs, msiexec for
+// a companion, and for RST itself the updater copy (SelfUpdater), after which the tray quits.
 
 using System.Diagnostics;
 using System.IO;
@@ -34,6 +36,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private TrayIcon? _icon;
     private HttpClient? _http;
     private TrayUpdates? _updates;
+    private InstallCoordinator? _installs;
+    private RevitWatch? _revit;
+    private SelfUpdater? _selfUpdater;
+    private CancellationTokenSource? _revitPageWatch;
     private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
     private TrayPage _page = TrayPage.Updates;
@@ -63,10 +69,55 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     public UpdateSnapshot Current => _updates?.Current ?? UpdateSnapshot.Empty(ProductCatalog.Default, _checks.Enabled);
 
-    public event EventHandler? Changed
+    /// <summary>The checker's snapshot or an install changed (on the UI thread).</summary>
+    public event EventHandler? Changed;
+
+    // F17 WU4: installs.
+
+    public IReadOnlyDictionary<string, InstallProgress> Installs => _installs?.Current ?? ITrayUpdatesHost.EmptyInstalls;
+
+    public bool RevitRunning => _installs?.RevitRunning ?? false;
+
+    public bool PerMachineTray => _selfUpdater?.PerMachineTray ?? false;
+
+    /// <summary>Install or Update: the product's latest version, through every check (InstallCoordinator). Never blocks.</summary>
+    public void Install(ProductInfo product)
     {
-        add { if (_updates is not null) _updates.Changed += value; }
-        remove { if (_updates is not null) _updates.Changed -= value; }
+        if (_quitting || _installs is null) return;
+        var status = Current.Products.FirstOrDefault(p => p.Product.Id == product.Id);
+        if (status?.Latest is not { } latest)
+        {
+            Log.Warning("install {Product}: no latest version known yet", product.Name);
+            return;
+        }
+        Log.Information("install {Product} {Version} (asked by the user)", product.Name, latest);
+        _ = _installs.InstallAsync(product, latest);
+    }
+
+    public void ReinstallPrevious(ProductInfo product)
+    {
+        if (_quitting || _installs is null) return;
+        Log.Information("reinstall the previous {Product} (asked by the user)", product.Name);
+        _ = _installs.ReinstallPreviousAsync(product);
+    }
+
+    public void CancelInstall(ProductInfo product) => _installs?.Cancel(product.Id);
+
+    /// <summary>Opens one of the tray's msiexec logs in Notepad (only a file in the tray's install-log folder).</summary>
+    public void OpenLog(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            if (!SelfUpdater.IsUnder(full, TrayPaths.InstallLogsDir) || !File.Exists(full)) return;
+            var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "notepad.exe")) { UseShellExecute = false };
+            start.ArgumentList.Add(full);
+            Process.Start(start)?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "could not open the install log {Path}", path);
+        }
     }
 
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
@@ -120,6 +171,12 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _icon.SessionEnding += (_, _) => QuitNow("sign-out", insideWindowMessage: true);
         _icon.ThemeChanged += (_, _) => OnWindowsThemeChanged();
         _icon.Resumed += (_, _) => _updates?.Resumed();
+        // WU3 review D2: an icon Explorer puts back (TaskbarCreated) also sends a notification that waited for it.
+        _icon.Readded += (_, _) =>
+        {
+            Log.Information("tray icon added again (Explorer restarted)");
+            if (_pendingAnnounce is { } pending) Announce(pending);
+        };
         ShowIcon();
         AppRestart.Register(m => Log.Warning("{Message}", m));
 
@@ -138,6 +195,29 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             action => _dispatcher.BeginInvoke(action),
             m => Log.Information("{Message}", m));
         _updates.NewVersionsFound += (_, found) => Announce(found);
+        _updates.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+
+        // Installs (F17 WU4): nothing runs until the user clicks Install or Update.
+        _revit = new RevitWatch(log: m => Log.Information("{Message}", m));
+        _selfUpdater = new SelfUpdater(AppContext.BaseDirectory, TrayPaths.UpdaterDir, Environment.ProcessId, m => Log.Information("{Message}", m));
+        _installs = new InstallCoordinator(
+            _updates.Current.Products.Select(p => p.Product),
+            _http,
+            new MsiProducts(m => Log.Warning("{Message}", m)),
+            new MsiDatabase(),
+            new Msiexec(),
+            _revit,
+            _selfUpdater,
+            new InstallPaths(TrayPaths.CacheDir, TrayPaths.InstallLogsDir, TrayPaths.SelfUpdateResultFile),
+            TimeProvider.System,
+            action => _dispatcher.BeginInvoke(action),
+            m => Log.Information("{Message}", m),
+            quitForSelfUpdate: () => Quit("self-update: the updater installs RST"),
+            installsChanged: () => _ = _updates?.RefreshInstalledAsync());
+        _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+        if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed)
+            _ = _updates.RefreshInstalledAsync(); // the updater just ran: show what is installed now
+
         _updates.Start();
         if (_updates.Loop.NextDueUtc is { } due)
             Log.Information("first update check slot at {Due:u}{Off}", due, _checks.Enabled ? "" : " (checks are off: it will make no request)");
@@ -145,6 +225,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
         {
             Log.Information("another launch asked for the window");
+            _installs?.RefreshSelfUpdateResult(); // the updater's launch, when this tray was restarted by the installer
             OpenWindow(null);
         }));
 
@@ -198,9 +279,12 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             };
             built.Closed += (_, _) =>
             {
-                if (ReferenceEquals(_window, built)) _window = null;
+                if (!ReferenceEquals(_window, built)) return;
+                _window = null;
+                StopRevitPageWatch();
             };
             built.Show();
+            WatchRevitForPage();
             Log.Information("window opened ({Page}, {Theme})", _page, RstTheme.Current);
         }
         else
@@ -208,6 +292,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _window.ViewModel.Page = _page;
             if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
             _window.Show();
+            _window.ViewModel.Updates.Refresh(); // Revit may have started or closed since
+            WatchRevitForPage();
         }
         _window.Activate();
     }
@@ -256,11 +342,16 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _icon = null;
     }
 
-    /// <summary>Stops the check loop (an in-flight check is cancelled) and releases the HTTP client. Idempotent.</summary>
+    /// <summary>
+    /// Stops the check loop (an in-flight check is cancelled), any install that is downloading or waiting (an
+    /// msiexec already running finishes on its own), and releases the HTTP client. Idempotent.
+    /// </summary>
     private void StopUpdates()
     {
+        StopRevitPageWatch();
         try
         {
+            _installs?.Dispose();
             _updates?.Dispose();
             _http?.Dispose();
         }
@@ -268,8 +359,49 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         {
             Log.Warning(ex, "stopping update checks");
         }
+        _installs = null;
         _updates = null;
         _http = null;
+    }
+
+    /// <summary>
+    /// While the window is open and Revit runs, the buttons read "… when Revit closes"; this waits for Revit's exit
+    /// (its process events, no polling) and refreshes the pages once, so they say Install and Update again.
+    /// </summary>
+    private void WatchRevitForPage()
+    {
+        if (_revit is not { } revit || _revitPageWatch is not null || !RevitRunning) return;
+        var cts = new CancellationTokenSource();
+        _revitPageWatch = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await revit.WaitUntilNoneAsync(cts.Token).ConfigureAwait(false);
+                _ = _dispatcher.BeginInvoke(() =>
+                {
+                    if (ReferenceEquals(_revitPageWatch, cts)) _revitPageWatch = null;
+                    if (!_quitting) Changed?.Invoke(this, EventArgs.Empty);
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // The window closed.
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "watching Revit for the pages");
+            }
+        });
+    }
+
+    private void StopRevitPageWatch()
+    {
+        var cts = _revitPageWatch;
+        _revitPageWatch = null;
+        if (cts is null) return;
+        try { cts.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 
     /// <summary>
