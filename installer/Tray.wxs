@@ -26,7 +26,7 @@
   and waits up to Timeout seconds. It never terminates the process and never
   asks for a reboot: CloseApplication matches RST.Tray.exe by name across
   every session, so a forced end would reach other users' trays (and WU4's
-  updater, which must therefore run under a different exe name). The tray
+  updater, which therefore runs as RST.TrayUpdater.exe: F17 WU4). The tray
   registers with Restart Manager (RegisterApplicationRestart, startup switch), so
   after an installer closes it Windows starts it again. ci-smoke.ps1 checks
   both paths. util:RemoveFolderEx removes the tray's
@@ -54,6 +54,10 @@
          runs right after AppSearch, before RemoveFoldersEx (before
          CostInitialize). -->
     <SetProperty Id="RSTTRAYCACHEDIR" Value="[LocalAppDataFolder]RST\Tray\cache\" After="AppSearch" Sequence="execute" />
+    <!-- F17 WU4: the rest of the tray's non-roaming folder: the updater copy (updater\), msiexec's install logs
+         (logs\) and the self-update result. Removed with the cache on a real uninstall only, so an RST upgrade
+         run BY the updater copy never removes the folder it runs from. -->
+    <SetProperty Id="RSTTRAYLOCALDIR" Value="[LocalAppDataFolder]RST\Tray\" After="AppSearch" Sequence="execute" />
 
     <!-- Only when files can change: a first install or upgrade, a repair,
          an uninstall, or the old version's removal in an upgrade. A no-op
@@ -71,6 +75,8 @@
         <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="RST"
                        Type="string" Value="&quot;[TrayDir]RST.Tray.exe&quot; --startup" KeyPath="yes" />
         <util:RemoveFolderEx Id="RemoveTrayCache" On="uninstall" Property="RSTTRAYCACHEDIR"
+                             Condition="NOT UPGRADINGPRODUCTCODE" />
+        <util:RemoveFolderEx Id="RemoveTrayLocal" On="uninstall" Property="RSTTRAYLOCALDIR"
                              Condition="NOT UPGRADINGPRODUCTCODE" />
       </Component>
     </ComponentGroup>

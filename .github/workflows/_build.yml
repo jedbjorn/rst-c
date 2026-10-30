@@ -49,6 +49,12 @@ name: _build (reusable)
 #                    the fixture companion MSI, built in the job from the
 #                    bundle's fixture project (installer/ci-tray-detect.ps1,
 #                    feature #17 AC5).
+#   • tray-install — Windows runner: the tray's verified installs against
+#                    a fake GitHub serving the fixture companion MSI
+#                    (installer/ci-tray-install.ps1, feature #17 AC6, AC7).
+#   • tray-selfupdate — Windows runner: RST updating itself through the
+#                    tray's updater copy, across three RST.msi builds of
+#                    this commit (installer/ci-tray-selfupdate.ps1, AC8).
 #
 # WiX MSI emission is officially Windows-only (installer/README.md). The
 # WiX SDK MSBuild path on Linux emits WIX0000 ("behavior is undefined")
@@ -446,6 +452,10 @@ jobs:
           name: RST-Setup.exe
           path: artifacts/
       - run: build/sha256sums.sh self-test artifacts RST.msi RST-Setup.exe
+      # WU3 review D1: release.yml's gh calls (one draft per tag, by id; a
+      # re-run deletes its own stale draft, never a published release), run
+      # against a fake gh. Nothing is sent to GitHub.
+      - run: build/release-draft.sh self-test
 
   # Companion detection (feature #17, spec #20 §6, AC5's fixture half): the
   # tray's MsiProducts and ProductDetection against spec #15's fixture
@@ -483,4 +493,95 @@ jobs:
         with:
           name: tray-detect
           path: ${{ runner.temp }}/tray-detect/
+          if-no-files-found: ignore
+
+  # Verified installs (feature #17, spec #20 §5, AC6, and AC7's CI
+  # analogue): the tray's real install path (msi.dll, System32's msiexec,
+  # the Revit.exe watch) against a fake GitHub serving the fixture
+  # companion MSI. Every unverified MSI is refused with a logged reason; the
+  # good one installs, waits while a Revit.exe runs, refuses a downgrade,
+  # survives a failed upgrade and reinstalls the previous version.
+  tray-install:
+    name: Tray installs (fixture MSI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build the fixture companion MSIs (1.0.0, 1.1.0, 2.0.0)
+        shell: pwsh
+        run: |
+          $out = New-Item -ItemType Directory -Force fixture-msi
+          foreach ($v in '1.0.0', '1.1.0', '2.0.0') {
+            dotnet build installer-bundle/fixture/RST.CompanionFixture.wixproj -c Release --nologo "-p:FixtureVersion=$v" "-p:IntermediateOutputPath=obj\v$v\"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item "installer-bundle/fixture/bin/Release/RST-CompanionFixture-$v.msi" $out
+          }
+      - run: dotnet build src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
+      - name: Install smoke
+        shell: pwsh
+        run: installer/ci-tray-install.ps1 -FixtureDir fixture-msi
+      - name: Upload install results and msiexec logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-install
+          path: ${{ runner.temp }}/tray-install/
+          if-no-files-found: ignore
+
+  # RST updates itself (feature #17, spec #20 §5, AC8): this commit's
+  # RST.msi built at 3.1.90, 3.1.91 and 3.1.92. The installed tray's
+  # verified download and its updater copy (RST.TrayUpdater.exe) take
+  # 3.1.90 to 3.1.91, then 3.1.92 with the tray still running (Restart
+  # Manager's restart racing the updater's start): one tray, one RST entry.
+  tray-selfupdate:
+    name: Tray self-update (RST.msi builds)
+    needs: [stage, stage-tray]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R25
+          path: build/R25/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R26
+          path: build/R26/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R27
+          path: build/R27/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-Tray
+          path: build/Tray/
+      - name: Build RST.msi at 3.1.90, 3.1.91 and 3.1.92
+        shell: pwsh
+        run: |
+          dotnet restore installer/RST.Installer.wixproj --nologo
+          foreach ($v in '3.1.90', '3.1.91', '3.1.92') {
+            dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild "-p:RstMsiVersion=$v"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-$v.msi"
+          }
+      - run: dotnet build src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
+      - name: Self-update smoke
+        shell: pwsh
+        run: >-
+          installer/ci-tray-selfupdate.ps1
+          -OldMsi "$env:RUNNER_TEMP/RST-3.1.90.msi" -OldVersion 3.1.90
+          -NewMsi "$env:RUNNER_TEMP/RST-3.1.91.msi" -NewVersion 3.1.91
+          -NewerMsi "$env:RUNNER_TEMP/RST-3.1.92.msi" -NewerVersion 3.1.92
+      - name: Upload self-update results and msiexec logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-selfupdate
+          path: |
+            ${{ runner.temp }}/tray-selfupdate/
           if-no-files-found: ignore
