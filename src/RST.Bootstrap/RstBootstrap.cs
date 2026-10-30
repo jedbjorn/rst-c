@@ -62,14 +62,14 @@ public sealed class RstBootstrap : IExternalApplication
 
             // AssemblyDependencyResolver reads RST.Engine.deps.json next to
             // the engine DLL (so it probes the engine dir chosen above, in
-            // either layout) and resolves both managed deps and native libs
-            // (runtimes/<rid>/native/*) for every transitive — Serilog,
-            // System.Management (its runtime variant), etc.
+            // either layout) and resolves its managed deps (RST.Core, RST.UI)
+            // and any native libs (runtimes/<rid>/native/*).
             //
-            // The handler is process-wide: it answers any requester in the
+            // The handler is process-wide: it sees every requester in the
             // default context, not only the engine. EngineDependencyResolver
-            // (below) keeps it from handing a neighbour an older copy, and
-            // neither handler throws from inside the event (decision #27).
+            // (below) answers only for RST's own assemblies (decision #33: RST
+            // ships no third-party DLL), never hands a neighbour an older copy,
+            // and neither handler throws from inside the event (decision #27).
             var resolver = new AssemblyDependencyResolver(enginePath);
             var managed = EngineDependencyResolver.ForEngine(resolver, AssemblyLoadContext.Default, BootLog.Info, BootLog.Warn);
             AssemblyLoadContext.Default.Resolving += (ctx, name) => managed.Resolve(name);
@@ -116,9 +116,10 @@ public sealed class RstBootstrap : IExternalApplication
             }
             finally
             {
-                // Once per startup, after the engine has configured Serilog
-                // (or failed to): the Serilog the engine's context holds.
-                LogBoundSerilog(engineAsm);
+                // Once per startup (decision #33): the app folder ships no
+                // third-party DLL, so nothing of RST's can clash in the shared
+                // context. A WRN names any DLL that is not RST's own.
+                LogShippedDlls(appDir);
             }
             BootLog.Info($"OnStartup returned {result}");
             return result;
@@ -130,22 +131,18 @@ public sealed class RstBootstrap : IExternalApplication
         }
     }
 
-    private static void LogBoundSerilog(Assembly engineAsm)
+    private static void LogShippedDlls(string appDir)
     {
         try
         {
-            const string name = "Serilog";
-            var compiled = Array.Find(engineAsm.GetReferencedAssemblies(),
-                r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase))?.Version;
-            var context = AssemblyLoadContext.GetLoadContext(engineAsm) ?? AssemblyLoadContext.Default;
-            var bound = EngineDependencyResolver.FindLoaded(context.Assemblies, name);
-            var (warn, message) = EngineDependencyResolver.DescribeBinding(
-                name, compiled, bound?.GetName().Version, bound is null ? null : EngineDependencyResolver.LocationOf(bound));
+            var dlls = Directory.EnumerateFiles(appDir, "*.dll", SearchOption.AllDirectories)
+                .Select(p => Path.GetRelativePath(appDir, p));
+            var (warn, message) = EngineDependencyResolver.DescribeShipped(dlls);
             if (warn) BootLog.Warn(message); else BootLog.Info(message);
         }
         catch (Exception ex)
         {
-            BootLog.Warn($"Serilog binding check failed :: {ex.GetType().Name}: {ex.Message}");
+            BootLog.Warn($"Shipped-DLL check failed :: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -200,9 +197,11 @@ internal static class EngineLocation
 }
 
 /// <summary>
-/// The bootstrap's managed <c>Resolving</c> handler (decisions #27 and #32, research M3). It
-/// answers only for assemblies in the engine's deps.json (Serilog, Serilog.Sinks.File,
-/// System.Management, RST.Core, RST.UI). For those:
+/// The bootstrap's managed <c>Resolving</c> handler (decisions #27, #32 and #33, research M3). It
+/// answers only for RST's own assemblies (<c>RST</c> and <c>RST.*</c>: RST.Core, RST.UI) that the
+/// engine's deps.json lists. Any other name, a third-party one included, is declined (null) without
+/// a log line: RST ships no third-party DLL (decision #33), so another add-in's request is never
+/// RST's to answer. For RST's own:
 /// <list type="number">
 /// <item>a same-named assembly already loaded in the context at or above the requested version
 /// is reused, instead of loading ours by path;</item>
@@ -216,9 +215,8 @@ internal static class EngineLocation
 /// the requester's own newer copy can load and RST later binds up to it;</item>
 /// <item>it never throws: any failure is logged as a warning and the handler returns null.</item>
 /// </list>
-/// Its seams are delegates so RST.RuntimeTests can drive every branch without Revit. It cannot
-/// stop a neighbour's own resolver handing RST an older copy (research M3); the startup
-/// <see cref="DescribeBinding"/> line makes that case visible in the boot log.
+/// Its seams are delegates so RST.RuntimeTests can drive every branch without Revit. The startup
+/// <see cref="DescribeShipped"/> line records that the app folder holds no third-party DLL.
 /// </summary>
 internal sealed class EngineDependencyResolver
 {
@@ -274,8 +272,15 @@ internal sealed class EngineDependencyResolver
         }
     }
 
+    /// <summary>RST's own assemblies: <c>RST</c> and <c>RST.*</c> (case-insensitive). Nothing else is answered.</summary>
+    public static bool IsRstAssembly(string? simpleName) =>
+        !string.IsNullOrEmpty(simpleName)
+        && (simpleName.Equals("RST", StringComparison.OrdinalIgnoreCase)
+            || simpleName.StartsWith("RST.", StringComparison.OrdinalIgnoreCase));
+
     private Assembly? ResolveCore(AssemblyName requested)
     {
+        if (!IsRstAssembly(requested.Name)) return null; // decision #33: never a third-party name
         var path = _pathFor(requested);
         if (path is null) return null; // not one of the engine's dependencies
 
@@ -383,18 +388,19 @@ internal sealed class EngineDependencyResolver
     }
 
     /// <summary>
-    /// The startup line for the version a dependency actually bound to: a warning when it is not
-    /// loaded, or is older than the version the engine was compiled against.
+    /// The startup line for the DLLs in the app folder (paths relative to it): an <c>INF</c> that
+    /// it ships no third-party DLL, or a <c>WRN</c> naming every DLL that is not RST's own.
     /// </summary>
-    public static (bool Warn, string Message) DescribeBinding(string name, Version? compiled, Version? bound, string? location)
+    public static (bool Warn, string Message) DescribeShipped(IEnumerable<string> dlls)
     {
-        var against = compiled?.ToString() ?? "unknown";
-        if (bound is null)
-            return (true, $"{name} bound: not loaded (engine compiled against {against})");
-        var message = $"{name} bound: {bound} at {location ?? "(no path)"} (engine compiled against {against})";
-        return compiled is not null && bound < compiled
-            ? (true, message + "; OLDER than compiled, another add-in supplied it")
-            : (false, message);
+        var all = dlls.ToList();
+        var foreign = all
+            .Where(p => !IsRstAssembly(Path.GetFileNameWithoutExtension(p)))
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (foreign.Count == 0)
+            return (false, $"Third-party DLLs shipped: none ({all.Count} RST DLLs in the app folder; decision #33)");
+        return (true, $"Third-party DLLs shipped: {foreign.Count} ({string.Join(", ", foreign)}); RST should ship none (decision #33)");
     }
 
     private static void Safe(Action<string> log, string message)
