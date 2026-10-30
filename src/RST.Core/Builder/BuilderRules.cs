@@ -2,8 +2,9 @@
 // profile_builder.html: shortId (1936-1940), addPanel's defaults (1943-1951), the slot shapes of
 // addToolToSelectedPanel (1974-1986) and the URL button editor (2170-2209), normalizeUrl
 // (2214-2225, the same rule as Core's UrlNormalizer), normalizeHex (2230-2237), the panel card's
-// "N slot(s)" count, the Pick-icon button's label (3237-3256), and the RST Presets and Junk
-// Cleanup summaries (2629-2638, 2727-2734). Behavior and text are unchanged.
+// "N slot(s)" count and the Pick-icon button's label (3237-3256). Behavior and text are unchanged.
+// The RST Presets and Junk Cleanup summaries went with the Properties pane (feature #18, spec #19):
+// the Profile pane's tabs show the settings themselves.
 
 using System.Text.RegularExpressions;
 using RST.Core.Profiles;
@@ -94,23 +95,6 @@ public static partial class BuilderRules
     /// </summary>
     public static string IconButtonLabel(Slot slot) =>
         IconPack.TryParseValue(slot?.IconFile, out var value) ? value.Name : "Icon";
-
-    /// <summary>The RST Presets summary: "No tabs hidden  •  Disable Unused: off", "2 tabs hidden  •  …".</summary>
-    public static string PresetsSummary(ProfilePresets? presets)
-    {
-        var p = presets ?? new ProfilePresets();
-        var n = p.HiddenTabs?.Count ?? 0;
-        var hidden = n == 0 ? "No tabs hidden" : n + " tab" + (n == 1 ? "" : "s") + " hidden";
-        return hidden + "  •  " + "Disable Unused: " + (p.DisableUnusedAddins ? "on" : "off");
-    }
-
-    /// <summary>The Junk Cleanup summary: "5 of 6 targets enabled.", or "Defaults will be used." with no list.</summary>
-    public static string CleanupSummary(IReadOnlyList<CleanupTarget>? targets)
-    {
-        if (targets is null) return "Defaults will be used.";
-        var enabled = targets.Count(t => t is not null && t.Enabled);
-        return enabled + " of " + targets.Count + " target" + (targets.Count == 1 ? "" : "s") + " enabled.";
-    }
 
     [GeneratedRegex("^#([0-9a-f])([0-9a-f])([0-9a-f])$")]
     private static partial Regex ShortHex();
