@@ -95,10 +95,8 @@ The bitmaps are generated from the bundled `src/RST.Engine/Assets/branding.png` 
   RST.UI.dll
   RST.Core.dll
   Serilog*.dll
-  Microsoft.Web.WebView2.*.dll
   RST.Engine.deps.json
   Assets\**\*
-  runtimes\<rid>\native\WebView2Loader.dll
   runtimes\win\lib\net8.0\System.Management.dll  (RST-038: stub at bin
                                                   root removed at stage
                                                   time)

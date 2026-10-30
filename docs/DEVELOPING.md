@@ -191,15 +191,14 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
 
 ## The Profile Loader (WU3)
 
-The native Profile Loader replaces `profile_loader.html`. The Builder stays on WebView2 until
-WU5, so `LoaderWindow` now always shows `profile_builder.html`.
+The native Profile Loader replaces `profile_loader.html`.
 
 - **Logic in RST.Core (`RST.Core.Loader`, tested on Linux in `RST.Tests/Loader`):** the ported
   JS rules (`RequiredAddinRules`, `RstifyRules`, `FailedDisableMessages`, `RibbonPreviewRules`)
-  and the services moved out of `LoaderBridge` (`ProfileLibraryService`, `ProfileLoadService`,
-  `LoaderPrefsService`, `AddinMaintenanceService`, `AddinLookupService`). `LoaderBridge` calls the
-  same services for the Builder's `get_profiles`, `get_active_profile`, `load_profile` and
-  `get_addin_lookup`. The services log through `ILoaderLog` (Serilog in RST.UI).
+  and the services moved out of the retired `LoaderBridge` (`ProfileLibraryService`,
+  `ProfileLoadService`, `LoaderPrefsService`, `AddinMaintenanceService`, `AddinLookupService`). The
+  WPF Builder's backend calls the same services for its profile list, the active profile, the
+  auto-reload and the add-in lookup. The services log through `ILoaderLog` (Serilog in RST.UI).
 - **The window (`RST.UI/Loader`):** `ProfileLoaderLauncher.Show(owner, …)` →
   `ProfileLoaderWindow` → `ProfileLoaderViewModel`, which talks to `IProfileLoaderBackend` (the
   services) and `ILoaderDialogs` (`ConfirmAddinChangesWindow`, `AddinCheckWindow`). The load's
@@ -214,12 +213,12 @@ WU5, so `LoaderWindow` now always shows `profile_builder.html`.
 - **Tests:** `RST.RuntimeTests/Loader` (view-model flows with fakes, screenshots `loader-*`, and
   AC6 over the v2.2.0 fixtures in `src/RST.Tests/Fixtures/V220`).
 
-## The Profile Builder shell (WU4)
+## The Profile Builder (WU4, WU5)
 
-The native Profile Builder (`RST.UI/Builder`) is built and tested, but **not wired yet**:
-`BuilderCommand` keeps opening the WebView2 `profile_builder.html` until WU5 adds drag and drop,
-the icon picker and the RST Presets / Junk Cleanup modals. `ProfileBuilderLauncher.Show(owner, …)`
-is the entry point WU5 will call.
+The native Profile Builder (`RST.UI/Builder`) replaces `profile_builder.html`. `BuilderCommand`
+applies Revit's theme and calls `ProfileBuilderLauncher.Show(MainWindowHandle, …)`. With it,
+`LoaderBridge`, `LoaderWindow`, `LoaderHost`, `FileDialogBridge` and the last WebView2 code are gone:
+rst-c no longer references the WebView2 package.
 
 - **Logic in RST.Core (`RST.Core.Builder`, tested on Linux in `RST.Tests/Builder`):**
   `CatalogCommand` (get_catalog's shape and host-tab promotion), `CatalogTree` (the catalogue index
@@ -241,3 +240,16 @@ is the entry point WU5 will call.
   AC6 (`ProfileBuilderDataCompatibilityTests`, over the v2.2.0 fixtures and the captured v2.2.0 save
   payloads in `src/RST.Tests/Fixtures/V220/builder`), and AC7 (`ProfileBuilderPerformanceTests`: 823
   commands, median keystroke under 100 ms, and far fewer realized rows than commands).
+- **WU5 additions:**
+  - **Drag and drop:** `RST.Core.Builder.PanelDrops` holds the page's index arithmetic and the
+    marker rules; the window's handlers start `DragDrop.DoDragDrop` with a `BuilderDrag` payload
+    (catalogue row, panel header, slot row) and report the cursor's half to the view-model, which
+    sets `DropMarker` on the cards and rows (overlay borders: no layout shift).
+  - **Icon picker:** `RST.Core.Builder.IconPickerModel` (the port of `icon-picker.test.mjs`'s
+    behavior, as a row model), `Controls/IconPickerViewModel` and the `Controls/IconPicker` overlay
+    (a scrim inside the Builder window, so a click outside the card cancels).
+  - **Modals:** `PresetsWindow` and `CleanupWindow` (family dialogs, `ShowInTaskbar="False"`) over
+    `PresetsViewModel` / `CleanupViewModel`, behind `IBuilderDialogs`. The Cleanup modal edits a copy.
+  - **WPF event rule:** anything that closes the window or rebuilds a bound list from inside a WPF
+    event (the window's `Closing`, a ComboBox's selection write) is posted to run after it
+    (`ProfileBuilderViewModel`'s `post`); `ProfileBuilderWindowFlowTests` drives a real window.

@@ -139,7 +139,7 @@ public sealed class ConsentToggleTests : IDisposable
         var act = () => ok = ConsentToggle.Apply(
             false, _ => throw new InvalidOperationException("seam boom"), _prefsPath, m => logged = m);
 
-        act.Should().NotThrow("the toggle rides the WebView2 dispatch path — it must never throw");
+        act.Should().NotThrow("the toggle runs on the Health window's UI path — it must never throw");
         ok.Should().BeTrue("the preference persisted; that is what the click's success reports");
         logged.Should().Contain("seam boom");
         TelemetryPrefs.Read(_prefsPath).Enabled.Should().BeFalse();

@@ -7,7 +7,9 @@ using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.RuntimeTests.Loader;
 using RST.RuntimeTests.Support;
+using RST.Core.Ribbon;
 using RST.UI.Builder;
+using RST.UI.Loader;
 
 namespace RST.RuntimeTests.Builder;
 
@@ -128,6 +130,19 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
         return OnLoad(request);
     }
 
+    /// <summary>The icon pack; null reads the shipped one (the real images, for the screenshots).</summary>
+    public IReadOnlyList<IconPackEntry>? IconPack { get; set; }
+
+    /// <summary>Overrides the pack read (a throwing backend).</summary>
+    public Func<IReadOnlyList<IconPackEntry>>? OnIconPack { get; set; }
+
+    public IReadOnlyList<IconPackEntry> GetIconPack()
+    {
+        Calls.Add("GetIconPack");
+        if (OnIconPack is not null) return OnIconPack();
+        return IconPack ??= IconPackSource.Read(LoaderAssets.IconPackDirectory);
+    }
+
     public FakeBuilderBackend With(params Profile[] profiles)
     {
         foreach (var p in profiles) Library.Add(new ProfileEntry(ProfileStore.CanonicalFileName(p), p));
@@ -203,8 +218,40 @@ public static class BuilderFixtures
     }
 }
 
+/// <summary>Scripted answers for the RST Presets and Junk Cleanup modals; the edit runs on the modal's model first.</summary>
+public sealed class FakeBuilderDialogs : IBuilderDialogs
+{
+    public List<PresetsViewModel> Presets { get; } = [];
+
+    public List<CleanupViewModel> Cleanups { get; } = [];
+
+    /// <summary>What the user does in the Presets modal before answering.</summary>
+    public Action<PresetsViewModel>? EditPresetsWith { get; set; }
+
+    public bool PresetsAnswer { get; set; } = true;
+
+    /// <summary>What the user does in the Cleanup modal before answering.</summary>
+    public Action<CleanupViewModel>? EditCleanupWith { get; set; }
+
+    public bool CleanupAnswer { get; set; } = true;
+
+    public bool EditPresets(PresetsViewModel model)
+    {
+        Presets.Add(model);
+        EditPresetsWith?.Invoke(model);
+        return PresetsAnswer;
+    }
+
+    public bool EditCleanup(CleanupViewModel model)
+    {
+        Cleanups.Add(model);
+        EditCleanupWith?.Invoke(model);
+        return CleanupAnswer;
+    }
+}
+
 /// <summary>A view-model over a backend, with the fake dialogs and clock, ready to drive.</summary>
-public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuilderBackend Raw, FakeDialogs Dialogs, ManualClock Clock, Queue<Action>? Posted)
+public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuilderBackend Raw, FakeDialogs Dialogs, ManualClock Clock, Queue<Action>? Posted, FakeBuilderDialogs Modals)
 {
     public FakeBuilderBackend Backend => (FakeBuilderBackend)Raw;
 
@@ -216,9 +263,10 @@ public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuild
         var dialogs = new FakeDialogs();
         var clock = new ManualClock();
         var posted = deferPosts ? new Queue<Action>() : null;
-        var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: posted is null ? a => a() : posted.Enqueue);
+        var modals = new FakeBuilderDialogs();
+        var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: posted is null ? a => a() : posted.Enqueue, builderDialogs: modals);
         model.Initialize();
-        return new BuilderHarness(model, b, dialogs, clock, posted);
+        return new BuilderHarness(model, b, dialogs, clock, posted, modals);
     }
 
     /// <summary>Runs every posted action (the dispatcher turn after the current event).</summary>

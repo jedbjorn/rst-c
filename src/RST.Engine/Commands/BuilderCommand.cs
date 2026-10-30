@@ -1,16 +1,20 @@
 // BuilderCommand.cs — IExternalCommand wired to the "Builder" ribbon button.
 //
-// Same WebView2 host as the Loader, but lands directly on profile_builder.html
-// instead of profile_loader.html. Lets the user edit/create profiles without
-// going through the loader picker first — matches the upstream pyRevit RST
-// pattern where Builder and Loader are dedicated entry points.
+// Opens the native WPF Profile Builder (spec #16, WU5) modally on the Revit UI
+// thread, owned by Revit's main window and in Revit's theme. The hand-off lives in
+// RST.UI.Builder.ProfileBuilderLauncher, so RST.UI stays Revit-free: Revit is
+// reached only through the switch scheduler (the auto-reload after saving the
+// active profile) and the captured catalogue and ribbon tabs. Builder and Loader
+// stay separate entry points, as in the upstream pyRevit RST.
 
 using System.Diagnostics;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
-using RST.UI.Loader;
+using RST.Engine.Theming;
+using RST.UI.Builder;
 using Serilog;
 
 namespace RST.Engine.Commands;
@@ -31,7 +35,8 @@ public sealed class BuilderCommand : IExternalCommand
             var catalog = RstApplication.GetOrBuildCatalog(revitVersion);
             var scheduler = RstApplication.GetSwitchScheduler();
             var allTabs = RibbonTabEnumerator.Enumerate();
-            LoaderHost.ShowModalToBuilder(revitVersion, catalog, scheduler, allTabs);
+            RevitThemeDetector.ApplyToWindows();
+            ProfileBuilderLauncher.Show(commandData.Application.MainWindowHandle, revitVersion, catalog, scheduler, allTabs);
             Log.Information("=== Builder session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }

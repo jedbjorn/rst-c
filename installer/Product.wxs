@@ -4,7 +4,7 @@
 
   Lays the bootstrap thunk (RST.addin + RST.Bootstrap.dll) into the
   per-user Revit Add-Ins directory and the engine + transitives
-  (Serilog, WebView2, System.Management runtime variant, Assets,
+  (Serilog, System.Management runtime variant, Assets,
   runtimes/native) into %AppData%\RST\R<major>\app\. The bootstrap
   derives R<major> from application.ControlledApplication.VersionNumber
   at OnStartup (RST-037) and loads the matching engine.
@@ -19,10 +19,8 @@
       RST.UI.dll
       RST.Core.dll
       Serilog*.dll
-      Microsoft.Web.WebView2.*.dll
       RST.Engine.deps.json
       Assets\**\*
-      runtimes\<rid>\native\WebView2Loader.dll
       runtimes\win\lib\net8.0\System.Management.dll  (RST-038: stub at
                                                       bin root removed at
                                                       stage time)

@@ -1,7 +1,7 @@
 // rst-c's own (not vendored); follows splash-it src/SplashIt.UI/Settings/SettingsLauncher.cs
 // (splash-it commit ba86a71, MIT, same owner). The WPF Profile Builder's entry point (spec #16),
-// taking the same captured data LoaderHost.ShowModalToBuilder takes. Not called yet: BuilderCommand
-// keeps the WebView2 Builder until WU5 completes drag and drop, the icon picker and the modals.
+// taking the same captured data LoaderHost.ShowModalToBuilder took. RST.Engine's BuilderCommand
+// calls it (WU5).
 
 using RST.Core.Configuration;
 using RST.Core.Profiles;
@@ -36,10 +36,12 @@ public static class ProfileBuilderLauncher
 
         var backend = new ProfileBuilderBackend(revitVersion, catalog, switchScheduler, allTabs);
         var dialogs = new DialogService();
-        var model = new ProfileBuilderViewModel(backend, dialogs);
+        var builderDialogs = new BuilderDialogs();
+        var model = new ProfileBuilderViewModel(backend, dialogs, builderDialogs: builderDialogs);
         model.Initialize();
         var window = new ProfileBuilderWindow(model);
         dialogs.Owner = window;
+        builderDialogs.Owner = window;
         WindowPlacement.Own(window, owner);
         window.ShowDialog();
     }

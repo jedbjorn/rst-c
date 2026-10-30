@@ -221,4 +221,55 @@ public class RequiredAddinDetectorTests
         RequiredAddinDetector.Enrich("bim track", lookup).AddinFile.Should().Be("BIMTracker.addin");
         RequiredAddinDetector.Enrich("anything", null).Should().Be(((string?)null, ""));
     }
+
+    /// <summary>
+    /// The VM's "VM Test" finding (WU5): ribbon-only built-in commands (no PostableCommand, so the
+    /// scanner leaves their origin Unknown) on built-in tabs are recorded by their panel names
+    /// ("Build", "Select", "Model"). This is v2.2.0's behavior too: the expected list below is what
+    /// v2.2.0's own computeRequiredAddins (`git show v2.2.0:src/RST.UI/Assets/profile_builder.html`,
+    /// run in Node over get_catalog's DTO of this same scanned catalogue, with v2.2.0's
+    /// addin_lookup.json) returned. The scanner, get_catalog's reshaping and the lookup are unchanged
+    /// since v2.2.0, so the WPF Builder reproduces it exactly; the behavior is pre-existing and kept.
+    /// </summary>
+    [Fact]
+    public void Ribbon_only_built_in_commands_give_the_same_required_addins_as_v220()
+    {
+        var scanned = new[]
+        {
+            new RST.Core.Scanning.ScannedCommand("ID_OBJECTS_WALL", "Wall", RST.Core.Scanning.CommandOrigin.Native, null, null, "Architecture", "Build"),
+            new RST.Core.Scanning.ScannedCommand("ID_OBJECTS_FLOOR", "Floor", RST.Core.Scanning.CommandOrigin.Native, null, null, "Architecture", "Build"),
+            new RST.Core.Scanning.ScannedCommand("ID_INPLACE_WALL", "In-Place Wall", RST.Core.Scanning.CommandOrigin.Unknown, null, null, "Architecture", "Build"),
+            new RST.Core.Scanning.ScannedCommand("ID_BUTTON_SELECT", "Modify", RST.Core.Scanning.CommandOrigin.Unknown, null, null, "Modify", "Select"),
+            new RST.Core.Scanning.ScannedCommand("ID_PLACE_GROUP", "Place Model Group", RST.Core.Scanning.CommandOrigin.Unknown, null, null, "Architecture", "Model"),
+            new RST.Core.Scanning.ScannedCommand("ID_DYNAMO_PLAYER", "Dynamo Player", RST.Core.Scanning.CommandOrigin.Autodesk, null, null, "Manage", "Visual Programming"),
+            new RST.Core.Scanning.ScannedCommand("ID_INSIGHT", "Insight", RST.Core.Scanning.CommandOrigin.Autodesk, null, null, "Analyze", "Insight"),
+            new RST.Core.Scanning.ScannedCommand("Enscape.Start", "Start Enscape", RST.Core.Scanning.CommandOrigin.Custom, null, null, "Enscape", "Enscape"),
+            new RST.Core.Scanning.ScannedCommand("Kinship.Open", "Open Library", RST.Core.Scanning.CommandOrigin.Custom, null, null, "Add-Ins", "Kinship"),
+        };
+        var catalog = CatalogCommand.FromScanned(scanned);
+        var profile = new Profile
+        {
+            Panels =
+            [
+                new Panel { Slots = catalog.Select(BuilderRules.ToolSlot).ToList() },
+                new Panel { Slots = [BuilderRules.UrlSlot("Wiki", "https://example.com")] },
+            ],
+        };
+        profile.Panels[1].Slots[0].IconFile = "pack:house_purple";
+
+        var result = RequiredAddinDetector.Compute(profile, catalog, ShippedLookup());
+
+        // v2.2.0's output, verbatim:
+        // [{"tabName":"Enscape","addinFile":"Enscape.addin","url":"https://enscape3d.com"},
+        //  {"tabName":"Kinship","addinFile":"Kinship.addin","url":""},
+        //  {"tabName":"Build","addinFile":null,"url":""},{"tabName":"Select","addinFile":null,"url":""},
+        //  {"tabName":"Model","addinFile":null,"url":""}]
+        result.Select(r => (r.TabName, r.AddinFile, r.Url)).Should().Equal(
+            ("Enscape", "Enscape.addin", "https://enscape3d.com"),
+            ("Kinship", "Kinship.addin", ""),
+            ("Build", (string?)null, ""),
+            ("Select", (string?)null, ""),
+            ("Model", (string?)null, ""));
+        catalog.Where(c => c.Origin == "Native").Select(c => c.Id).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_FLOOR");
+    }
 }

@@ -21,8 +21,8 @@
 //      designs are reported via IncompleteNames, never returned), bare
 //      blue aliases excluded as icons, names sorted OrdinalIgnoreCase.
 //
-// Lives in Core (no WPF / WebView2 dependencies) because RST.Engine's
-// IconAssets, RST.UI's LoaderBridge, and RST.Tests (which references
+// Lives in Core (no WPF dependencies) because RST.Engine's
+// IconAssets, RST.UI's Builder (the icon picker), and RST.Tests (which references
 // only Core) all consume it. Logging stays with the callers — Core has
 // no Serilog dependency.
 

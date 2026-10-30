@@ -2,8 +2,8 @@
 // tab. Used by:
 //   - RstApplication.OnStartup → ApplicationInitialized (first build of
 //     the active profile post-Revit-launch).
-//   - LoaderBridge.LoadProfile → ProfileSwitchScheduler (live rebuild
-//     when the user clicks Apply).
+//   - ProfileLoadService (the Loader's Load Profile →, the Builder's
+//     auto-reload) → ProfileSwitchScheduler (live rebuild).
 //
 // Why AdWindows-direct: UIControlledApplication.CreateRibbonTab/Panel
 // only works during IExternalApplication.OnStartup. To rebuild the
