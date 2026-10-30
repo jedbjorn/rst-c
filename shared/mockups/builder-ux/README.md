@@ -5,7 +5,7 @@ The purple strip at the top is the mockup's own control bar, not part of the des
 
 ## v2 (2026-10-30)
 
-The FnB's picks are now the defaults: **B · Tabs**, **Tiles**, **In profile menu** (decision #21). Settings is an icon-only ⚙ left of the title. The other options stay in the strip for reference.
+The FnB's picks are now the defaults: **B · Tabs**, **Tiles**, **In profile menu** (decision #22). Settings is an icon-only ⚙ left of the title. The other options stay in the strip for reference.
 
 ## Options (purple strip; the choice is kept in the URL, so quote it in a redline)
 
