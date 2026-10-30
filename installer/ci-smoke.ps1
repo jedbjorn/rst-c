@@ -502,9 +502,13 @@ if ($Mode -eq 'Install') {
   # (t) the tray (feature #17, AC1): installed with the Run value; one per user.
   Assert-TrayInstalled '(a)'
   $trayA = Test-TraySingleInstance '(t)'
-  $sm = Get-ChildItem (Join-Path $AppData 'RST\R27\app') -Recurse -Filter System.Management.dll |
-        ForEach-Object { $_.FullName.Substring($AppData.Length + 1) }
-  Write-Host "R27 System.Management.dll: $($sm -join ', ')"
+  # Decision #33: the installed app trees and the tray hold only RST's own DLLs.
+  foreach ($tree in @((Join-Path $AppData 'RST\R26\app'), (Join-Path $AppData 'RST\R27\app'), $TrayDir)) {
+    $dlls = @(Get-ChildItem $tree -Recurse -Filter *.dll)
+    $foreign = @($dlls | Where-Object { $_.Name -notmatch '^RST(\..+)?\.dll$' } | ForEach-Object { $_.FullName.Substring($tree.Length + 1) })
+    Write-Host "$tree DLLs: $(($dlls | ForEach-Object { $_.Name }) -join ', ')"
+    Assert ($dlls.Count -gt 0 -and $foreign.Count -eq 0) "(a) $tree ships no third-party DLL (decision #33)$(if ($foreign) { ': ' + ($foreign -join ', ') })"
+  }
 
   # (d) Revit 2025 installed later: Repair adds it. Then 2026 removed:
   # Repair drops it. Then 2026 back: Repair restores it.

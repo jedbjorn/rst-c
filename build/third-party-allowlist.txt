@@ -1,0 +1,8 @@
+# Third-party DLLs RST may ship (decision #33), checked by build/check-shipped-dlls.sh on every
+# staged folder (build/R25, build/R26, build/R27, build/Tray) in CI.
+#
+# RST runs in Revit's shared .NET load context, where another add-in's copy of a same-named DLL can
+# bind in place of RST's. So this list is empty, and stays empty unless a dependency is worth that
+# risk. To add one: one DLL file name per line, then "#" and the reason, the decision that allowed
+# it and how a clash is handled. For example:
+#   Example.Library.dll  # why it cannot be avoided; decision #NN; how RST copes with another version
