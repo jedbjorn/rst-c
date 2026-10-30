@@ -1,7 +1,8 @@
 // DisablePreview.cs — classify scanned manifests into the buckets the
 // loader UI's confirm modal renders before committing to a disable.
 //
-// Mirrors the dict shape upstream LoaderBridge.GetDisablePreview returns:
+// The buckets (the shape v2.2.0's Loader disable preview returned; the WPF
+// Loader reads them through RST.Core.Loader.AddinMaintenanceService):
 //   staying      — required, will not be touched.
 //   disabling    — non-required and writeable; will be renamed.
 //   tryDisable   — non-required but in a path the running token can't

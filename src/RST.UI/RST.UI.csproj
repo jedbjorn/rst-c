@@ -3,8 +3,8 @@
   <!--
     RST.UI — rst-c's native WPF windows (spec #16): the Profile Loader, the
     Profile Builder and Health, on the family kit vendored from splash-it
-    (Theme.xaml, Theming, Mvvm, Dialogs, Swatches). The WebView2 pages and
-    their bridges are gone (WU5 retired the last one, the Builder).
+    (Theme.xaml, Theming, Mvvm, Dialogs, Swatches). They replaced v2.x's HTML
+    pages and their bridges (WU5 retired the last one, the Builder).
 
     TFM tracks the same RevitVersion grid as RST.Engine so we get a
     consistent build matrix; this project depends on RST.Core but NOT on

@@ -29,7 +29,7 @@ public sealed record CatalogCommand(
     /// <summary>The Revit built-in origin, which never makes a required add-in.</summary>
     public const string NativeOrigin = nameof(CommandOrigin.Native);
 
-    /// <summary>LoaderBridge.GetCatalog: the scanned catalogue, reshaped with the host-tab promotion.</summary>
+    /// <summary>The Builder's catalogue: the scanned commands, reshaped with the host-tab promotion (v2.2.0's get_catalog).</summary>
     public static IReadOnlyList<CatalogCommand> FromScanned(IEnumerable<ScannedCommand>? catalog) =>
         FromScanned(catalog, out _);
 
