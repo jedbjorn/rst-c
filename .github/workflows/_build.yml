@@ -5,7 +5,10 @@ name: _build (reusable)
 # `_build.yml` (leading underscore) to flag "internal — don't trigger
 # directly" by convention.
 #
-#   • test         — xunit on RST.Tests (configuration-agnostic)
+#   • test         — the Revit API floor check (decision #26:
+#                    build/check-revit-api-floor.py fails on any
+#                    Nice3point.Revit.Api pin above the year's earliest
+#                    update), then xunit on RST.Tests (configuration-agnostic)
 #   • test-runtime — matrix R25/R27: xunit on RST.RuntimeTests (Windows-
 #                    only WPF paths: bridge + resolver production
 #                    contracts) on net8.0-windows and net10.0-windows.
@@ -61,6 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Revit API floor (decision #26)
+        run: python3 build/check-revit-api-floor.py
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'

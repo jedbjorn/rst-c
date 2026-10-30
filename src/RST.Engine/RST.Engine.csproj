@@ -28,23 +28,23 @@
 
   <!-- Revit 2025 -->
   <ItemGroup Condition="'$(RevitVersion)' == '2025'">
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.4.41" PrivateAssets="all" VersionOverride="2025.4.41" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.4.41" PrivateAssets="all" VersionOverride="2025.4.41" />
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2025.4.41" PrivateAssets="all" VersionOverride="2025.4.41" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.0.2" PrivateAssets="all" VersionOverride="2025.0.2" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.0.2" PrivateAssets="all" VersionOverride="2025.0.2" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2025.0.2" PrivateAssets="all" VersionOverride="2025.0.2" />
   </ItemGroup>
 
   <!-- Revit 2026 -->
   <ItemGroup Condition="'$(RevitVersion)' == '2026'">
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.4.0" PrivateAssets="all" VersionOverride="2026.4.0" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.4.0" PrivateAssets="all" VersionOverride="2026.4.0" />
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2026.4.0" PrivateAssets="all" VersionOverride="2026.4.0" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
   </ItemGroup>
 
   <!-- Revit 2027 -->
   <ItemGroup Condition="'$(RevitVersion)' == '2027'">
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.10" PrivateAssets="all" VersionOverride="2027.0.10" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.10" PrivateAssets="all" VersionOverride="2027.0.10" />
-    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2027.0.10" PrivateAssets="all" VersionOverride="2027.0.10" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
   </ItemGroup>
 
   <ItemGroup>
