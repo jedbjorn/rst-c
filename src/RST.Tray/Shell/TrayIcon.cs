@@ -76,6 +76,8 @@ internal sealed class TrayIcon : IDisposable
             ExtendedWindowStyle = WS_EX_TOOLWINDOW,
         });
         _window.AddHook(WndProc);
+        AllowFromShell(_window.Handle, _taskbarCreated, log: _log);
+        AllowFromShell(_window.Handle, CallbackMessage, log: _log);
         _icon = LoadIcon(iconFile, GetSystemMetrics(49 /* SM_CXSMICON */), GetSystemMetrics(50 /* SM_CYSMICON */));
     }
 
@@ -251,6 +253,25 @@ internal sealed class TrayIcon : IDisposable
         }
     }
 
+    /// <summary>
+    /// Lets Explorer's messages through User Interface Privilege Isolation when the tray runs elevated (e.g. started
+    /// again by Windows Installer after an install run from an elevated prompt): "TaskbarCreated" after an Explorer
+    /// restart, and the icon's own callback message. A no-op for a normal tray.
+    /// </summary>
+    private static void AllowFromShell(IntPtr hwnd, int message, Action<string> log)
+    {
+        if (message == 0) return;
+        try
+        {
+            if (!ChangeWindowMessageFilterEx(hwnd, (uint)message, 1 /* MSGFLT_ALLOW */, IntPtr.Zero))
+                log($"tray icon: message filter for 0x{message:X} not changed (error {Marshal.GetLastWin32Error()})");
+        }
+        catch (Exception ex)
+        {
+            log("tray icon: message filter: " + ex.Message);
+        }
+    }
+
     private NotifyIconData NewData(int flags) => new()
     {
         cbSize = Marshal.SizeOf<NotifyIconData>(),
@@ -326,6 +347,10 @@ internal sealed class TrayIcon : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int RegisterWindowMessageW(string name);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hwnd, uint message, uint action, IntPtr changeFilterStruct);
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);

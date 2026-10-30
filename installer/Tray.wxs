@@ -55,7 +55,13 @@
          CostInitialize). -->
     <SetProperty Id="RSTTRAYCACHEDIR" Value="[LocalAppDataFolder]RST\Tray\cache\" After="AppSearch" Sequence="execute" />
 
+    <!-- Only when files can change: a first install or upgrade, a repair,
+         an uninstall, or the old version's removal in an upgrade. A no-op
+         reinstall of the installed product (IT re-pushing the same RST.msi)
+         replaces nothing, so it leaves a running tray alone (Restart Manager
+         then has nothing to close either, and would not restart it). -->
     <util:CloseApplication Id="CloseRstTray" Target="RST.Tray.exe"
+                           Condition="NOT Installed OR REINSTALL OR REMOVE OR UPGRADINGPRODUCTCODE"
                            CloseMessage="yes" RebootPrompt="no" Timeout="10"
                            Description="RST is closing its tray app." />
 
