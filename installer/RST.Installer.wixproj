@@ -1,13 +1,13 @@
 <Project Sdk="WixToolset.Sdk/6.0.2">
 
   <!--
-    RST.Installer — produces RST.msi.
+    RST.Installer — produces RST.msi (Revit 2025, 2026 and 2027).
 
     Build: from this directory, `dotnet build` (or `wix build Product.wxs`
     directly). Output: bin/<Configuration>/RST.msi.
 
-    The WXS auto-harvests files from ../build/R25/{addins,app}/, so
-    `build/stage.sh R25` must be run first to populate that tree.
+    The WXS auto-harvests files from ../build/R{25,26,27}/{addins,app}/, so
+    `build/stage.sh R25|R26|R27` must be run first to populate those trees.
 
     SDK is pinned to 6.x because the <Files> harvest element used in
     Product.wxs was introduced in WiX v5.0 — v4.0.5 has no <Files>
@@ -30,10 +30,16 @@
     silently no-ops and the .wxs gets Version="" (WIX0006/WIX0010). Derive a
     *local* effective version instead (which the global can't shadow) and feed
     that to the preprocessor constant.
+
+    The fallback must sort ABOVE the latest public release (v2.2.0) and below
+    the next one (v3.0.0): a push/PR RST.msi then installs over a released
+    RST.msi as an in-place MajorUpgrade (CI's msi-migrate job and the VM
+    check depend on it), and the v3.0.0 release still upgrades a dev build.
+    Move it after each release so it stays between the latest and the next.
   -->
   <PropertyGroup>
     <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
-    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">2.0.0</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">2.99.0</RstMsiVersionEffective>
     <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 

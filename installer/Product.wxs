@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  RST.msi — per-user installer for RST.
+  RST.msi — per-user installer for RST, Revit 2025 / 2026 / 2027.
 
   Lays the bootstrap thunk (RST.addin + RST.Bootstrap.dll) into the
   per-user Revit Add-Ins directory and the engine + transitives
@@ -9,12 +9,12 @@
   derives R<major> from application.ControlledApplication.VersionNumber
   at OnStartup (RST-037) and loads the matching engine.
 
-  Layout (RST-033 split):
-    %AppData%\Autodesk\Revit\Addins\<ver>\
+  Layout (RST-033 split), one pair of trees per Revit major:
+    %AppData%\Autodesk\Revit\Addins\<ver>\        (2025, 2026, 2027)
       RST.addin
       RST.Bootstrap.dll
       RST.Bootstrap.pdb
-    %AppData%\RST\R<NN>\app\
+    %AppData%\RST\R<NN>\app\                       (R25, R26, R27)
       RST.Engine.dll
       RST.UI.dll
       RST.Core.dll
@@ -28,9 +28,14 @@
                                                       stage time)
       *.pdb
 
-  v0 ships R25 only. R26/R27 expand once those majors enter the test
-  matrix; the WXS pattern is identical (one ComponentGroup per Revit
-  per tree).
+  R25 + R26 are net8.0-windows; R27 is net10.0-windows. The MSI only
+  carries files, so mixed TFMs need nothing here: every major lands in
+  its own directory with its own RST.Engine.deps.json, and each Revit
+  loads only its own major's engine through the bootstrap.
+
+  Revit 2027 was folded in from the retired standalone preview MSI
+  ("RST (Revit 2027 preview)") in v3.0.0. The Upgrade row below removes
+  that preview automatically on install.
 
   UpgradeCode is the stable identity of the RST product family. NEVER
   change it once shipped — it's how the MSI engine knows to upgrade
@@ -46,10 +51,30 @@
            Scope="perUser"
            Compressed="yes">
 
-    <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles" />
+    <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles (Revit 2025–2027)" />
 
-    <!-- Replace any prior install of the same product family in place. -->
+    <!-- Replace any prior install of the same product family in place.
+         The default schedule (afterInstallValidate) removes old products
+         before any file is installed, inside the install transaction:
+         a failed install rolls back and restores what was there. -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <!-- R27 preview migration (feature #11, Option B).
+         02BE4399-A563-4B15-BD12-ECF5D8486FB3 is the UpgradeCode of the
+         RETIRED standalone "RST (Revit 2027 preview)" MSI (RST-R27.msi,
+         v1.0.0–v2.2.0). Retired, never reused. This row finds an
+         installed preview at any version (OnlyDetect="no"), and the
+         RemoveExistingProducts action that MajorUpgrade schedules above
+         removes it before the unified R27 payload installs, so the two
+         products never co-own Addins\2027 or RST\R27\app. Per-user
+         scope: only the installing user's preview is found. The row
+         stays indefinitely, so a late install of an old RST-R27.msi is
+         migrated again by the next RST.msi install. -->
+    <Upgrade Id="02BE4399-A563-4B15-BD12-ECF5D8486FB3">
+      <UpgradeVersion Minimum="0.0.0" IncludeMinimum="yes"
+                      OnlyDetect="no"
+                      Property="R27PREVIEWFOUND" />
+    </Upgrade>
 
     <MediaTemplate EmbedCab="yes" />
 
@@ -57,7 +82,7 @@
          options to misconfigure: welcome + license -> progress -> finish.
          The banner shows on every page; the dialog bitmap backs the
          welcome/exit pages. Needs WixToolset.UI.wixext (see .wixproj).
-         Bitmaps + license live in branding/ (shared with installer-r27). -->
+         Bitmaps + license live in branding/. -->
     <ui:WixUI Id="WixUI_Minimal" />
     <WixVariable Id="WixUIBannerBmp"  Value="branding\banner.bmp" />
     <WixVariable Id="WixUIDialogBmp"  Value="branding\dialog.bmp" />
@@ -93,15 +118,16 @@
     </Property>
 
     <!-- Directory layout under %AppData% (Roaming). All paths are
-         per-user; no admin elevation required for install. R27
-         directories will land in RST-013 once .NET 10 SDK is wired into
-         CI to stage the R27 engine. -->
+         per-user; no admin elevation required for install. The R27 Ids
+         and names match the retired preview MSI's, so both products
+         target the same paths. -->
     <StandardDirectory Id="AppDataFolder">
       <Directory Id="AutodeskFolder" Name="Autodesk">
         <Directory Id="RevitFolder" Name="Revit">
           <Directory Id="RevitAddinsFolder" Name="Addins">
             <Directory Id="Addins2025Dir" Name="2025" />
             <Directory Id="Addins2026Dir" Name="2026" />
+            <Directory Id="Addins2027Dir" Name="2027" />
           </Directory>
         </Directory>
       </Directory>
@@ -112,10 +138,13 @@
         <Directory Id="R26Dir" Name="R26">
           <Directory Id="R26AppDir" Name="app" />
         </Directory>
+        <Directory Id="R27Dir" Name="R27">
+          <Directory Id="R27AppDir" Name="app" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
-    <!-- Single feature for v0: install everything. Per-Revit conditional
+    <!-- Single feature: install every major. Per-Revit conditional
          install (using REVIT<NN>_REG above) is a future refinement —
          absent Revit installs receive the .addin in a directory Revit
          creates lazily; the engine subdir under %AppData%\RST\R<NN>\app\
@@ -129,6 +158,8 @@
       <Files Include="..\build\R25\app\**"    Directory="R25AppDir" />
       <Files Include="..\build\R26\addins\**" Directory="Addins2026Dir" />
       <Files Include="..\build\R26\app\**"    Directory="R26AppDir" />
+      <Files Include="..\build\R27\addins\**" Directory="Addins2027Dir" />
+      <Files Include="..\build\R27\app\**"    Directory="R27AppDir" />
     </Feature>
 
   </Package>
