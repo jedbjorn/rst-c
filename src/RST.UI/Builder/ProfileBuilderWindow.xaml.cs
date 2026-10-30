@@ -218,6 +218,13 @@ public partial class ProfileBuilderWindow : Window
 
     // ---- stacks (spec #17) --------------------------------------------------------------------
 
+    // The keyboard path to a stack (review N6): tabbing into a stack card (its name box or buttons)
+    // selects it, as a click on the card does. Selecting a stack rebuilds nothing, so the focused box stays.
+    private void OnStackFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: StackCardViewModel stack }) Model.SelectStack(stack);
+    }
+
     // A stack card takes catalogue commands only; anything else is refused there (and does not
     // reach the Properties pane behind it).
     private void OnStackDragOver(object sender, DragEventArgs e)

@@ -276,8 +276,19 @@ public sealed class PanelCardViewModel : ObservableObject
     public bool IsSelected
     {
         get => _isSelected;
-        internal set => SetField(ref _isSelected, value);
+        internal set
+        {
+            if (SetField(ref _isSelected, value)) OnPropertyChanged(nameof(ShowsRing));
+        }
     }
+
+    /// <summary>
+    /// The accent ring: the selected panel, unless a stack is selected (spec #17, review N6: one ring
+    /// at a time, on whatever a double-click adds to). The panel stays the target of "+ Panel".
+    /// </summary>
+    public bool ShowsRing => _isSelected && !_owner.HasSelectedStack;
+
+    internal void RingChanged() => OnPropertyChanged(nameof(ShowsRing));
 
     /// <summary>The drag feedback on the card: a line above or below it (panels), or the whole card (commands, slots).</summary>
     public DropMarker DropMarker

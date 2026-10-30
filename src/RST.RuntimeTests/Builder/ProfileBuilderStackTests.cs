@@ -11,6 +11,7 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using FluentAssertions;
 using RST.Core.Builder;
@@ -369,6 +370,60 @@ public class ProfileBuilderStackTests
     }
 
     [Fact]
+    public async Task A_failed_save_keeps_the_unplaced_stacks_in_the_editor()
+    {
+        var h = WithStacks();
+        h.Model.AddStackCommand.Execute(null);
+        h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_WALL"));
+        h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_DOOR"));
+        h.Backend.SaveError = "disk full";
+
+        (await h.Model.SaveAsync()).Should().BeFalse();
+
+        h.Model.Profile.Stacks.Keys.Should().Contain("Stack 1", "nothing was written, so nothing is dropped");
+        h.Model.Stacks.Select(c => c.Name).Should().Contain("Stack 1");
+
+        h.Backend.SaveError = null;
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        h.Model.Profile.Stacks.Keys.Should().NotContain("Stack 1");
+    }
+
+    [Fact]
+    public void Export_ZIP_applies_the_stack_rules_of_Save()
+    {
+        var h = WithStacks();
+        h.Model.AddStackCommand.Execute(null);
+        h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_WALL"));
+        h.Dialogs.SaveResult = @"C:\out\stacks.zip";
+
+        h.Model.ExportCommand.Execute(null);
+        AssertToast(h, "Stack \"Stack 1\" needs 2 or 3 tools before you can save.");
+        h.Dialogs.SaveCalls.Should().Be(0, "a profile that would not import is not exported");
+        h.Backend.Exports.Should().BeEmpty();
+
+        h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_DOOR"));
+        h.Model.ExportCommand.Execute(null);
+        var exported = h.Backend.Exports.Single().Profile;
+        exported.Stacks.Keys.Should().Equal("Openings", "Datum", "Help");
+        ProfileSerializer.Validate(exported).Should().BeEmpty();
+        h.Model.Profile.Stacks.Keys.Should().Contain("Stack 1", "an export leaves the editor as it is");
+    }
+
+    [Fact]
+    public void Only_one_ring_shows_the_selected_stack_takes_it_from_the_panel()
+    {
+        var h = WithStacks();
+        h.Model.Panels[0].ShowsRing.Should().BeTrue();
+        h.Model.Stacks[1].SelectCommand.Execute(null);
+        h.Model.Panels[0].IsSelected.Should().BeTrue("the panel is still the + Panel target");
+        h.Model.Panels[0].ShowsRing.Should().BeFalse();
+        h.Model.Stacks.Select(c => c.IsSelected).Should().Equal(false, true, false);
+        h.Model.Panels[1].SelectCommand.Execute(null);
+        h.Model.Panels.Select(p => p.ShowsRing).Should().Equal(false, true);
+        h.Model.Stacks.Should().OnlyContain(c => !c.IsSelected);
+    }
+
+    [Fact]
     public void Loading_a_profile_shows_its_stacks_and_a_fresh_profile_has_none()
     {
         var h = WithStacks();
@@ -524,6 +579,26 @@ public class ProfileBuilderStackWindowTests
             WindowCapture.DoEvents();
             datum.Text.Should().Be("Datum", "a duplicate is refused and the box shows the name again");
             h.Model.Toast.Text.Should().Be("Stack \"Openings\" already exists.");
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void Keyboard_focus_in_a_stack_card_selects_the_stack() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            h.Model.HasSelectedStack.Should().BeFalse();
+            var box = WindowCapture.Descendants<TextBox>(window.StackCards).Single(t => Id(t) == "Builder.StackName" && t.Text == "Help");
+            // What Tab into the name box raises (an off-screen test window cannot take real focus).
+            box.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, null, box) { RoutedEvent = Keyboard.GotKeyboardFocusEvent });
+            h.Model.SelectedStack!.Name.Should().Be("Help");
+            WindowCapture.Descendants<TextBox>(window.StackCards).Should().Contain(box, "selecting a stack rebuilds nothing, so the focused box stays");
+            h.Model.Panels[0].ShowsRing.Should().BeFalse("one ring at a time");
         }
         finally
         {

@@ -689,6 +689,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private void RaiseStackSelection()
     {
         foreach (var card in Stacks) card.IsSelected = card.Name == _selectedStack;
+        foreach (var panel in Panels) panel.RingChanged();
         OnPropertyChanged(nameof(SelectedStack));
         OnPropertyChanged(nameof(HasSelectedStack));
     }
@@ -792,6 +793,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         foreach (var (name, stack) in _profile.Stacks)
             Stacks.Add(new StackCardViewModel(name, stack ?? new Stack(), this) { IsSelected = name == _selectedStack });
         if (_selectedStack is not null && !_profile.Stacks.ContainsKey(_selectedStack)) _selectedStack = null;
+        foreach (var panel in Panels) panel.RingChanged();
         OnPropertyChanged(nameof(HasStacks));
         OnPropertyChanged(nameof(SelectedStack));
         OnPropertyChanged(nameof(HasSelectedStack));
@@ -1051,12 +1053,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         if (IsWorking) return false;
         // Spec #17: a stack needs 2 or 3 tools before the profile can be saved (checked before the
         // rename-as-copy plan, which clears the id of a copy).
-        if (StackEditing.FirstUnderfilled(_profile) is { } underfilled)
-        {
-            Log.Warning("Builder: save blocked, stack {Stack} has fewer than 2 tools", underfilled);
-            ShowToast(UiStrings.Builder_StackNeedsTools(underfilled), BannerKind.Error);
-            return false;
-        }
+        if (BlockedByUnderfilledStack("save")) return false;
         var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, _library.Select(e => e.Profile));
         switch (plan)
         {
@@ -1073,24 +1070,25 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         }
         var savedAsCopy = plan == SavePlanKind.AsCopy;
 
-        // Spec #17: a stack no panel places is removed on save (its card said so); the editor drops
-        // it too, so it matches what is written.
-        var orphans = ProfileEditing.RemoveOrphanStacks(_profile);
-        if (orphans.Count > 0)
-        {
-            Log.Information("Builder: save removes stacks not on any panel: {Stacks}", string.Join(", ", orphans));
-            if (_selectedStack is not null && orphans.Contains(_selectedStack)) _selectedStack = null;
-            RenderStacks();
-        }
-
         _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup);
         Log.Information("Builder: save {Name} (edit={Edit}, copy={Copy}, requiredAddins={Required})",
             _profile.ProfileName, _editMode, savedAsCopy, _profile.RequiredAddins.Count);
-        var result = Safe(() => _backend.Save(_profile), SaveOutcome.Fail("unknown"), "save_profile");
+        // Spec #17: a stack no panel places is removed on save (its card said so). The write gets a
+        // copy without them; the editor drops them only once the write succeeded, so a failed save
+        // keeps them.
+        var toSave = WithoutOrphanStacks(_profile, out var orphans);
+        var result = Safe(() => _backend.Save(toSave), SaveOutcome.Fail("unknown"), "save_profile");
         if (!result.Ok)
         {
             ShowToast(UiStrings.Builder_SaveFailed(result.Error ?? "unknown"), BannerKind.Error);
             return false;
+        }
+        if (orphans.Count > 0)
+        {
+            ProfileEditing.RemoveOrphanStacks(_profile);
+            Log.Information("Builder: save removed stacks not on any panel: {Stacks}", string.Join(", ", orphans));
+            if (_selectedStack is not null && orphans.Contains(_selectedStack)) _selectedStack = null;
+            RenderStacks();
         }
         if (result.Saved is { } saved)
         {
@@ -1140,13 +1138,17 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             ShowToast(UiStrings.Builder_NameRequired, BannerKind.Error);
             return;
         }
+        // Spec #17 (review N2): the same stack rules as Save, so an export always imports.
+        if (BlockedByUnderfilledStack("export")) return;
         var path = _dialogs.SaveFile(FileDialogTexts.ExportZipTitle, FileDialogTexts.ZipFilter, ProfileSaveService.SuggestedExportName(_profile));
         if (string.IsNullOrEmpty(path))
         {
             Log.Information("Builder: export cancelled");
             return;
         }
-        var result = Safe(() => _backend.Export(_profile, path), OpResult.Fail("unknown"), "export_profile");
+        var toExport = WithoutOrphanStacks(_profile, out var orphans);
+        if (orphans.Count > 0) Log.Information("Builder: export leaves out stacks not on any panel: {Stacks}", string.Join(", ", orphans));
+        var result = Safe(() => _backend.Export(toExport, path), OpResult.Fail("unknown"), "export_profile");
         if (result.Ok) ShowToast(UiStrings.Builder_ExportedTo(path), BannerKind.Success);
         else ShowToast(UiStrings.Builder_ExportFailed(result.Error ?? "unknown"), BannerKind.Error);
     }
@@ -1222,6 +1224,25 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     private void ShowToast(string text, BannerKind kind) => Toast.Show(text, kind, TransientMessage.ToastDuration);
+
+    /// <summary>A stack with fewer than 2 tools blocks Save and Export ZIP (spec #17): the toast, and true.</summary>
+    private bool BlockedByUnderfilledStack(string what)
+    {
+        if (StackEditing.FirstUnderfilled(_profile) is not { } underfilled) return false;
+        Log.Warning("Builder: {What} blocked, stack {Stack} has fewer than 2 tools", what, underfilled);
+        ShowToast(UiStrings.Builder_StackNeedsTools(underfilled), BannerKind.Error);
+        return true;
+    }
+
+    /// <summary>The profile to write: itself, or a copy without the stacks no panel places.</summary>
+    private static Profile WithoutOrphanStacks(Profile profile, out IReadOnlyList<string> orphans)
+    {
+        orphans = ProfileSerializer.OrphanStacks(profile);
+        if (orphans.Count == 0) return profile;
+        var copy = ProfileEditing.Clone(profile);
+        ProfileEditing.RemoveOrphanStacks(copy);
+        return copy;
+    }
 
     private static T Safe<T>(Func<T> read, T fallback, string what)
     {
