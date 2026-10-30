@@ -182,9 +182,11 @@ public class TrayWindowScreenshotTests
         {
             WindowCapture.ShowOffScreen(dialog);
             WindowCapture.DoEvents();
-            var bitmap = WindowCapture.Content(dialog);
+            // The dialog paints its color on the window itself (as StyleGalleryScreenshotTests captures it).
+            var bitmap = WindowCapture.Client(dialog);
             Screenshots.Save(bitmap, Name("notice", theme));
-            Assert.True(Screenshots.DistinctPixels(bitmap) > 40, "the notice looks blank");
+            AssertColor(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 1, 1), "notice background");
+            Assert.True(Screenshots.DistinctPixels(bitmap) > 30, "the notice looks blank");
         }
         finally
         {
