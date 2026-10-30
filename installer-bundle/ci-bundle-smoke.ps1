@@ -109,7 +109,9 @@ function Get-Arp {
     if (-not (Test-Path $root)) { continue }
     foreach ($k in Get-ChildItem $root) {
       $p = Get-ItemProperty $k.PSPath
-      $names = $p.PSObject.Properties.Name
+      # Not .Properties.Name: a key with no values makes that an empty
+      # member enumeration, which StrictMode rejects.
+      $names = @($p.PSObject.Properties | ForEach-Object { $_.Name })
       if (-not ($names -contains 'DisplayName')) { continue }
       $out += [pscustomobject]@{
         Hive              = $root.Substring(0, 4)
