@@ -2,8 +2,9 @@
 // src/SplashIt.UI/Settings/SettingsWindow.xaml.cs (splash-it commit ba86a71, MIT, same owner).
 // The Profile Builder window (spec #16, WU4). All behavior is in ProfileBuilderViewModel; the
 // code here is view plumbing: the title-bar ✕ asks the view-model first (Planner default 3), the
-// Branding popover commits its URL box when it closes and does not reopen from the click that
-// dismissed it, the URL editor's label box takes focus when the editor opens, and drag and drop
+// Branding popover commits its URL box when it closes and closes on Escape (Branding ▾ is a
+// ToggleButton bound to the popup, so the dismissing click cannot reopen it), the URL editor's
+// label box takes focus when the editor opens, and drag and drop
 // (WU5): DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel
 // headers and the slot rows; the cards and rows report the cursor's half to the view-model, which
 // owns the markers and the index arithmetic (RST.Core PanelDrops).
@@ -38,10 +39,6 @@ public partial class ProfileBuilderWindow : Window
             // buildUrlEditor: the label box takes focus when the editor opens.
             if (e.PropertyName == nameof(ProfileBuilderViewModel.IsUrlEditorOpen) && model.IsUrlEditorOpen)
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UrlLabelBox.Focus());
-            // The popover's close time, taken the moment it closes (Popup.Closed comes later, after the
-            // click that closed it has already reached the Branding button). VM D2.
-            if (e.PropertyName == nameof(ProfileBuilderViewModel.IsBrandingOpen) && !model.IsBrandingOpen)
-                _brandingClosedAt = Environment.TickCount64;
         };
         // A drag that leaves the window straight from a card, a row or a name box (whose own DragLeave
         // the TextBox handles) still clears its marker.
@@ -63,23 +60,14 @@ public partial class ProfileBuilderWindow : Window
         base.OnClosing(e);
     }
 
-    // A click on Branding while the popover is open only closes it. With StaysOpen=False the popup
-    // closes itself on that mouse-down (an outside click) and WPF then delivers the same press to
-    // the button, which would reopen it: a press within 300 ms of the close is swallowed.
-    internal void OnBrandingButtonDown(object sender, MouseButtonEventArgs e)
+    // Escape inside the popover closes it and puts the focus back on Branding ▾.
+    private void OnBrandingPopoverKey(object sender, KeyEventArgs e)
     {
-        if (Model.IsBrandingOpen)
-        {
-            Model.IsBrandingOpen = false;
-            e.Handled = true;
-        }
-        else if (Environment.TickCount64 - _brandingClosedAt < 300)
-        {
-            e.Handled = true;
-        }
+        if (e.Key != Key.Escape) return;
+        Model.IsBrandingOpen = false;
+        BrandingButton.Focus();
+        e.Handled = true;
     }
-
-    private long _brandingClosedAt = long.MinValue / 2;
 
     // The URL is saved on change (blur or Enter); closing the popover is a blur.
     private void OnBrandingClosed(object? sender, EventArgs e)
