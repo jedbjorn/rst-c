@@ -272,6 +272,10 @@ public class TrayUpdatesScreenshotTests
                 Assert.Null(rows[1].ActionText);
                 Assert.Equal("Install", rows[2].ActionText);
                 Assert.Contains("Coming soon", texts);
+                // Not installed and Installed manually are said once, by the pill, not again as an "Installed" value.
+                Assert.DoesNotContain(texts, t => t.Contains("Installed Not installed") || t.Contains("Installed Installed manually"));
+                Assert.False(rows[1].ShowInstalledVersion);
+                Assert.True(rows[0].ShowInstalledVersion);
             }
             else
             {

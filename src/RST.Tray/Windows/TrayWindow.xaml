@@ -70,15 +70,19 @@
                 </Grid>
             </DataTemplate>
 
-            <!-- Installed and Latest on one line (Apps rows, the Updates page's companion lines). -->
+            <!-- Installed and Latest on one line (Apps rows, the Updates page's companion lines). The Installed part
+                 shows only for a Windows Installer install: Not installed and Installed manually are the pill's. -->
             <DataTemplate x:Key="InstalledAndLatestInline">
-                <TextBlock TextWrapping="Wrap">
-                    <Run Text="{x:Static res:TrayStrings.App_InstalledLabel}" Foreground="{StaticResource MutedTextBrush}" />
-                    <Run Text="{Binding InstalledText, Mode=OneWay}" />
-                    <Run Text="   " />
-                    <Run Text="{x:Static res:TrayStrings.App_LatestLabel}" Foreground="{StaticResource MutedTextBrush}" />
-                    <Run Text="{Binding LatestText, Mode=OneWay}" />
-                </TextBlock>
+                <WrapPanel>
+                    <TextBlock Margin="0,0,14,0" Visibility="{Binding ShowInstalledVersion, Converter={StaticResource BoolToVisible}}">
+                        <Run Text="{x:Static res:TrayStrings.App_InstalledLabel}" Foreground="{StaticResource MutedTextBrush}" />
+                        <Run Text="{Binding InstalledText, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock>
+                        <Run Text="{x:Static res:TrayStrings.App_LatestLabel}" Foreground="{StaticResource MutedTextBrush}" />
+                        <Run Text="{Binding LatestText, Mode=OneWay}" />
+                    </TextBlock>
+                </WrapPanel>
             </DataTemplate>
         </ResourceDictionary>
     </Window.Resources>

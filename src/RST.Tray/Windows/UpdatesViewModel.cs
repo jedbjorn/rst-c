@@ -60,6 +60,9 @@ internal sealed class ProductRowViewModel
         _ => InstalledVersion(Status.Installation.Installed!),
     };
 
+    /// <summary>Windows Installer has it: the one-line layouts show its version (otherwise the pill says it all).</summary>
+    public bool ShowInstalledVersion => Status.Installation.Kind == InstallKind.Installer;
+
     public string LatestText =>
         Status.Latest is { } latest ? latest.ToString()
         : Status.LatestFailed ? TrayStrings.App_LatestFailed
