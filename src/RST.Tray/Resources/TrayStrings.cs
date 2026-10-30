@@ -96,4 +96,108 @@ public static class TrayStrings
     public static string Notice_Heading => Get(nameof(Notice_Heading));
 
     public static string Notice_Message => Get(nameof(Notice_Message));
+
+    // Updates and Apps pages, notifications (F17 WU3).
+
+    public static string Updates_CheckNow => Get(nameof(Updates_CheckNow));
+
+    public static string Updates_Checking => Get(nameof(Updates_Checking));
+
+    public static string Updates_LastCheckedToday(string time) => Format(nameof(Updates_LastCheckedToday), time);
+
+    public static string Updates_LastCheckedYesterday(string time) => Format(nameof(Updates_LastCheckedYesterday), time);
+
+    public static string Updates_LastCheckedOn(string date, string time) => Format(nameof(Updates_LastCheckedOn), date, time);
+
+    public static string Updates_NeverChecked => Get(nameof(Updates_NeverChecked));
+
+    public static string Updates_RstAvailable(string version) => Format(nameof(Updates_RstAvailable), version);
+
+    public static string Updates_RstUpToDate => Get(nameof(Updates_RstUpToDate));
+
+    public static string Updates_RstInstalled(string version) => Format(nameof(Updates_RstInstalled), version);
+
+    public static string Updates_RstUnknown => Get(nameof(Updates_RstUnknown));
+
+    public static string Updates_ChecksOff => Get(nameof(Updates_ChecksOff));
+
+    public static string Updates_ChecksOffLocked => Get(nameof(Updates_ChecksOffLocked));
+
+    public static string Updates_CheckFailed(string reason) => Format(nameof(Updates_CheckFailed), reason);
+
+    public static string Updates_LastSuccessToday(string time) => Format(nameof(Updates_LastSuccessToday), time);
+
+    public static string Updates_LastSuccessYesterday(string time) => Format(nameof(Updates_LastSuccessYesterday), time);
+
+    public static string Updates_LastSuccessOn(string date, string time) => Format(nameof(Updates_LastSuccessOn), date, time);
+
+    public static string Updates_NoSuccessYet => Get(nameof(Updates_NoSuccessYet));
+
+    public static string Apps_DetectionFailed => Get(nameof(Apps_DetectionFailed));
+
+    public static string App_LatestFailedKnown(string version) => Format(nameof(App_LatestFailedKnown), version);
+
+    public static string App_Unknown => Get(nameof(App_Unknown));
+
+    public static string State_Unknown => Get(nameof(State_Unknown));
+
+    public static string Updates_InstallComingSoon => Get(nameof(Updates_InstallComingSoon));
+
+    public static string Updates_OtherApps => Get(nameof(Updates_OtherApps));
+
+    public static string Updates_OtherAppsHint => Get(nameof(Updates_OtherAppsHint));
+
+    public static string Apps_InstallsComingSoon => Get(nameof(Apps_InstallsComingSoon));
+
+    public static string Apps_Detecting => Get(nameof(Apps_Detecting));
+
+    public static string App_InstalledLabel => Get(nameof(App_InstalledLabel));
+
+    public static string App_LatestLabel => Get(nameof(App_LatestLabel));
+
+    public static string App_InstalledForYou(string version) => Format(nameof(App_InstalledForYou), version);
+
+    public static string App_InstalledForYouManaged(string version) => Format(nameof(App_InstalledForYouManaged), version);
+
+    public static string App_InstalledForEveryone(string version) => Format(nameof(App_InstalledForEveryone), version);
+
+    public static string App_VersionUnknown => Get(nameof(App_VersionUnknown));
+
+    public static string App_NotInstalled => Get(nameof(App_NotInstalled));
+
+    public static string App_InstalledManually => Get(nameof(App_InstalledManually));
+
+    public static string App_ManualNote => Get(nameof(App_ManualNote));
+
+    public static string App_LatestNotChecked => Get(nameof(App_LatestNotChecked));
+
+    public static string App_LatestFailed => Get(nameof(App_LatestFailed));
+
+    public static string App_LatestNone => Get(nameof(App_LatestNone));
+
+    public static string App_Install => Get(nameof(App_Install));
+
+    public static string App_Update => Get(nameof(App_Update));
+
+    public static string App_ComingSoon => Get(nameof(App_ComingSoon));
+
+    public static string App_ReleasePage => Get(nameof(App_ReleasePage));
+
+    public static string State_UpToDate => Get(nameof(State_UpToDate));
+
+    public static string State_UpdateAvailable => Get(nameof(State_UpdateAvailable));
+
+    public static string State_NotInstalled => Get(nameof(State_NotInstalled));
+
+    public static string State_InstalledManually => Get(nameof(State_InstalledManually));
+
+    public static string State_Installed => Get(nameof(State_Installed));
+
+    public static string Notify_OneTitle(string product, string version) => Format(nameof(Notify_OneTitle), product, version);
+
+    public static string Notify_OneText => Get(nameof(Notify_OneText));
+
+    public static string Notify_ManyTitle => Get(nameof(Notify_ManyTitle));
+
+    public static string Notify_ManyText(string list) => Format(nameof(Notify_ManyText), list);
 }

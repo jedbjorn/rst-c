@@ -1,10 +1,12 @@
-// rst-c's own (not vendored): the RST tray window's view-model (spec #20 §1; F17 WU1). Four pages: Updates, Apps
-// and Add-ins are placeholders in WU1 (WU3 and WU2 fill them); Settings / About is real: the theme, "Check for
+// rst-c's own (not vendored): the RST tray window's view-model (spec #20 §1; F17 WU1). Four pages: Updates and
+// Apps (F17 WU3) are UpdatesViewModel, over the update checker; Add-ins is a placeholder until WU2; Settings /
+// About is real: the theme, "Check for
 // updates automatically" (locked off by the UpdateChecks preset), the version and the log folder. Persistence
 // and re-theming go through ITraySettingsHost (TrayHost in the app, a fake in RuntimeTests).
 
 using System.Windows.Input;
 using RST.Core.Tray;
+using RST.Core.Updates;
 using RST.Tray.Resources;
 using RST.UI.Mvvm;
 
@@ -48,14 +50,19 @@ internal sealed class TrayViewModel : ObservableObject
     private bool _checkForUpdates;
     private string? _saveError;
 
-    public TrayViewModel(ITraySettingsHost host, TrayPage page)
+    /// <param name="updates">The update checker (F17 WU3); null shows the pages with nothing detected or checked yet.</param>
+    public TrayViewModel(ITraySettingsHost host, TrayPage page, ITrayUpdatesHost? updates = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _page = page;
         _checkForUpdates = host.UpdateChecks.Enabled;
         OpenLogFolderCommand = new RelayCommand(host.OpenLogFolder);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
+        Updates = new UpdatesViewModel(updates ?? new NoUpdatesHost(host), () => _host.UpdateChecks);
     }
+
+    /// <summary>The Updates and Apps pages (F17 WU3).</summary>
+    public UpdatesViewModel Updates { get; }
 
     /// <summary>The window asks to close (the Close button).</summary>
     public event EventHandler? RequestClose;
@@ -161,5 +168,25 @@ internal sealed class TrayViewModel : ObservableObject
         OnPropertyChanged(nameof(ThemeSystem));
         OnPropertyChanged(nameof(ThemeLight));
         OnPropertyChanged(nameof(ThemeDark));
+    }
+
+    /// <summary>No checker: every product not installed, never checked.</summary>
+    private sealed class NoUpdatesHost(ITraySettingsHost settings) : ITrayUpdatesHost
+    {
+        public UpdateSnapshot Current { get; } = UpdateSnapshot.Empty(ProductCatalog.Default, settings.UpdateChecks.Enabled);
+
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
+
+        public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
+
+        public TimeZoneInfo TimeZone => TimeZoneInfo.Local;
+
+        public void CheckNow() { }
+
+        public void OpenReleasePage(ProductInfo product) { }
     }
 }

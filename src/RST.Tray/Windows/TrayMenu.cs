@@ -1,5 +1,5 @@
-// rst-c's own (not vendored): the tray icon's menu (spec #20 §1; F17 WU1): Open RST, Check for updates (disabled
-// until WU3 wires it), Settings, Quit. A WPF ContextMenu in the family look: each open builds it afresh on a new
+// rst-c's own (not vendored): the tray icon's menu (spec #20 §1; F17 WU1): Open RST, Check for updates (checks
+// now and opens the Updates page, F17 WU3), Settings, Quit. A WPF ContextMenu in the family look: each open builds it afresh on a new
 // Theme.xaml, so it always matches the current theme. Opened at the icon's anchor point; it takes the
 // foreground (the classic notification-menu rule) so a click anywhere else dismisses it.
 
@@ -15,8 +15,8 @@ namespace RST.Tray.Windows;
 /// <summary>What the menu's items do.</summary>
 internal sealed record TrayMenuActions(Action Open, Action CheckForUpdates, Action Settings, Action Quit)
 {
-    /// <summary>False until update checks arrive (WU3): the item shows disabled.</summary>
-    public bool CanCheckForUpdates { get; init; }
+    /// <summary>Check for updates is enabled (F17 WU3); false shows it disabled.</summary>
+    public bool CanCheckForUpdates { get; init; } = true;
 }
 
 internal static class TrayMenu

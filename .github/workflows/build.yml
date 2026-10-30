@@ -6,8 +6,10 @@ name: build
 on:
   push:
     branches: [main]
+  # feat/**: a PR stacked on another feature branch (e.g. F17 WU3 on
+  # feat/tray-core) gets the same gate before it is retargeted to main.
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/**']
 
 permissions:
   contents: read

@@ -5,6 +5,7 @@
 //   %LocalAppData%\Programs\RST\Tray\RST.Tray.exe   the tray (RST.msi, per user)
 //   %LocalAppData%\RST\Tray\cache\                  downloads (WU4); RST.msi removes it on uninstall
 //   %AppData%\RST\tray_settings.json                the tray's settings (user data, survives uninstall)
+//   %AppData%\RST\tray_updates.json                 the last update check and the versions announced (WU3)
 //   %AppData%\RST\logs\tray_<yyyyMMdd>.log          the tray's log, 10 files kept (outside rst_*.log)
 //   Local\RST.Tray.<UserSid>                        the single-instance mutex (per user and session)
 //   Local\RST.Tray.Show.<UserSid>                   the event a second launch sets to show the window
@@ -49,6 +50,9 @@ public static class TrayPaths
 
     /// <summary>%AppData%\RST\tray_settings.json.</summary>
     public static string SettingsFile => Path.Combine(AppDataPaths.Root, "tray_settings.json");
+
+    /// <summary>%AppData%\RST\tray_updates.json: the last check's result and the versions already announced (WU3).</summary>
+    public static string UpdatesFile => Path.Combine(AppDataPaths.Root, "tray_updates.json");
 
     /// <summary>%AppData%\RST\logs\ (shared with the engine's session logs).</summary>
     public static string LogsDir => Path.Combine(AppDataPaths.Root, "logs");

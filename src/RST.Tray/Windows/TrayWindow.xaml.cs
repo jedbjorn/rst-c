@@ -21,7 +21,11 @@ internal partial class TrayWindow : Window
         Icon = WindowIcon();
         DataContext = viewModel;
         viewModel.RequestClose += OnRequestClose;
-        Closed += (_, _) => viewModel.RequestClose -= OnRequestClose;
+        Closed += (_, _) =>
+        {
+            viewModel.RequestClose -= OnRequestClose;
+            viewModel.Updates.Detach(); // the checker outlives the window
+        };
     }
 
     public TrayViewModel ViewModel { get; }
