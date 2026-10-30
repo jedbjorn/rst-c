@@ -144,6 +144,14 @@ function Seed-Probe {
 $newVersion = Get-MsiProperty $Msi 'ProductVersion'
 $newProductCode = Get-MsiProperty $Msi 'ProductCode'
 Write-Host "New RST.msi: ProductVersion=$newVersion ProductCode=$newProductCode"
+
+# MajorUpgrade Schedule="afterInstallInitialize": RemoveExistingProducts
+# must sit after InstallInitialize (inside the install transaction, so a
+# failed install rolls the old product back in) and before InstallFiles.
+$seq = @{}
+foreach ($row in (Get-MsiQuery $Msi 'SELECT `Action`, `Sequence` FROM `InstallExecuteSequence`' 2)) { $seq[$row[0]] = [int]$row[1] }
+Write-Host "InstallExecuteSequence: InstallValidate=$($seq['InstallValidate']) InstallInitialize=$($seq['InstallInitialize']) RemoveExistingProducts=$($seq['RemoveExistingProducts']) InstallFiles=$($seq['InstallFiles'])"
+Assert ($seq.ContainsKey('RemoveExistingProducts') -and $seq['RemoveExistingProducts'] -gt $seq['InstallInitialize'] -and $seq['RemoveExistingProducts'] -lt $seq['InstallFiles']) 'RemoveExistingProducts sequenced after InstallInitialize and before InstallFiles'
 Show-Related 'start'
 Assert ((Get-Related $UnifiedCode).Count -eq 0 -and (Get-Related $PreviewCode).Count -eq 0) 'runner starts with no RST product'
 
@@ -213,6 +221,7 @@ if ($From -eq 'Preview') {
   $oldHash = (Get-FileHash $engine27 -Algorithm SHA256).Hash
   Write-Host "R27 RST.Engine.dll before: $oldHash (preview)"
   Write-Host "R27 RST.Engine.dll staged: $stagedHash (new build)"
+  Assert ($oldHash -ne $stagedHash) 'preview R27 engine differs from the new build (hash check below is meaningful)'
 
   # Component identity: do the preview's components share GUIDs with the
   # unified MSI's R27 components? (Informational: removal runs before

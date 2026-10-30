@@ -113,7 +113,7 @@ msiexec /x RST.msi /qn
 
 ### Migrating from the Revit 2027 preview
 
-Installing `RST.msi` (v3.0.0 or later) removes an installed "RST (Revit 2027 preview)" automatically — no manual uninstall, and it works under `msiexec /qn`. `Product.wxs` carries an `<Upgrade>` row on the preview's retired `UpgradeCode` (any version, `OnlyDetect="no"`), so the `RemoveExistingProducts` action that `MajorUpgrade` schedules removes the preview before the new files install, inside the same transaction: a failed install rolls back and restores the preview. Afterwards Settings → Apps shows a single "RST". Removal is per-user: other Windows users on the same machine migrate when they run the new MSI. User data under `%AppData%\RST\` is not touched.
+Installing `RST.msi` (v3.0.0 or later) removes an installed "RST (Revit 2027 preview)" automatically — no manual uninstall, and it works under `msiexec /qn`. `Product.wxs` carries an `<Upgrade>` row on the preview's retired `UpgradeCode` (any version, `OnlyDetect="no"`), so the `RemoveExistingProducts` action that `MajorUpgrade` schedules removes the preview before the new files install. `MajorUpgrade` is scheduled `afterInstallInitialize`, so that removal is part of the install transaction: if the new install fails, the rollback reinstalls the preview (or the previous `RST`). Afterwards Settings → Apps shows a single "RST". Removal is per-user: other Windows users on the same machine migrate when they run the new MSI. User data under `%AppData%\RST\` is not touched.
 
 The row stays indefinitely, so if someone installs an old `RST-R27.msi` from a past release after the fold, the next `RST.msi` install removes it again.
 
@@ -125,7 +125,7 @@ The row stays indefinitely, so if someone installs an old `RST-R27.msi` from a p
 
 1. Tag from `main` HEAD: `git tag -a v1.0.0 -m "…" && git push origin v1.0.0`. No version-bump commit is needed — the tag carries the version.
 2. `.github/workflows/release.yml` fires on the `v*` tag, runs the matrix in `_build.yml`, creates a GitHub Release at `releases/tag/v1.0.0`, and attaches `RST.msi` (Revit 2025 + 2026 + 2027) by name. Every major, R27 included, is a hard gate: an R27 build failure fails the workflow and blocks the release.
-3. The installed ProductVersion always matches the tag, and a new tag always raises it — driving `MajorUpgrade` / `RemoveExistingProducts` on in-place upgrade.
+3. The installed ProductVersion always matches the numeric part of the tag — driving `MajorUpgrade` / `RemoveExistingProducts` on in-place upgrade. A new release raises it, **except** that `v3.0.0-rc.N` and `v3.0.0` all stamp `3.0.0`: an rc → rc → final install is a same-version upgrade, which works only because `MajorUpgrade` sets `AllowSameVersionUpgrades="yes"`. Do not remove that attribute; without it the final installs side by side with the rc as a second "RST".
 
 **Pre-release tags:** any tag with a hyphen (`v1.0.0-rc.1`, `v0.2.0-alpha`) is flagged as pre-release on the GitHub Release.
 

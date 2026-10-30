@@ -54,16 +54,21 @@
     <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles (Revit 2025–2027)" />
 
     <!-- Replace any prior install of the same product family in place.
-         The default schedule (afterInstallValidate) removes old products
-         before any file is installed, inside the install transaction:
-         a failed install rolls back and restores what was there.
+         Schedule="afterInstallInitialize" runs RemoveExistingProducts
+         inside this install's transaction, before any file is installed:
+         the old product (and the R27 preview, via the Upgrade row below)
+         is fully removed first, and if the new install then fails, the
+         rollback reinstalls it. The WiX default (afterInstallValidate)
+         removes it in a separate transaction, so a failed install would
+         leave no RST at all. ci-smoke.ps1 asserts this sequencing.
          AllowSameVersionUpgrades: release.yml strips "-rc.N" from the tag,
          so an rc and its final release (and dev builds of one commit)
          share a ProductVersion with different ProductCodes. Without it
          the later one installs side by side as a second "RST" instead of
          replacing the first. Family convention (gantt-it, splash-it).
          Downgrades stay blocked. -->
-    <MajorUpgrade AllowSameVersionUpgrades="yes"
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
     <!-- R27 preview migration (feature #11, Option B).
@@ -72,7 +77,8 @@
          v1.0.0–v2.2.0). Retired, never reused. This row finds an
          installed preview at any version (OnlyDetect="no"), and the
          RemoveExistingProducts action that MajorUpgrade schedules above
-         removes it before the unified R27 payload installs, so the two
+         removes it (rolled back if the install fails) before the unified
+         R27 payload installs, so the two
          products never co-own Addins\2027 or RST\R27\app. Per-user
          scope: only the installing user's preview is found. The row
          stays indefinitely, so a late install of an old RST-R27.msi is

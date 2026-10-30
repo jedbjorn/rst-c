@@ -16,8 +16,10 @@ name: release
 # Versioning: the MSI's <Package Version="…"> is threaded from the tag.
 # The `prepare` job strips the leading `v` and any `-prerelease` suffix to a
 # numeric a.b.c and passes it to _build.yml, which stamps RST.msi. So the
-# installed ProductVersion always matches the tag and a new tag always raises
-# it — driving MajorUpgrade / RemoveExistingProducts on in-place upgrade.
+# installed ProductVersion always matches the tag's a.b.c, driving
+# MajorUpgrade / RemoveExistingProducts on in-place upgrade. An rc and its
+# final (v3.0.0-rc.N, v3.0.0) share a.b.c: that same-version upgrade relies
+# on AllowSameVersionUpgrades="yes" in installer/Product.wxs.
 
 on:
   push:
