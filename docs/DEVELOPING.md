@@ -213,3 +213,31 @@ WU5, so `LoaderWindow` now always shows `profile_builder.html`.
   (list rows with a divider).
 - **Tests:** `RST.RuntimeTests/Loader` (view-model flows with fakes, screenshots `loader-*`, and
   AC6 over the v2.2.0 fixtures in `src/RST.Tests/Fixtures/V220`).
+
+## The Profile Builder shell (WU4)
+
+The native Profile Builder (`RST.UI/Builder`) is built and tested, but **not wired yet**:
+`BuilderCommand` keeps opening the WebView2 `profile_builder.html` until WU5 adds drag and drop,
+the icon picker and the RST Presets / Junk Cleanup modals. `ProfileBuilderLauncher.Show(owner, …)`
+is the entry point WU5 will call.
+
+- **Logic in RST.Core (`RST.Core.Builder`, tested on Linux in `RST.Tests/Builder`):**
+  `CatalogCommand` (get_catalog's shape and host-tab promotion), `CatalogTree` (the catalogue index
+  and filter: built once, a filter only computes per-node match counts), `RequiredAddinDetector`
+  (computeRequiredAddins, the port of `tests/ui/required-addins.test.mjs` is
+  `RequiredAddinDetectorTests`), `BuilderRules` (shortId, normalizeUrl via `UrlNormalizer`,
+  normalizeHex, the slot shapes and summaries), `ProfileEditing` (startFresh, loadIntoProfile, the
+  dirty snapshot, rename-as-copy) and `ProfileSaveService` (save_profile and export_profile's writes).
+- **The window:** `ProfileBuilderWindow` → `ProfileBuilderViewModel`, which talks to
+  `IProfileBuilderBackend` and `IDialogService`. The catalogue tree is a virtualizing `TreeView`
+  over `CatalogNodeViewModel`s built once; a filter updates counts and each node's
+  `FilteredCollection` of visible children (small changes item by item, big ones as one Reset).
+  Panel and slot edits write straight into the profile and bump `PreviewRevision`, which redraws
+  the shared `RibbonPreview` (Builder mode).
+- **Dialogs:** `IDialogService.Choose` is the three-way prompt (MessageDialog's optional
+  `SecondaryText` button) used for Save & Exit / Discard & Exit / Cancel. Every Builder window and
+  dialog sets `ShowInTaskbar="False"`.
+- **Tests:** `RST.RuntimeTests/Builder`: view-model flows with fakes, screenshots `builder-*`,
+  AC6 (`ProfileBuilderDataCompatibilityTests`, over the v2.2.0 fixtures and the captured v2.2.0 save
+  payloads in `src/RST.Tests/Fixtures/V220/builder`), and AC7 (`ProfileBuilderPerformanceTests`: 823
+  commands, median keystroke under 100 ms, and far fewer realized rows than commands).

@@ -1,0 +1,855 @@
+// rst-c's own (not vendored): the Profile Builder's view-model (spec #16, WU4), a port of
+// profile_builder.html's script (1361-3453) without drag and drop, the icon picker and the two
+// Configure modals (WU5): boot, the profile dropdown (startFresh / loadIntoProfile), the
+// machine-wide branding, the catalogue tree and filter, double-click to add, the panels list
+// (add, select, rename, ▲ ▼ ×), the slot rows (rename, ▲ ▼ ×), the Properties pane (Min Revit,
+// opacity, the selected panel's name and color, the URL button editor, the Presets and Cleanup
+// summaries), the live preview, Save (rename-as-copy, required add-ins, the auto-reload of the
+// active profile), Export ZIP and Exit. Every toast keeps its text.
+// Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
+// (Planner default 3), and the panel delete confirm is the family's destructive MessageDialog.
+
+using System.Collections.ObjectModel;
+using System.Windows.Input;
+using System.Windows.Threading;
+using RST.Core.Builder;
+using RST.Core.Colors;
+using RST.Core.Loader;
+using RST.Core.Profiles;
+using RST.UI.Controls;
+using RST.UI.Dialogs;
+using RST.UI.Loader;
+using RST.UI.Mvvm;
+using RST.UI.Resources;
+using Serilog;
+using ProfilePanel = RST.Core.Profiles.Panel;
+
+namespace RST.UI.Builder;
+
+public sealed class ProfileBuilderViewModel : ObservableObject
+{
+    public const string UnsavedChangesDialogId = MessageDialog.DiscardChangesId;
+    public const string DeletePanelDialogId = "DeletePanelDialog";
+
+    /// <summary>
+    /// The color picker's palette: the Builder's default blue and the other panel colors rst-c's
+    /// profiles use (the HTML's native color input had no palette).
+    /// </summary>
+    public static readonly IReadOnlyList<Rgb> PanelPalette =
+    [
+        Rgb.Parse("#4f8ef7"), Rgb.Parse("#10b981"), Rgb.Parse("#8b5cf6"), Rgb.Parse("#ef4444"),
+        Rgb.Parse("#14b8a6"), Rgb.Parse("#f59e0b"), Rgb.Parse("#64748b"), Rgb.Parse("#ec4899"),
+    ];
+
+    private readonly IProfileBuilderBackend _backend;
+    private readonly IDialogService _dialogs;
+    private readonly Action<Action> _post;
+
+    private IReadOnlyList<CatalogCommand> _catalog = [];
+    private CatalogTree _tree = CatalogTree.Build([]);
+    private readonly CatalogExpansion _expansion = new();
+    private List<CatalogNodeViewModel> _allRoots = [];
+    private CatalogFilter? _filter;
+    private string _filterText = "";
+
+    private IReadOnlyDictionary<string, AddinLookupEntry> _lookup = new Dictionary<string, AddinLookupEntry>();
+    private IReadOnlyList<ProfileEntry> _library = [];
+    private string? _activeId;
+    private IReadOnlyList<string> _activeHiddenTabs = [];
+    private bool _activeDisable;
+
+    private Profile _profile = ProfileEditing.NewProfile();
+    private string _pristine = "";
+    private bool _editMode;
+    private string _originalName = "";
+    private int _selectedPanelIndex = -1;
+    private ProfileOptionViewModel? _selectedOption;
+
+    private BrandingState _branding = BrandingState.None;
+    private bool _isBrandingOpen;
+
+    private bool _isUrlEditorOpen;
+    private string _urlLabel = "";
+    private string _urlAddress = "";
+
+    private int _previewRevision;
+    private bool _isWorking;
+    private bool _closeApproved;
+
+    /// <param name="backend">The Builder's data and writes (a fake in tests).</param>
+    /// <param name="dialogs">The family dialogs: confirm, the three-way prompt, the color picker, the file dialogs.</param>
+    /// <param name="schedule">Runs an action once after a delay (the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
+    /// <param name="post">Runs an action after the current input event (to snap the dropdown back); null uses the dispatcher.</param>
+    public ProfileBuilderViewModel(
+        IProfileBuilderBackend backend,
+        IDialogService dialogs,
+        Func<TimeSpan, Action, IDisposable>? schedule = null,
+        Action<Action>? post = null)
+    {
+        _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
+        Toast = new TransientMessage(schedule);
+
+        ToggleBrandingCommand = new RelayCommand(() => IsBrandingOpen = !IsBrandingOpen);
+        CloseBrandingCommand = new RelayCommand(() => IsBrandingOpen = false);
+        PickLogoCommand = new RelayCommand(PickLogo, () => IsIdle);
+        ClearLogoCommand = new RelayCommand(ClearLogo, () => IsIdle);
+        ExportCommand = new RelayCommand(Export, () => IsIdle);
+        SaveCommand = new RelayCommand(() => _ = SaveAsync(), () => IsIdle);
+        ExitCommand = new RelayCommand(() => _ = ExitAsync(), () => IsIdle);
+        AddPanelCommand = new RelayCommand(AddPanel, () => IsIdle);
+        AddCatalogCommand = new RelayCommand<CatalogNodeViewModel>(n => AddToSelectedPanel(n.Command!), n => IsIdle && n.IsCommand);
+        PickColorCommand = new RelayCommand(PickColor, () => IsIdle && SelectedPanel is not null);
+        OpenUrlEditorCommand = new RelayCommand(OpenUrlEditor, () => IsIdle && SelectedPanel is not null);
+        CancelUrlEditorCommand = new RelayCommand(() => IsUrlEditorOpen = false);
+        AddUrlCommand = new RelayCommand(AddUrlButton, () => IsIdle && SelectedPanel is not null);
+        // The RST Presets and Junk Cleanup modals arrive with WU5; the buttons are shown, disabled.
+        ConfigurePresetsCommand = new RelayCommand(() => { }, () => false);
+        ConfigureCleanupCommand = new RelayCommand(() => { }, () => false);
+    }
+
+    /// <summary>Raised when the window should close (Exit, or after the unsaved-changes prompt allowed it).</summary>
+    public event Action? CloseRequested;
+
+    public TransientMessage Toast { get; }
+
+    /// <summary>The icon pack folder for the slot thumbnails; null is the shipped one.</summary>
+    public string? PackDirectory { get; init; }
+
+    /// <summary>False while a save's auto-reload runs: the commands are disabled until it ends.</summary>
+    public bool IsIdle => !_isWorking;
+
+    public bool IsWorking
+    {
+        get => _isWorking;
+        private set
+        {
+            if (!SetField(ref _isWorking, value)) return;
+            OnPropertyChanged(nameof(IsIdle));
+            RelayCommand.Refresh();
+        }
+    }
+
+    // ---- boot ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// bootAfterBridge: the machine-wide branding first, then the catalogue, the profiles, the active
+    /// profile, the lookup and the tabs, then a fresh profile with one panel.
+    /// </summary>
+    public void Initialize()
+    {
+        _branding = Safe(_backend.LoadBranding, BrandingState.None, "load_default_branding");
+        RaiseBranding();
+
+        var catalog = _catalog = Safe(() => _backend.Catalog, [], "get_catalog");
+        _tree = CatalogTree.Build(catalog);
+        _allRoots = _tree.Roots.Select(r => new CatalogNodeViewModel(r, _expansion)).ToList();
+        if (catalog.Count == 0) Log.Warning("Builder: get_catalog returned no commands");
+        ApplyFilter();
+        OnPropertyChanged(nameof(CatalogCount));
+        OnPropertyChanged(nameof(CatalogIsEmpty));
+
+        _library = Safe(_backend.GetProfiles, [], "get_profiles");
+        var active = Safe<ActiveProfile?>(_backend.GetActiveProfile, null, "get_active_profile");
+        _activeId = active is { IsBlank: false } && !string.IsNullOrEmpty(active.ProfileId) ? active.ProfileId : null;
+        _activeHiddenTabs = active is { IsBlank: false } ? active.HiddenTabs ?? [] : [];
+        _activeDisable = active is { IsBlank: false } && active.DisableNonRequired;
+        _lookup = Safe(_backend.GetAddinLookup, new Dictionary<string, AddinLookupEntry>(), "get_addin_lookup");
+        Log.Information("Builder boot: catalog={Catalog} profiles={Profiles} active={Active} lookup={Lookup} tabs={Tabs}",
+            catalog.Count, _library.Count, _activeId, _lookup.Count, _backend.AllTabs.Count);
+
+        PopulateOptions();
+        StartFresh();
+    }
+
+    // ---- the profile dropdown -----------------------------------------------------------------
+
+    public ObservableCollection<ProfileOptionViewModel> ProfileOptions { get; } = [];
+
+    /// <summary>The dropdown's selection. Choosing another entry switches the editor (asking first when dirty).</summary>
+    public ProfileOptionViewModel? SelectedProfileOption
+    {
+        get => _selectedOption;
+        set
+        {
+            if (value is null || ReferenceEquals(value, _selectedOption)) return;
+            RequestSwitch(value);
+        }
+    }
+
+    /// <summary>"edit" mode: the editor holds a profile from the dropdown, or one saved once.</summary>
+    public bool IsEditMode => _editMode;
+
+    private void PopulateOptions(string? selectKey = null)
+    {
+        var previous = selectKey ?? _selectedOption?.Key;
+        ProfileOptions.Clear();
+        ProfileOptions.Add(ProfileOptionViewModel.New());
+        foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId));
+        _selectedOption = ProfileOptions.FirstOrDefault(o => o.Key == previous) ?? ProfileOptions[0];
+        OnPropertyChanged(nameof(SelectedProfileOption));
+    }
+
+    private void RequestSwitch(ProfileOptionViewModel target)
+    {
+        if (IsWorking)
+        {
+            SnapDropdownBack();
+            return;
+        }
+        if (!IsDirty)
+        {
+            ApplySwitch(target);
+            return;
+        }
+        switch (_dialogs.Choose(UiStrings.Builder_UnsavedTitle, UiStrings.Builder_UnsavedText,
+                    UiStrings.Builder_SaveAndSwitch, UiStrings.Builder_DiscardAndSwitch, UnsavedChangesDialogId))
+        {
+            case DialogChoice.Secondary:
+                Log.Information("Builder: dropdown switch → discard unsaved changes");
+                ApplySwitch(target);
+                break;
+            case DialogChoice.Primary:
+                Log.Information("Builder: dropdown switch → save first");
+                SnapDropdownBack();
+                _ = SaveThenSwitchAsync(target.Key);
+                break;
+            default:
+                SnapDropdownBack();
+                break;
+        }
+    }
+
+    private async Task SaveThenSwitchAsync(string targetKey)
+    {
+        if (!await SaveAsync()) return;
+        var target = ProfileOptions.FirstOrDefault(o => o.Key == targetKey) ?? ProfileOptions[0];
+        ApplySwitch(target);
+    }
+
+    // The ComboBox has already shown the new entry; put it back once the input event is over.
+    private void SnapDropdownBack() => _post(() => OnPropertyChanged(nameof(SelectedProfileOption)));
+
+    /// <summary>onProfileSelectChange: "+ New Profile" starts fresh; a profile loads into the editor.</summary>
+    private void ApplySwitch(ProfileOptionViewModel target)
+    {
+        _selectedOption = target;
+        OnPropertyChanged(nameof(SelectedProfileOption));
+        if (target.Entry is null)
+        {
+            Log.Information("Builder: dropdown → new profile");
+            StartFresh();
+            return;
+        }
+        Log.Information("Builder: dropdown → load existing {Name} ({Id})", target.Entry.Profile.ProfileName, target.Entry.Profile.Id);
+        LoadIntoEditor(target.Entry.Profile);
+    }
+
+    /// <summary>startFresh: a blank profile with one panel ("Panel 1"), new mode, a clean baseline.</summary>
+    private void StartFresh()
+    {
+        _profile = ProfileEditing.NewProfile();
+        _selectedPanelIndex = -1;
+        _editMode = false;
+        _originalName = "";
+        AddPanelCore();
+        ProfileChanged();
+        SnapshotPristine();
+    }
+
+    /// <summary>loadIntoProfile + the dropdown handler: edit mode, panel 0 selected, a clean baseline.</summary>
+    private void LoadIntoEditor(Profile source)
+    {
+        _profile = ProfileEditing.ForEditing(source);
+        _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
+        _editMode = true;
+        _originalName = _profile.ProfileName ?? "";
+        ProfileChanged();
+        SnapshotPristine();
+    }
+
+    private void ProfileChanged()
+    {
+        IsUrlEditorOpen = false;
+        RenderCanvas();
+        OnPropertyChanged(nameof(ProfileName));
+        OnPropertyChanged(nameof(ProfileTab));
+        OnPropertyChanged(nameof(MinVersion));
+        OnPropertyChanged(nameof(PanelOpacity));
+        OnPropertyChanged(nameof(PresetsSummary));
+        OnPropertyChanged(nameof(CleanupSummary));
+        OnPropertyChanged(nameof(PreviewProfile));
+        OnPropertyChanged(nameof(IsEditMode));
+    }
+
+    // ---- dirty tracking -----------------------------------------------------------------------
+
+    /// <summary>The profile differs from the clean baseline (boot, a dropdown switch, the last save).</summary>
+    public bool IsDirty => ProfileEditing.Snapshot(_profile) != _pristine;
+
+    private void SnapshotPristine() => _pristine = ProfileEditing.Snapshot(_profile);
+
+    /// <summary>The profile being edited (the preview draws it; tests read it).</summary>
+    public Profile Profile => _profile;
+
+    // ---- header fields ------------------------------------------------------------------------
+
+    public string ProfileName
+    {
+        get => _profile.ProfileName ?? "";
+        set
+        {
+            if (_profile.ProfileName == (value ?? "")) return;
+            _profile.ProfileName = value ?? "";
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>The ribbon tab; the preview's tab pill follows it as you type.</summary>
+    public string ProfileTab
+    {
+        get => _profile.Tab ?? "";
+        set
+        {
+            if (_profile.Tab == (value ?? "")) return;
+            _profile.Tab = value ?? "";
+            OnPropertyChanged();
+            PreviewChanged();
+        }
+    }
+
+    // ---- branding (machine-wide, not part of the profile) ------------------------------------
+
+    public bool IsBrandingOpen
+    {
+        get => _isBrandingOpen;
+        set
+        {
+            if (!SetField(ref _isBrandingOpen, value)) return;
+            if (value) RaiseBranding();
+        }
+    }
+
+    /// <summary>The Branding button's dot: filled when a logo or a URL is set.</summary>
+    public bool HasBranding => _branding.IsSet;
+
+    public bool HasLogo => _branding.HasLogo;
+
+    /// <summary>The logo row's text: the file name, or "(none)".</summary>
+    public string LogoName => _branding.HasLogo ? _branding.FileName ?? BrandingDefaultsFileName : UiStrings.Builder_NoLogo;
+
+    private const string BrandingDefaultsFileName = "branding.png";
+
+    /// <summary>The URL box. Saved when it changes (focus leaves the box, or Enter), not on every keystroke.</summary>
+    public string BrandingUrl
+    {
+        get => _branding.Url ?? "";
+        set
+        {
+            if ((value ?? "") == (_branding.Url ?? "")) return;
+            SetBrandingUrl(value ?? "");
+        }
+    }
+
+    public ICommand ToggleBrandingCommand { get; }
+
+    public ICommand CloseBrandingCommand { get; }
+
+    public ICommand PickLogoCommand { get; }
+
+    public ICommand ClearLogoCommand { get; }
+
+    private void SetBrandingUrl(string text)
+    {
+        var url = BuilderRules.NormalizeUrl(text.Trim());
+        var result = Safe(() => _backend.SaveBrandingUrl(url), OpResult.Fail("unknown"), "save_default_branding_url");
+        if (!result.Ok)
+        {
+            ShowToast(UiStrings.Builder_SaveUrlFailed(result.Error ?? "unknown"), BannerKind.Error);
+            RaiseBranding();
+            return;
+        }
+        _branding = _branding with { Url = url.Length == 0 ? null : url };
+        RaiseBranding();
+    }
+
+    private void PickLogo()
+    {
+        var path = _dialogs.OpenFile(FileDialogBridge.LogoTitle, FileDialogBridge.ImageFilter);
+        if (string.IsNullOrEmpty(path)) return; // cancelled: no toast
+        var result = Safe(() => _backend.StoreLogo(path), LogoOutcome.Fail("unknown"), "pick_logo_file");
+        if (!result.Ok)
+        {
+            ShowToast(UiStrings.Builder_LogoPickFailed(result.Error ?? "unknown"), BannerKind.Error);
+            return;
+        }
+        _branding = _branding with { HasLogo = true, FileName = result.FileName ?? BrandingDefaultsFileName };
+        RaiseBranding();
+    }
+
+    private void ClearLogo()
+    {
+        var result = Safe(_backend.ClearLogo, OpResult.Fail("unknown"), "clear_default_logo");
+        if (!result.Ok)
+        {
+            ShowToast(UiStrings.Builder_ClearLogoFailed(result.Error ?? "unknown"), BannerKind.Error);
+            return;
+        }
+        _branding = _branding with { HasLogo = false, FileName = null };
+        RaiseBranding();
+    }
+
+    private void RaiseBranding()
+    {
+        OnPropertyChanged(nameof(HasBranding));
+        OnPropertyChanged(nameof(HasLogo));
+        OnPropertyChanged(nameof(LogoName));
+        OnPropertyChanged(nameof(BrandingUrl));
+    }
+
+    // ---- the catalogue ------------------------------------------------------------------------
+
+    /// <summary>The Commands count: every command in the catalogue.</summary>
+    public int CatalogCount => _tree.CommandCount;
+
+    /// <summary>The tree's top level that holds a match: "Autodesk Native", then the other tabs.</summary>
+    public FilteredCollection<CatalogNodeViewModel> CatalogRoots { get; } = [];
+
+    /// <summary>Every top-level node, matched or not (tests).</summary>
+    public IReadOnlyList<CatalogNodeViewModel> AllCatalogRoots => _allRoots;
+
+    /// <summary>"No commands available…": the catalogue is empty (the Builder opened outside Revit).</summary>
+    public bool CatalogIsEmpty => _tree.CommandCount == 0;
+
+    /// <summary>"No matches for "q".": a filter is active and matches nothing.</summary>
+    public bool HasNoMatches => !CatalogIsEmpty && _filter is { IsActive: true, AnyMatch: false };
+
+    public string NoMatchesText => UiStrings.Builder_NoMatches(_filter?.Query ?? "");
+
+    /// <summary>The Filter… box. Each keystroke re-filters the tree in place.</summary>
+    public string FilterText
+    {
+        get => _filterText;
+        set
+        {
+            if (!SetField(ref _filterText, value ?? "")) return;
+            ApplyFilter();
+        }
+    }
+
+    public ICommand AddCatalogCommand { get; }
+
+    private void ApplyFilter()
+    {
+        _filter = _tree.Filter(_filterText);
+        _expansion.FilterActive = _filter.IsActive;
+        foreach (var root in _allRoots) root.Apply(_filter);
+        CatalogRoots.Sync(_allRoots, r => _filter.IsVisible(r.Node));
+        OnPropertyChanged(nameof(HasNoMatches));
+        OnPropertyChanged(nameof(NoMatchesText));
+    }
+
+    /// <summary>
+    /// addToolToSelectedPanel (double-click a command): appends a tool slot to the selected panel,
+    /// adding a panel first when none is selected.
+    /// </summary>
+    public void AddToSelectedPanel(CatalogCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (_selectedPanelIndex < 0 || _selectedPanelIndex >= _profile.Panels.Count) AddPanelCore();
+        _profile.Panels[_selectedPanelIndex].Slots.Add(BuilderRules.ToolSlot(command));
+        RenderCanvas();
+    }
+
+    // ---- panels and slots ---------------------------------------------------------------------
+
+    public ObservableCollection<PanelCardViewModel> Panels { get; } = [];
+
+    public bool HasPanels => Panels.Count > 0;
+
+    /// <summary>The selected panel (the Properties pane edits it), or null.</summary>
+    public PanelCardViewModel? SelectedPanel =>
+        _selectedPanelIndex >= 0 && _selectedPanelIndex < Panels.Count ? Panels[_selectedPanelIndex] : null;
+
+    public bool HasSelectedPanel => SelectedPanel is not null;
+
+    public int SelectedPanelIndex => _selectedPanelIndex;
+
+    public ICommand AddPanelCommand { get; }
+
+    private void AddPanel()
+    {
+        AddPanelCore();
+        RenderCanvas();
+    }
+
+    private void AddPanelCore()
+    {
+        _profile.Panels.Add(BuilderRules.NewPanel(_profile.Panels.Count));
+        _selectedPanelIndex = _profile.Panels.Count - 1;
+    }
+
+    internal void SelectPanel(int index)
+    {
+        if (index == _selectedPanelIndex) return;
+        _selectedPanelIndex = index;
+        RenderCanvas();
+    }
+
+    internal void MovePanel(int index, int delta)
+    {
+        var to = index + delta;
+        if (to < 0 || to >= _profile.Panels.Count) return;
+        var p = _profile.Panels[index];
+        _profile.Panels.RemoveAt(index);
+        _profile.Panels.Insert(to, p);
+        if (_selectedPanelIndex == index) _selectedPanelIndex = to;
+        else if (_selectedPanelIndex == to) _selectedPanelIndex = index;
+        RenderCanvas();
+    }
+
+    /// <summary>× on a panel card: the destructive confirm "Delete panel "X"?" (Cancel is the default).</summary>
+    internal void DeletePanel(int index)
+    {
+        if (index < 0 || index >= _profile.Panels.Count) return;
+        var name = _profile.Panels[index].Name;
+        if (!_dialogs.Confirm(UiStrings.Builder_DeletePanelTitle(name), "", [], UiStrings.Builder_Delete, danger: true, DeletePanelDialogId)) return;
+        _profile.Panels.RemoveAt(index);
+        if (_selectedPanelIndex >= _profile.Panels.Count) _selectedPanelIndex = _profile.Panels.Count - 1;
+        RenderCanvas();
+    }
+
+    internal void MoveSlot(int panelIndex, int slotIndex, int delta)
+    {
+        var slots = _profile.Panels[panelIndex].Slots;
+        var to = slotIndex + delta;
+        if (to < 0 || to >= slots.Count) return;
+        var s = slots[slotIndex];
+        slots.RemoveAt(slotIndex);
+        slots.Insert(to, s);
+        RenderCanvas();
+    }
+
+    /// <summary>× on a slot row removes it (no confirm, as the page).</summary>
+    internal void DeleteSlot(int panelIndex, int slotIndex)
+    {
+        _profile.Panels[panelIndex].Slots.RemoveAt(slotIndex);
+        RenderCanvas();
+    }
+
+    /// <summary>The Pick-icon button. The icon picker arrives with WU5; until then the click is logged only.</summary>
+    internal void PickIcon(SlotRowViewModel slot) =>
+        Log.Information("Builder: pick icon for {Slot} (the icon picker arrives in WU5)", slot.Name);
+
+    /// <summary>renderCanvas: the cards and rows again from the profile; the URL editor closes, the preview redraws.</summary>
+    private void RenderCanvas()
+    {
+        IsUrlEditorOpen = false;
+        Panels.Clear();
+        for (var i = 0; i < _profile.Panels.Count; i++)
+        {
+            Panels.Add(new PanelCardViewModel(_profile.Panels[i], i, this) { IsSelected = i == _selectedPanelIndex });
+        }
+        OnPropertyChanged(nameof(HasPanels));
+        OnPropertyChanged(nameof(SelectedPanel));
+        OnPropertyChanged(nameof(HasSelectedPanel));
+        OnPropertyChanged(nameof(SelectedPanelIndex));
+        PreviewChanged();
+    }
+
+    // ---- the Properties pane ------------------------------------------------------------------
+
+    public string MinVersion
+    {
+        get => _profile.MinVersion ?? "";
+        set
+        {
+            if (_profile.MinVersion == (value ?? "")) return;
+            _profile.MinVersion = value ?? "";
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Panel Opacity, 10-100 in steps of 5; the preview follows it.</summary>
+    public int PanelOpacity
+    {
+        get => _profile.PanelOpacity;
+        set
+        {
+            var v = Math.Clamp(value, 10, 100);
+            if (_profile.PanelOpacity == v) return;
+            _profile.PanelOpacity = v;
+            OnPropertyChanged();
+            PreviewChanged();
+        }
+    }
+
+    public ICommand PickColorCommand { get; }
+
+    /// <summary>The swatch: the family color picker, starting from the panel's color.</summary>
+    private void PickColor()
+    {
+        if (SelectedPanel is not { } panel) return;
+        var current = Rgb.TryParse(panel.ColorHex, out var rgb) ? rgb : Rgb.Parse(BuilderRules.DefaultPanelColor);
+        if (_dialogs.PickColor(current, PanelPalette, UiStrings.Builder_ColorDialogTitle) is not { } picked) return;
+        panel.SetColor(picked.ToHex().ToLowerInvariant());
+    }
+
+    public bool IsUrlEditorOpen
+    {
+        get => _isUrlEditorOpen;
+        private set
+        {
+            if (!SetField(ref _isUrlEditorOpen, value)) return;
+            if (!value)
+            {
+                UrlLabel = "";
+                UrlAddress = "";
+            }
+        }
+    }
+
+    public string UrlLabel
+    {
+        get => _urlLabel;
+        set => SetField(ref _urlLabel, value ?? "");
+    }
+
+    public string UrlAddress
+    {
+        get => _urlAddress;
+        set => SetField(ref _urlAddress, value ?? "");
+    }
+
+    public ICommand OpenUrlEditorCommand { get; }
+
+    public ICommand CancelUrlEditorCommand { get; }
+
+    public ICommand AddUrlCommand { get; }
+
+    private void OpenUrlEditor()
+    {
+        if (IsUrlEditorOpen) return;
+        IsUrlEditorOpen = true;
+    }
+
+    /// <summary>The editor's Add: a label and a URL are required; the URL is normalized and the slot gets "URL:&lt;url&gt;".</summary>
+    private void AddUrlButton()
+    {
+        if (SelectedPanel is not { } panel) return;
+        var name = UrlLabel.Trim();
+        var url = BuilderRules.NormalizeUrl(UrlAddress.Trim());
+        if (name.Length == 0)
+        {
+            ShowToast(UiStrings.Builder_LabelRequired, BannerKind.Error);
+            return;
+        }
+        if (url.Length == 0)
+        {
+            ShowToast(UiStrings.Builder_UrlRequired, BannerKind.Error);
+            return;
+        }
+        panel.Model.Slots.Add(BuilderRules.UrlSlot(name, url));
+        Log.Information("Builder: url button added to panel {Panel}: {Name} → {Url}", panel.Index, name, url);
+        IsUrlEditorOpen = false;
+        RenderCanvas();
+    }
+
+    public string PresetsSummary => BuilderRules.PresetsSummary(_profile.Presets);
+
+    public string CleanupSummary => BuilderRules.CleanupSummary(_profile.CleanupTargets);
+
+    /// <summary>RST Presets → Configure (WU5).</summary>
+    public ICommand ConfigurePresetsCommand { get; }
+
+    /// <summary>Junk Cleanup → Configure (WU5).</summary>
+    public ICommand ConfigureCleanupCommand { get; }
+
+    // ---- the live preview ---------------------------------------------------------------------
+
+    public Profile PreviewProfile => _profile;
+
+    /// <summary>Bumped after every edit the preview shows (the profile is edited in place).</summary>
+    public int PreviewRevision
+    {
+        get => _previewRevision;
+        private set => SetField(ref _previewRevision, value);
+    }
+
+    internal void PreviewChanged() => PreviewRevision++;
+
+    // ---- save, export, exit -------------------------------------------------------------------
+
+    public ICommand SaveCommand { get; }
+
+    public ICommand ExportCommand { get; }
+
+    public ICommand ExitCommand { get; }
+
+    /// <summary>
+    /// saveAndMaybeReload: name and tab required; rename-as-copy in edit mode (a name collision
+    /// aborts); the required add-ins recomputed; the save; the dropdown refreshed; a clean baseline;
+    /// then, when the saved profile is the active one, the ribbon reloaded with the active hidden
+    /// tabs and disable flag. True when the profile was saved.
+    /// </summary>
+    public async Task<bool> SaveAsync()
+    {
+        if (IsWorking) return false;
+        var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, _library.Select(e => e.Profile));
+        switch (plan)
+        {
+            case SavePlanKind.MissingName:
+                ShowToast(UiStrings.Builder_NameRequired, BannerKind.Error);
+                return false;
+            case SavePlanKind.MissingTab:
+                ShowToast(UiStrings.Builder_TabRequired, BannerKind.Error);
+                return false;
+            case SavePlanKind.NameCollision:
+                Log.Warning("Builder: rename-as-copy aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
+                ShowToast(UiStrings.Builder_NameCollision(_profile.ProfileName), BannerKind.Error);
+                return false;
+        }
+        var savedAsCopy = plan == SavePlanKind.AsCopy;
+
+        _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup);
+        Log.Information("Builder: save {Name} (edit={Edit}, copy={Copy}, requiredAddins={Required})",
+            _profile.ProfileName, _editMode, savedAsCopy, _profile.RequiredAddins.Count);
+        var result = Safe(() => _backend.Save(_profile), SaveOutcome.Fail("unknown"), "save_profile");
+        if (!result.Ok)
+        {
+            ShowToast(UiStrings.Builder_SaveFailed(result.Error ?? "unknown"), BannerKind.Error);
+            return false;
+        }
+        if (result.Saved is { } saved)
+        {
+            _profile.Id = saved.Id;
+            _profile.ExportDate = saved.ExportDate;
+        }
+        _editMode = true;
+        _originalName = _profile.ProfileName ?? "";
+        OnPropertyChanged(nameof(IsEditMode));
+        var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
+
+        _library = Safe(_backend.GetProfiles, _library, "get_profiles");
+        PopulateOptions(_profile.Id);
+        SnapshotPristine();
+
+        if (!savedIsActive)
+        {
+            ShowToast(savedAsCopy ? UiStrings.Builder_SavedAsCopy(_profile.ProfileName) : UiStrings.Builder_SavedAs(result.FileName), BannerKind.Success);
+            return true;
+        }
+
+        Log.Information("Builder: saved profile is active — auto-reloading");
+        IsWorking = true;
+        try
+        {
+            var load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
+            if (load.Ok) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success);
+            else ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Builder: auto-reload threw");
+            ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+        return true;
+    }
+
+    /// <summary>Export ZIP: a name is required; the Save dialog (cancel is silent); the path in a toast.</summary>
+    private void Export()
+    {
+        if (string.IsNullOrWhiteSpace(_profile.ProfileName))
+        {
+            ShowToast(UiStrings.Builder_NameRequired, BannerKind.Error);
+            return;
+        }
+        var path = _dialogs.SaveFile(FileDialogBridge.ExportZipTitle, FileDialogBridge.ZipFilter, ProfileSaveService.SuggestedExportName(_profile));
+        if (string.IsNullOrEmpty(path))
+        {
+            Log.Information("Builder: export cancelled");
+            return;
+        }
+        var result = Safe(() => _backend.Export(_profile, path), OpResult.Fail("unknown"), "export_profile");
+        if (result.Ok) ShowToast(UiStrings.Builder_ExportedTo(path), BannerKind.Success);
+        else ShowToast(UiStrings.Builder_ExportFailed(result.Error ?? "unknown"), BannerKind.Error);
+    }
+
+    /// <summary>Exit: clean closes; dirty asks Save &amp; Exit / Discard &amp; Exit / Cancel (Save &amp; Exit closes only when the save succeeds).</summary>
+    public async Task ExitAsync()
+    {
+        if (IsWorking) return;
+        if (!IsDirty)
+        {
+            Close();
+            return;
+        }
+        switch (AskUnsaved())
+        {
+            case DialogChoice.Primary:
+                if (await SaveAsync()) Close();
+                break;
+            case DialogChoice.Secondary:
+                Close();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The title-bar ✕ (Planner default 3): true when the window may close now. Dirty asks the same
+    /// question as Exit; Save &amp; Exit keeps the window open until the save succeeds, then closes it.
+    /// </summary>
+    public bool CanClose()
+    {
+        if (_closeApproved) return true;
+        if (IsWorking) return false;
+        if (!IsDirty) return true;
+        switch (AskUnsaved())
+        {
+            case DialogChoice.Secondary:
+                _closeApproved = true;
+                return true;
+            case DialogChoice.Primary:
+                _ = SaveThenCloseAsync();
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private async Task SaveThenCloseAsync()
+    {
+        if (await SaveAsync()) Close();
+    }
+
+    private DialogChoice AskUnsaved() => _dialogs.Choose(UiStrings.Builder_UnsavedTitle, UiStrings.Builder_UnsavedText,
+        UiStrings.Builder_SaveAndExit, UiStrings.Builder_DiscardAndExit, UnsavedChangesDialogId);
+
+    private void Close()
+    {
+        _closeApproved = true;
+        CloseRequested?.Invoke();
+    }
+
+    // ---- helpers ------------------------------------------------------------------------------
+
+    private void ShowToast(string text, BannerKind kind) => Toast.Show(text, kind, TransientMessage.ToastDuration);
+
+    private static T Safe<T>(Func<T> read, T fallback, string what)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Builder: {What} threw", what);
+            return fallback;
+        }
+    }
+}

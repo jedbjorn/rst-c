@@ -685,4 +685,254 @@
     <value>{0} (empty)</value>
     <comment>{0} the stack name.</comment>
   </data>
+  <data name="Builder_WindowTitle" xml:space="preserve">
+    <value>RST — Profile Builder</value>
+  </data>
+  <data name="Builder_Title" xml:space="preserve">
+    <value>Profile Builder</value>
+  </data>
+  <data name="Builder_NewProfile" xml:space="preserve">
+    <value>+ New Profile</value>
+  </data>
+  <data name="Builder_LoadedOption" xml:space="preserve">
+    <value>{0}  (loaded)</value>
+    <comment>{0} the profile name.</comment>
+  </data>
+  <data name="Builder_ProfileSelectorTip" xml:space="preserve">
+    <value>Switch profile or start a new one</value>
+  </data>
+  <data name="Builder_Branding" xml:space="preserve">
+    <value>Branding</value>
+  </data>
+  <data name="Builder_BrandingTip" xml:space="preserve">
+    <value>Company Tab Branding</value>
+  </data>
+  <data name="Builder_BrandingHeading" xml:space="preserve">
+    <value>Company Tab Branding</value>
+  </data>
+  <data name="Builder_Logo" xml:space="preserve">
+    <value>Logo</value>
+  </data>
+  <data name="Builder_PickLogo" xml:space="preserve">
+    <value>Pick…</value>
+  </data>
+  <data name="Builder_ClearLogo" xml:space="preserve">
+    <value>×</value>
+  </data>
+  <data name="Builder_ClearLogoTip" xml:space="preserve">
+    <value>Clear logo</value>
+  </data>
+  <data name="Builder_NoLogo" xml:space="preserve">
+    <value>(none)</value>
+  </data>
+  <data name="Builder_Url" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="Builder_UrlPlaceholder" xml:space="preserve">
+    <value>https://example.com</value>
+  </data>
+  <data name="Builder_Done" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="Builder_Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Builder_NamePlaceholder" xml:space="preserve">
+    <value>Profile name</value>
+  </data>
+  <data name="Builder_Tab" xml:space="preserve">
+    <value>Tab</value>
+  </data>
+  <data name="Builder_TabPlaceholder" xml:space="preserve">
+    <value>Ribbon tab</value>
+  </data>
+  <data name="Builder_ExportZip" xml:space="preserve">
+    <value>Export ZIP</value>
+  </data>
+  <data name="Builder_Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Builder_Exit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="Builder_ExitTip" xml:space="preserve">
+    <value>Close the Builder</value>
+  </data>
+  <data name="Builder_Commands" xml:space="preserve">
+    <value>Commands</value>
+  </data>
+  <data name="Builder_FilterPlaceholder" xml:space="preserve">
+    <value>Filter…</value>
+  </data>
+  <data name="Builder_CatalogEmpty" xml:space="preserve">
+    <value>No commands available.
+Open the Loader from inside Revit to populate the catalog.</value>
+  </data>
+  <data name="Builder_NoMatches" xml:space="preserve">
+    <value>No matches for "{0}".</value>
+    <comment>{0} the filter text, lower case.</comment>
+  </data>
+  <data name="Builder_Panels" xml:space="preserve">
+    <value>Panels</value>
+  </data>
+  <data name="Builder_AddPanel" xml:space="preserve">
+    <value>+ Add Panel</value>
+  </data>
+  <data name="Builder_CanvasEmpty" xml:space="preserve">
+    <value>No panels yet. Click "+ Add Panel" to start.</value>
+  </data>
+  <data name="Builder_PanelEmpty" xml:space="preserve">
+    <value>Drop a command here, or click one in the Commands pane.</value>
+  </data>
+  <data name="Builder_MoveUp" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="Builder_MoveDown" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="Builder_DeletePanelTip" xml:space="preserve">
+    <value>Delete panel</value>
+  </data>
+  <data name="Builder_RemoveSlotTip" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="Builder_PickIconTip" xml:space="preserve">
+    <value>Pick icon</value>
+  </data>
+  <data name="Builder_DeletePanelTitle" xml:space="preserve">
+    <value>Delete panel "{0}"?</value>
+    <comment>{0} the panel name.</comment>
+  </data>
+  <data name="Builder_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Builder_Properties" xml:space="preserve">
+    <value>Properties</value>
+  </data>
+  <data name="Builder_ProfileSection" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="Builder_MinRevitVersion" xml:space="preserve">
+    <value>Min Revit Version</value>
+  </data>
+  <data name="Builder_PanelOpacity" xml:space="preserve">
+    <value>Panel Opacity</value>
+  </data>
+  <data name="Builder_SelectedPanel" xml:space="preserve">
+    <value>Selected Panel</value>
+  </data>
+  <data name="Builder_NoPanelSelected" xml:space="preserve">
+    <value>No panel selected.</value>
+  </data>
+  <data name="Builder_Color" xml:space="preserve">
+    <value>Color</value>
+  </data>
+  <data name="Builder_ColorDialogTitle" xml:space="preserve">
+    <value>Panel color</value>
+  </data>
+  <data name="Builder_UrlButtons" xml:space="preserve">
+    <value>URL Buttons</value>
+  </data>
+  <data name="Builder_AddUrlButton" xml:space="preserve">
+    <value>+ URL Button</value>
+  </data>
+  <data name="Builder_UrlLabelPlaceholder" xml:space="preserve">
+    <value>Button label</value>
+  </data>
+  <data name="Builder_UrlAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="Builder_Presets" xml:space="preserve">
+    <value>RST Presets</value>
+  </data>
+  <data name="Builder_PresetsHelp" xml:space="preserve">
+    <value>Pre-configure RSTify hidden tabs + Disable Unused Add-ins so the profile ships with a sensible Loader state out of the box.</value>
+  </data>
+  <data name="Builder_Configure" xml:space="preserve">
+    <value>Configure</value>
+  </data>
+  <data name="Builder_Cleanup" xml:space="preserve">
+    <value>Junk Cleanup</value>
+  </data>
+  <data name="Builder_CleanupHelp" xml:space="preserve">
+    <value>Targets the Health tool's "Clean Junk Files" sweeps. Ship with sensible OOB defaults; remove or extend per profile.</value>
+  </data>
+  <data name="Builder_LivePreview" xml:space="preserve">
+    <value>Live Preview</value>
+  </data>
+  <data name="Builder_ReadOnly" xml:space="preserve">
+    <value>Read Only</value>
+  </data>
+  <data name="Builder_UnsavedTitle" xml:space="preserve">
+    <value>Unsaved changes</value>
+  </data>
+  <data name="Builder_UnsavedText" xml:space="preserve">
+    <value>You have unsaved changes to this profile. What would you like to do?</value>
+  </data>
+  <data name="Builder_SaveAndExit" xml:space="preserve">
+    <value>Save &amp; Exit</value>
+  </data>
+  <data name="Builder_DiscardAndExit" xml:space="preserve">
+    <value>Discard &amp; Exit</value>
+  </data>
+  <data name="Builder_SaveAndSwitch" xml:space="preserve">
+    <value>Save &amp; Switch</value>
+  </data>
+  <data name="Builder_DiscardAndSwitch" xml:space="preserve">
+    <value>Discard &amp; Switch</value>
+  </data>
+  <data name="Builder_NameRequired" xml:space="preserve">
+    <value>Profile name required.</value>
+  </data>
+  <data name="Builder_TabRequired" xml:space="preserve">
+    <value>Tab name required.</value>
+  </data>
+  <data name="Builder_NameCollision" xml:space="preserve">
+    <value>A profile named "{0}" already exists. Choose a different name.</value>
+    <comment>{0} the new profile name.</comment>
+  </data>
+  <data name="Builder_SaveFailed" xml:space="preserve">
+    <value>Save failed: {0}</value>
+    <comment>{0} the error.</comment>
+  </data>
+  <data name="Builder_SavedAsCopy" xml:space="preserve">
+    <value>Saved as new profile "{0}" — original kept.</value>
+    <comment>{0} the new profile name.</comment>
+  </data>
+  <data name="Builder_SavedAs" xml:space="preserve">
+    <value>Saved as {0}</value>
+    <comment>{0} the profile's file name.</comment>
+  </data>
+  <data name="Builder_SavedReloaded" xml:space="preserve">
+    <value>Saved &amp; ribbon reloaded.</value>
+  </data>
+  <data name="Builder_SavedReloadFailed" xml:space="preserve">
+    <value>Saved (auto-reload failed).</value>
+  </data>
+  <data name="Builder_ExportedTo" xml:space="preserve">
+    <value>Exported to {0}</value>
+    <comment>{0} the .zip path.</comment>
+  </data>
+  <data name="Builder_ExportFailed" xml:space="preserve">
+    <value>Export failed: {0}</value>
+    <comment>{0} the error.</comment>
+  </data>
+  <data name="Builder_SaveUrlFailed" xml:space="preserve">
+    <value>Save URL failed: {0}</value>
+    <comment>{0} the error.</comment>
+  </data>
+  <data name="Builder_LogoPickFailed" xml:space="preserve">
+    <value>Logo pick failed: {0}</value>
+    <comment>{0} the error.</comment>
+  </data>
+  <data name="Builder_ClearLogoFailed" xml:space="preserve">
+    <value>Clear logo failed: {0}</value>
+    <comment>{0} the error.</comment>
+  </data>
+  <data name="Builder_LabelRequired" xml:space="preserve">
+    <value>Button label required.</value>
+  </data>
+  <data name="Builder_UrlRequired" xml:space="preserve">
+    <value>URL required.</value>
+  </data>
 </root>
