@@ -1,8 +1,9 @@
 // rst-c's own (not vendored): the Builder's small rules (spec #16, WU4), ported from
 // profile_builder.html: shortId (1936-1940), addPanel's defaults (1943-1951), the slot shapes of
 // addToolToSelectedPanel (1974-1986) and the URL button editor (2170-2209), normalizeUrl
-// (2214-2225, the same rule as Core's UrlNormalizer), normalizeHex (2230-2237), the panel card's
-// "N slot(s)" count and the Pick-icon button's label (3237-3256). Behavior and text are unchanged.
+// (2214-2225, the same rule as Core's UrlNormalizer), normalizeHex (2230-2237).
+// Behavior and text are unchanged. Feature #18 (WU3) replaces the card's "N slot(s)" count and the
+// Pick-icon button's label (3237-3256) with the tool count and the tiles' source line and tooltip.
 // The RST Presets and Junk Cleanup summaries went with the Properties pane (feature #18, spec #19):
 // the Profile pane's tabs show the settings themselves.
 
@@ -86,15 +87,49 @@ public static partial class BuilderRules
         return LongHex().IsMatch(s) ? s : null;
     }
 
-    /// <summary>The panel card's count: "1 slot", "3 slots".</summary>
-    public static string SlotCount(int count) => count + " slot" + (count == 1 ? "" : "s");
+    /// <summary>
+    /// The panel card's count (feature #18): every tool on the panel, loose or in a stack, "1 tool",
+    /// "5 tools". A stack itself is not counted.
+    /// </summary>
+    public static int ToolCount(Profile profile, Panel panel)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(panel);
+        return panel.Slots.Sum(s => PanelStacks.IsStack(s) ? PanelStacks.ToolsOf(profile, s).Count : 1);
+    }
+
+    /// <summary>The count's text: "1 tool", "3 tools".</summary>
+    public static string ToolCountText(int count) => count + " tool" + (count == 1 ? "" : "s");
 
     /// <summary>
-    /// The Pick-icon button's text: the pack icon's design name, or "Icon" when the slot has no pack
-    /// icon (the button then shows "+" instead of a thumbnail).
+    /// A tile's muted source line (feature #18): "tab · panel" for a command (just the tab when it
+    /// has no panel; the short command id when it has neither), and the link for a URL or email tool,
+    /// without its scheme ("wiki.example.com", "bim@studio.example"). The full id or link is the
+    /// tile's tooltip.
     /// </summary>
-    public static string IconButtonLabel(Slot slot) =>
-        IconPack.TryParseValue(slot?.IconFile, out var value) ? value.Name : "Icon";
+    public static string SourceLine(Slot slot)
+    {
+        ArgumentNullException.ThrowIfNull(slot);
+        if (CustomTools.IsCustom(slot))
+        {
+            var link = CustomTools.LinkOf(slot);
+            var colon = link.IndexOf(':');
+            if (colon <= 0) return link;
+            return link[(colon + 1)..].TrimStart('/').TrimEnd('/');
+        }
+        var tab = slot.SourceTab ?? "";
+        var panel = slot.SourcePanel ?? "";
+        if (tab.Length > 0 && panel.Length > 0) return tab + " · " + panel;
+        if (tab.Length > 0 || panel.Length > 0) return tab + panel;
+        return ShortId(slot.CommandId);
+    }
+
+    /// <summary>A tile's tooltip: the full link of a URL or email tool, or the full command id.</summary>
+    public static string ToolTipOf(Slot slot)
+    {
+        ArgumentNullException.ThrowIfNull(slot);
+        return CustomTools.IsCustom(slot) ? CustomTools.LinkOf(slot) : slot.CommandId ?? "";
+    }
 
     [GeneratedRegex("^#([0-9a-f])([0-9a-f])([0-9a-f])$")]
     private static partial Regex ShortHex();
