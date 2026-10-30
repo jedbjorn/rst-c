@@ -109,11 +109,17 @@ internal static class ProfileTabBuilder
         int buttonCount = 0;
         int stackCount = 0;
         int skippedCount = 0;
+        int failedCount = 0;
+
+        // Spec #17 (review N5): problems that do not stop a profile loading, such as a stack no
+        // panel places (it is not drawn), are logged when the profile is built.
+        foreach (var warning in ProfileSerializer.Warnings(profile))
+            Log.Warning("ProfileTabBuilder: profile={Name} warning: {Warning}", profile.ProfileName, warning);
 
         foreach (var panelDef in profile.Panels)
         {
             var layout = RibbonLayoutPlanner.PlanPanel(profile, panelDef, panelIndex);
-            var panel = BuildPanel(layout, handler);
+            var panel = BuildPanel(layout, handler, _ => failedCount++);
             tab.Panels.Add(panel);
             _managedPanels.Add(panel);
             PanelStyling.ApplyColor(panel, panelDef.Color, alpha, RibbonLayoutPlanner.EstimatePanelWidth(layout));
@@ -154,8 +160,8 @@ internal static class ProfileTabBuilder
         // profile tab on the next Loader open.
         RstManagedTabs.Add(tabName);
 
-        Log.Information("ProfileTabBuilder built: profile={Name}, tab={Tab}, panels={PanelCount}, slots={Slots}, buttons={Buttons}, stacks={Stacks}, skipped={Skipped}",
-                        profile.ProfileName, tabName, profile.Panels.Count, slotCount, buttonCount, stackCount, skippedCount);
+        Log.Information("ProfileTabBuilder built: profile={Name}, tab={Tab}, panels={PanelCount}, slots={Slots}, buttons={Buttons}, stacks={Stacks}, skipped={Skipped}, failed={Failed}",
+                        profile.ProfileName, tabName, profile.Panels.Count, slotCount, buttonCount, stackCount, skippedCount, failedCount);
     }
 
     /// <summary>
@@ -237,7 +243,10 @@ internal static class ProfileTabBuilder
     /// Revit API type (the click handler comes from the caller), so
     /// RST.RuntimeTests builds panels with it outside Revit.
     /// </summary>
-    internal static AwRibbonPanel BuildPanel(PanelLayout layout, Func<SlotTarget, System.Windows.Input.ICommand> handler)
+    /// <param name="layout">The panel's layout.</param>
+    /// <param name="handler">A button's click handler.</param>
+    /// <param name="failed">Told about each item that threw while it was built (it is skipped).</param>
+    internal static AwRibbonPanel BuildPanel(PanelLayout layout, Func<SlotTarget, System.Windows.Input.ICommand> handler, Action<RibbonLayoutItem>? failed = null)
     {
         var source = new AwRibbonPanelSource
         {
@@ -248,22 +257,34 @@ internal static class ProfileTabBuilder
 
         foreach (var item in layout.Items)
         {
-            switch (item)
+            // One item that fails to build (AdWindows throwing for a row panel, an icon, a handler)
+            // is skipped and logged; the rest of the panel, the other panels and the branding still
+            // build (spec #17, review N4). The item is added only once it is complete.
+            try
             {
-                case LargeButtonItem large:
-                    source.Items.Add(RibbonItemFactory.LargeButton(large.Button, Icon32(large.Button), handler(large.Button.Target)));
-                    break;
+                switch (item)
+                {
+                    case LargeButtonItem large:
+                        source.Items.Add(RibbonItemFactory.LargeButton(large.Button, Icon32(large.Button), handler(large.Button.Target)));
+                        break;
 
-                case StackItem stack:
-                    source.Items.Add(RibbonItemFactory.Stack(stack, Icon16, Icon32, b => handler(b.Target)));
-                    Log.Information("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot}: stack '{Stack}' with {Count} buttons ({Id})",
-                              layout.PanelIndex, layout.Name, stack.SlotIndex, stack.StackName, stack.Buttons.Count, stack.Id);
-                    break;
+                    case StackItem stack:
+                        source.Items.Add(RibbonItemFactory.Stack(stack, Icon16, Icon32, b => handler(b.Target)));
+                        Log.Information("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot}: stack '{Stack}' with {Count} buttons ({Id})",
+                                  layout.PanelIndex, layout.Name, stack.SlotIndex, stack.StackName, stack.Buttons.Count, stack.Id);
+                        break;
 
-                case SkippedItem skipped:
-                    Log.Warning("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot} skipped: {Reason}",
-                                layout.PanelIndex, layout.Name, skipped.SlotIndex, skipped.Reason);
-                    break;
+                    case SkippedItem skipped:
+                        Log.Warning("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot} skipped: {Reason}",
+                                    layout.PanelIndex, layout.Name, skipped.SlotIndex, skipped.Reason);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                failed?.Invoke(item);
+                Log.Warning(ex, "ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot} skipped: building it failed",
+                            layout.PanelIndex, layout.Name, item.SlotIndex);
             }
         }
 
