@@ -80,7 +80,7 @@ Every profile tab can display an 85×85 branding image with rounded corners at t
 
 ### Ribbon Tools — RSTify & Required Add-ins
 
-RSTify is a tab-hiding mode: when enabled, rst-c hides every Revit and add-in tab the active profile did not draw from, leaving just the rst-c tab and any preserved tabs. It is per-profile and per-user — the admin sets defaults in the Builder, the user adopts or changes them in the Loader, and the ribbon icon shows the current state. Required Add-ins lets profiles declare the add-ins they depend on; when a profile is loaded, rst-c re-enables disabled ones and shows download links for missing ones.
+RSTify is a tab-hiding mode: when enabled, rst-c hides the Revit and add-in tabs chosen for the active profile, from those it does not draw commands from, so the ribbon narrows to the profile's tab and the tabs it needs. It is per-profile and per-user — the admin sets defaults in the Builder, the user adopts or changes them in the Loader, and the ribbon icon shows the current state. Required Add-ins lets profiles declare the add-ins they depend on; when a profile is loaded, rst-c re-enables disabled ones and shows download links for missing ones.
 
 **[Ribbon Tools docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/ribbon-tools.md)**
 

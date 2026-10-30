@@ -18,7 +18,7 @@ Two ribbon-level tools come with every rst-c install: **RSTify**, which hides ta
 
 ### What it does
 
-RSTify is a tab-hiding mode. When enabled, rst-c hides every Revit and add-in tab the active profile did not draw commands from, leaving the rst-c tab and any tabs the profile explicitly preserves. The ribbon narrows to just the tools the profile provides.
+RSTify is a tab-hiding mode. When enabled, rst-c hides the Revit and add-in tabs chosen for the active profile. Only tabs the profile does not draw commands from can be hidden, so the profile's tab and the tabs its tools come from always stay. The ribbon narrows to just the tools the profile provides.
 
 The intent is to remove the route back into the unfiltered Revit ribbon mid-session. A curated ribbon is only effective if users work from it — RSTify removes the distraction of the full tab bar while keeping the escape hatch (turning RSTify off) obvious and one click away.
 
@@ -30,7 +30,7 @@ The admin sets which tabs a profile hides by default in the Builder's RST Preset
 
 The **RSTify** button is on the **RST** panel of the **Add-Ins** tab. The button icon shows the current state: tabs hidden (on) or tabs visible (off). Clicking it toggles the state and the icon updates immediately.
 
-Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create) and the profile's own tab are never listed. Your switches are applied when you click **Load Profile →** and remembered for that profile.
+Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create), the profile's own tab and the tabs its commands come from are never listed. Your switches are applied when you click **Load Profile →** and remembered for that profile.
 
 ### How admin defaults work
 
