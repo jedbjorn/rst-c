@@ -92,7 +92,8 @@ public sealed class ProfileSaveService
     /// After the first save of a profile read from a file with no id (feature #18, WU1 review F6): the
     /// save gave it an id and wrote it under its canonical name, so the file it came from (which
     /// <see cref="ProfileStore.Save"/> cannot match by id) is removed, or the profile would be listed
-    /// twice. Only a bare file name in the profiles folder is accepted; one already gone is fine.
+    /// twice. Only a bare file name in the profiles folder is accepted; one already gone is fine; one
+    /// that has gained an id, or no longer reads as a profile, is kept and logged.
     /// </summary>
     public OpResult RemoveSupersededFile(string fileName)
     {
@@ -105,7 +106,30 @@ public sealed class ProfileSaveService
         var path = Path.Combine(_profilesDir, fileName);
         try
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (!File.Exists(path))
+            {
+                _log.Information("Builder.save_profile: {File} is already gone", fileName);
+                return OpResult.Success;
+            }
+            // The name was recorded when the profile was opened. Delete only what is still that
+            // id-less profile: a file that now has an id, or that no longer reads as a profile, is
+            // something else, and is kept (review N8b). Kept is not a failure: it is not our duplicate.
+            string? id;
+            try
+            {
+                id = ProfileSerializer.ReadString(File.ReadAllText(path)).Id;
+            }
+            catch (Exception ex) when (ex is not (IOException or UnauthorizedAccessException))
+            {
+                _log.Warning(ex, "Builder.save_profile: kept {File}: it no longer reads as a profile", fileName);
+                return OpResult.Success;
+            }
+            if (!string.IsNullOrEmpty(id))
+            {
+                _log.Warning(null, "Builder.save_profile: kept {File}: it has an id now ({Id}), so it is not the profile just saved", fileName, id);
+                return OpResult.Success;
+            }
+            File.Delete(path);
             _log.Information("Builder.save_profile: removed {File}, superseded by the saved profile", fileName);
             return OpResult.Success;
         }

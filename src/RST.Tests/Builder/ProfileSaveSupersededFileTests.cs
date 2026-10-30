@@ -54,6 +54,28 @@ public sealed class ProfileSaveSupersededFileTests : IDisposable
         service.RemoveSupersededFile(entry.FileName).Ok.Should().BeTrue("a file already gone is fine");
     }
 
+    [Fact]
+    public void A_file_that_has_gained_an_id_since_is_kept()
+    {
+        // Review N8b: the name was recorded when the profile was opened; another session has since
+        // written a profile with an id under it. It is not ours to remove.
+        var withId = IdLess();
+        withId.Id = "other-session-id";
+        using (var fs = File.Create(Path.Combine(_dir, "Legacy.json")))
+            ProfileSerializer.Write(withId, fs);
+        new ProfileSaveService(_dir).RemoveSupersededFile("Legacy.json").Ok.Should().BeTrue("kept is not a failure");
+        File.Exists(Path.Combine(_dir, "Legacy.json")).Should().BeTrue();
+        ProfileStore.List(_dir).Single().Profile.Id.Should().Be("other-session-id");
+    }
+
+    [Fact]
+    public void A_file_that_no_longer_reads_as_a_profile_is_kept()
+    {
+        File.WriteAllText(Path.Combine(_dir, "Legacy.json"), "{ not json");
+        new ProfileSaveService(_dir).RemoveSupersededFile("Legacy.json").Ok.Should().BeTrue();
+        File.Exists(Path.Combine(_dir, "Legacy.json")).Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(@"..\outside.json")]
     [InlineData("sub/inner.json")]
