@@ -69,6 +69,37 @@ public static class InstallCache
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Opens <paramref name="path"/> so nothing can write it (FileShare.Read: readers such as msiexec, Windows
+    /// Installer's service and a bundle's own engine are fine), hashes it through that same handle, and returns the
+    /// handle when the SHA256 is still <paramref name="expectedSha256"/>. The caller keeps it open until msiexec or
+    /// the bundle has finished, so the file that runs is the file that was just checked (review N1). Null (logged)
+    /// when it changed, or cannot be opened that way.
+    /// </summary>
+    public static FileStream? HoldVerified(string path, string expectedSha256, Action<string>? log = null)
+    {
+        FileStream? stream = null;
+        try
+        {
+            stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);
+            var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            if (!string.Equals(actual, expectedSha256, StringComparison.Ordinal))
+            {
+                Log(log, $"cache: {path} changed since it was verified (sha256 {actual}, expected {expectedSha256})");
+                stream.Dispose();
+                return null;
+            }
+            stream.Position = 0;
+            return stream;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log(log, $"cache: {path} could not be held for the install: {ex.Message}");
+            stream?.Dispose();
+            return null;
+        }
+    }
+
     /// <summary>Writes <c>verified.json</c> beside <paramref name="msiPath"/>.</summary>
     public static void WriteVerified(string msiPath, VerifiedRecord record, Action<string>? log = null) =>
         TrayAtomicFile.WriteAllText(Path.Combine(Path.GetDirectoryName(msiPath)!, VerifiedFileName),

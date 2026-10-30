@@ -179,6 +179,10 @@ internal static class FakeMsi
 {
     public static byte[] Bytes(string upgradeCode, string version, string? allUsers = null, string? perUser = null, string salt = "") =>
         Encoding.UTF8.GetBytes($"MSI|{upgradeCode}|{version}|{allUsers}|{perUser}|{salt}");
+
+    /// <summary>Fake RST-Setup.exe bytes: its four-part file version and product name.</summary>
+    public static byte[] Bundle(string fileVersion, string productName = "RST") =>
+        Encoding.UTF8.GetBytes($"BUNDLE|{fileVersion}|{productName}|");
 }
 
 /// <summary>msiexec, scripted: each call answers the next code (0 when the script is used up) and may change what is installed.</summary>
@@ -197,12 +201,31 @@ internal sealed class FakeMsiexec : IMsiexec
         return this;
     }
 
+    /// <summary>Runs before each call (a test checks, e.g., that the package is held against writes while it runs).</summary>
+    public Action<string>? BeforeRun { get; set; }
+
     public Task<int> InstallAsync(string msiPath, string logPath, CancellationToken cancel)
     {
+        BeforeRun?.Invoke(msiPath);
         var code = _codes.Count > 0 ? _codes.Dequeue() : 0;
         Calls.Add((msiPath, logPath));
         OnRun?.Invoke(msiPath, code);
         return Task.FromResult(code);
+    }
+
+    /// <summary>RST-Setup.exe runs, recorded in Calls too (the path ends in .exe).</summary>
+    public Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel) => InstallAsync(exePath, logPath, cancel);
+}
+
+/// <summary>A bundle's version resource, read from fake bundle bytes (<see cref="FakeMsi.Bundle"/>).</summary>
+internal sealed class FakeBundleReader : IBundleReader
+{
+    public BundleIdentity Read(string exePath)
+    {
+        var text = System.IO.File.ReadAllText(exePath);
+        if (!text.StartsWith("BUNDLE|", StringComparison.Ordinal)) throw new InvalidOperationException("no version resource");
+        var f = text.Split('|');
+        return new BundleIdentity(f[1], f[2]);
     }
 }
 
@@ -214,6 +237,9 @@ internal sealed class FakeRevit : IRevitWatch
     public bool Running { get; private set; }
 
     public int Waits { get; private set; }
+
+    /// <summary>The process list cannot be read (review N3: that must count as "Revit may be running").</summary>
+    public bool Throws { get; set; }
 
     public void Open()
     {
@@ -227,11 +253,12 @@ internal sealed class FakeRevit : IRevitWatch
         _closed.TrySetResult();
     }
 
-    public bool AnyRunning() => Running;
+    public bool AnyRunning() => Throws ? throw new InvalidOperationException("access denied") : Running;
 
     public async Task WaitUntilNoneAsync(CancellationToken cancel)
     {
         Waits++;
+        if (Throws) throw new InvalidOperationException("access denied");
         if (!Running) return;
         await _closed.Task.WaitAsync(cancel).ConfigureAwait(false);
     }
@@ -241,6 +268,8 @@ internal sealed class FakeRevit : IRevitWatch
 internal sealed class FakeSelfUpdater : ISelfUpdater
 {
     public bool PerMachineTray { get; set; }
+
+    public bool InstalledByBundle { get; set; }
 
     /// <summary>Null: it starts; otherwise this is why not.</summary>
     public string? Failure { get; set; }

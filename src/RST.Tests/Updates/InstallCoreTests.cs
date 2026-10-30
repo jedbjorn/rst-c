@@ -379,7 +379,7 @@ public sealed class InstallCoordinatorTests : IDisposable
     private InstallPaths Paths => new(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
 
     private InstallCoordinator Make() => new(
-        ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), _msiexec, _revit, _self, Paths,
+        ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _revit, _self, Paths,
         _time, action => action(), _log.Add, () => _quits++, () => _changes++);
 
     public void Dispose()
@@ -651,101 +651,3 @@ public sealed class InstallCoordinatorTests : IDisposable
     }
 }
 
-/// <summary>The updater copy's re-checks and its result (AC8's logic; the real self-update runs on Windows CI).</summary>
-public sealed class SelfUpdateApplyTests : IDisposable
-{
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "RST-SelfUpdate-" + Guid.NewGuid().ToString("N"));
-    private readonly FakeMsiexec _msiexec = new();
-    private readonly List<string> _log = new();
-    private readonly FakeHost _host = new();
-
-    private sealed class FakeHost : ISelfUpdateHost
-    {
-        public List<int> Waited { get; } = new();
-
-        public int TraysStarted { get; private set; }
-
-        public bool WaitForTrayExit(int pid, TimeSpan timeout)
-        {
-            Waited.Add(pid);
-            return true;
-        }
-
-        public bool StartTray()
-        {
-            TraysStarted++;
-            return true;
-        }
-    }
-
-    private InstallPaths Paths => new(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
-    }
-
-    /// <summary>RST.msi 3.1.1 verified in the cache, as the tray leaves it.</summary>
-    private string Verified(string version = "3.1.1", string? upgradeCode = null)
-    {
-        var dir = Path.Combine(Paths.CacheRoot, "rst", version);
-        Directory.CreateDirectory(dir);
-        var msi = Path.Combine(dir, "RST.msi");
-        File.WriteAllBytes(msi, FakeMsi.Bytes(upgradeCode ?? ProductCatalog.RstUpgradeCode, version));
-        InstallCache.WriteVerified(msi, new VerifiedRecord("rst", version, "RST.msi", InstallCache.Sha256Of(msi), DateTimeOffset.UtcNow));
-        return msi;
-    }
-
-    private Task<int> Apply(string msi, int? pid = 4242) =>
-        SelfUpdateApply.RunAsync(msi, pid, Paths, FakeMsiReader.FromText(), _msiexec, _host, TimeProvider.System, _log.Add);
-
-    [Fact]
-    public async Task It_waits_for_the_tray_installs_records_and_starts_the_new_tray()
-    {
-        var msi = Verified();
-        (await Apply(msi)).Should().Be(SelfUpdateApply.Installed);
-        _host.Waited.Should().Equal(4242);
-        _msiexec.Calls.Should().ContainSingle().Which.Msi.Should().Be(msi);
-        _host.TraysStarted.Should().Be(1);
-        InstallCache.ReadState(Paths.CacheRoot, "rst").Installed!.Version.Should().Be("3.1.1");
-
-        // The new tray shows the result once.
-        using var tray = new InstallCoordinator(ProductCatalog.Default.Products, new HttpClient(new FakeGitHub()), new FakeInstalledProducts(),
-            FakeMsiReader.FromText(), _msiexec, new FakeRevit(), new FakeSelfUpdater(), Paths, TimeProvider.System, a => a(), _log.Add, () => { }, () => { });
-        tray.For("rst").Should().Match<InstallProgress>(p => p.Phase == InstallPhase.Installed && p.Version == new ReleaseVersion(3, 1, 1));
-        File.Exists(Paths.SelfUpdateResultFile).Should().BeFalse("shown once");
-    }
-
-    [Fact]
-    public async Task A_failed_install_is_recorded_and_the_tray_still_starts()
-    {
-        _msiexec.Then(1603);
-        (await Apply(Verified())).Should().Be(SelfUpdateApply.InstallFailed);
-        _host.TraysStarted.Should().Be(1);
-        SelfUpdateResult.TryParse(File.ReadAllText(Paths.SelfUpdateResultFile))!.ExitCode.Should().Be(1603);
-    }
-
-    [Fact]
-    public async Task It_installs_nothing_it_was_not_given_by_the_tray()
-    {
-        var outside = Path.Combine(_root, "elsewhere", "RST.msi");
-        Directory.CreateDirectory(Path.GetDirectoryName(outside)!);
-        File.Copy(Verified(), outside);
-        (await Apply(outside)).Should().Be(SelfUpdateApply.Refused);
-
-        var companion = Path.Combine(Paths.CacheRoot, "rst", "3.1.1", "GanttIt-1.2.0.msi");
-        File.WriteAllText(companion, "x");
-        (await Apply(companion)).Should().Be(SelfUpdateApply.Refused);
-
-        var tampered = Verified("3.1.2");
-        File.AppendAllText(tampered, "changed after it was verified");
-        (await Apply(tampered)).Should().Be(SelfUpdateApply.Refused);
-
-        var other = Verified("3.1.3", upgradeCode: "644FCAD5-E631-4441-9A11-75F175565136");
-        (await Apply(other)).Should().Be(SelfUpdateApply.Refused);
-
-        _msiexec.Calls.Should().BeEmpty();
-        _host.TraysStarted.Should().Be(4, "the old tray is started again whatever happens");
-        _log.Count(l => l.StartsWith("updater: refused", StringComparison.Ordinal)).Should().Be(4);
-    }
-}

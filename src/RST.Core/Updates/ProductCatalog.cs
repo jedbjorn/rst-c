@@ -64,6 +64,25 @@ public sealed class ProductCatalog
     public const string RstAsset = "RST.msi";
 
     /// <summary>
+    /// The setup bundle's release-asset name (decision #34: an RST that RST-Setup.exe installed is updated by the
+    /// new release's RST-Setup.exe, so Add/Remove Programs keeps its one entry and the bundle's uninstall keeps
+    /// working).
+    /// </summary>
+    public const string RstBundleAsset = "RST-Setup.exe";
+
+    /// <summary>The hard-coded pattern the bundle's asset name must match (exactly <c>RST-Setup.exe</c>).</summary>
+    public const string RstBundlePattern = @"^RST-Setup\.exe\z";
+
+    /// <summary>RST-Setup.exe's bundle UpgradeCode (installer-bundle/Bundle.wxs): how the tray recognises a bundle install.</summary>
+    public const string RstBundleUpgradeCode = "2BE2BE5D-9203-4344-A70D-E735D3B041A3";
+
+    /// <summary>
+    /// RST as RST.msi updates it: the PER-USER UpgradeCode only. Self-update never accepts another RST
+    /// UpgradeCode (the per-machine RST-Machine.msi's, from WU5), whatever RstProduct lists for detection.
+    /// </summary>
+    public static ProductInfo RstPerUserUpdate => RstProduct with { UpgradeCodes = new[] { RstUpgradeCode } };
+
+    /// <summary>
     /// The asset-name patterns, hard-coded per product id (spec #20 §5: ^RST\.msi$, ^GanttIt-\d+\.\d+\.\d+\.msi$,
     /// ^SplashIt-\d+\.\d+\.\d+\.msi$, written with ASCII [0-9] and \z as in ReleaseVersion). A companion's asset name,
     /// built from its pinned asset in companions.json, must match its pattern here or it is never installed.

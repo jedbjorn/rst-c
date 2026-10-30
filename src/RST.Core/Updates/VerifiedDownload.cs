@@ -10,7 +10,9 @@
 //   3. GET  github.com/<repo>/releases/download/<tag>/<asset>           redirects as in 1; 512 MB at most; hashed
 //      while it streams into cache\<product>\<version>\<asset>.download, then moved into place when the hash is the
 //      one both sources gave
-//   4. the MSI's Property table (IMsiReader): UpgradeCode, ProductVersion, per-user
+//   4. the MSI's Property table (IMsiReader): RST's PER-USER UpgradeCode or the companion's, ProductVersion, per-user;
+//      or, for RST-Setup.exe (decision #34), its version resource (IBundleReader)
+//   Redirects: the first request goes to github.com; every redirect only to the release-asset hosts (review N2).
 //
 // Only then is verified.json written beside it. Anything else is a refusal with a logged reason, the file is deleted,
 // and msiexec never sees it. Nothing here throws.
@@ -60,6 +62,7 @@ public sealed class VerifiedDownload
 
     private readonly HttpClient _http;
     private readonly IMsiReader _msi;
+    private readonly IBundleReader? _bundles;
     private readonly string _cacheRoot;
     private readonly Action<string> _log;
     private readonly TimeProvider _time;
@@ -67,10 +70,13 @@ public sealed class VerifiedDownload
     /// <param name="http">The tray's client: its handler must not follow redirects (TrayHttp).</param>
     /// <param name="msi">Reads the MSI's Property table.</param>
     /// <param name="cacheRoot">%LocalAppData%\RST\Tray\cache.</param>
-    public VerifiedDownload(HttpClient http, IMsiReader msi, string cacheRoot, Action<string>? log = null, TimeProvider? time = null)
+    /// <param name="bundles">Reads RST-Setup.exe's version resource (decision #34); null: bundles are never installed.</param>
+    public VerifiedDownload(HttpClient http, IMsiReader msi, string cacheRoot, Action<string>? log = null, TimeProvider? time = null,
+                            IBundleReader? bundles = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _msi = msi ?? throw new ArgumentNullException(nameof(msi));
+        _bundles = bundles;
         _cacheRoot = cacheRoot ?? throw new ArgumentNullException(nameof(cacheRoot));
         _log = log ?? (_ => { });
         _time = time ?? TimeProvider.System;
@@ -78,20 +84,25 @@ public sealed class VerifiedDownload
 
     /// <summary>
     /// Downloads <paramref name="product"/> <paramref name="version"/> and checks it all four ways, against what is
-    /// installed now (<paramref name="installed"/>; null when it is not). Never throws.
+    /// installed now (<paramref name="installed"/>; null when it is not). <paramref name="kind"/>: the product's MSI,
+    /// or (RST installed by RST-Setup.exe, decision #34) the release's RST-Setup.exe. Never throws.
     /// </summary>
-    public async Task<VerifyResult> RunAsync(ProductInfo product, ReleaseVersion version, ReleaseVersion? installed, CancellationToken cancel)
+    public async Task<VerifyResult> RunAsync(ProductInfo product, ReleaseVersion version, ReleaseVersion? installed, CancellationToken cancel,
+                                             PackageKind kind = PackageKind.Msi)
     {
         ArgumentNullException.ThrowIfNull(product);
-        var result = await RunCoreAsync(product, version, installed, cancel).ConfigureAwait(false);
-        if (result.Ok) _log($"verified {product.Name} {version}: {result.Msi!.Asset} sha256 {result.Msi.Sha256} (SHA256SUMS.txt and GitHub's digest agree; UpgradeCode, version and per-user scope match)");
+        var result = await RunCoreAsync(product, version, installed, kind, cancel).ConfigureAwait(false);
+        if (result.Ok)
+            _log($"verified {product.Name} {version}: {result.Msi!.Asset} sha256 {result.Msi.Sha256} (SHA256SUMS.txt and GitHub's digest agree; "
+                 + (kind == PackageKind.Bundle ? "its version resource is the release's)" : "UpgradeCode, version and per-user scope match)"));
         else _log($"refused {product.Name} {version}: {result.Problem}: {result.Detail}");
         return result;
     }
 
-    private async Task<VerifyResult> RunCoreAsync(ProductInfo product, ReleaseVersion version, ReleaseVersion? installed, CancellationToken cancel)
+    private async Task<VerifyResult> RunCoreAsync(ProductInfo product, ReleaseVersion version, ReleaseVersion? installed, PackageKind kind,
+                                                  CancellationToken cancel)
     {
-        var asset = InstallChecks.AssetName(product, version, out var nameCheck);
+        var asset = InstallChecks.AssetName(product, version, kind, out var nameCheck);
         if (asset is null) return VerifyResult.Refused(nameCheck);
         var newer = InstallChecks.Newer(version, installed);
         if (!newer.Passed) return VerifyResult.Refused(newer);
@@ -167,18 +178,8 @@ public sealed class VerifiedDownload
             }
         }
 
-        // 4. The MSI says what it is.
-        MsiIdentity identity;
-        try
-        {
-            identity = _msi.Read(path);
-        }
-        catch (Exception ex)
-        {
-            TryDelete(path);
-            return VerifyResult.Refused(new CheckResult(InstallProblem.MsiUnreadable, $"{asset}: {ex.Message}"));
-        }
-        var who = InstallChecks.Identity(product, version, identity);
+        // 4. The MSI (its Property table) or the bundle (its version resource) says what it is.
+        var who = InstallChecks.IdentityOf(product, version, path, _msi, _bundles);
         if (!who.Passed)
         {
             TryDelete(path);
@@ -206,16 +207,7 @@ public sealed class VerifiedDownload
         var record = InstallCache.ReadVerified(path, _log);
         if (record is null || record.Version != version.ToString() || record.Product != product.Id)
             return VerifyResult.Refused(new CheckResult(InstallProblem.HashMismatch, $"{path}: not the verified {product.Name} {version}"));
-        MsiIdentity identity;
-        try
-        {
-            identity = _msi.Read(path);
-        }
-        catch (Exception ex)
-        {
-            return VerifyResult.Refused(new CheckResult(InstallProblem.MsiUnreadable, $"{path}: {ex.Message}"));
-        }
-        var who = InstallChecks.Identity(product, version, identity);
+        var who = InstallChecks.IdentityOf(product, version, path, _msi, _bundles);
         return who.Passed
             ? new VerifyResult(new VerifiedMsi(product, version, record.Asset, path, record.Sha256), InstallProblem.None, "")
             : VerifyResult.Refused(who);
@@ -341,7 +333,10 @@ public sealed class VerifiedDownload
         var target = uri;
         for (var hop = 0; ; hop++)
         {
-            if (!UpdateHosts.IsAllowed(target, use) || !string.IsNullOrEmpty(target.Fragment))
+            // The first request goes to its own host (github.com for a download); a redirect only to the
+            // release-asset hosts, never back to github.com (spec #20 §5; review N2).
+            var allowed = hop == 0 || use != UpdateHostUse.Download ? use : UpdateHostUse.DownloadRedirect;
+            if (!UpdateHosts.IsAllowed(target, allowed) || !string.IsNullOrEmpty(target.Fragment))
                 return (null, VerifyResult.Refused(new CheckResult(InstallProblem.RedirectNotAllowed,
                     $"{uri.AbsolutePath}: {(hop == 0 ? "request" : "redirect")} to {target.GetLeftPart(UriPartial.Authority)} is off the allowlist")));
 

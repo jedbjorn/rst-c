@@ -13,6 +13,7 @@
 
 using System;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -95,6 +96,34 @@ public enum InstallProblem
 
     /// <summary>The tray was closing, or the user cancelled.</summary>
     Cancelled,
+
+    /// <summary>Revit was open when the updater was about to install (it hands the wait back to the tray).</summary>
+    RevitRunning,
+}
+
+/// <summary>What the tray installs a release with (decision #34).</summary>
+public enum PackageKind
+{
+    /// <summary>The product's MSI, through msiexec (companions; RST installed from RST.msi).</summary>
+    Msi,
+
+    /// <summary>RST-Setup.exe, the Burn bundle (RST installed from RST-Setup.exe).</summary>
+    Bundle,
+}
+
+/// <summary>What a bundle exe's version resource says about itself.</summary>
+/// <param name="FileVersion">The four-part file version (<c>3.1.1.0</c>), or null when unreadable.</param>
+/// <param name="ProductName">Its product name (the bundle's Name), for the log.</param>
+public sealed record BundleIdentity(string? FileVersion, string? ProductName);
+
+/// <summary>
+/// Reads a bundle exe's version resource (RST.Tray: FileVersionInfo). Throws when it cannot. The bundle's UpgradeCode
+/// is NOT read: it sits in Burn's manifest inside the exe's attached container, which the tray does not unpack; the
+/// SHA256 pair and immutable releases vouch for the file instead (decision #34).
+/// </summary>
+public interface IBundleReader
+{
+    BundleIdentity Read(string exePath);
 }
 
 /// <summary>What an MSI's Property table says about itself.</summary>
@@ -124,10 +153,26 @@ public static class InstallChecks
     /// The product's asset name for <paramref name="version"/>, or null with the refusal when it has none or the
     /// built name does not match the product's hard-coded pattern.
     /// </summary>
-    public static string? AssetName(ProductInfo product, ReleaseVersion version, out CheckResult refusal)
+    public static string? AssetName(ProductInfo product, ReleaseVersion version, out CheckResult refusal) =>
+        AssetName(product, version, PackageKind.Msi, out refusal);
+
+    /// <summary>
+    /// As <see cref="AssetName(ProductInfo, ReleaseVersion, out CheckResult)"/>; for <see cref="PackageKind.Bundle"/>
+    /// (RST only) the asset is exactly <c>RST-Setup.exe</c>.
+    /// </summary>
+    public static string? AssetName(ProductInfo product, ReleaseVersion version, PackageKind kind, out CheckResult refusal)
     {
         ArgumentNullException.ThrowIfNull(product);
         refusal = CheckResult.Pass;
+        if (kind == PackageKind.Bundle)
+        {
+            if (!product.IsRst)
+            {
+                refusal = new CheckResult(InstallProblem.NotInstallable, $"{product.Name} has no setup bundle");
+                return null;
+            }
+            product = product with { AssetTemplate = ProductCatalog.RstBundleAsset, AssetPattern = ProductCatalog.RstBundlePattern };
+        }
         if (!product.IsInstallable)
         {
             refusal = new CheckResult(InstallProblem.NotInstallable, $"{product.Name}: the catalog has no asset name");
@@ -265,6 +310,45 @@ public static class InstallChecks
                 $"the MSI is not per-user (ALLUSERS='{identity.AllUsers}', MSIINSTALLPERUSER='{identity.InstallPerUser}')");
         return CheckResult.Pass;
     }
+
+    /// <summary>
+    /// Check 3 for RST-Setup.exe (decision #34): its version resource's file version is the release's a.b.c (a fourth
+    /// field, if any, must be 0). The asset name and the SHA256 pair are checked as for an MSI.
+    /// </summary>
+    public static CheckResult BundleIdentity(ReleaseVersion version, BundleIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        var text = identity.FileVersion?.Trim() ?? "";
+        if (text.EndsWith(".0", StringComparison.Ordinal) && text.Count(c => c == '.') == 3) text = text[..^2];
+        if (ReleaseVersion.TryParseTag("v" + text) is not { } exeVersion || exeVersion != version)
+            return new CheckResult(InstallProblem.WrongVersion,
+                $"RST-Setup.exe's version resource says '{identity.FileVersion}' ({identity.ProductName}), the release is {version}");
+        return CheckResult.Pass;
+    }
+
+    /// <summary>The identity check for <paramref name="path"/>: an MSI's Property table, or a bundle's version resource.</summary>
+    public static CheckResult IdentityOf(ProductInfo product, ReleaseVersion version, string path, IMsiReader msi, IBundleReader? bundles)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+        // Self-update accepts only RST's per-user UpgradeCode, whatever else RstProduct lists for detection.
+        var expected = product.IsRst ? ProductCatalog.RstPerUserUpdate : product;
+        try
+        {
+            if (KindOf(path) == PackageKind.Bundle)
+                return bundles is null
+                    ? new CheckResult(InstallProblem.NotInstallable, "no bundle reader")
+                    : BundleIdentity(version, bundles.Read(path));
+            return Identity(expected, version, msi.Read(path));
+        }
+        catch (Exception ex)
+        {
+            return new CheckResult(InstallProblem.MsiUnreadable, $"{Path.GetFileName(path)}: {ex.Message}");
+        }
+    }
+
+    /// <summary>A bundle (<c>.exe</c>) or an MSI, by the file's extension.</summary>
+    public static PackageKind KindOf(string path) =>
+        path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? PackageKind.Bundle : PackageKind.Msi;
 
     private static string? Text(JsonElement obj, string property) =>
         obj.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
