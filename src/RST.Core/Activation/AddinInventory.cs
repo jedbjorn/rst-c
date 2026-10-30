@@ -47,8 +47,12 @@ public sealed record InventoryItem(
     /// <summary>Every ClientId has Disabled:true in the user's AddInsSettings.json.</summary>
     public bool SwitchedOffInSettings => Mechanism == SwitchMechanism.SettingsFile && AddinIds.Count > 0 && AddinIds.All(DisabledIds.Contains);
 
-    /// <summary>The add-in will not load at the next start (renamed, switched off, or locked off).</summary>
-    public bool IsOff => Renamed || Lock == AdminLock.AlwaysDisabled || SwitchedOffInSettings;
+    /// <summary>
+    /// The add-in will not load at the next start: renamed (Revit cannot find it), locked off by the
+    /// administrator, or switched off in the settings file, unless the administrator locks it on
+    /// (IT's AdminSettings.json overrides the user's file; addins-manager-spike.md §6).
+    /// </summary>
+    public bool IsOff => Renamed || Lock == AdminLock.AlwaysDisabled || (SwitchedOffInSettings && Lock != AdminLock.AlwaysEnabled);
 
     /// <summary>"name (year)" in the plan and the report.</summary>
     public string Label => Name + " (" + Year.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";

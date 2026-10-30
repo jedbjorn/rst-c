@@ -115,6 +115,23 @@ public class ActivationPlannerTests
     }
 
     [Fact]
+    public void An_admin_lock_on_wins_over_the_users_file_so_switching_off_reports_the_lock()
+    {
+        // rst-c switched DiRoots off earlier; then IT locked it on. Revit loads it (the admin file
+        // wins), so Disable unused must try again and report the lock, not call it "already off".
+        var locked = Item(2027, "DiRoots.One", AddinScope.Machine, off: true, adminLock: AdminLock.AlwaysEnabled);
+        locked.IsOff.Should().BeFalse();
+        var ledger = new ActivationLedger();
+        ledger.Add(new LedgerEntry(2027, locked.AddinIds[0], locked.Name, SwitchMechanism.SettingsFile, locked.ManifestPath, DateTime.UtcNow));
+
+        var plan = ActivationPlanner.Plan(InventoryOf(locked), ActivationPolicy.Load([], true), ledger);
+        plan.Changes.Should().ContainSingle().Which.Should().Match<PlanEntry>(e =>
+            e.Action == PlanAction.Disable && e.ExpectedBlock == ChangeReason.AdminLocked && e.TargetIds.Count == 0);
+        plan.Forget.Should().BeEmpty("the setting rst-c wrote is still there for when the lock goes");
+        ActivationPlanner.Plan(InventoryOf(locked), ActivationPolicy.Unload, ledger).HasChanges.Should().BeFalse("it is on already");
+    }
+
+    [Fact]
     public void A_protected_add_in_that_v3_switched_off_is_switched_back_on()
     {
         // v3.0 could rename Autodesk's own add-ins (investigation B3): they go back on, whatever the policy.
