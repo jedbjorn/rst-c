@@ -25,7 +25,7 @@ The header reads "RST · Health" and holds two tabs, plus the **Device** name an
 
 ## System snapshot
 
-![The Health tab after a scan: the Hardware section expanded with its CPU, RAM, GPU, disk and junk rows, the Display & Network, Revit and Operating System sections collapsed below it, and Clean Junk Files, Close and Scan System in the footer](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-system-snapshot.png)
+![The Health tab after a scan, with all four sections opened: Hardware (user, CPU, RAM, GPUs, disk, the junk rows and Junk total, with a red dot for high RAM use), Display & Network, Revit (version, username, hardware acceleration, model, warnings) and Operating System, above Clean Junk Files, Close and Scan System](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-system-snapshot.png)
 
 ### Scanning
 
@@ -100,6 +100,9 @@ Clean Junk Files :::class1 -> Choose targets, Clean Selected :::class2 -> Confir
 ```
 
 1. Click **Clean Junk Files**. A dialog lists the targets, each with a switch and its path, all switched on. With none configured, it reads "No cleanup targets configured".
+
+   ![The Clean Junk Files dialog: the six preset targets (Temp, PacCache, Journals, Collaboration Cache, Recent File List, RST Logs), each with its path and a switch turned on, above Cancel and Clean Selected](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-junk-cleanup.png)
+
 2. Switch off any target you want to keep and click **Clean Selected** (or **Cancel**). With every target off, rst-c tells you "No targets were chosen for cleanup."
 3. Confirm **Delete selected junk?**. **Cancel** is the default; **Continue** deletes.
 4. "Cleaning" shows while the files are deleted in the background.
@@ -116,7 +119,7 @@ For folder targets, rst-c walks the folder and deletes its files and subfolders.
 
 The **Activity** tab turns the passive session into something you can look at: how long you have been working, how long the current model has been open, and how the current file has behaved over time. It reads only data recorded locally on this machine; see [Data & privacy](#data--privacy).
 
-![The Health tool's Activity tab: six stat cards (Session Timer, Session Total, Longest Sync, Longest Open Time, Warning Count, File Size), the 7D / 1M / 3M / 6M range switch, and the session-time and opening-time charts for the current model](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-activity-tab.png)
+![The Health tool's Activity tab: six stat cards (Session Timer, Session Total, Longest Sync, Longest Open Time, Warning Count, File Size), the 7D / 1M / 3M / 6M range switch, the session-time, opening-time and sync-history charts for the current model, and the Collection switch with its status line](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-activity-tab.png)
 
 ### Stat cards
 

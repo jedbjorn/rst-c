@@ -25,6 +25,8 @@ Click **Loader** on the **RST** panel of the **Add-Ins** tab. The window, titled
 - It belongs to Revit. It has no taskbar button of its own, and Revit waits until you close it.
 - It uses Revit's light or dark theme, as set in Revit under Options → Colors → UI active theme (including "Use system setting"). The theme is read when the window opens; if you change Revit's theme, close and reopen the Loader to pick it up.
 
+![The Profile Loader opened with Revit's dark theme: the same window with a dark palette and a dark title bar](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-dark.png)
+
 ### The window
 
 - **Header:** "Profile Selector", the running Revit version, and **+ Import from File**.

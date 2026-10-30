@@ -83,7 +83,7 @@ Tool icons come from rst-c's built-in icon pack: 55 designs, each in seven colou
 
 The chosen icon shows on the tool's row, in the Live Preview and on the ribbon. A tool with no pack icon uses rst-c's default button icon on the ribbon (rst-c's own tools keep their own icons). There is no option to take an icon from the source command.
 
-![The Pick an icon overlay over the Builder: the icon pack's designs in a grid with ∅ none first, and a selected design's row of seven colour variants open below it](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
+![The Pick an icon overlay over the Builder: the icon pack's designs in a grid with ∅ none first, and the house design's row of seven colours open below it, with the tooltip "house — purple"](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
 
 ### Properties
 
@@ -116,6 +116,8 @@ See [Appearance](appearance.md) for how colours and opacity render on the ribbon
 - **×**, which removes it from this profile.
 
 **Restore Defaults** brings back the full preset list. **Apply** keeps the changes; **Cancel** undoes every change made since the dialog opened. With every row removed, the list reads `No targets. Use "Restore Defaults".`
+
+![The Junk Cleanup Targets dialog over the Builder: the help text, six rows each with an on/off switch, an editable name, the fixed preset path, its kind and ×, then Restore Defaults, Apply and Cancel](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-junk-cleanup.png)
 
 A profile keeps its own cleanup targets when you edit and save it. Only a profile with no targets at all (one made before cleanup targets existed) is given the defaults.
 
