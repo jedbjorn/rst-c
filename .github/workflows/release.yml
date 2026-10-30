@@ -33,6 +33,12 @@ on:
   push:
     tags: ['v*']
 
+# One release run per tag at a time (WU4 review N7): a re-pushed tag waits for the run before it, never
+# overlapping its draft clean-up.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -60,6 +66,10 @@ jobs:
   release:
     name: GitHub Release
     needs: build
+    env:
+      # The release's assets, in ONE place: SHA256SUMS.txt lists them and release-draft.sh attaches them
+      # (with SHA256SUMS.txt). Adding RST-Machine.msi (WU5) is this one line.
+      RELEASE_ASSETS: RST.msi RST-Setup.exe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,50 +88,48 @@ jobs:
       # and checked (names exactly the assets, every hash verifies) before
       # anything is published.
       - name: SHA256SUMS.txt
-        run: build/sha256sums.sh write artifacts RST.msi RST-Setup.exe
+        run: build/sha256sums.sh write artifacts $RELEASE_ASSETS
       # Draft → verify → publish. With immutable releases on (P3) a release's
       # assets and tag lock at publication, so nothing is published until the
       # uploaded assets are proven: a mismatch leaves an unpublished draft
       # (fix and re-run) instead of a frozen release every tray refuses.
       #
+      #
+      # One draft per tag, addressed by its id (WU3 review D1): Actions'
+      # "re-run failed jobs" re-runs this whole job, and a draft left by the
+      # failed run would otherwise sit beside a second one for the same tag.
+      # build/release-draft.sh holds every gh call; its self-test (CI job
+      # "Release SHA256SUMS.txt") runs them against a fake gh.
+      #
+      # 0. A published release for the tag is refused (never replaced);
+      #    unpublished drafts an earlier run left for it are deleted by id.
+      - name: Clear stale drafts for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: build/release-draft.sh prepare "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
       # 1. A DRAFT with every asset, attached by name so a stray artifact can
       #    never ship. Hyphenated tags (v1.0.0-rc.1) are pre-releases from
-      #    the start; the flag stays when the draft is published.
+      #    the start; the flag stays when the draft is published. Its id is
+      #    the one draft for the tag (anything else fails here).
       - name: Create the release as a draft
+        id: draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          prerel=()
-          if [[ "$tag" == *-* ]]; then
-            prerel=(--prerelease)
-          fi
-          gh release create "$tag" \
-            artifacts/RST.msi \
-            artifacts/RST-Setup.exe \
-            artifacts/SHA256SUMS.txt \
-            --draft \
-            --verify-tag \
-            --title "$tag" \
-            --generate-notes \
-            "${prerel[@]}"
-      # 2. The draft as GitHub holds it: SHA256SUMS.txt lists exactly its
+          id="$(build/release-draft.sh create "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" artifacts)"
+          echo "draft $id for $GITHUB_REF_NAME"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+      # 2. That draft as GitHub holds it: SHA256SUMS.txt lists exactly its
       #    other assets, each line equals GitHub's digest of that upload, and
       #    the draft's own SHA256SUMS.txt is the file checked. A failure fails
-      #    the job here and the draft stays unpublished.
+      #    the job here and the draft stays unpublished (a re-run deletes it).
       - name: Verify the draft against SHA256SUMS.txt
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          gh release view "$tag" --json isDraft,assets > "$RUNNER_TEMP/draft-assets.json"
-          jq -e '.isDraft == true' "$RUNNER_TEMP/draft-assets.json" > /dev/null || { echo "::error::$tag is not a draft"; exit 1; }
-          build/sha256sums.sh check-release artifacts/SHA256SUMS.txt "$RUNNER_TEMP/draft-assets.json"
-      # 3. Only now publish: one step from a complete, verified draft.
+        run: build/release-draft.sh verify "$GITHUB_REPOSITORY" "${{ steps.draft.outputs.id }}" "$GITHUB_REF_NAME" artifacts/SHA256SUMS.txt
+      # 3. Only now publish that exact release: one step from a complete,
+      #    verified draft.
       - name: Publish the verified release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          gh release edit "$tag" --draft=false
-          gh release view "$tag" --json isDraft,isPrerelease,url --jq '"published: \(.url) (draft \(.isDraft), pre-release \(.isPrerelease))"'
+        run: build/release-draft.sh publish "$GITHUB_REPOSITORY" "${{ steps.draft.outputs.id }}" "$GITHUB_REF_NAME"

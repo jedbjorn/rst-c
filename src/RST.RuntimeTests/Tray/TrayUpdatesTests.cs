@@ -57,6 +57,22 @@ internal sealed class FakeUpdatesHost : ITrayUpdatesHost
 
     public void OpenReleasePage(ProductInfo product) => Calls.Add("release:" + product.Id);
 
+    // F17 WU4.
+
+    public IReadOnlyDictionary<string, InstallProgress> Installs { get; set; } = new Dictionary<string, InstallProgress>();
+
+    public bool RevitRunning { get; set; }
+
+    public bool PerMachineTray { get; set; }
+
+    public void Install(ProductInfo product) => Calls.Add("install:" + product.Id);
+
+    public void ReinstallPrevious(ProductInfo product) => Calls.Add("reinstall:" + product.Id);
+
+    public void CancelInstall(ProductInfo product) => Calls.Add("cancel:" + product.Id);
+
+    public void OpenLog(string path) => Calls.Add("log:" + path);
+
     public void Publish(UpdateSnapshot snapshot)
     {
         Current = snapshot;
@@ -121,7 +137,7 @@ internal static class Scenarios
         S("gantt-it", InstallKind.Installer, "1.1.0", "1.2.0", failed: true),
         S("splash-it", InstallKind.NotInstalled, null, null, failed: true),
     }, new DateTimeOffset(2026, 10, 28, 16, 5, 0, TimeSpan.Zero), Checking: false, AutomaticChecks: true, Detected: true,
-       FailureReason: "no answer in 30 s");
+       FailureReason: "no answer in 30 s", Failure: NetFailure.TimedOut);
 
     /// <summary>Windows Installer could not be read (msi.dll failed): every product Unknown; the latest versions are known.</summary>
     public static UpdateSnapshot Unknown => new(new[]
@@ -225,7 +241,8 @@ public class TrayUpdatesScreenshotTests
                     Assert.Equal("RST 3.1.1 is available", window.RstHeadline.Text);
                     Assert.Equal("Last checked today at 09:14", window.LastChecked.Text);
                     Assert.True(note.IsVisible);
-                    Assert.False(ById(window, "Tray.RstUpdate").IsEnabled, "installs are WU4's");
+                    Assert.True(ById(window, "Tray.RstUpdate").IsEnabled, "Update installs on click (WU4)");
+                    Assert.Equal("Update", ((Button)ById(window, "Tray.RstUpdate")).Content);
                     Assert.Contains("Update available", texts);
                     Assert.Contains("Installed manually", texts);
                     break;
@@ -246,7 +263,7 @@ public class TrayUpdatesScreenshotTests
                     // A failed check: the last SUCCESSFUL check, the reason, and nothing stale ("up to date", "today").
                     Assert.True(failed.IsVisible);
                     Assert.Equal("Last successful check 28 Oct 2026 at 16:05", window.LastChecked.Text);
-                    Assert.Contains(texts, t => t.StartsWith("Couldn't check: no answer in 30 s.", StringComparison.Ordinal));
+                    Assert.Contains(texts, t => t.StartsWith("Couldn't check: GitHub didn't answer in time.", StringComparison.Ordinal));
                     Assert.Equal("RST 3.1.0", window.RstHeadline.Text);
                     Assert.Contains("3.1.0 (couldn't check)", texts);
                     Assert.DoesNotContain("Up to date", texts);
@@ -280,10 +297,10 @@ public class TrayUpdatesScreenshotTests
             var rows = window.ViewModel.Updates.Rows;
             Assert.Equal(new[] { "RST", "Gantt-It", "Splash-It" }, rows.Select(r => r.Name));
             var texts = Texts(window.AppsPage);
-            Assert.Contains(TrayStrings.Apps_InstallsComingSoon, texts);
+            Assert.Contains(TrayStrings.Apps_InstallsNote, texts);
             Assert.False(ById(window, "Tray.AppsDetecting").IsVisible);
             foreach (var row in rows.Where(r => r.HasAction))
-                Assert.False(ById(window, $"Tray.App.{row.Id}.Action").IsEnabled, "Install and Update are WU4's");
+                Assert.True(ById(window, $"Tray.App.{row.Id}.Action").IsEnabled, "Install and Update act on click (WU4)");
 
             if (scenario == "mixed")
             {
@@ -293,7 +310,7 @@ public class TrayUpdatesScreenshotTests
                 Assert.Equal("Update", rows[0].ActionText);
                 Assert.Null(rows[1].ActionText);
                 Assert.Equal("Install", rows[2].ActionText);
-                Assert.Contains("Coming soon", texts);
+                Assert.DoesNotContain("Coming soon", texts);
                 // Not installed and Installed manually are said once, by the pill, not again as an "Installed" value.
                 Assert.DoesNotContain(texts, t => t.Contains("Installed Not installed") || t.Contains("Installed Installed manually"));
                 Assert.False(rows[1].ShowInstalledVersion);
@@ -355,7 +372,7 @@ public class UpdatesViewModelTests
         Assert.Equal("Not installed", splash.InstalledText);
         Assert.Equal("Install", splash.ActionText);
         Assert.True(splash.IsNeutral);
-        Assert.All(vm.Rows, r => Assert.False(r.CanAct));
+        Assert.Equal(new[] { true, false, true }, vm.Rows.Select(r => r.CanAct)); // Update RST, nothing for a manual copy, Install Splash-It
 
         var off = new UpdatesViewModel(new FakeUpdatesHost { Current = Scenarios.Off }, () => new UpdateChecksState(false, false));
         Assert.Equal("Not checked yet", off.Rows[0].LatestText);
@@ -368,7 +385,8 @@ public class UpdatesViewModelTests
         Assert.Equal(ProductState.Installed, failed.Rows[0].State); // not "up to date": that would be stale
         Assert.Equal("RST 3.1.0", failed.RstHeadline);
         Assert.True(failed.ShowCheckFailed);
-        Assert.Equal("Couldn't check: no answer in 30 s. RST tries again at the next daily check. Details are in the log.",
+        // WU3 review D3: the plain wording for a timeout; the raw "no answer in 30 s" stays in the log.
+        Assert.Equal("Couldn't check: GitHub didn't answer in time. RST tries again at the next daily check. Details are in the log.",
                      failed.CheckFailedText);
         Assert.Equal("Last successful check 28 Oct 2026 at 16:05", failed.LastCheckedText);
     }
@@ -387,8 +405,17 @@ public class UpdatesViewModelTests
         Assert.False(vm.IsDetecting);
         Assert.Null(vm.Rst.ActionText);
         Assert.Equal("RST", vm.RstHeadline);
-        Assert.Equal("Install", vm.Rows[1].ActionText);
+        Assert.Null(vm.Rows[1].ActionText); // Install needs a latest version to install (F17 WU4)
         Assert.True(vm.Rows[1].IsNeutral);
+
+        var checkedOnce = snapshot with
+        {
+            Detected = true,
+            Products = snapshot.Products.Select(p => p with { Latest = new ReleaseVersion(1, 2, 0) }).ToList(),
+        };
+        host.Publish(checkedOnce);
+        Assert.Null(vm.Rst.ActionText); // RST is never "installed" from the tray, only updated
+        Assert.Equal("Install", vm.Rows[1].ActionText);
     }
 
     [Fact]
@@ -561,7 +588,10 @@ public sealed class TrayUpdateChecksTests : IDisposable
         Assert.Equal("RST 3.1.0", vm.RstHeadline);
         Assert.Equal("3.1.0 (couldn't check)", vm.Rst.LatestText);
         Assert.Equal("Last successful check yesterday at 08:05", vm.LastCheckedText);
-        Assert.StartsWith("Couldn't check: HttpRequestException: No such host", vm.CheckFailedText);
+        // WU3 review D3: the page says it plainly; the raw reason stays in the snapshot and the log.
+        Assert.Equal(NetFailure.Offline, failed.Failure);
+        Assert.Equal("Couldn't check: couldn't reach GitHub. RST tries again at the next daily check. Details are in the log.", vm.CheckFailedText);
+        Assert.DoesNotContain("Exception", vm.CheckFailedText);
 
         offline = false;
         h.Advance(TimeSpan.FromHours(24));

@@ -216,8 +216,9 @@ To turn this off, open RST from the notification area and go to Settings.</value
     <value>Unknown (couldn't read installed apps)</value>
     <comment>Windows Installer could not be read for this app.</comment>
   </data>
-  <data name="Updates_InstallComingSoon" xml:space="preserve">
-    <value>Installing from RST is coming soon. For now, download the new version from its release page.</value>
+  <data name="Updates_RstUpdateNote" xml:space="preserve">
+    <value>RST closes while it updates, then opens again. Nothing is installed while Revit is open.</value>
+    <comment>Beside RST's Update button, with the Release page link (F17 WU4).</comment>
   </data>
   <data name="Updates_OtherApps" xml:space="preserve">
     <value>Gantt-It and Splash-It</value>
@@ -225,8 +226,8 @@ To turn this off, open RST from the notification area and go to Settings.</value
   <data name="Updates_OtherAppsHint" xml:space="preserve">
     <value>More on the Apps page.</value>
   </data>
-  <data name="Apps_InstallsComingSoon" xml:space="preserve">
-    <value>Install and Update are coming soon. For now, get each app from its release page.</value>
+  <data name="Apps_InstallsNote" xml:space="preserve">
+    <value>Installs are for your account only and need no administrator. RST checks each download against its release before installing it, and never installs while Revit is open.</value>
   </data>
   <data name="Apps_Detecting" xml:space="preserve">
     <value>Looking for installed apps…</value>
@@ -277,9 +278,26 @@ To turn this off, open RST from the notification area and go to Settings.</value
   <data name="App_Update" xml:space="preserve">
     <value>Update</value>
   </data>
-  <data name="App_ComingSoon" xml:space="preserve">
-    <value>Coming soon</value>
-    <comment>Beside the disabled Install and Update buttons (installs arrive in F17 WU4).</comment>
+  <data name="App_InstallWhenRevitCloses" xml:space="preserve">
+    <value>Install when Revit closes</value>
+    <comment>The Install button while Revit runs (spec #20 §5): a click waits for Revit to exit, then installs.</comment>
+  </data>
+  <data name="App_UpdateWhenRevitCloses" xml:space="preserve">
+    <value>Update when Revit closes</value>
+  </data>
+  <data name="App_ReinstallPrevious" xml:space="preserve">
+    <value>Reinstall previous version ({0})</value>
+    <comment>After a failed upgrade left the app uninstalled (spec #20 §5). {0} is the previous version, e.g. 1.1.0.</comment>
+  </data>
+  <data name="App_ReinstallPreviousWhenRevitCloses" xml:space="preserve">
+    <value>Reinstall {0} when Revit closes</value>
+    <comment>The reinstall button while Revit runs (the reinstall waits for Revit too). {0} is the previous version.</comment>
+  </data>
+  <data name="App_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="App_OpenLog" xml:space="preserve">
+    <value>Open log</value>
   </data>
   <data name="App_ReleasePage" xml:space="preserve">
     <value>Release page</value>
@@ -314,5 +332,139 @@ To turn this off, open RST from the notification area and go to Settings.</value
   <data name="Notify_ManyText" xml:space="preserve">
     <value>{0}. Click to see them in RST.</value>
     <comment>{0} lists them: "RST 3.1.1, Gantt-It 1.2.0".</comment>
+  </data>
+  <!-- F17 WU4: what an install is doing, and how it ended. {0} is the app (Gantt-It), {1} the version (1.2.0). -->
+  <data name="Install_Downloading" xml:space="preserve">
+    <value>Downloading and checking {0} {1}…</value>
+  </data>
+  <data name="Install_WaitingForRevit" xml:space="preserve">
+    <value>Waiting for Revit to close. {0} {1} installs as soon as it does.</value>
+  </data>
+  <data name="Install_Installing" xml:space="preserve">
+    <value>Installing {0} {1}…</value>
+  </data>
+  <data name="Install_Queued" xml:space="preserve">
+    <value>Waiting its turn: {0} {1} installs when the installation before it has finished.</value>
+    <comment>F17 WU4 review B1: one install at a time.</comment>
+  </data>
+  <data name="Install_QueuedRst" xml:space="preserve">
+    <value>RST {1} updates once the other installs have finished, so none of them is lost when RST restarts.</value>
+  </data>
+  <data name="Install_RetryLater" xml:space="preserve">
+    <value>Another installation is running. RST tries {0} {1} again in a few minutes.</value>
+  </data>
+  <data name="Install_HandingOff" xml:space="preserve">
+    <value>Updating RST to {1}. RST closes now and opens again when it is done.</value>
+  </data>
+  <data name="Install_Done" xml:space="preserve">
+    <value>{0} {1} is installed.</value>
+  </data>
+  <data name="Install_DoneRestart" xml:space="preserve">
+    <value>{0} {1} is installed. Restart Windows to finish; RST never restarts it for you.</value>
+  </data>
+  <data name="Install_Refused" xml:space="preserve">
+    <value>RST didn't install {0} {1}: {2}. Nothing was changed.</value>
+    <comment>{2} is a plain reason (Problem_* or Net_*). The detail is in the tray log.</comment>
+  </data>
+  <data name="Install_Failed" xml:space="preserve">
+    <value>Couldn't install {0} {1}: Windows Installer stopped with error {2}. The log has the details.</value>
+  </data>
+  <data name="Install_FailedGone" xml:space="preserve">
+    <value>Couldn't update {0} to {1}: Windows Installer stopped with error {2}, and {0} is no longer installed. Reinstall the previous version to get it back; the log has the details.</value>
+  </data>
+  <data name="Install_Busy" xml:space="preserve">
+    <value>Another installation kept running, so {0} {1} wasn't installed. Try again later.</value>
+  </data>
+  <data name="Install_UpdaterFailed" xml:space="preserve">
+    <value>Couldn't start RST's updater, so RST {1} wasn't installed. Details are in the log.</value>
+  </data>
+  <data name="Install_PerMachineRst" xml:space="preserve">
+    <value>RST {1} is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here.</value>
+    <comment>Spec #20 §5's wording for a per-machine RST, shown with the Release page link.</comment>
+  </data>
+  <data name="Install_PerMachine" xml:space="preserve">
+    <value>{0} {1} is available. It's installed for everyone on this PC, so ask whoever manages software here to update it.</value>
+  </data>
+  <data name="Problem_NotInstallable" xml:space="preserve">
+    <value>RST doesn't know this app's installer</value>
+  </data>
+  <data name="Problem_AssetNameBad" xml:space="preserve">
+    <value>the release's installer has an unexpected name</value>
+  </data>
+  <data name="Problem_NotNewer" xml:space="preserve">
+    <value>it isn't newer than the version installed</value>
+  </data>
+  <data name="Problem_RedirectNotAllowed" xml:space="preserve">
+    <value>the download was sent somewhere other than GitHub</value>
+  </data>
+  <data name="Problem_SumsMissing" xml:space="preserve">
+    <value>the release has no SHA256SUMS.txt</value>
+  </data>
+  <data name="Problem_SumsUnreadable" xml:space="preserve">
+    <value>the release's SHA256SUMS.txt is damaged</value>
+  </data>
+  <data name="Problem_NotInSums" xml:space="preserve">
+    <value>the release's SHA256SUMS.txt doesn't list the installer</value>
+  </data>
+  <data name="Problem_ReleaseNotFound" xml:space="preserve">
+    <value>GitHub doesn't list that release</value>
+  </data>
+  <data name="Problem_DigestMissing" xml:space="preserve">
+    <value>GitHub gives no checksum for the installer</value>
+  </data>
+  <data name="Problem_DigestMismatch" xml:space="preserve">
+    <value>the release's two checksums don't agree</value>
+  </data>
+  <data name="Problem_HashMismatch" xml:space="preserve">
+    <value>the download doesn't match its checksum</value>
+  </data>
+  <data name="Problem_TooLarge" xml:space="preserve">
+    <value>the download is larger than expected</value>
+  </data>
+  <data name="Problem_MsiUnreadable" xml:space="preserve">
+    <value>the download isn't a readable installer</value>
+  </data>
+  <data name="Problem_WrongUpgradeCode" xml:space="preserve">
+    <value>the installer is for a different app</value>
+  </data>
+  <data name="Problem_WrongVersion" xml:space="preserve">
+    <value>the installer's version isn't the release's</value>
+  </data>
+  <data name="Problem_WrongScope" xml:space="preserve">
+    <value>the installer would install for everyone on this PC</value>
+  </data>
+  <data name="Problem_DiskError" xml:space="preserve">
+    <value>the download couldn't be saved on this PC</value>
+  </data>
+  <data name="Problem_DetectionFailed" xml:space="preserve">
+    <value>RST couldn't tell what is installed</value>
+  </data>
+  <data name="Problem_Cancelled" xml:space="preserve">
+    <value>it was cancelled</value>
+  </data>
+  <data name="Problem_RevitRunning" xml:space="preserve">
+    <value>Revit was open</value>
+  </data>
+  <data name="Net_Offline" xml:space="preserve">
+    <value>couldn't reach GitHub</value>
+    <comment>A network failure, in plain words (WU3 review D3). Also used for "Couldn't check: {0}".</comment>
+  </data>
+  <data name="Net_TimedOut" xml:space="preserve">
+    <value>GitHub didn't answer in time</value>
+  </data>
+  <data name="Net_ProxyRefused" xml:space="preserve">
+    <value>the proxy refused the connection (HTTP 407)</value>
+  </data>
+  <data name="Net_RateLimited" xml:space="preserve">
+    <value>GitHub asked RST to wait; try again in an hour</value>
+  </data>
+  <data name="Net_HttpStatus" xml:space="preserve">
+    <value>GitHub answered HTTP {0}</value>
+  </data>
+  <data name="Net_Unexpected" xml:space="preserve">
+    <value>GitHub gave an unexpected answer</value>
+  </data>
+  <data name="Net_Cancelled" xml:space="preserve">
+    <value>it was cancelled</value>
   </data>
 </root>

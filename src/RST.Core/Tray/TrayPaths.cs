@@ -67,6 +67,27 @@ public static class TrayPaths
     /// <summary>%LocalAppData%\RST\Tray\cache\ (removed by RST.msi on uninstall, util:RemoveFolderEx).</summary>
     public static string CacheDir => Path.Combine(LocalRoot, "cache");
 
+    /// <summary>%LocalAppData%\RST\Tray\logs\: msiexec's verbose logs, <c>install-&lt;product&gt;-&lt;ts&gt;.log</c> (WU4).</summary>
+    public static string InstallLogsDir => Path.Combine(LocalRoot, "logs");
+
+    /// <summary>%LocalAppData%\RST\Tray\updater\: the tray's copy that installs RST over the tray itself (WU4).</summary>
+    public static string UpdaterDir => Path.Combine(LocalRoot, "updater");
+
+    /// <summary>
+    /// The updater copy's exe name. Not <see cref="ExeName"/>: RST.msi's util:CloseApplication targets RST.Tray.exe
+    /// by name, and must never reach the process that is running the install (WU1 review N2).
+    /// </summary>
+    public const string UpdaterExeName = "RST.TrayUpdater.exe";
+
+    /// <summary>%LocalAppData%\RST\Tray\selfupdate.json: what the updater did, shown once by the new tray.</summary>
+    public static string SelfUpdateResultFile => Path.Combine(LocalRoot, "selfupdate.json");
+
+    /// <summary>The argument that makes the updater copy install an MSI.</summary>
+    public const string ApplyArgument = "--apply";
+
+    /// <summary>The argument naming the tray process the updater waits for.</summary>
+    public const string WaitPidArgument = "--wait-pid";
+
     /// <summary>%LocalAppData%\Programs\RST\Tray\ (the per-user install folder).</summary>
     public static string PerUserInstallDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "RST", "Tray");

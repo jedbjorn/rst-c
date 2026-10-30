@@ -1,7 +1,8 @@
 <!--
     rst-c's own (not vendored). The RST tray's one window (spec #20 §1; F17 WU1), on RST.UI's family kit
     (Theme.xaml, the Health window's header-tabs layout): Updates, Apps, Add-ins and Settings / About. Updates and
-    Apps are F17 WU3's (UpdatesViewModel); Add-ins is a placeholder until WU2. The view-model is TrayViewModel.
+    Apps are F17 WU3's (UpdatesViewModel), with WU4's installs; Add-ins is a placeholder until WU2. The view-model
+    is TrayViewModel.
 -->
 <Window x:Class="RST.Tray.Windows.TrayWindow" x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -84,6 +85,45 @@
                     </TextBlock>
                 </WrapPanel>
             </DataTemplate>
+
+            <!-- A row's install note (F17 WU4): what the install is doing (info), how it ended (success or error), or
+                 who can update an install for everyone on this PC (warning). Open log after msiexec ran; the
+                 Release page with the per-machine note. The data is a ProductRowViewModel. -->
+            <DataTemplate x:Key="RowNoteText">
+                <StackPanel>
+                    <TextBlock Text="{Binding NoteText}" TextWrapping="Wrap" />
+                    <WrapPanel Margin="0,3,0,0" Visibility="{Binding HasNoteLinks, Converter={StaticResource BoolToVisible}}">
+                        <TextBlock Margin="0,0,14,0" Visibility="{Binding HasLog, Converter={StaticResource BoolToVisible}}">
+                            <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding OpenLogCommand}" CommandParameter="{Binding}"
+                                       AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.OpenLog}">
+                                <Run Text="{x:Static res:TrayStrings.App_OpenLog}" />
+                            </Hyperlink>
+                        </TextBlock>
+                        <TextBlock Visibility="{Binding ShowNoteReleasePage, Converter={StaticResource BoolToVisible}}">
+                            <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding ReleasePageCommand}" CommandParameter="{Binding}">
+                                <Run Text="{x:Static res:TrayStrings.App_ReleasePage}" />
+                            </Hyperlink>
+                        </TextBlock>
+                    </WrapPanel>
+                </StackPanel>
+            </DataTemplate>
+            <DataTemplate x:Key="RowNote">
+                <Grid Margin="0,8,0,0" Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}"
+                      AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Note}">
+                    <Border Style="{StaticResource InfoBanner}" Visibility="{Binding IsNoteProgress, Converter={StaticResource BoolToVisible}}">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
+                    </Border>
+                    <Border Style="{StaticResource SuccessBanner}" Visibility="{Binding IsNoteSuccess, Converter={StaticResource BoolToVisible}}">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
+                    </Border>
+                    <Border Style="{StaticResource WarningBanner}" Visibility="{Binding IsNoteWarning, Converter={StaticResource BoolToVisible}}">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
+                    </Border>
+                    <Border Style="{StaticResource ErrorBanner}" Visibility="{Binding IsNoteError, Converter={StaticResource BoolToVisible}}">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
+                    </Border>
+                </Grid>
+            </DataTemplate>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -135,18 +175,21 @@
                                             Focusable="False" IsTabStop="False" />
                             <TextBlock x:Name="LastChecked" Text="{Binding LastCheckedText}" Style="{StaticResource Hint}" Margin="0,8,0,0"
                                        AutomationProperties.AutomationId="Tray.LastChecked" />
+                            <ContentControl Content="{Binding Rst}" ContentTemplate="{StaticResource RowNote}" Focusable="False" IsTabStop="False"
+                                            AutomationProperties.AutomationId="Tray.RstNote" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="16,0,0,0">
                             <Button x:Name="CheckNowButton" Content="{Binding CheckNowText}" Command="{Binding CheckNowCommand}"
                                     Style="{StaticResource PrimaryButton}" MinWidth="110"
                                     AutomationProperties.AutomationId="Tray.CheckNow" />
-                            <Button Content="{x:Static res:TrayStrings.App_Update}" IsEnabled="False" MinWidth="110" Margin="0,8,0,0"
-                                    ToolTip="{x:Static res:TrayStrings.App_ComingSoon}" ToolTipService.ShowOnDisabled="True"
-                                    Visibility="{Binding ShowRstInstallNote, Converter={StaticResource BoolToVisible}}"
+                            <Button x:Name="RstUpdateButton" Content="{Binding Rst.ActionText}" Command="{Binding Rst.ActCommand}"
+                                    CommandParameter="{Binding Rst}" IsEnabled="{Binding Rst.CanAct}" MinWidth="110" Margin="0,8,0,0"
+                                    Visibility="{Binding Rst.HasAction, Converter={StaticResource BoolToVisible}}"
                                     AutomationProperties.AutomationId="Tray.RstUpdate" />
-                            <TextBlock Text="{x:Static res:TrayStrings.App_ComingSoon}" Style="{StaticResource Hint}"
-                                       HorizontalAlignment="Center" Margin="0,3,0,0"
-                                       Visibility="{Binding ShowRstInstallNote, Converter={StaticResource BoolToVisible}}" />
+                            <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding Rst.CancelCommand}"
+                                    CommandParameter="{Binding Rst}" MinWidth="110" Margin="0,8,0,0"
+                                    Visibility="{Binding Rst.CanCancel, Converter={StaticResource BoolToVisible}}"
+                                    AutomationProperties.AutomationId="Tray.RstCancel" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -165,7 +208,7 @@
                         Visibility="{Binding ShowRstInstallNote, Converter={StaticResource BoolToVisible}}"
                         AutomationProperties.AutomationId="Tray.RstInstallNote">
                     <TextBlock TextWrapping="Wrap">
-                        <Run Text="{x:Static res:TrayStrings.Updates_InstallComingSoon}" />
+                        <Run Text="{x:Static res:TrayStrings.Updates_RstUpdateNote}" />
                         <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding Rst.ReleasePageCommand}" CommandParameter="{Binding Rst}"
                                    AutomationProperties.AutomationId="Tray.RstReleasePage">
                             <Run Text="{x:Static res:TrayStrings.App_ReleasePage}" />
@@ -200,7 +243,9 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Apps (F17 WU3): RST, Gantt-It and Splash-It, one row each. Install and Update arrive in WU4. -->
+        <!-- Apps (F17 WU3): RST, Gantt-It and Splash-It, one row each, with Install / Update / Reinstall and the
+             install's note (F17 WU4). -->
+
         <ScrollViewer x:Name="AppsPage" Grid.Row="1" Style="{StaticResource Page}"
                       Visibility="{Binding IsAppsPage, Converter={StaticResource BoolToVisible}}">
             <StackPanel MaxWidth="640" DataContext="{Binding Updates}">
@@ -235,15 +280,19 @@
                                                         Focusable="False" IsTabStop="False" />
                                         <TextBlock Text="{x:Static res:TrayStrings.App_ManualNote}" Style="{StaticResource Hint}"
                                                    Visibility="{Binding ShowManualNote, Converter={StaticResource BoolToVisible}}" />
+                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNote}" Focusable="False" IsTabStop="False" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0"
-                                                Visibility="{Binding HasAction, Converter={StaticResource BoolToVisible}}">
-                                        <Button Content="{Binding ActionText}" IsEnabled="{Binding CanAct}" MinWidth="96"
-                                                ToolTip="{x:Static res:TrayStrings.App_ComingSoon}" ToolTipService.ShowOnDisabled="True"
+                                                Visibility="{Binding HasButtons, Converter={StaticResource BoolToVisible}}">
+                                        <Button Content="{Binding ActionText}" Command="{Binding ActCommand}" CommandParameter="{Binding}"
+                                                IsEnabled="{Binding CanAct}" MinWidth="96"
+                                                Visibility="{Binding HasAction, Converter={StaticResource BoolToVisible}}"
                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Action}" />
-                                        <TextBlock Text="{x:Static res:TrayStrings.App_ComingSoon}" Style="{StaticResource Hint}"
-                                                   HorizontalAlignment="Center" Margin="0,3,0,0" />
-                                        <TextBlock HorizontalAlignment="Center" Margin="0,2,0,0" FontSize="11">
+                                        <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding CancelCommand}" CommandParameter="{Binding}"
+                                                MinWidth="96" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
+                                                AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Cancel}" />
+                                        <TextBlock HorizontalAlignment="Center" Margin="0,4,0,0" FontSize="11"
+                                                   Visibility="{Binding ShowReleasePage, Converter={StaticResource BoolToVisible}}">
                                             <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding ReleasePageCommand}" CommandParameter="{Binding}">
                                                 <Run Text="{x:Static res:TrayStrings.App_ReleasePage}" />
                                             </Hyperlink>
@@ -255,8 +304,8 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Stretch" Margin="0,2,0,0"
-                        AutomationProperties.AutomationId="Tray.InstallsComingSoon">
-                    <TextBlock Text="{x:Static res:TrayStrings.Apps_InstallsComingSoon}" TextWrapping="Wrap" />
+                        AutomationProperties.AutomationId="Tray.InstallsNote">
+                    <TextBlock Text="{x:Static res:TrayStrings.Apps_InstallsNote}" TextWrapping="Wrap" />
                 </Border>
             </StackPanel>
         </ScrollViewer>

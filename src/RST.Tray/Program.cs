@@ -4,6 +4,9 @@
 //                             show its window, and exit)
 //   RST.Tray.exe --startup    start hidden in the notification area (the HKMU Run value RST.msi writes); if a tray
 //                             already runs, exit quietly
+//   RST.TrayUpdater.exe --apply <msi> --wait-pid <pid>
+//                             the updater copy (F17 WU4): wait for that tray to exit, install RST.msi, start the
+//                             new tray; refused unless run as the copy in %LocalAppData%\RST\Tray\updater\
 //
 // Exit code 0 in every normal case, including a second launch.
 
@@ -24,6 +27,10 @@ internal static class Program
         TrayLog.Configure();
         try
         {
+            // The updater copy (F17 WU4): installs RST.msi and exits. It takes no mutex, shows no window and never
+            // registers with Restart Manager, so the tray it starts afterwards is the only tray.
+            if (args.IsApply) return RST.Tray.Updates.Updater.Run(args);
+
             string sid;
             SingleInstance? instance;
             try
