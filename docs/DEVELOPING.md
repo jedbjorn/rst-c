@@ -421,7 +421,10 @@ tray's `build/Tray`) hold only `RST.Bootstrap`, `RST.Engine`, `RST.Core` and `RS
 
 - **Logging** is RST's own (`RST.Core.Logging`, below), not Serilog.
 - **Health** reads Win32 and the registry (`RST.UI/Health/HealthNative.cs`), not
-  System.Management.
+  System.Management. The GPU rows are every present display-class device (setupapi, each read
+  from its own driver key), as WMI's `Win32_VideoController` listed them, so RDP sessions and
+  hybrid laptops show the physical GPUs; `EnumDisplayDevices` (this session's outputs) only
+  marks the primary adapter.
 - **JSON** is the shared framework's `System.Text.Json` (net8.0 and up). No project references
   the package.
 - **CI enforces it.** The Stage and Stage Tray jobs run `build/check-shipped-dlls.sh` on the staged
@@ -453,9 +456,13 @@ changing only its `using` line (`using Serilog;` became `using RST.Core.Logging;
 - **`FileSink`** keeps the Serilog.Sinks.File rules the configurations used: the engine's
   `rst_<yyyy-MM-dd_HHmmss>.log` is one file per session (no roll, Serilog's 1 GB cap); the tray's
   `tray_.log` base becomes `tray_<yyyyMMdd>.log`, rolls daily and at 5 MB (`_001`, `_002`), keeps
-  10 files of its own pattern, and is shared by two trays of one user (a named mutex around
-  each append). Files are UTF-8 without a BOM, and every event is flushed to the OS as it is
-  written. A file that cannot be opened drops events and is retried every few seconds.
+  10 files of its own pattern, and is shared by two trays of one user (a session-local
+  `Local\RST.Log.<hash>` mutex around each append; a wait over 10 s drops that event and the next
+  30 s skip the mutex). Files are opened as Serilog opened them (`FileShare.Read`, or `ReadWrite`
+  when shared, never `Delete`), so the live log cannot be deleted: Health's **RST Logs** clean-up,
+  a second Revit's prune and the tray's retention skip it as in use. Files are UTF-8 without a
+  BOM, and every event is flushed to the OS as it is written. A file that cannot be opened drops
+  events and is retried every few seconds.
 - **Configuration:** `RstApplication.ConfigureLogging` (Debug and up, the engine line format
   `{Timestamp:HH:mm:ss.fff} {Level:u3} {Message:lj}{NewLine}{Exception}`) and the tray's
   `TrayLog.Configure` (Information and up, with the date and `[{ProcessId}]`). The engine's
