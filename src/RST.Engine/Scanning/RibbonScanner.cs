@@ -114,7 +114,9 @@ internal static class RibbonScanner
             yield return new ScannedCommand(
                 Id: id!,
                 DisplayName: button.Text ?? id!,
-                Origin: CommandOrigin.Unknown,
+                // SC-007 (spec #18): Revit's own buttons on its own tabs are Native; an add-in's
+                // CustomCtrl_ button is Custom wherever it sits.
+                Origin: OriginClassifier.ClassifyRibbonButton(tabTitle, id),
                 AddinFile: null,
                 AssemblyPath: null,
                 SourceTab: tabTitle,

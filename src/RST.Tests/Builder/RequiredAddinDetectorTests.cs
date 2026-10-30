@@ -13,6 +13,7 @@ using FluentAssertions;
 using RST.Core.Builder;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 using Xunit;
 
 namespace RST.Tests.Builder;
@@ -223,16 +224,15 @@ public class RequiredAddinDetectorTests
     }
 
     /// <summary>
-    /// The VM's "VM Test" finding (WU5): ribbon-only built-in commands (no PostableCommand, so the
-    /// scanner leaves their origin Unknown) on built-in tabs are recorded by their panel names
-    /// ("Build", "Select", "Model"). This is v2.2.0's behavior too: the expected list below is what
-    /// v2.2.0's own computeRequiredAddins (`git show v2.2.0:src/RST.UI/Assets/profile_builder.html`,
-    /// run in Node over get_catalog's DTO of this same scanned catalogue, with v2.2.0's
-    /// addin_lookup.json) returned. The scanner, get_catalog's reshaping and the lookup are unchanged
-    /// since v2.2.0, so the WPF Builder reproduces it exactly; the behavior is pre-existing and kept.
+    /// SC-007 (spec #18, T-B8). The VM's "VM Test" finding (WU5): ribbon-only built-in commands (no
+    /// PostableCommand, so the v3.0 scanner left their origin Unknown) on built-in tabs were recorded
+    /// by their panel names ("Build", "Select", "Model"), as v2.2.0 did:
+    /// [{"tabName":"Enscape",…},{"tabName":"Kinship",…},{"tabName":"Build",…},{"tabName":"Select",…},{"tabName":"Model",…}].
+    /// From v3.1 an Unknown-origin command on one of Revit's own tabs is never a required add-in, and
+    /// the scanner classifies those buttons Native in the first place (<see cref="OriginClassifier.ClassifyRibbonButton"/>).
     /// </summary>
     [Fact]
-    public void Ribbon_only_built_in_commands_give_the_same_required_addins_as_v220()
+    public void Unknown_origin_commands_on_built_in_tabs_never_become_required_add_ins()
     {
         var scanned = new[]
         {
@@ -259,17 +259,32 @@ public class RequiredAddinDetectorTests
 
         var result = RequiredAddinDetector.Compute(profile, catalog, ShippedLookup());
 
-        // v2.2.0's output, verbatim:
-        // [{"tabName":"Enscape","addinFile":"Enscape.addin","url":"https://enscape3d.com"},
-        //  {"tabName":"Kinship","addinFile":"Kinship.addin","url":""},
-        //  {"tabName":"Build","addinFile":null,"url":""},{"tabName":"Select","addinFile":null,"url":""},
-        //  {"tabName":"Model","addinFile":null,"url":""}]
+        // The real third-party add-ins only: "Build", "Select" and "Model" are gone.
         result.Select(r => (r.TabName, r.AddinFile, r.Url)).Should().Equal(
             ("Enscape", "Enscape.addin", "https://enscape3d.com"),
-            ("Kinship", "Kinship.addin", ""),
-            ("Build", (string?)null, ""),
-            ("Select", (string?)null, ""),
-            ("Model", (string?)null, ""));
+            ("Kinship", "Kinship.addin", ""));
         catalog.Where(c => c.Origin == "Native").Select(c => c.Id).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_FLOOR");
     }
+
+    [Fact]
+    public void An_unknown_origin_command_on_a_host_tab_is_still_an_add_in()
+    {
+        // Add-Ins is where add-ins put their panels: SC-007's rule leaves host tabs alone.
+        var profile = new Profile { Panels = [new Panel { Slots = [Tool("x", "Add-Ins", "Enscape")] }] };
+        RequiredAddinDetector.Compute(profile, [Cmd("x", "Add-Ins", "Enscape", "Unknown")], ShippedLookup())
+            .Select(r => r.TabName).Should().Equal("Enscape");
+        var onBuiltin = new Profile { Panels = [new Panel { Slots = [Tool("y", "Architecture", "Build")] }] };
+        RequiredAddinDetector.Compute(onBuiltin, [Cmd("y", "Architecture", "Build", "Unknown")], ShippedLookup()).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Architecture", "ID_INPLACE_WALL", CommandOrigin.Native)]
+    [InlineData("Modify", "ID_BUTTON_SELECT", CommandOrigin.Native)]
+    [InlineData("Manage", "CustomCtrl_%CustomCtrl_%Manage%Acme%Go", CommandOrigin.Custom)]
+    [InlineData("Add-Ins", "CustomCtrl_%Add-Ins%Kinship%Open", CommandOrigin.Custom)]
+    [InlineData("Add-Ins", "Kinship.Open", CommandOrigin.Unknown)]
+    [InlineData("Enscape", "Enscape.Start", CommandOrigin.Unknown)]
+    [InlineData(null, null, CommandOrigin.Unknown)]
+    public void The_ribbon_scan_classifies_revit_buttons_on_revit_tabs_as_native(string? tab, string? id, CommandOrigin expected) =>
+        OriginClassifier.ClassifyRibbonButton(tab, id).Should().Be(expected);
 }
