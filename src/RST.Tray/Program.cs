@@ -52,7 +52,7 @@ internal static class Program
                 using var host = new TrayHost(args, instance);
                 app.Startup += (_, _) => host.Start();
                 var code = app.Run();
-                Log.Information("RST tray exited ({Code})", code);
+                Log.Information("RST tray exited ({Code}; {Reason})", code, host.ExitReason);
                 return code;
             }
         }

@@ -28,8 +28,9 @@
       (a) RST.Tray.exe installed and the HKCU Run value RST = "<exe>" --startup
       (t) --startup starts hidden; a second launch exits 0 and the first shows
           its window; a second --startup exits 0; one RST.Tray process
-      (d) the repair closes that running tray (CloseApplication, clean exit 0)
-      (e) uninstall with a tray running: it exits cleanly (WM_CLOSE, exit 0),
+      (d) the repair closes that running tray (Restart Manager, clean exit 0)
+      (e) uninstall with a tray running and Restart Manager off: CloseApplication's
+          WM_CLOSE closes it cleanly (exit 0, logged as WM_CLOSE),
           the Run value, %LocalAppData%\Programs\RST and the cache
           (RemoveFolderEx) are gone; the settings and log under %AppData%\RST
           (user data) stay
@@ -160,9 +161,9 @@ function Get-MsiProperty([string]$Path, [string]$Name) {
 }
 
 # Runs msiexec; returns the exit code. Throws on failure unless -ExpectFail.
-function Invoke-Msiexec([string]$Verb, [string]$Path, [string]$Log, [switch]$ExpectFail) {
-  Write-Host "msiexec $Verb $Path (log: $Log)"
-  $p = Start-Process msiexec.exe -ArgumentList "$Verb `"$Path`" /qn /l*v `"$Log`"" -Wait -PassThru
+function Invoke-Msiexec([string]$Verb, [string]$Path, [string]$Log, [switch]$ExpectFail, [string]$Extra = '') {
+  Write-Host "msiexec $Verb $Path $Extra (log: $Log)"
+  $p = Start-Process msiexec.exe -ArgumentList "$Verb `"$Path`" /qn /l*v `"$Log`" $Extra" -Wait -PassThru
   Write-Host "  exit $($p.ExitCode)"
   if (-not $ExpectFail -and $p.ExitCode -notin 0, 3010) {
     if (Test-Path $Log) { Get-Content $Log -Tail 60 | Write-Host }
@@ -312,12 +313,18 @@ function Test-TraySingleInstance([string]$Label) {
 }
 # A running tray is closed by Windows Installer's CloseApplication (WM_CLOSE) and exits cleanly (code 0, not
 # CloseApplication's TerminateProcess code 1).
-function Assert-TrayClosed($Proc, [string]$Label) {
+# -How is a pattern for the path in the tray's own exit line: 'WM_CLOSE' (util:CloseApplication) or 'session ending' (Windows
+# Installer's Restart Manager, which reaches the tray first when it is on).
+function Assert-TrayClosed($Proc, [string]$Label, [string]$How) {
   $exited = $Proc.WaitForExit(30000)
   if (-not $exited) { Show-TrayLog }
   Assert $exited "[$Label] the running tray (pid $($Proc.Id)) was closed"
-  Assert ($Proc.ExitCode -eq 0) "[$Label] it exited cleanly on WM_CLOSE (exit $($Proc.ExitCode))"
+  Assert ($Proc.ExitCode -eq 0) "[$Label] it exited cleanly (exit $($Proc.ExitCode); CloseApplication's TerminateProcess would give 1)"
   Assert (-not (Test-TrayMutex)) "[$Label] its mutex is released"
+  $exit = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' | ForEach-Object { Get-Content $_.FullName } |
+            Where-Object { $_.Contains("[$($Proc.Id)]") -and $_.Contains('RST tray exited') })
+  Write-Host "[$Label] tray log: $($exit -join ' / ')"
+  Assert (@($exit | Where-Object { $_ -match $How }).Count -eq 1) "[$Label] the tray logged its exit by $How"
 }
 
 # ---- Package checks (every mode)
@@ -435,8 +442,8 @@ if ($Mode -eq 'Install') {
   Show-LogLines $logD @('CloseApplication', 'RST.Tray.exe')
   Assert-OneProduct $newProductCode $newVersion '(d) repair'
   Assert-Years @('2025', '2026', '2027') '(d) repair added 2025'
-  # The repair replaced the tray's files: CloseApplication closed the window-showing tray from (t) first.
-  Assert-TrayClosed $trayA '(d) repair'
+  # The repair replaced the tray's files: Windows Installer (Restart Manager) closed the tray from (t) first.
+  Assert-TrayClosed $trayA '(d) repair' 'session ending|WM_CLOSE'
   Assert-TrayInstalled '(d) repair'
 
   Set-RevitStubs @('2025', '2027')
@@ -476,8 +483,10 @@ if ($Mode -eq 'Install') {
   $trayE = Start-Tray @('--startup') '(e)'
   New-Item -ItemType Directory -Force $TrayCache | Out-Null
   Set-Content -Path (Join-Path $TrayCache 'probe.msi') -Value 'rst-c ci cache probe' -NoNewline
+  # Restart Manager off, so util:CloseApplication's WM_CLOSE is what closes the tray (the repair in (d)
+  # covered the Restart Manager path).
   $logE = Join-Path $LogDir 'rst-uninstall.log'
-  Invoke-Msiexec '/x' $uninstallMsi $logE | Out-Null
+  Invoke-Msiexec '/x' $uninstallMsi $logE -Extra 'MSIRESTARTMANAGERCONTROL=Disable' | Out-Null
   Show-LogLines $logE @('CloseApplication', 'RST.Tray.exe', 'RemoveFolder')
   Show-Related '(e) after uninstall'
   Assert ((Get-Related $UnifiedCode).Count -eq 0) '(e) no RST product after uninstall'
@@ -490,7 +499,7 @@ if ($Mode -eq 'Install') {
 
   # AC1: uninstall closed the running tray, removed the Run value, its files and its cache; only user data
   # under %AppData%\RST (settings, log) remains.
-  Assert-TrayClosed $trayE '(e) uninstall'
+  Assert-TrayClosed $trayE '(e) uninstall' 'WM_CLOSE'
   Assert ($null -eq (Get-RunValue)) '(e) HKCU Run value RST removed'
   Assert (-not (Test-Path $TrayDir)) "(e) $TrayDir removed"
   Assert (-not (Test-Path (Split-Path $TrayDir))) "(e) $(Split-Path $TrayDir) removed"

@@ -47,9 +47,18 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
 
     public string LogFolder => TrayPaths.LogsDir;
 
+    /// <summary>Why the tray ended, for the exit log line.</summary>
+    public string ExitReason { get; private set; } = "dispatcher stopped";
+
     /// <summary>Starts the tray: settings, theme, icon, the show signal, then the window (unless --startup) and the notice.</summary>
     public void Start()
     {
+        // Windows Installer's Restart Manager (on a repair, upgrade or uninstall that replaces the tray's files)
+        // and sign-out send WM_QUERYENDSESSION; WPF's Application then shuts the dispatcher down itself. The tray
+        // lets it, and records why. util:CloseApplication's WM_CLOSE (CloseRequested) is the path when Restart
+        // Manager is off or did not reach the tray.
+        if (Application.Current is { } app) app.SessionEnding += (_, e) => OnSessionEnding(e.ReasonSessionEnding.ToString());
+
         _settings = TraySettings.Read(log: m => Log.Warning("{Message}", m));
         _checks = UpdateChecksPolicy.Resolve(_settings.CheckForUpdates, WindowsState.UpdateChecksPresets());
         ApplyTheme();
@@ -156,6 +165,7 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
     {
         if (_quitting) return;
         _quitting = true;
+        ExitReason = reason;
         Log.Information("quitting ({Reason})", reason);
         try
         {
@@ -173,6 +183,23 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
             Log.Warning(ex, "closing windows on quit");
         }
         Application.Current?.Shutdown(0);
+    }
+
+    /// <summary>WPF ends the dispatcher after this returns; the icon goes now, the hidden window at Dispose.</summary>
+    private void OnSessionEnding(string reason)
+    {
+        if (_quitting) return;
+        _quitting = true;
+        ExitReason = "session ending (" + reason + "): Restart Manager or sign-out";
+        Log.Information("Windows asked the tray to close: {Reason}", ExitReason);
+        try
+        {
+            _icon?.Hide();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "removing the icon at session end");
+        }
     }
 
     private void OpenMenu(Point screenPixels)

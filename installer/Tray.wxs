@@ -18,10 +18,13 @@
                                             (StartupApproved) is Windows' own and
                                             is respected as is.
 
-  On uninstall and upgrade a running tray is closed first: util:CloseApplication
-  sends WM_CLOSE to RST.Tray.exe's top-level windows (the tray keeps a hidden
-  one and exits cleanly on it), waits up to Timeout seconds, then ends the
-  process rather than ask for a reboot. util:RemoveFolderEx removes the tray's
+  On uninstall, repair and upgrade a running tray is closed first. Windows
+  Installer's Restart Manager usually gets there first (WM_QUERYENDSESSION:
+  the tray lets WPF end it cleanly). util:CloseApplication covers the rest,
+  e.g. MSIRESTARTMANAGERCONTROL=Disable: it sends WM_CLOSE to RST.Tray.exe's
+  top-level windows (the tray keeps a hidden one and exits cleanly on it),
+  waits up to Timeout seconds, then ends the process rather than ask for a
+  reboot. ci-smoke.ps1 checks both paths. util:RemoveFolderEx removes the tray's
   download cache %LocalAppData%\RST\Tray\cache\ on a real uninstall (not when
   an upgrade removes the old version). The tray's settings and log are user
   data under %AppData%\RST\ and stay, like the rest of RST's user data.
