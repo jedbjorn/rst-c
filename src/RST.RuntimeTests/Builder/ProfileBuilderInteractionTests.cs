@@ -29,7 +29,7 @@ public class ProfileBuilderInteractionTests
     public void Pick_icon_opens_the_picker_on_the_slot_s_value_without_changing_it()
     {
         var h = Structure();
-        var beam = h.Model.Panels[0].Slots[0]; // pack:parallel_red
+        var beam = h.Model.Panels[0].Tile(0); // pack:parallel_red
         beam.PickIconCommand.Execute(null);
         var picker = h.Model.IconPicker!;
         h.Model.IsIconPickerOpen.Should().BeTrue();
@@ -47,20 +47,20 @@ public class ProfileBuilderInteractionTests
     public void A_variant_commits_the_value_updates_the_button_and_redraws_the_preview()
     {
         var h = Structure();
-        var beam = h.Model.Panels[0].Slots[0];
+        var beam = h.Model.Panels[0].Tile(0);
         var before = h.Model.PreviewRevision;
         beam.PickIconCommand.Execute(null);
         h.Model.IconPicker!.TileCommand.Execute("move");
         h.Model.IconPicker!.VariantCommand.Execute("green");
         h.Model.IsIconPickerOpen.Should().BeFalse();
         h.Model.Profile.Panels[0].Slots[0].IconFile.Should().Be("pack:move_green");
-        beam.IconLabel.Should().Be("move");
-        beam.HasIconThumbnail.Should().BeTrue();
+        beam.Icon.Should().BeSameAs(RST.UI.Controls.PackIcons.ForIconFile("pack:move_green"), "the tile shows the picked icon");
+        beam.HasIcon.Should().BeTrue();
         h.Model.PreviewRevision.Should().BeGreaterThan(before);
         h.Model.IsDirty.Should().BeTrue();
 
         // The pack list is read once per window.
-        h.Model.Panels[0].Slots[1].PickIconCommand.Execute(null);
+        h.Model.Panels[0].Tile(1).PickIconCommand.Execute(null);
         h.Model.IconPicker!.CancelCommand.Execute(null);
         h.Backend.Calls.Count(c => c == "GetIconPack").Should().Be(1);
     }
@@ -69,17 +69,17 @@ public class ProfileBuilderInteractionTests
     public void None_clears_the_icon()
     {
         var h = Structure();
-        h.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+        h.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
         h.Model.IconPicker!.NoneCommand.Execute(null);
         h.Model.Profile.Panels[0].Slots[0].IconFile.Should().BeNull();
-        h.Model.Panels[0].Slots[0].IconLabel.Should().Be("Icon");
+        h.Model.Panels[0].Tile(0).HasIcon.Should().BeFalse("the tile shows the empty icon frame");
     }
 
     [Fact]
     public void Cancel_escape_and_an_outside_click_change_nothing()
     {
         var h = Structure();
-        var slot = h.Model.Panels[0].Slots[0];
+        var slot = h.Model.Panels[0].Tile(0);
         slot.PickIconCommand.Execute(null);
         h.Model.IconPicker!.CancelCommand.Execute(null);
         h.Model.IsIconPickerOpen.Should().BeFalse();
@@ -105,7 +105,7 @@ public class ProfileBuilderInteractionTests
     public void A_legacy_bare_value_restores_as_blue_and_is_kept_until_a_variant_is_picked()
     {
         var h = Structure();
-        var wiki = h.Model.Panels[2].Slots[0]; // pack:link_external (bare)
+        var wiki = h.Model.Panels[2].Tile(0); // pack:link_external (bare)
         wiki.PickIconCommand.Execute(null);
         var picker = h.Model.IconPicker!;
         picker.Model.SelectedDesign.Should().Be("link_external");
@@ -121,7 +121,7 @@ public class ProfileBuilderInteractionTests
     public void The_variant_row_follows_the_keyboard_and_enter_commits_the_focused_color()
     {
         var h = Structure();
-        h.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+        h.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
         var picker = h.Model.IconPicker!;
         picker.TileCommand.Execute("parallel");
         picker.Model.FocusedColor.Should().Be("red");
@@ -138,11 +138,11 @@ public class ProfileBuilderInteractionTests
         backend.OnIconPack = () => throw new IOException("pack gone");
         var h = BuilderHarness.Create(backend);
         h.Model.SelectedProfileOption = h.Option("Structure");
-        h.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+        h.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
         var tiles = h.Model.IconPicker!.Rows.SelectMany(r => r.Tiles).ToList();
         tiles.Should().ContainSingle().Which.IsNone.Should().BeTrue("only the None tile shows");
         h.Model.IconPicker!.CancelCommand.Execute(null);
-        h.Model.Panels[0].Slots[1].PickIconCommand.Execute(null);
+        h.Model.Panels[0].Tile(1).PickIconCommand.Execute(null);
         h.Backend.Calls.Count(c => c == "GetIconPack").Should().Be(1, "the empty list is cached for the window");
     }
 
@@ -190,7 +190,7 @@ public class ProfileBuilderInteractionTests
     public void Switching_profiles_closes_the_picker()
     {
         var h = Structure();
-        h.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+        h.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
         h.Model.NewProfileCommand.Execute(null);
         h.Model.IsIconPickerOpen.Should().BeFalse();
     }
@@ -215,35 +215,6 @@ public class ProfileBuilderInteractionTests
     }
 
     [Fact]
-    public void Dragging_a_command_onto_a_slot_inserts_it_before_or_after()
-    {
-        var h = Structure();
-        var wall = h.Command("ID_OBJECTS_WALL").Command!;
-        h.Model.BeginDrag(BuilderDrag.FromCatalog(wall));
-        h.Model.DragOverSlot(0, 1, upperHalf: false).Should().BeTrue();
-        h.Model.Panels[0].Slots[1].DropMarker.Should().Be(DropMarker.After);
-        h.Model.DropOnSlot(0, 1, upperHalf: false);
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Beam", "Column", "Wall", "Brace");
-    }
-
-    [Fact]
-    public void Dragging_a_slot_reorders_it_marks_the_source_and_moves_it_across_panels()
-    {
-        var h = Structure();
-        h.Model.BeginDrag(BuilderDrag.FromSlot(0, 0));
-        h.Model.Panels[0].Slots[0].IsDragSource.Should().BeTrue();
-        h.Model.DragOverSlot(0, 2, upperHalf: true).Should().BeTrue();
-        h.Model.Panels[0].Slots[2].DropMarker.Should().Be(DropMarker.Before);
-        h.Model.DropOnSlot(0, 2, upperHalf: true);
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Beam", "Brace");
-
-        h.Model.BeginDrag(BuilderDrag.FromSlot(0, 2));
-        h.Model.DropOnPanel(1, upperHalf: false);
-        h.Model.Profile.Panels[1].Slots.Select(s => s.Name).Should().Equal("Kinship", "Checks", "Notes", "Brace");
-        h.Model.SelectedPanelIndex.Should().Be(1);
-    }
-
-    [Fact]
     public void Dragging_a_panel_header_reorders_the_panels_with_the_before_and_after_markers()
     {
         var h = Structure();
@@ -251,7 +222,7 @@ public class ProfileBuilderInteractionTests
         h.Model.DragOverPanel(0, upperHalf: true).Should().BeFalse("a panel never drops on itself");
         h.Model.DragOverPanel(2, upperHalf: false).Should().BeTrue();
         h.Model.Panels[2].DropMarker.Should().Be(DropMarker.After);
-        h.Model.DragOverSlot(1, 0, upperHalf: true).Should().BeFalse("a panel never drops on a slot");
+        h.Model.DragOverTile(TileHit.On(1, 0, 50, 100)).Should().BeFalse("a panel never drops on a tile");
         h.Model.DropOnPanel(2, upperHalf: false);
         h.Model.Panels.Select(p => p.Name).Should().Equal("Review", "Links", "Frame");
         h.Model.SelectedPanel!.Name.Should().Be("Frame");
@@ -261,11 +232,12 @@ public class ProfileBuilderInteractionTests
     public void A_cancelled_or_no_op_drag_changes_nothing_and_clears_the_markers()
     {
         var h = Structure();
-        h.Model.BeginDrag(BuilderDrag.FromSlot(0, 0));
-        h.Model.DragOverPanel(0, upperHalf: true);
-        h.Model.DropOnPanel(0, upperHalf: true); // own card: nothing
+        h.Model.BeginDrag(BuilderDrag.FromSlot(0, 2));
+        h.Model.Panels[0].Tile(2).IsDragSource.Should().BeTrue();
+        h.Model.DragOverPanel(0, upperHalf: true).Should().BeFalse("Brace is already the panel's last tool");
+        h.Model.DropOnPanel(0, upperHalf: true);
         h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Beam", "Column", "Brace");
-        h.Model.Panels.SelectMany(p => p.Slots).Should().OnlyContain(s => !s.IsDragSource && s.DropMarker == DropMarker.None);
+        h.Model.Panels.SelectMany(p => p.Tiles).Should().OnlyContain(s => !s.IsDragSource && s.DropMarker == DropMarker.None);
         h.Model.IsDirty.Should().BeFalse();
 
         h.Model.BeginDrag(BuilderDrag.FromPanel(1));
@@ -282,7 +254,9 @@ public class ProfileBuilderInteractionTests
         ProfileBuilderWindow.DragFor(h.Command("ID_OBJECTS_WALL")).Should().Be(BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!));
         ProfileBuilderWindow.DragFor(h.Model.CatalogRoots[0]).Should().BeNull("groups are not draggable");
         ProfileBuilderWindow.DragFor(h.Model.Panels[1]).Should().Be(BuilderDrag.FromPanel(1));
-        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Slots[2]).Should().Be(BuilderDrag.FromSlot(1, 2));
+        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Tile(2)).Should().Be(BuilderDrag.FromSlot(1, 2));
+        ProfileBuilderWindow.DragFor(h.Model.Panels[1].StackAt(1)).Should().Be(BuilderDrag.FromSlot(1, 1), "a stack by its header: the whole stack");
+        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Tile(1, row: 2)).Should().Be(BuilderDrag.FromSlot(1, 1, row: 2));
     }
 
     // ── Loader defaults (the RST Presets, inline) ─────────────────────────────

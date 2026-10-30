@@ -1,19 +1,23 @@
 // rst-c's own (not vendored): drag and drop on a real ProfileBuilderWindow (spec #16, WU5 review
-// B1). DragDrop.DoDragDrop runs the OS drag loop and cannot run headless, so these tests raise the
-// routed events WPF's DragDrop raises for each step (PreviewDragOver then DragOver, PreviewDrop
-// then Drop, each bubbling phase skipped once the preview is handled), with a DragEventArgs built
-// through its internal constructor, on the real visual tree. The cases aim at the slot and panel
-// name TextBoxes, which take every drag passing over them: on the WU5 code before the fix, no
-// marker was set and nothing dropped there.
+// B1; feature #18, spec #19, WU3, AC5: each row of the stack table). DragDrop.DoDragDrop runs the
+// OS drag loop and cannot run headless, so these tests raise the routed events WPF's DragDrop
+// raises for each step (PreviewDragOver then DragOver, PreviewDrop then Drop, each bubbling phase
+// skipped once the preview is handled), with a DragEventArgs built through its internal
+// constructor, on the real visual tree: the tiles, the stack groups, their rows and the name boxes
+// inside them (a TextBox takes every drag that passes over it; the card's preview handlers must see
+// the drag first). The pointer positions are real points on those elements, so the edge and middle
+// zones are worked out by the window as they would be under a mouse.
 
 using System.Reflection;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using RST.Core.Builder;
 using RST.Core.Theming;
 using RST.RuntimeTests.Support;
 using RST.UI.Builder;
+using RST.UI.Controls;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
 using Xunit;
@@ -36,10 +40,12 @@ public class ProfileBuilderDragEventTests
         }
     });
 
-    private static (ProfileBuilderWindow Window, BuilderHarness Harness) Open()
+    /// <summary>Structure: Frame [Beam, Column, Brace]; Review [Kinship, [Warnings Audit Purge], Notes]; Links [Wiki, Help].</summary>
+    private static (ProfileBuilderWindow Window, BuilderHarness Harness) Open(Action<BuilderHarness>? arrange = null)
     {
         var h = BuilderHarness.Create();
         h.Model.SelectedProfileOption = h.Option("Structure");
+        arrange?.Invoke(h);
         var window = new ProfileBuilderWindow(h.Model);
         WindowCapture.ShowOffScreen(window);
         return (window, h);
@@ -96,38 +102,89 @@ public class ProfileBuilderDragEventTests
         return args;
     }
 
-    private static TextBox NameBox(ProfileBuilderWindow window, string automationId, Func<object, bool> owner) =>
-        WindowCapture.Descendants<TextBox>(window.PanelCards)
-            .Single(t => System.Windows.Automation.AutomationProperties.GetAutomationId(t) == automationId && owner(t.DataContext));
-
-    private static TextBox SlotNameBox(ProfileBuilderWindow w, int panel, int slot) =>
-        NameBox(w, "Builder.SlotName", dc => dc is SlotRowViewModel s && s.Panel.Index == panel && s.Index == slot);
-
-    private static TextBox PanelNameBox(ProfileBuilderWindow w, int panel) =>
-        NameBox(w, "Builder.PanelName", dc => dc is PanelCardViewModel c && c.Index == panel);
-
     private static IDataObject Payload(BuilderDrag drag) => new DataObject(typeof(BuilderDrag), drag);
 
-    private static Point Lower(FrameworkElement e) => new(e.ActualWidth / 2, e.ActualHeight - 2);
+    /// <summary>Drags <paramref name="drag"/> over <paramref name="over"/> at <paramref name="at"/> and drops it there.</summary>
+    private static (DragEventArgs Over, DragEventArgs Drop) DragAndDrop(BuilderHarness h, BuilderDrag drag, UIElement over, Point at)
+    {
+        h.Model.BeginDrag(drag);
+        var o = DragOver(over, Payload(drag), at);
+        var d = Drop(over, Payload(drag), at);
+        h.Model.EndDrag();
+        return (o, d);
+    }
+
+    // ── the real elements ──
+
+    private static string Id(DependencyObject d) => AutomationProperties.GetAutomationId(d);
+
+    private static Grid Tile(ProfileBuilderWindow w, int panel, int slot) =>
+        WindowCapture.Descendants<Grid>(w.PanelCards).Single(g => g.Name == "Tile" && g.DataContext is ToolTileViewModel { InStack: false } t && t.Panel.Index == panel && t.Index == slot);
+
+    private static Grid StackGroup(ProfileBuilderWindow w, int panel, int slot) =>
+        WindowCapture.Descendants<Grid>(w.PanelCards).Single(g => g.Name == "StackGroup" && g.DataContext is StackGroupViewModel s && s.Panel.Index == panel && s.Index == slot);
+
+    private static DockPanel StackHeader(ProfileBuilderWindow w, int panel, int slot) =>
+        WindowCapture.Descendants<DockPanel>(StackGroup(w, panel, slot)).Single(d => d.Name == "StackHeader");
+
+    private static Grid StackRow(ProfileBuilderWindow w, int panel, int slot, int row) =>
+        WindowCapture.Descendants<Grid>(w.PanelCards).Single(g => g.Name == "StackRow" && g.DataContext is ToolTileViewModel { InStack: true } t && t.Panel.Index == panel && t.Index == slot && t.Row == row);
+
+    /// <summary>The name box inside a tile or a stack row.</summary>
+    private static TextBox NameBox(FrameworkElement tileOrRow) =>
+        WindowCapture.Descendants<TextBox>(tileOrRow).Single(t => Id(t) == "Builder.ToolName");
+
+    private static TextBox PanelNameBox(ProfileBuilderWindow w, int panel) =>
+        WindowCapture.Descendants<TextBox>(w.PanelCards).Single(t => Id(t) == "Builder.PanelName" && t.DataContext is PanelCardViewModel c && c.Index == panel);
+
+    private static Grid Card(ProfileBuilderWindow w, int panel) =>
+        WindowCapture.Descendants<Grid>(w.PanelCards).Single(g => g.Name == "CardRoot" && g.DataContext is PanelCardViewModel c && c.Index == panel);
+
+    private static Point Middle(FrameworkElement e) => new(e.ActualWidth / 2, e.ActualHeight / 2);
+
+    private static Point LeftEdge(FrameworkElement e) => new(3, e.ActualHeight / 2);
+
+    private static Point RightEdge(FrameworkElement e) => new(e.ActualWidth - 3, e.ActualHeight / 2);
 
     private static Point Upper(FrameworkElement e) => new(e.ActualWidth / 2, 2);
 
+    private static Point Lower(FrameworkElement e) => new(e.ActualWidth / 2, e.ActualHeight - 2);
+
+    /// <summary>A point given on <paramref name="from"/> as the same screen point on <paramref name="to"/>.</summary>
+    private static Point On(FrameworkElement from, Point p, FrameworkElement to) => from.TranslatePoint(p, to);
+
+    private static string Shape(BuilderHarness h, int panel) => PanelCardTestExtensions.Shape(h.Model.Profile, panel);
+
+    private static BuilderDrag Wall(BuilderHarness h) => BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!);
+
+    /// <summary>Review's stack with Purge removed (× on its row): a 2-tool stack with room.</summary>
+    private static void TwoToolStack(BuilderHarness h) => h.Model.Panels[1].Tile(1, row: 2).RemoveCommand.Execute(null);
+
+    // ── the stack table, one row each ──
+
     [Fact]
-    public void A_command_dropped_on_a_slot_s_name_box_is_inserted_after_that_slot() => Sta(() =>
+    public void A_tool_dropped_on_the_middle_of_a_loose_tool_makes_a_stack_the_dropped_tool_second() => Sta(() =>
     {
         var (window, h) = Open();
         try
         {
-            var wall = BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!);
-            h.Model.BeginDrag(wall);
-            var box = SlotNameBox(window, 0, 1); // Column
-            var over = DragOver(box, Payload(wall), Lower(box));
+            // Over Column's name box (the TextBox lesson): the card's preview handler sees it first.
+            h.Model.BeginDrag(Wall(h));
+            var box = NameBox(Tile(window, 0, 1));
+            var at = On(Tile(window, 0, 1), Middle(Tile(window, 0, 1)), box);
+            var over = DragOver(box, Payload(Wall(h)), at);
+            Assert.True(over.Handled);
             Assert.Equal(DragDropEffects.Copy, over.Effects);
-            Assert.Equal(DropMarker.After, h.Model.Panels[0].Slots[1].DropMarker);
+            Assert.Equal(DropMarker.Over, h.Model.Panels[0].Tile(1).DropMarker);
+            Drop(box, Payload(Wall(h)), at);
+            Assert.Equal("Beam,[Column Wall],Brace", Shape(h, 0));
 
-            var drop = Drop(box, Payload(wall), Lower(box));
-            Assert.True(drop.Handled);
-            Assert.Equal(new[] { "Beam", "Column", "Wall", "Brace" }, h.Model.Profile.Panels[0].Slots.Select(s => s.Name));
+            // A tile dropped on a tile's middle: Brace onto Beam.
+            WindowCapture.DoEvents();
+            var beam = Tile(window, 0, 0);
+            DragAndDrop(h, BuilderDrag.FromSlot(0, 2), beam, Middle(beam));
+            Assert.Equal("[Beam Brace],[Column Wall]", Shape(h, 0));
+            Assert.True(h.Model.IsDirty);
         }
         finally
         {
@@ -136,22 +193,69 @@ public class ProfileBuilderDragEventTests
     });
 
     [Fact]
-    public void A_slot_dropped_on_another_slot_s_name_box_moves_before_it() => Sta(() =>
+    public void A_tool_dropped_on_the_middle_of_a_stack_or_a_row_s_edge_joins_it() => Sta(() =>
+    {
+        var (window, h) = Open(TwoToolStack);
+        try
+        {
+            // Kinship onto Warnings' lower half (its name box): joins after Warnings.
+            var warnings = StackRow(window, 1, 1, 0);
+            var box = NameBox(warnings);
+            h.Model.BeginDrag(BuilderDrag.FromSlot(1, 0));
+            var at = On(warnings, Lower(warnings), box);
+            Assert.Equal(DragDropEffects.Move, DragOver(box, Payload(BuilderDrag.FromSlot(1, 0)), at).Effects);
+            Assert.Equal(DropMarker.After, h.Model.Panels[1].Tile(1, row: 0).DropMarker);
+            Assert.Equal(DropMarker.None, h.Model.Panels[1].StackAt(1).DropMarker);
+            Drop(box, Payload(BuilderDrag.FromSlot(1, 0)), at);
+            h.Model.EndDrag();
+            Assert.Equal("[Warnings Kinship Audit],Notes", Shape(h, 1));
+
+            // Remove Kinship again, then Beam (another panel) onto the stack's middle (its header): joins at the end.
+            h.Model.Panels[1].Tile(0, row: 1).RemoveCommand.Execute(null);
+            WindowCapture.DoEvents();
+            var header = StackHeader(window, 1, 0);
+            h.Model.BeginDrag(BuilderDrag.FromSlot(0, 0));
+            DragOver(header, Payload(BuilderDrag.FromSlot(0, 0)), On(StackGroup(window, 1, 0), Middle(StackGroup(window, 1, 0)), header));
+            Assert.Equal(DropMarker.Over, h.Model.Panels[1].StackAt(0).DropMarker);
+            Drop(header, Payload(BuilderDrag.FromSlot(0, 0)), On(StackGroup(window, 1, 0), Middle(StackGroup(window, 1, 0)), header));
+            h.Model.EndDrag();
+            Assert.Equal("[Warnings Audit Beam],Notes", Shape(h, 1));
+            Assert.Equal("Column,Brace", Shape(h, 0));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_fourth_tool_is_refused_with_the_marker_and_the_message() => Sta(() =>
     {
         var (window, h) = Open();
         try
         {
-            var beam = BuilderDrag.FromSlot(0, 0);
-            h.Model.BeginDrag(beam);
-            var box = SlotNameBox(window, 1, 1); // Review › Checks
-            var over = DragOver(box, Payload(beam), Upper(box));
-            Assert.Equal(DragDropEffects.Move, over.Effects);
-            Assert.Equal(DropMarker.Before, h.Model.Panels[1].Slots[1].DropMarker);
+            var group = StackGroup(window, 1, 1);
+            var row = StackRow(window, 1, 1, 1);
+            h.Model.BeginDrag(BuilderDrag.FromSlot(1, 0));
+            var over = DragOver(NameBox(row), Payload(BuilderDrag.FromSlot(1, 0)), On(row, Upper(row), NameBox(row)));
+            Assert.Equal(DragDropEffects.None, over.Effects);
+            Assert.Equal(DropMarker.Refused, h.Model.Panels[1].StackAt(1).DropMarker);
+            WindowCapture.DoEvents();
+            var note = WindowCapture.Descendants<Border>(group).Single(b => Id(b) == "Builder.StackFull");
+            Assert.Equal(Visibility.Visible, note.Visibility);
+            Assert.Equal("A stack holds 2–3 tools. This one is full.", ((TextBlock)note.Child).Text);
 
-            Drop(box, Payload(beam), Upper(box));
-            Assert.Equal(new[] { "Column", "Brace" }, h.Model.Profile.Panels[0].Slots.Select(s => s.Name));
-            Assert.Equal(new[] { "Kinship", "Beam", "Checks", "Notes" }, h.Model.Profile.Panels[1].Slots.Select(s => s.Name));
-            Assert.Equal(1, h.Model.SelectedPanelIndex);
+            Drop(NameBox(row), Payload(BuilderDrag.FromSlot(1, 0)), On(row, Upper(row), NameBox(row)));
+            h.Model.EndDrag();
+            Assert.Equal("Kinship,[Warnings Audit Purge],Notes", Shape(h, 1));
+            Assert.True(h.Model.Toast.IsOpen);
+            Assert.Equal(PanelStacks.FullMessage, h.Model.Toast.Text);
+            Assert.Equal(BannerKind.Warning, h.Model.Toast.Kind);
+            Assert.False(h.Model.IsDirty);
+
+            // A catalogue command is refused the same way.
+            DragAndDrop(h, Wall(h), StackHeader(window, 1, 1), On(group, Middle(group), StackHeader(window, 1, 1)));
+            Assert.Equal("Kinship,[Warnings Audit Purge],Notes", Shape(h, 1));
         }
         finally
         {
@@ -160,21 +264,36 @@ public class ProfileBuilderDragEventTests
     });
 
     [Fact]
-    public void A_panel_dropped_on_another_panel_s_name_box_lands_before_it() => Sta(() =>
+    public void A_tool_dropped_on_the_edge_of_a_loose_tool_or_a_stack_is_inserted_beside_it() => Sta(() =>
     {
         var (window, h) = Open();
         try
         {
-            var links = BuilderDrag.FromPanel(2);
-            h.Model.BeginDrag(links);
-            var box = PanelNameBox(window, 0); // Frame's header name
-            var over = DragOver(box, Payload(links), Lower(box));
-            Assert.Equal(DragDropEffects.Move, over.Effects);
-            Assert.Equal(DropMarker.Before, h.Model.Panels[0].DropMarker);
+            var column = Tile(window, 0, 1);
+            h.Model.BeginDrag(Wall(h));
+            DragOver(column, Payload(Wall(h)), LeftEdge(column));
+            Assert.Equal(DropMarker.Before, h.Model.Panels[0].Tile(1).DropMarker);
+            Drop(column, Payload(Wall(h)), LeftEdge(column));
+            h.Model.EndDrag();
+            Assert.Equal("Beam,Wall,Column,Brace", Shape(h, 0));
 
-            Drop(box, Payload(links), Lower(box));
-            Assert.Equal(new[] { "Links", "Frame", "Review" }, h.Model.Panels.Select(p => p.Name));
-            Assert.Equal("Links", h.Model.SelectedPanel!.Name);
+            // Notes onto the left edge of the stack, over a row: beside the stack, not in it.
+            WindowCapture.DoEvents();
+            var group = StackGroup(window, 1, 1);
+            var row = StackRow(window, 1, 1, 0);
+            var at = On(group, LeftEdge(group), row);
+            h.Model.BeginDrag(BuilderDrag.FromSlot(1, 2));
+            DragOver(row, Payload(BuilderDrag.FromSlot(1, 2)), at);
+            Assert.Equal(DropMarker.Before, h.Model.Panels[1].StackAt(1).DropMarker);
+            Drop(row, Payload(BuilderDrag.FromSlot(1, 2)), at);
+            h.Model.EndDrag();
+            Assert.Equal("Kinship,Notes,[Warnings Audit Purge]", Shape(h, 1));
+
+            // The trailing edge of a loose tool.
+            WindowCapture.DoEvents();
+            var help = Tile(window, 2, 1);
+            DragAndDrop(h, BuilderDrag.FromSlot(2, 0), help, RightEdge(help));
+            Assert.Equal("Help,Wiki", Shape(h, 2));
         }
         finally
         {
@@ -183,41 +302,117 @@ public class ProfileBuilderDragEventTests
     });
 
     [Fact]
-    public void A_panel_over_a_slot_s_name_box_falls_through_to_its_card() => Sta(() =>
+    public void A_tool_dragged_out_of_a_3_tool_stack_leaves_2() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            // Audit onto the Links card (outside its tiles): appended there.
+            var links = Card(window, 2);
+            var drag = BuilderDrag.FromSlot(1, 1, row: 1);
+            h.Model.BeginDrag(drag);
+            Assert.True(h.Model.Panels[1].Tile(1, row: 1).IsDragSource);
+            DragOver(links, Payload(drag), new Point(links.ActualWidth - 20, links.ActualHeight - 12));
+            Assert.Equal(DropMarker.Over, h.Model.Panels[2].DropMarker);
+            Drop(links, Payload(drag), new Point(links.ActualWidth - 20, links.ActualHeight - 12));
+            h.Model.EndDrag();
+            Assert.Equal("Kinship,[Warnings Purge],Notes", Shape(h, 1));
+            Assert.Equal("Wiki,Help,Audit", Shape(h, 2));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_tool_dragged_out_of_a_2_tool_stack_dissolves_it_in_place() => Sta(() =>
+    {
+        var (window, h) = Open(TwoToolStack);
+        try
+        {
+            var brace = Tile(window, 0, 2);
+            DragAndDrop(h, BuilderDrag.FromSlot(1, 1, row: 0), brace, RightEdge(brace));
+            Assert.Equal("Kinship,Audit,Notes", Shape(h, 1));
+            Assert.Equal("Beam,Column,Brace,Warnings", Shape(h, 0));
+            Assert.Empty(h.Model.Profile.Stacks);
+            Assert.All(h.Model.Panels[1].Items, i => Assert.IsType<ToolTileViewModel>(i));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_stack_dragged_by_its_header_moves_whole_and_never_goes_inside_another() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            // Onto Beam's middle, left half: before Beam, not a stack of a stack.
+            var beam = Tile(window, 0, 0);
+            var drag = BuilderDrag.FromSlot(1, 1);
+            h.Model.BeginDrag(drag);
+            Assert.True(h.Model.Panels[1].StackAt(1).IsDragSource);
+            var at = new Point(beam.ActualWidth / 2 - 8, beam.ActualHeight / 2);
+            DragOver(beam, Payload(drag), at);
+            Assert.Equal(DropMarker.Before, h.Model.Panels[0].Tile(0).DropMarker);
+            Drop(beam, Payload(drag), at);
+            h.Model.EndDrag();
+            Assert.Equal("[Warnings Audit Purge],Beam,Column,Brace", Shape(h, 0));
+            Assert.Equal("Kinship,Notes", Shape(h, 1));
+            Assert.Single(h.Model.Profile.Stacks);
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_catalogue_command_dropped_onto_a_stack_joins_it_if_it_has_room() => Sta(() =>
+    {
+        var (window, h) = Open(TwoToolStack);
+        try
+        {
+            var audit = StackRow(window, 1, 1, 1);
+            DragAndDrop(h, Wall(h), NameBox(audit), On(audit, Upper(audit), NameBox(audit)));
+            Assert.Equal("Kinship,[Warnings Wall Audit],Notes", Shape(h, 1));
+            var added = h.Model.Profile.Stacks.Values.Single().Tools[1];
+            Assert.Equal("ID_OBJECTS_WALL", added.CommandId);
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_panel_over_a_tile_s_name_box_falls_through_to_its_card() => Sta(() =>
     {
         var (window, h) = Open();
         try
         {
             var frame = BuilderDrag.FromPanel(0);
             h.Model.BeginDrag(frame);
-            var box = SlotNameBox(window, 2, 1); // Links › Help, in the card's lower half
-            var over = DragOver(box, Payload(frame), Lower(box));
-            Assert.Equal(DragDropEffects.Move, over.Effects);
+            var help = Tile(window, 2, 1);
+            var box = NameBox(help);
+            var card = Card(window, 2);
+            var at = On(card, new Point(40, card.ActualHeight - 30), box);
+            Assert.Equal(DragDropEffects.Move, DragOver(box, Payload(frame), at).Effects);
             Assert.Equal(DropMarker.After, h.Model.Panels[2].DropMarker);
-            Assert.All(h.Model.Panels.SelectMany(p => p.Slots), s => Assert.Equal(DropMarker.None, s.DropMarker));
-
-            Drop(box, Payload(frame), Lower(box));
+            Assert.All(h.Model.Panels.SelectMany(p => p.Tiles), s => Assert.Equal(DropMarker.None, s.DropMarker));
+            Drop(box, Payload(frame), at);
             Assert.Equal(new[] { "Review", "Links", "Frame" }, h.Model.Panels.Select(p => p.Name));
-        }
-        finally
-        {
-            Close(window, h);
-        }
-    });
 
-    [Fact]
-    public void A_command_over_a_panel_s_name_box_highlights_the_card_and_appends() => Sta(() =>
-    {
-        var (window, h) = Open();
-        try
-        {
-            var wall = BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!);
-            h.Model.BeginDrag(wall);
-            var box = PanelNameBox(window, 2);
-            Assert.Equal(DragDropEffects.Copy, DragOver(box, Payload(wall), Upper(box)).Effects);
-            Assert.Equal(DropMarker.Over, h.Model.Panels[2].DropMarker);
-            Drop(box, Payload(wall), Upper(box));
-            Assert.Equal(new[] { "Wiki", "Help", "Wall" }, h.Model.Profile.Panels[2].Slots.Select(s => s.Name));
+            // And over a panel's name box: before or after that card.
+            WindowCapture.DoEvents();
+            var links = BuilderDrag.FromPanel(1);
+            h.Model.BeginDrag(links);
+            var name = PanelNameBox(window, 0);
+            DragOver(name, Payload(links), new Point(4, 2));
+            Assert.Equal(DropMarker.Before, h.Model.Panels[0].DropMarker);
         }
         finally
         {
@@ -231,32 +426,12 @@ public class ProfileBuilderDragEventTests
         var (window, h) = Open();
         try
         {
-            var box = SlotNameBox(window, 0, 0);
+            var box = NameBox(Tile(window, 0, 0));
             var text = new DataObject(DataFormats.UnicodeText, "pasted");
-            var over = DragOver(box, text, Upper(box));
+            var over = DragOver(box, text, new Point(4, 4));
             Assert.True(over.Handled, "the TextBox handles a text drag");
-            Assert.All(h.Model.Panels.SelectMany(p => p.Slots), s => Assert.Equal(DropMarker.None, s.DropMarker));
+            Assert.All(h.Model.Panels.SelectMany(p => p.Tiles), s => Assert.Equal(DropMarker.None, s.DropMarker));
             Assert.All(h.Model.Panels, p => Assert.Equal(DropMarker.None, p.DropMarker));
-        }
-        finally
-        {
-            Close(window, h);
-        }
-    });
-
-    [Fact]
-    public void The_slot_row_and_card_outside_the_name_boxes_still_take_drops() => Sta(() =>
-    {
-        var (window, h) = Open();
-        try
-        {
-            var wall = BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!);
-            h.Model.BeginDrag(wall);
-            var row = WindowCapture.Descendants<Grid>(window.PanelCards).Single(g => g.Name == "SlotRow" && g.DataContext is SlotRowViewModel { Panel.Index: 0, Index: 2 });
-            Assert.Equal(DragDropEffects.Copy, DragOver(row, Payload(wall), Upper(row)).Effects);
-            Assert.Equal(DropMarker.Before, h.Model.Panels[0].Slots[2].DropMarker);
-            Drop(row, Payload(wall), Upper(row));
-            Assert.Equal(new[] { "Beam", "Column", "Wall", "Brace" }, h.Model.Profile.Panels[0].Slots.Select(s => s.Name));
         }
         finally
         {
@@ -270,14 +445,14 @@ public class ProfileBuilderDragEventTests
         var (window, h) = Open();
         try
         {
-            var wall = BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!);
-            h.Model.BeginDrag(wall);
-            var box = SlotNameBox(window, 0, 1);
-            DragOver(box, Payload(wall), Lower(box));
-            Assert.Equal(DropMarker.After, h.Model.Panels[0].Slots[1].DropMarker);
+            h.Model.BeginDrag(Wall(h));
+            var tile = Tile(window, 0, 1);
+            var box = NameBox(tile);
+            DragOver(box, Payload(Wall(h)), On(tile, RightEdge(tile), box));
+            Assert.Equal(DropMarker.After, h.Model.Panels[0].Tile(1).DropMarker);
 
             // The pointer leaves the window from the name box: WPF raises DragLeave there (the TextBox handles it).
-            var leave = Args(Payload(wall), box, Lower(box));
+            var leave = Args(Payload(Wall(h)), box, new Point(1, 1));
             leave.RoutedEvent = DragDrop.PreviewDragLeaveEvent;
             box.RaiseEvent(leave);
             if (!leave.Handled)
@@ -285,8 +460,35 @@ public class ProfileBuilderDragEventTests
                 leave.RoutedEvent = DragDrop.DragLeaveEvent;
                 box.RaiseEvent(leave);
             }
-            Assert.All(h.Model.Panels.SelectMany(p => p.Slots), s => Assert.Equal(DropMarker.None, s.DropMarker));
+            Assert.All(h.Model.Panels.SelectMany(p => p.Tiles), s => Assert.Equal(DropMarker.None, s.DropMarker));
             Assert.All(h.Model.Panels, p => Assert.Equal(DropMarker.None, p.DropMarker));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void The_window_finds_the_tile_stack_or_row_under_the_pointer() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var tile = Tile(window, 0, 1);
+            var hit = ProfileBuilderWindow.HitAt(NameBox(tile), Card(window, 0), e => tile.TranslatePoint(Middle(tile), (UIElement)e));
+            Assert.Equal(0, hit!.Value.Panel);
+            Assert.Equal(1, hit.Value.Slot);
+            Assert.Equal(-1, hit.Value.Row);
+            Assert.Equal(tile.ActualWidth, hit.Value.Width);
+
+            var row = StackRow(window, 1, 1, 2);
+            var rowHit = ProfileBuilderWindow.HitAt(NameBox(row), Card(window, 1), e => row.TranslatePoint(Lower(row), (UIElement)e));
+            Assert.Equal((1, 1, 2), (rowHit!.Value.Panel, rowHit.Value.Slot, rowHit.Value.Row));
+            Assert.Equal(StackGroup(window, 1, 1).ActualWidth, rowHit.Value.Width);
+            Assert.True(rowHit.Value.Y > rowHit.Value.Height / 2);
+
+            Assert.Null(ProfileBuilderWindow.HitAt(Card(window, 2), Card(window, 2), _ => new Point()));
         }
         finally
         {
