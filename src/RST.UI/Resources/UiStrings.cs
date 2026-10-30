@@ -267,4 +267,180 @@ public static class UiStrings
     public static string Health_ActivityFailedTitle => Get(nameof(Health_ActivityFailedTitle));
 
     public static string Health_WorkRunning => Get(nameof(Health_WorkRunning));
+
+    // ── Loader (spec #16, WU3: the Profile Loader window and the shared ribbon preview) ──
+
+    public static string Loader_WindowTitle => Get(nameof(Loader_WindowTitle));
+
+    public static string Loader_Title => Get(nameof(Loader_Title));
+
+    public static string Loader_RevitLabel => Get(nameof(Loader_RevitLabel));
+
+    public static string Loader_RevitVersion(object? arg0) => Format(nameof(Loader_RevitVersion), arg0);
+
+    public static string Loader_RevitNotDetected => Get(nameof(Loader_RevitNotDetected));
+
+    public static string Loader_ImportFromFile => Get(nameof(Loader_ImportFromFile));
+
+    public static string Loader_Profiles => Get(nameof(Loader_Profiles));
+
+    public static string Loader_NoProfiles => Get(nameof(Loader_NoProfiles));
+
+    public static string Loader_NoProfilesHint => Get(nameof(Loader_NoProfilesHint));
+
+    public static string Loader_ImportProfileFromFile => Get(nameof(Loader_ImportProfileFromFile));
+
+    public static string Loader_LoadedBadge => Get(nameof(Loader_LoadedBadge));
+
+    public static string Loader_Tab => Get(nameof(Loader_Tab));
+
+    public static string Loader_MinRevit => Get(nameof(Loader_MinRevit));
+
+    public static string Loader_MinRevitValue(object? arg0) => Format(nameof(Loader_MinRevitValue), arg0);
+
+    public static string Loader_Panels => Get(nameof(Loader_Panels));
+
+    public static string Loader_Updated => Get(nameof(Loader_Updated));
+
+    public static string Loader_NoSelection => Get(nameof(Loader_NoSelection));
+
+    public static string Loader_TabPreview => Get(nameof(Loader_TabPreview));
+
+    public static string Loader_OverrideOpacity => Get(nameof(Loader_OverrideOpacity));
+
+    public static string Loader_ReadOnly => Get(nameof(Loader_ReadOnly));
+
+    public static string Loader_RstifyHeading => Get(nameof(Loader_RstifyHeading));
+
+    public static string Loader_RstifyEmpty => Get(nameof(Loader_RstifyEmpty));
+
+    public static string Loader_RequiredAddins => Get(nameof(Loader_RequiredAddins));
+
+    public static string Loader_None => Get(nameof(Loader_None));
+
+    public static string Loader_InfoLink => Get(nameof(Loader_InfoLink));
+
+    public static string Loader_UnloadProfile => Get(nameof(Loader_UnloadProfile));
+
+    public static string Loader_DeleteProfile => Get(nameof(Loader_DeleteProfile));
+
+    public static string Loader_RestoreAll => Get(nameof(Loader_RestoreAll));
+
+    public static string Loader_DisableUnused => Get(nameof(Loader_DisableUnused));
+
+    public static string Loader_LoadProfile => Get(nameof(Loader_LoadProfile));
+
+    public static string Loader_Close => Get(nameof(Loader_Close));
+
+    public static string Loader_Continue => Get(nameof(Loader_Continue));
+
+    public static string Loader_ImportDialogTitle => Get(nameof(Loader_ImportDialogTitle));
+
+    public static string Loader_ImportFailed => Get(nameof(Loader_ImportFailed));
+
+    public static string Loader_ImportError(object? arg0) => Format(nameof(Loader_ImportError), arg0);
+
+    public static string Loader_Error => Get(nameof(Loader_Error));
+
+    public static string Loader_Loading(object? arg0) => Format(nameof(Loader_Loading), arg0);
+
+    public static string Loader_LoadError(object? arg0) => Format(nameof(Loader_LoadError), arg0);
+
+    public static string Loader_LoadFailed => Get(nameof(Loader_LoadFailed));
+
+    public static string Loader_LoadFailedText => Get(nameof(Loader_LoadFailedText));
+
+    public static string Loader_RestartNeeded => Get(nameof(Loader_RestartNeeded));
+
+    public static string Loader_TabWillBeBuilt(object? arg0) => Format(nameof(Loader_TabWillBeBuilt), arg0);
+
+    public static string Loader_NoProfile => Get(nameof(Loader_NoProfile));
+
+    public static string Loader_NoProfileText => Get(nameof(Loader_NoProfileText));
+
+    public static string Loader_Unloading => Get(nameof(Loader_Unloading));
+
+    public static string Loader_UnloadingText => Get(nameof(Loader_UnloadingText));
+
+    public static string Loader_UnloadFailed => Get(nameof(Loader_UnloadFailed));
+
+    public static string Loader_UnloadFailedText => Get(nameof(Loader_UnloadFailedText));
+
+    public static string Loader_UnloadError(object? arg0) => Format(nameof(Loader_UnloadError), arg0);
+
+    public static string Loader_DeleteTitle(object? arg0) => Format(nameof(Loader_DeleteTitle), arg0);
+
+    public static string Loader_DeleteText => Get(nameof(Loader_DeleteText));
+
+    public static string Loader_DeleteLoadedText => Get(nameof(Loader_DeleteLoadedText));
+
+    public static string Loader_DeleteFailed => Get(nameof(Loader_DeleteFailed));
+
+    public static string Loader_DeleteFailedText => Get(nameof(Loader_DeleteFailedText));
+
+    public static string Loader_DeleteError(object? arg0) => Format(nameof(Loader_DeleteError), arg0);
+
+    public static string Loader_RestoreFailed => Get(nameof(Loader_RestoreFailed));
+
+    public static string Loader_RestoreFailedText(object? arg0) => Format(nameof(Loader_RestoreFailedText), arg0);
+
+    public static string Loader_UnknownError => Get(nameof(Loader_UnknownError));
+
+    public static string Loader_RestoreError(object? arg0) => Format(nameof(Loader_RestoreError), arg0);
+
+    public static string Loader_PleaseRestart => Get(nameof(Loader_PleaseRestart));
+
+    public static string Loader_PleaseRestartText(object? arg0) => Format(nameof(Loader_PleaseRestartText), arg0);
+
+    public static string Loader_NoChanges => Get(nameof(Loader_NoChanges));
+
+    public static string Loader_NoChangesText => Get(nameof(Loader_NoChangesText));
+
+    public static string Loader_ConfirmTitle => Get(nameof(Loader_ConfirmTitle));
+
+    public static string Loader_ConfirmSubtitle => Get(nameof(Loader_ConfirmSubtitle));
+
+    public static string Loader_StayingActive => Get(nameof(Loader_StayingActive));
+
+    public static string Loader_WillBeDisabled => Get(nameof(Loader_WillBeDisabled));
+
+    public static string Loader_TryDisable => Get(nameof(Loader_TryDisable));
+
+    public static string Loader_ConfirmRestart => Get(nameof(Loader_ConfirmRestart));
+
+    public static string Loader_ConfirmAndLoad => Get(nameof(Loader_ConfirmAndLoad));
+
+    public static string Loader_Unknown => Get(nameof(Loader_Unknown));
+
+    public static string Loader_QaTitle => Get(nameof(Loader_QaTitle));
+
+    public static string Loader_QaAllClear => Get(nameof(Loader_QaAllClear));
+
+    public static string Loader_QaReview(object? arg0) => Format(nameof(Loader_QaReview), arg0);
+
+    public static string Loader_QaRestored => Get(nameof(Loader_QaRestored));
+
+    public static string Loader_QaMissing => Get(nameof(Loader_QaMissing));
+
+    public static string Loader_QaDownload => Get(nameof(Loader_QaDownload));
+
+    public static string Loader_QaNoLink => Get(nameof(Loader_QaNoLink));
+
+    public static string Loader_QaNothing => Get(nameof(Loader_QaNothing));
+
+    public static string Loader_QaRestart => Get(nameof(Loader_QaRestart));
+
+    public static string Loader_QaContinue => Get(nameof(Loader_QaContinue));
+
+    public static string Loader_QaUnknown => Get(nameof(Loader_QaUnknown));
+
+    public static string Preview_NoTab => Get(nameof(Preview_NoTab));
+
+    public static string Preview_NoPanels => Get(nameof(Preview_NoPanels));
+
+    public static string Preview_NoPanelsBuilder => Get(nameof(Preview_NoPanelsBuilder));
+
+    public static string Preview_Empty => Get(nameof(Preview_Empty));
+
+    public static string Preview_EmptyStack(object? arg0) => Format(nameof(Preview_EmptyStack), arg0);
 }

@@ -409,4 +409,280 @@
   <data name="Health_WorkRunning" xml:space="preserve">
     <value>A scan or cleanup is still running. Try again when it finishes.</value>
   </data>
+  <!-- Loader (spec #16, WU3): the Profile Loader window and the shared ribbon preview. -->
+  <data name="Loader_WindowTitle" xml:space="preserve">
+    <value>RST — Profile Loader</value>
+  </data>
+  <data name="Loader_Title" xml:space="preserve">
+    <value>Profile Selector</value>
+  </data>
+  <data name="Loader_RevitLabel" xml:space="preserve">
+    <value>Revit</value>
+  </data>
+  <data name="Loader_RevitVersion" xml:space="preserve">
+    <value>Revit {0}</value>
+    <comment>{0} the Revit version, e.g. 2026.</comment>
+  </data>
+  <data name="Loader_RevitNotDetected" xml:space="preserve">
+    <value>Not detected</value>
+  </data>
+  <data name="Loader_ImportFromFile" xml:space="preserve">
+    <value>+ Import from File</value>
+  </data>
+  <data name="Loader_Profiles" xml:space="preserve">
+    <value>Profiles</value>
+  </data>
+  <data name="Loader_NoProfiles" xml:space="preserve">
+    <value>No profiles found</value>
+  </data>
+  <data name="Loader_NoProfilesHint" xml:space="preserve">
+    <value>Create a profile in the Profiler, or import an existing one.</value>
+  </data>
+  <data name="Loader_ImportProfileFromFile" xml:space="preserve">
+    <value>+ Import Profile from File</value>
+  </data>
+  <data name="Loader_LoadedBadge" xml:space="preserve">
+    <value>● Loaded</value>
+  </data>
+  <data name="Loader_Tab" xml:space="preserve">
+    <value>Tab</value>
+  </data>
+  <data name="Loader_MinRevit" xml:space="preserve">
+    <value>Min Revit</value>
+  </data>
+  <data name="Loader_MinRevitValue" xml:space="preserve">
+    <value>{0}+</value>
+    <comment>{0} the profile's min_version.</comment>
+  </data>
+  <data name="Loader_Panels" xml:space="preserve">
+    <value>Panels</value>
+  </data>
+  <data name="Loader_Updated" xml:space="preserve">
+    <value>Updated</value>
+  </data>
+  <data name="Loader_NoSelection" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="Loader_TabPreview" xml:space="preserve">
+    <value>Tab Preview</value>
+  </data>
+  <data name="Loader_OverrideOpacity" xml:space="preserve">
+    <value>Override Panel Opacity</value>
+  </data>
+  <data name="Loader_ReadOnly" xml:space="preserve">
+    <value>Read Only</value>
+  </data>
+  <data name="Loader_RstifyHeading" xml:space="preserve">
+    <value>RSTify: Hide These Tabs</value>
+  </data>
+  <data name="Loader_RstifyEmpty" xml:space="preserve">
+    <value>No tabs available to hide</value>
+  </data>
+  <data name="Loader_RequiredAddins" xml:space="preserve">
+    <value>Required Add-ins for this profile</value>
+  </data>
+  <data name="Loader_None" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="Loader_InfoLink" xml:space="preserve">
+    <value>info ↗</value>
+  </data>
+  <data name="Loader_UnloadProfile" xml:space="preserve">
+    <value>Unload Profile</value>
+  </data>
+  <data name="Loader_DeleteProfile" xml:space="preserve">
+    <value>Delete Profile</value>
+  </data>
+  <data name="Loader_RestoreAll" xml:space="preserve">
+    <value>Restore All Add-ins</value>
+  </data>
+  <data name="Loader_DisableUnused" xml:space="preserve">
+    <value>Disable unused add-ins</value>
+  </data>
+  <data name="Loader_LoadProfile" xml:space="preserve">
+    <value>Load Profile →</value>
+  </data>
+  <data name="Loader_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Loader_Continue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
+  <data name="Loader_ImportDialogTitle" xml:space="preserve">
+    <value>Import RST Profile (.zip)</value>
+  </data>
+  <data name="Loader_ImportFailed" xml:space="preserve">
+    <value>Import Failed</value>
+  </data>
+  <data name="Loader_ImportError" xml:space="preserve">
+    <value>Error importing profile: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Loader_Error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="Loader_Loading" xml:space="preserve">
+    <value>Loading {0}</value>
+    <comment>{0} the profile name.</comment>
+  </data>
+  <data name="Loader_LoadError" xml:space="preserve">
+    <value>Error loading profile: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Loader_LoadFailed" xml:space="preserve">
+    <value>Load Failed</value>
+  </data>
+  <data name="Loader_LoadFailedText" xml:space="preserve">
+    <value>Failed to load profile.</value>
+  </data>
+  <data name="Loader_RestartNeeded" xml:space="preserve">
+    <value>Add-ins modified — restart Revit for changes.</value>
+  </data>
+  <data name="Loader_TabWillBeBuilt" xml:space="preserve">
+    <value>Tab "{0}" will be built.</value>
+    <comment>{0} the profile's tab name.</comment>
+  </data>
+  <data name="Loader_NoProfile" xml:space="preserve">
+    <value>No Profile</value>
+  </data>
+  <data name="Loader_NoProfileText" xml:space="preserve">
+    <value>No profile is currently loaded.</value>
+  </data>
+  <data name="Loader_Unloading" xml:space="preserve">
+    <value>Unloading</value>
+  </data>
+  <data name="Loader_UnloadingText" xml:space="preserve">
+    <value>A blank RST tab will replace the current one.</value>
+  </data>
+  <data name="Loader_UnloadFailed" xml:space="preserve">
+    <value>Unload Failed</value>
+  </data>
+  <data name="Loader_UnloadFailedText" xml:space="preserve">
+    <value>Failed to unload profile.</value>
+  </data>
+  <data name="Loader_UnloadError" xml:space="preserve">
+    <value>Error unloading profile: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Loader_DeleteTitle" xml:space="preserve">
+    <value>Delete "{0}"?</value>
+    <comment>{0} the profile name.</comment>
+  </data>
+  <data name="Loader_DeleteText" xml:space="preserve">
+    <value>This deletes the local copy. The original file shared by the admin is not affected.</value>
+  </data>
+  <data name="Loader_DeleteLoadedText" xml:space="preserve">
+    <value>This is the currently loaded profile — a blank RST tab will replace it.</value>
+  </data>
+  <data name="Loader_DeleteFailed" xml:space="preserve">
+    <value>Delete Failed</value>
+  </data>
+  <data name="Loader_DeleteFailedText" xml:space="preserve">
+    <value>Failed to delete profile.</value>
+  </data>
+  <data name="Loader_DeleteError" xml:space="preserve">
+    <value>Error deleting profile: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Loader_RestoreFailed" xml:space="preserve">
+    <value>Restore Failed</value>
+  </data>
+  <data name="Loader_RestoreFailedText" xml:space="preserve">
+    <value>Failed to restore add-ins: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Loader_UnknownError" xml:space="preserve">
+    <value>Unknown error</value>
+  </data>
+  <data name="Loader_RestoreError" xml:space="preserve">
+    <value>Error restoring add-ins: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Loader_PleaseRestart" xml:space="preserve">
+    <value>Please Restart Revit</value>
+  </data>
+  <data name="Loader_PleaseRestartText" xml:space="preserve">
+    <value>After restart, the following add-ins will be restored: {0}</value>
+    <comment>{0} the restored file names, comma separated.</comment>
+  </data>
+  <data name="Loader_NoChanges" xml:space="preserve">
+    <value>No Changes</value>
+  </data>
+  <data name="Loader_NoChangesText" xml:space="preserve">
+    <value>No disabled add-ins found to restore.</value>
+  </data>
+  <data name="Loader_ConfirmTitle" xml:space="preserve">
+    <value>Confirm Add-in Changes</value>
+  </data>
+  <data name="Loader_ConfirmSubtitle" xml:space="preserve">
+    <value>The following changes will be applied to your add-in files.</value>
+  </data>
+  <data name="Loader_StayingActive" xml:space="preserve">
+    <value>Staying Active</value>
+  </data>
+  <data name="Loader_WillBeDisabled" xml:space="preserve">
+    <value>Will Be Disabled</value>
+  </data>
+  <data name="Loader_TryDisable" xml:space="preserve">
+    <value>Try Disable</value>
+  </data>
+  <data name="Loader_ConfirmRestart" xml:space="preserve">
+    <value>Revit must restart for changes to take effect.</value>
+  </data>
+  <data name="Loader_ConfirmAndLoad" xml:space="preserve">
+    <value>Confirm &amp; Load</value>
+  </data>
+  <data name="Loader_Unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="Loader_QaTitle" xml:space="preserve">
+    <value>Add-in Check</value>
+  </data>
+  <data name="Loader_QaAllClear" xml:space="preserve">
+    <value>All required add-ins are installed and active.</value>
+  </data>
+  <data name="Loader_QaReview" xml:space="preserve">
+    <value>Review the required-add-in status for "{0}" before continuing.</value>
+    <comment>{0} the profile name.</comment>
+  </data>
+  <data name="Loader_QaRestored" xml:space="preserve">
+    <value>Auto-Restored (Was Disabled)</value>
+  </data>
+  <data name="Loader_QaMissing" xml:space="preserve">
+    <value>Missing — Not Installed</value>
+  </data>
+  <data name="Loader_QaDownload" xml:space="preserve">
+    <value>download ↗</value>
+  </data>
+  <data name="Loader_QaNoLink" xml:space="preserve">
+    <value>(no link)</value>
+  </data>
+  <data name="Loader_QaNothing" xml:space="preserve">
+    <value>Nothing to fix — every required add-in is on disk and active.</value>
+  </data>
+  <data name="Loader_QaRestart" xml:space="preserve">
+    <value>Revit must restart for the auto-restored add-ins to load.</value>
+  </data>
+  <data name="Loader_QaContinue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
+  <data name="Loader_QaUnknown" xml:space="preserve">
+    <value>(unknown)</value>
+  </data>
+  <data name="Preview_NoTab" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="Preview_NoPanels" xml:space="preserve">
+    <value>No panels configured</value>
+  </data>
+  <data name="Preview_NoPanelsBuilder" xml:space="preserve">
+    <value>No panels configured.</value>
+  </data>
+  <data name="Preview_Empty" xml:space="preserve">
+    <value>Empty</value>
+  </data>
+  <data name="Preview_EmptyStack" xml:space="preserve">
+    <value>{0} (empty)</value>
+    <comment>{0} the stack name.</comment>
+  </data>
 </root>

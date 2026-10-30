@@ -1545,4 +1545,40 @@
         </Setter>
     </Style>
 
+    <!--
+        ====================================================================================
+        Loader (spec #16, WU3): styles for the Profile Loader window and its dialogs. Built
+        from palette keys; the link text is a ContrastRequirement in UiPalette.Requirements.
+        ====================================================================================
+    -->
+
+    <!-- An external link ("info ↗", "download ↗"): accent text, underlined under the pointer; opens the default browser. -->
+    <Style x:Key="LoaderLink" TargetType="Hyperlink">
+        <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}" />
+        <Setter Property="TextDecorations" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="TextDecorations" Value="Underline" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="TextDecorations" Value="Underline" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A pane's header and footer strips: the surface color, divided from the content by a 1 px line. -->
+    <Style x:Key="LoaderStrip" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    </Style>
+
+    <!-- A row in the RSTify and Required Add-ins lists: a 1 px divider under each. -->
+    <Style x:Key="LoaderRow" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="10,7" />
+    </Style>
+
 </ResourceDictionary>
