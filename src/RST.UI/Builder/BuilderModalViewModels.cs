@@ -77,7 +77,7 @@ public sealed class ProfileNameDialogModel : ObservableObject
 
     /// <summary>Rename…: the current name; unique among the other saved profiles.</summary>
     public static ProfileNameDialogModel ForRename(string current, Func<string?, NameCheck> check) =>
-        new(UiStrings.Builder_RenameTitle, ProfileNaming.RenameHelp, UiStrings.Builder_RenameConfirm, current, check);
+        new(UiStrings.Builder_RenameTitle, UiStrings.Builder_RenameHelp, UiStrings.Builder_RenameConfirm, current, check);
 
     /// <summary>Duplicate…: "&lt;name&gt; copy" (or the next free one); unique among every saved profile.</summary>
     public static ProfileNameDialogModel ForDuplicate(string suggested, Func<string?, NameCheck> check) =>

@@ -667,6 +667,8 @@ public static class UiStrings
 
     public static string Builder_RenameTitle => Get(nameof(Builder_RenameTitle));
 
+    public static string Builder_RenameHelp => Get(nameof(Builder_RenameHelp));
+
     public static string Builder_RenameConfirm => Get(nameof(Builder_RenameConfirm));
 
     public static string Builder_DuplicateTitle => Get(nameof(Builder_DuplicateTitle));

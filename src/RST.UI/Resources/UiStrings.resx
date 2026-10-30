@@ -1020,6 +1020,9 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_RenameTitle" xml:space="preserve">
     <value>Rename profile</value>
   </data>
+  <data name="Builder_RenameHelp" xml:space="preserve">
+    <value>Same profile, new name. Users who have it loaded keep it.</value>
+  </data>
   <data name="Builder_RenameConfirm" xml:space="preserve">
     <value>Rename</value>
   </data>
