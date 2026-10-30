@@ -1,45 +1,75 @@
 // rst-c's own (not vendored): LoaderBridge's LoadProfile and UnloadProfile orchestration, moved
-// out of the bridge (spec #16, WU3) with unchanged behavior: write the active profile and the
-// prefs entry, classify the required add-ins and auto-restore the disabled ones (QA), run the
-// disable pass, schedule the live ribbon switch, and work out whether Revit must restart.
+// out of the bridge (spec #16, WU3): write the active profile and the prefs entry, run the add-in
+// changes, schedule the live ribbon switch, and work out whether Revit must restart.
 //
-// The load runs in three steps so a window can keep the add-in renames off the UI thread
-// (spec #16, Planner default 8): Begin (UI thread: files), RunAddinPasses (any thread: the
-// .addin renames), Finish (UI thread: the Revit scheduler). Load runs all three in a row, as
-// v2.2.0's bridge did.
+// Spec #18 (feature #16) changed the add-in step: it runs the plan the user confirmed in the
+// Confirm Add-in Changes dialog (LoadRequest.Plan) through RST.Core.Activation, and nothing else,
+// so what was shown is what runs (D15). A request without a plan changes no add-in: that is the
+// Builder's ribbon-only auto-reload (decision #16.4). Unload switches back on what rst-c switched off.
+//
+// The load runs in three steps so a window can keep the file work off the UI thread (spec #16,
+// Planner default 8): Begin (UI thread: files), RunAddinPasses (any thread: the add-in changes),
+// Finish (UI thread: the Revit scheduler). Load runs all three in a row.
 
-using RST.Core.AddIns;
+using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Profiles;
 
 namespace RST.Core.Loader;
 
-/// <summary>What Load Profile sends: the profile (id wins over name), the disable flag and the RSTify tabs.</summary>
-public sealed record LoadRequest(string Name, string? Id, bool DisableNonRequired, IReadOnlyList<string> HiddenTabs);
+/// <summary>
+/// What Load Profile sends: the profile (id wins over name), the disable flag, the RSTify tabs,
+/// and the add-in plan the user confirmed (null changes no add-in).
+/// </summary>
+public sealed record LoadRequest(string Name, string? Id, bool DisableNonRequired, IReadOnlyList<string> HiddenTabs, ActivationPlan? Plan = null);
 
-/// <summary>A required add-in the QA pass found disabled and renamed back (tab name — file).</summary>
-public sealed record QaRestoredItem(string TabName, string? AddinFile);
-
-/// <summary>A required add-in the QA pass found missing, with its download link (may be empty).</summary>
+/// <summary>A required add-in that is not installed for the running Revit year, with its download link (may be empty).</summary>
 public sealed record QaMissingItem(string TabName, string? AddinFile, string Url);
 
-/// <summary>The "Add-in Check" result shown after every successful load.</summary>
-public sealed record QaCheck(IReadOnlyList<QaRestoredItem> Restored, IReadOnlyList<QaMissingItem> NotInstalled)
+/// <summary>
+/// The required-add-in part of the report shown after every load: what is missing, and the
+/// required add-ins rst-c will not turn on (switched off by the user, or locked off by IT).
+/// </summary>
+public sealed record QaCheck(IReadOnlyList<QaMissingItem> NotInstalled, IReadOnlyList<string> RequiredOff)
 {
     public static readonly QaCheck Clear = new([], []);
 
-    public bool AllClear => Restored.Count == 0 && NotInstalled.Count == 0;
+    public bool AllClear => NotInstalled.Count == 0 && RequiredOff.Count == 0;
+
+    /// <summary>The check for <paramref name="profile"/>: missing from the running year, and the plan's required add-ins left off.</summary>
+    public static QaCheck For(Profile profile, AddinSessionContext session, ActivationPlan? plan)
+    {
+        var missing = RequiredAddinRules.NotFound(profile, session)
+            .Select(a => new QaMissingItem(a.TabName, a.AddinFile, a.Url.Length > 0 ? a.Url : session.LookupFor(a.TabName)?.Url ?? ""))
+            .ToList();
+        var off = (plan?.Entries ?? [])
+            .Where(e => e.Required && e.Action == PlanAction.NotManaged && e.NotManaged is NotManagedReason.SwitchedOffByUser or NotManagedReason.LockedOffByAdmin)
+            .Select(ActivationWording.RequiredOffLine)
+            .Distinct()
+            .ToList();
+        return new QaCheck(missing, off);
+    }
 }
 
-/// <summary>Load Profile's outcome, as the bridge returned it.</summary>
+/// <summary>Load Profile's outcome: the add-in changes (one outcome per planned change) and the required-add-in check.</summary>
 public sealed record LoadResult(
     bool Ok,
     IReadOnlyList<string> Warnings,
     bool RestartNeeded,
-    IReadOnlyList<FailedDisable> FailedDisables,
-    QaCheck? Qa)
+    IReadOnlyList<ActivationOutcome> AddinChanges,
+    QaCheck? Qa,
+    IReadOnlyList<string>? AddinNotes = null)
 {
     public static LoadResult Fail(string warning) => new(false, [warning], false, [], null);
+
+    /// <summary>The add-in report of this load.</summary>
+    public ActivationReport Report => new(ActivationIntent.Load, AddinChanges, AddinNotes ?? []);
+}
+
+/// <summary>Unload's outcome: the switch-back-on report (empty when rst-c had switched nothing off).</summary>
+public sealed record UnloadOutcome(bool Ok, string? Error, ActivationReport Addins)
+{
+    public static UnloadOutcome Fail(string error) => new(false, error, ActivationReport.Empty(ActivationIntent.Unload));
 }
 
 /// <summary>The first step's state: the resolved profile, or the failure to return.</summary>
@@ -60,46 +90,53 @@ public sealed class LoadStart
     public LoadResult? Failure { get; }
 }
 
-/// <summary>The add-in step's outcome: the QA lists, the failed disables, and whether either forces a restart.</summary>
-public sealed record AddinPassResult(QaCheck Qa, bool QaForcedRestart, IReadOnlyList<FailedDisable> FailedDisables, bool DisableForcedRestart);
+/// <summary>The add-in step's outcome.</summary>
+public sealed record AddinPassResult(ActivationReport Report)
+{
+    /// <summary>No add-in was touched (no plan, or the Builder's ribbon-only reload).</summary>
+    public static readonly AddinPassResult None = new(ActivationReport.Empty(ActivationIntent.Load));
+}
 
-/// <summary>Loads and unloads profiles (active_profile.json, prefs, add-in renames, the live ribbon switch).</summary>
+/// <summary>Loads and unloads profiles (active_profile.json, prefs, add-in changes, the live ribbon switch).</summary>
 public sealed class ProfileLoadService
 {
     private readonly LoaderPaths _paths;
-    private readonly IReadOnlyList<string> _ribbonTabs;
     private readonly IProfileSwitchScheduler? _scheduler;
-    private readonly IAddinPasses _passes;
+    private readonly IAddinSwitching? _switching;
     private readonly ILoaderLog _log;
     private readonly Func<DateTime> _clock;
 
     /// <param name="paths">The profile, active-profile and prefs files.</param>
-    /// <param name="ribbonTabs">The ribbon tab titles captured before the window opened (QA tier 3).</param>
     /// <param name="scheduler">The live ribbon switch; null falls back to "restart Revit".</param>
-    /// <param name="passes">The add-in file operations for the running Revit version.</param>
+    /// <param name="switching">The add-in switching; null changes no add-in (the Builder).</param>
     /// <param name="log">Log lines; null drops them.</param>
     /// <param name="clock">active_profile.json's <c>loaded_at</c> (local time); null is <see cref="DateTime.Now"/>.</param>
     public ProfileLoadService(
         LoaderPaths paths,
-        IReadOnlyList<string>? ribbonTabs,
         IProfileSwitchScheduler? scheduler,
-        IAddinPasses passes,
+        IAddinSwitching? switching,
         ILoaderLog? log = null,
         Func<DateTime>? clock = null)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
-        _ribbonTabs = ribbonTabs ?? [];
         _scheduler = scheduler;
-        _passes = passes ?? throw new ArgumentNullException(nameof(passes));
+        _switching = switching;
         _log = log ?? NullLoaderLog.Instance;
         _clock = clock ?? (() => DateTime.Now);
     }
 
-    /// <summary>All three steps in a row, on the calling thread (the bridge's LoadProfile).</summary>
+    /// <summary>All three steps in a row, on the calling thread.</summary>
     public LoadResult Load(LoadRequest request)
     {
         var start = Begin(request);
         return start.Failure ?? Finish(start, RunAddinPasses(start));
+    }
+
+    /// <summary>The ribbon only: the files and the live switch, with no add-in change (the Builder's auto-reload).</summary>
+    public LoadResult Reload(LoadRequest request)
+    {
+        var start = Begin(request with { Plan = null });
+        return start.Failure ?? Finish(start, AddinPassResult.None);
     }
 
     /// <summary>
@@ -143,93 +180,44 @@ public sealed class ProfileLoadService
             }
         }
 
-        _log.Information("Loader.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs}",
-            request.Name, request.Id, request.DisableNonRequired, hiddenTabs.Count);
+        _log.Information("Loader.load_profile OK: name={Name} id={Id} disableNonRequired={Disable} hiddenTabs={HiddenTabs} planChanges={Changes}",
+            request.Name, request.Id, request.DisableNonRequired, hiddenTabs.Count, request.Plan?.Changes.Count ?? 0);
         return new LoadStart(request, entry, null);
     }
 
     /// <summary>
-    /// Step 2 (safe off the UI thread): classifies the required add-ins, renames the disabled
-    /// ones back (forcing a restart when any was), then, when asked, disables the rest.
+    /// Step 2 (safe off the UI thread): runs the confirmed plan's add-in changes. Every change is
+    /// reported; an executor that throws is reported, not swallowed.
     /// </summary>
     public AddinPassResult RunAddinPasses(LoadStart start)
     {
         ArgumentNullException.ThrowIfNull(start);
-        if (start.Entry is null || start.Failure is not null) return new AddinPassResult(QaCheck.Clear, false, [], false);
-        var profile = start.Entry.Profile;
-        var name = start.Request.Name;
-
-        var restored = new List<QaRestoredItem>();
-        var missing = new List<QaMissingItem>();
-        var qaForcedRestart = false;
+        if (start.Entry is null || start.Failure is not null) return AddinPassResult.None;
+        var plan = start.Request.Plan;
+        if (plan is null || _switching is null || !plan.HasWork)
+        {
+            return plan is { Notes.Count: > 0 }
+                ? new AddinPassResult(ActivationReport.Empty(ActivationIntent.Load, [.. plan.Notes.Select(n => n.Text)]))
+                : AddinPassResult.None;
+        }
         try
         {
-            var qa = _passes.Classify(profile.RequiredAddins, _ribbonTabs);
-            int active = 0, disabled = 0, notInstalled = 0;
-            var disabledMatches = new List<RequiredAddin>();
-            foreach (var r in qa)
-            {
-                switch (r.Status)
-                {
-                    case RequiredAddinStatus.InstalledActive:
-                        active++;
-                        break;
-                    case RequiredAddinStatus.InstalledDisabled:
-                        disabled++;
-                        disabledMatches.Add(r.Required);
-                        restored.Add(new QaRestoredItem(r.Required.TabName, r.MatchedManifest?.FileName ?? r.Required.AddinFile));
-                        break;
-                    case RequiredAddinStatus.NotInstalled:
-                        notInstalled++;
-                        missing.Add(new QaMissingItem(r.Required.TabName, r.Required.AddinFile, r.Required.Url ?? ""));
-                        break;
-                }
-            }
-            _log.Information("Loader.load_profile QA: active={Active} disabled={Disabled} missing={Missing}", active, disabled, notInstalled);
-
-            if (disabledMatches.Count > 0)
-            {
-                var restore = _passes.RestoreRequired(disabledMatches,
-                    (path, ex) => _log.Warning(ex, "AddinDisabler.RestoreRequired: rename failed for {Path}", path));
-                _log.Information("Loader.load_profile QA: auto-restored {Count} required addins, failed={Failed}",
-                    restore.RestoredCount, restore.Failed);
-                if (restore.RestoredCount > 0) qaForcedRestart = true;
-            }
+            var report = _switching.Execute(plan);
+            AddinMaintenanceService.LogReport(_log, report);
+            return new AddinPassResult(report);
         }
         catch (Exception ex)
         {
-            _log.Warning(ex, "Loader.load_profile: QA classification threw — proceeding without auto-restore");
+            _log.Error(ex, "Loader.load_profile: add-in changes threw for {Name}", start.Request.Name);
+            return new AddinPassResult(new ActivationReport(ActivationIntent.Load,
+                plan.Changes.Select(e => ActivationOutcome.For(e, OutcomeResult.NotChanged, ChangeReason.Other, ex.Message)).ToList(), []));
         }
-
-        // Disabling renames .addin to .addin.RSTdisabled; it takes effect on the next launch,
-        // so any disable forces a restart.
-        var failed = new List<FailedDisable>();
-        var disableForcedRestart = false;
-        if (start.Request.DisableNonRequired)
-        {
-            try
-            {
-                var result = _passes.DisableNonRequired(profile.RequiredAddins,
-                    (path, ex) => _log.Warning(ex, "AddinDisabler: rename failed for {Path}", path));
-                _log.Information("Loader.load_profile: disabled {Count} addins, skippedReadOnly={ReadOnly}, alreadyDisabled={Already}, failed={Failed}",
-                    result.DisabledCount, result.SkippedReadOnly, result.SkippedAlreadyDisabled, result.Failed);
-                failed.AddRange(result.FailedFiles.Select(f => new FailedDisable(f)));
-                if (result.DisabledCount > 0) disableForcedRestart = true;
-            }
-            catch (Exception ex)
-            {
-                _log.Error(ex, "Loader.load_profile: AddinDisabler threw for {Name}", name);
-                failed.Add(new FailedDisable("(disable subsystem failure)", Error: ex.Message));
-                disableForcedRestart = true; // be conservative: assume the DLLs need a restart
-            }
-        }
-
-        return new AddinPassResult(new QaCheck(restored, missing), qaForcedRestart, failed, disableForcedRestart);
     }
 
     /// <summary>
     /// Step 3 (UI thread): schedules the live ribbon rebuild (RST-020; it runs once the modal
-    /// window closes). With no scheduler, or when scheduling fails, Revit must restart.
+    /// window closes). With no scheduler, or when scheduling fails, Revit must restart; any add-in
+    /// change also needs a restart (it applies the next time Revit starts).
     /// </summary>
     public LoadResult Finish(LoadStart start, AddinPassResult passes)
     {
@@ -251,15 +239,16 @@ public sealed class ProfileLoadService
                 restartNeeded = true;
             }
         }
-        if (passes.DisableForcedRestart || passes.QaForcedRestart) restartNeeded = true;
-        return new LoadResult(true, [], restartNeeded, passes.FailedDisables, passes.Qa);
+        if (passes.Report.AnyDone) restartNeeded = true;
+        return new LoadResult(true, [], restartNeeded, passes.Report.Outcomes, null, passes.Report.Notes);
     }
 
     /// <summary>
-    /// Unload: blanks active_profile.json and schedules the profile tab's removal
-    /// (<c>Schedule(null)</c>). The profile file itself is kept.
+    /// Unload: blanks active_profile.json, schedules the profile tab's removal
+    /// (<c>Schedule(null)</c>) and switches back on every add-in rst-c switched off (decision
+    /// #16.2). The profile file itself is kept.
     /// </summary>
-    public OpResult Unload()
+    public UnloadOutcome Unload()
     {
         ActiveProfile.WriteBlank(_paths.ActiveProfileFile);
         if (_scheduler is not null)
@@ -273,7 +262,26 @@ public sealed class ProfileLoadService
                 _log.Error(ex, "Loader.unload_profile: switch scheduler failed");
             }
         }
+
+        var report = ActivationReport.Empty(ActivationIntent.Unload);
+        if (_switching is not null)
+        {
+            try
+            {
+                var plan = _switching.Plan(_switching.Inventory(), ActivationPolicy.Unload);
+                AddinMaintenanceService.LogPlan(_log, plan, "Unload");
+                report = plan.HasWork
+                    ? _switching.Execute(plan)
+                    : ActivationReport.Empty(ActivationIntent.Unload, [.. plan.Notes.Select(n => n.Text)]);
+                AddinMaintenanceService.LogReport(_log, report);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "Loader.unload_profile: switching add-ins back on threw");
+                report = ActivationReport.Empty(ActivationIntent.Unload, "RST could not switch its add-ins back on: " + ex.Message);
+            }
+        }
         _log.Information("Loader.unload_profile OK");
-        return OpResult.Success;
+        return new UnloadOutcome(true, null, report);
     }
 }

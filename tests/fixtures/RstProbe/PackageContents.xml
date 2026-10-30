@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RST-Probe, bundle variant (rst-c's test add-in, feature #16; never shipped). One component per Revit year. -->
+<ApplicationPackage SchemaVersion="1.0" AutodeskProduct="Revit" Name="RST-Probe Bundle" AppVersion="1.0.0" ProductType="Application"
+                    ProductCode="{D4C6E3E0-0000-4000-8000-525354500102}" UpgradeCode="{D4C6E3E0-0000-4000-8000-525354500103}">
+  <CompanyDetails Name="rst-c (test)" />
+  <Components Description="Revit 2026">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2026" SeriesMax="R2026" />
+    <ComponentEntry AppName="RST-Probe Bundle" Version="1.0.0" ModuleName="./Contents/2026/RstProbeBundle.addin" />
+  </Components>
+  <Components Description="Revit 2027">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2027" SeriesMax="R2027" />
+    <ComponentEntry AppName="RST-Probe Bundle" Version="1.0.0" ModuleName="./Contents/2027/RstProbeBundle.addin" />
+  </Components>
+</ApplicationPackage>

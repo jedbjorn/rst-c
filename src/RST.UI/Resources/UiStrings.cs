@@ -388,23 +388,17 @@ public static class UiStrings
 
     public static string Loader_RestoreError(object? arg0) => Format(nameof(Loader_RestoreError), arg0);
 
-    public static string Loader_PleaseRestart => Get(nameof(Loader_PleaseRestart));
-
-    public static string Loader_PleaseRestartText(object? arg0) => Format(nameof(Loader_PleaseRestartText), arg0);
-
-    public static string Loader_NoChanges => Get(nameof(Loader_NoChanges));
-
-    public static string Loader_NoChangesText => Get(nameof(Loader_NoChangesText));
-
     public static string Loader_ConfirmTitle => Get(nameof(Loader_ConfirmTitle));
 
-    public static string Loader_ConfirmSubtitle => Get(nameof(Loader_ConfirmSubtitle));
+    public static string Loader_ConfirmSubtitle(object? arg0) => Format(nameof(Loader_ConfirmSubtitle), arg0);
 
-    public static string Loader_StayingActive => Get(nameof(Loader_StayingActive));
+    public static string Loader_WillBeSwitchedOff => Get(nameof(Loader_WillBeSwitchedOff));
 
-    public static string Loader_WillBeDisabled => Get(nameof(Loader_WillBeDisabled));
+    public static string Loader_WillBeSwitchedOn => Get(nameof(Loader_WillBeSwitchedOn));
 
-    public static string Loader_TryDisable => Get(nameof(Loader_TryDisable));
+    public static string Loader_StayingOn => Get(nameof(Loader_StayingOn));
+
+    public static string Loader_CantChange => Get(nameof(Loader_CantChange));
 
     public static string Loader_ConfirmRestart => Get(nameof(Loader_ConfirmRestart));
 
@@ -418,9 +412,19 @@ public static class UiStrings
 
     public static string Loader_QaReview(object? arg0) => Format(nameof(Loader_QaReview), arg0);
 
-    public static string Loader_QaRestored => Get(nameof(Loader_QaRestored));
+    public static string Loader_ReportSwitchedOff => Get(nameof(Loader_ReportSwitchedOff));
+
+    public static string Loader_ReportSwitchedOn => Get(nameof(Loader_ReportSwitchedOn));
+
+    public static string Loader_ReportMoved => Get(nameof(Loader_ReportMoved));
+
+    public static string Loader_ReportNotChanged => Get(nameof(Loader_ReportNotChanged));
+
+    public static string Loader_ReportRequired(object? arg0) => Format(nameof(Loader_ReportRequired), arg0);
 
     public static string Loader_QaMissing => Get(nameof(Loader_QaMissing));
+
+    public static string Loader_QaRequiredOff => Get(nameof(Loader_QaRequiredOff));
 
     public static string Loader_QaDownload => Get(nameof(Loader_QaDownload));
 
@@ -428,11 +432,27 @@ public static class UiStrings
 
     public static string Loader_QaNothing => Get(nameof(Loader_QaNothing));
 
-    public static string Loader_QaRestart => Get(nameof(Loader_QaRestart));
+    public static string Loader_ReportNothing => Get(nameof(Loader_ReportNothing));
 
     public static string Loader_QaContinue => Get(nameof(Loader_QaContinue));
 
     public static string Loader_QaUnknown => Get(nameof(Loader_QaUnknown));
+
+    public static string Loader_UnloadReportTitle => Get(nameof(Loader_UnloadReportTitle));
+
+    public static string Loader_UnloadReportSubtitle => Get(nameof(Loader_UnloadReportSubtitle));
+
+    public static string Loader_UnloadNoAddinChanges => Get(nameof(Loader_UnloadNoAddinChanges));
+
+    public static string Loader_RestoreReportTitle => Get(nameof(Loader_RestoreReportTitle));
+
+    public static string Loader_RestoreReportSubtitle => Get(nameof(Loader_RestoreReportSubtitle));
+
+    public static string Loader_MigrateReportTitle => Get(nameof(Loader_MigrateReportTitle));
+
+    public static string Loader_MigrateReportSubtitle => Get(nameof(Loader_MigrateReportSubtitle));
+
+    public static string Loader_PlanFailed(object? arg0) => Format(nameof(Loader_PlanFailed), arg0);
 
     public static string Preview_NoTab => Get(nameof(Preview_NoTab));
 

@@ -536,7 +536,7 @@
     <value>Failed to load profile.</value>
   </data>
   <data name="Loader_RestartNeeded" xml:space="preserve">
-    <value>Add-ins modified — restart Revit for changes.</value>
+    <value>Add-in changes apply the next time Revit starts.</value>
   </data>
   <data name="Loader_TabWillBeBuilt" xml:space="preserve">
     <value>Tab "{0}" will be built.</value>
@@ -598,36 +598,27 @@
     <value>Error restoring add-ins: {0}</value>
     <comment>{0} the error message.</comment>
   </data>
-  <data name="Loader_PleaseRestart" xml:space="preserve">
-    <value>Please Restart Revit</value>
-  </data>
-  <data name="Loader_PleaseRestartText" xml:space="preserve">
-    <value>After restart, the following add-ins will be restored: {0}</value>
-    <comment>{0} the restored file names, comma separated.</comment>
-  </data>
-  <data name="Loader_NoChanges" xml:space="preserve">
-    <value>No Changes</value>
-  </data>
-  <data name="Loader_NoChangesText" xml:space="preserve">
-    <value>No disabled add-ins found to restore.</value>
-  </data>
   <data name="Loader_ConfirmTitle" xml:space="preserve">
     <value>Confirm Add-in Changes</value>
   </data>
   <data name="Loader_ConfirmSubtitle" xml:space="preserve">
-    <value>The following changes will be applied to your add-in files.</value>
+    <value>For your Windows user, in {0}.</value>
+    <comment>{0} the Revit years, e.g. &quot;Revit 2026 and 2027&quot;.</comment>
   </data>
-  <data name="Loader_StayingActive" xml:space="preserve">
-    <value>Staying Active</value>
+  <data name="Loader_WillBeSwitchedOff" xml:space="preserve">
+    <value>Will Be Switched Off</value>
   </data>
-  <data name="Loader_WillBeDisabled" xml:space="preserve">
-    <value>Will Be Disabled</value>
+  <data name="Loader_WillBeSwitchedOn" xml:space="preserve">
+    <value>Will Be Switched Back On</value>
   </data>
-  <data name="Loader_TryDisable" xml:space="preserve">
-    <value>Try Disable</value>
+  <data name="Loader_StayingOn" xml:space="preserve">
+    <value>Staying On (Required)</value>
+  </data>
+  <data name="Loader_CantChange" xml:space="preserve">
+    <value>Can't Be Changed</value>
   </data>
   <data name="Loader_ConfirmRestart" xml:space="preserve">
-    <value>Revit must restart for changes to take effect.</value>
+    <value>Add-in changes apply the next time Revit starts.</value>
   </data>
   <data name="Loader_ConfirmAndLoad" xml:space="preserve">
     <value>Confirm &amp; Load</value>
@@ -639,17 +630,33 @@
     <value>Add-in Check</value>
   </data>
   <data name="Loader_QaAllClear" xml:space="preserve">
-    <value>All required add-ins are installed and active.</value>
+    <value>All required add-ins are installed and on.</value>
   </data>
   <data name="Loader_QaReview" xml:space="preserve">
-    <value>Review the required-add-in status for "{0}" before continuing.</value>
+    <value>What changed for "{0}", and what could not.</value>
     <comment>{0} the profile name.</comment>
   </data>
-  <data name="Loader_QaRestored" xml:space="preserve">
-    <value>Auto-Restored (Was Disabled)</value>
+  <data name="Loader_ReportSwitchedOff" xml:space="preserve">
+    <value>Switched Off</value>
+  </data>
+  <data name="Loader_ReportSwitchedOn" xml:space="preserve">
+    <value>Switched Back On</value>
+  </data>
+  <data name="Loader_ReportMoved" xml:space="preserve">
+    <value>Moved from RST 3.0 (Still Off)</value>
+  </data>
+  <data name="Loader_ReportNotChanged" xml:space="preserve">
+    <value>Could Not Change</value>
+  </data>
+  <data name="Loader_ReportRequired" xml:space="preserve">
+    <value>{0} — required</value>
+    <comment>{0} the add-in and its years.</comment>
   </data>
   <data name="Loader_QaMissing" xml:space="preserve">
     <value>Missing — Not Installed</value>
+  </data>
+  <data name="Loader_QaRequiredOff" xml:space="preserve">
+    <value>Required but Switched Off</value>
   </data>
   <data name="Loader_QaDownload" xml:space="preserve">
     <value>download ↗</value>
@@ -658,16 +665,41 @@
     <value>(no link)</value>
   </data>
   <data name="Loader_QaNothing" xml:space="preserve">
-    <value>Nothing to fix — every required add-in is on disk and active.</value>
+    <value>No add-in needed changing, and every required add-in is installed and on.</value>
   </data>
-  <data name="Loader_QaRestart" xml:space="preserve">
-    <value>Revit must restart for the auto-restored add-ins to load.</value>
+  <data name="Loader_ReportNothing" xml:space="preserve">
+    <value>No add-in needed changing.</value>
   </data>
   <data name="Loader_QaContinue" xml:space="preserve">
     <value>Continue</value>
   </data>
   <data name="Loader_QaUnknown" xml:space="preserve">
     <value>(unknown)</value>
+  </data>
+  <data name="Loader_UnloadReportTitle" xml:space="preserve">
+    <value>Add-ins After Unloading</value>
+  </data>
+  <data name="Loader_UnloadReportSubtitle" xml:space="preserve">
+    <value>RST switched back on the add-ins it had switched off.</value>
+  </data>
+  <data name="Loader_UnloadNoAddinChanges" xml:space="preserve">
+    <value>Unloaded. No add-in changes were needed.</value>
+  </data>
+  <data name="Loader_RestoreReportTitle" xml:space="preserve">
+    <value>Restore All Add-ins</value>
+  </data>
+  <data name="Loader_RestoreReportSubtitle" xml:space="preserve">
+    <value>Everything RST switched off, in every Revit year, is switched back on. Add-ins you switched off in Autodesk's Add-Ins Manager stay off.</value>
+  </data>
+  <data name="Loader_MigrateReportTitle" xml:space="preserve">
+    <value>Add-ins Switched Off by RST 3.0</value>
+  </data>
+  <data name="Loader_MigrateReportSubtitle" xml:space="preserve">
+    <value>RST 3.0 renamed these add-ins' files to switch them off. They stay off: RST now switches them through Revit's Add-Ins Manager settings, and their files have their own names back.</value>
+  </data>
+  <data name="Loader_PlanFailed" xml:space="preserve">
+    <value>RST could not read the installed add-ins, so no add-in was changed: {0}</value>
+    <comment>{0} the error message.</comment>
   </data>
   <data name="Preview_NoTab" xml:space="preserve">
     <value>—</value>

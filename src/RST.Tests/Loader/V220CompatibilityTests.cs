@@ -81,7 +81,7 @@ public sealed class V220CompatibilityTests : IDisposable
         var prefs = new LoaderPrefsService(p);
         prefs.Record(V220BridgeReference.StructureId, ["Massing & Site", "Collaborate"], true, true).Ok.Should().BeTrue();
         prefs.RecordOpacityOverride(V220BridgeReference.ArchitectureId, 55).Ok.Should().BeTrue();
-        var load = new ProfileLoadService(p, [], new FakeScheduler(), new FakeAddinPasses(), clock: () => V220BridgeReference.LoadedAt);
+        var load = new ProfileLoadService(p, new FakeScheduler(), new FakeAddinSwitching(), clock: () => V220BridgeReference.LoadedAt);
         load.Load(new LoadRequest("Architecture", V220BridgeReference.ArchitectureId, false, ["Analyze", "Collaborate"])).Ok.Should().BeTrue();
 
         AssertSameBytes(_reference, _ported, "user_profile_prefs.json");
@@ -94,7 +94,7 @@ public sealed class V220CompatibilityTests : IDisposable
     public void Unload_writes_the_v220_blank_stub()
     {
         V220BridgeReference.UnloadProfile(Paths(_reference).ActiveProfileFile);
-        new ProfileLoadService(Paths(_ported), [], null, new FakeAddinPasses()).Unload();
+        new ProfileLoadService(Paths(_ported), null, new FakeAddinSwitching()).Unload();
         AssertSameBytes(_reference, _ported, "active_profile.json");
         AssertMatchesExpected(_ported, "active_profile.json", "active_profile.blank.json");
     }
@@ -107,7 +107,7 @@ public sealed class V220CompatibilityTests : IDisposable
         V220BridgeReference.RemoveProfile(r.ProfilesDir, r.ActiveProfileFile, "Architecture", V220BridgeReference.ArchitectureId);
 
         var p = Paths(_ported);
-        new ProfileLoadService(p, [], null, new FakeAddinPasses()).Unload();
+        new ProfileLoadService(p, null, new FakeAddinSwitching()).Unload();
         new ProfileLibraryService(p).Delete("Architecture", V220BridgeReference.ArchitectureId).Ok.Should().BeTrue();
 
         Directory.GetFiles(p.ProfilesDir).Select(Path.GetFileName).Should().Equal(Directory.GetFiles(r.ProfilesDir).Select(Path.GetFileName));

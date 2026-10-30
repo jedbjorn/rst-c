@@ -1,11 +1,12 @@
 // rst-c's own (not vendored): the Profile Loader view-model's flows (spec #16, WU3, AC5) with a
 // fake backend, a manual clock and scripted dialogs: boot, select, adopt presets, opacity
-// override, import, load (preview, confirm, QA, failed disables, Loading … and close, ok:false,
-// throws), unload, delete (incl. while loaded), restore all and close. Message texts are checked
-// against profile_loader.html's.
+// override, import, load (the add-in plan, confirm, the report, Loading … and close, ok:false,
+// throws), unload, delete (incl. while loaded), restore all, the RST 3.0 move and close. Message
+// texts are checked against profile_loader.html's; the add-in parts follow spec #18 (AC4).
 
 using System.IO;
 using FluentAssertions;
+using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -61,7 +62,7 @@ public class ProfileLoaderViewModelTests
         // Planner default 6: the tabs and prefs were in, so the RSTify list and slider are right.
         vm.TabToggles.Should().Contain(t => t.Tab == "Analyze" && t.IsHidden);
         vm.OpacityOverride.Should().Be(70);
-        backend.Calls.Should().BeEquivalentTo(["GetAddinLookup", "GetLoadedAddins", "GetUserConfig", "GetPrefs", "GetProfiles", "GetActiveProfile"]);
+        backend.Calls.Should().BeEquivalentTo(["GetAddinLookup", "GetAddinInventory", "GetPrefs", "GetProfiles", "GetActiveProfile", "MigrateLegacy"]);
     }
 
     [Fact]
@@ -115,14 +116,16 @@ public class ProfileLoaderViewModelTests
         vm.TabToggles.Where(t => t.IsHidden).Select(t => t.Tab).Should().Equal("Massing & Site");
         vm.SelectedHiddenTabs.Should().Equal("Massing & Site");
 
-        // Required add-ins in every reachable status.
+        // Required add-ins in every state (spec #18, In Scope 7): from the running year's inventory.
         vm.RequiredAddins.Select(r => (r.TabName, r.StatusLabel)).Should().Equal(
-            ("Structure", "Native"), ("Kinship", "Loaded"), ("pyRevit", "Loaded"), ("Lumion", "Not Found"), ("Guardian", "Not Found"));
+            ("Structure", "Native"), ("Kinship", "Loaded"), ("pyRevit", "Loaded"), ("Lumion", "Disabled"), ("Guardian", "Locked"), ("Twinmotion", "Not Found"));
         var pyrevit = vm.RequiredAddins.Single(r => r.TabName == "pyRevit");
-        pyrevit.StatusTooltip.Should().Be("Loaded in current Revit session (PyRevitLoader)");
+        pyrevit.StatusTooltip.Should().Be("Installed and on for Revit 2026 (PyRevitLoader)");
         pyrevit.HasInfoUrl.Should().BeTrue();
-        vm.RequiredAddins.Single(r => r.TabName == "Lumion").StatusTooltip.Should().Be("Click to download");
-        vm.RequiredAddins.Single(r => r.TabName == "Guardian").StatusTooltip.Should().Be("Not found on this machine");
+        vm.RequiredAddins.Single(r => r.TabName == "Kinship").StatusTooltip.Should().Be("Loaded in current Revit session");
+        vm.RequiredAddins.Single(r => r.TabName == "Lumion").StatusTooltip.Should().StartWith("Lumion LiveSync is switched off for Revit 2026.");
+        vm.RequiredAddins.Single(r => r.TabName == "Guardian").StatusTooltip.Should().Be("Guardian is locked off by your administrator for Revit 2026.");
+        vm.RequiredAddins.Single(r => r.TabName == "Twinmotion").StatusTooltip.Should().Be("Click to download");
         vm.RequiredAddins.Single(r => r.TabName == "Structure").FileColumn.Should().Be("Revit Built-in");
     }
 
@@ -356,19 +359,19 @@ public class ProfileLoaderViewModelTests
         await vm.LoadAsync();
 
         backend.LoadRequests.Should().ContainSingle().Which.Should().BeEquivalentTo(
-            new LoadRequest("Structure", LoaderFixtures.StructId, false, ["Analyze", "Massing & Site"]));
-        backend.Calls.Should().NotContain("GetDisablePreview");
-        _dialogs.Log.Should().Equal("AddinCheck");
-        var check = _dialogs.AddinChecks.Single();
-        check.Subtitle.Should().Be("All required add-ins are installed and active.");
-        check.AllClear.Should().BeTrue();
+            new LoadRequest("Structure", LoaderFixtures.StructId, false, ["Analyze", "Massing & Site"], backend.Plans.Single()));
+        backend.Plans.Single().HasChanges.Should().BeFalse("Disable off and nothing rst-c switched off: no confirm");
+        _dialogs.Log.Should().Equal("AddinReport:Add-in Check");
+        var check = _dialogs.AddinReports.Single();
+        check.Subtitle.Should().Be("All required add-ins are installed and on.");
+        check.IsEmpty.Should().BeTrue();
+        check.NextStartNote.Should().Be("Add-in changes apply the next time Revit starts.");
 
         vm.Busy.IsBusy.Should().BeTrue();
         vm.Busy.Title.Should().Be("Loading Structure");
         vm.Busy.Message.Should().Be(
-            "Add-ins modified — restart Revit for changes. Tab \"Studio Struct\" will be built. "
-            + "Lumion not found. If you experience issues with using tools from this add-in please install for Revit 2026 and retry. "
-            + "Guardian not found. If you experience issues with using tools from this add-in please install for Revit 2026 and retry.");
+            "Add-in changes apply the next time Revit starts. Tab \"Studio Struct\" will be built. "
+            + "Twinmotion not found. If you experience issues with using tools from this add-in please install for Revit 2026 and retry.");
         vm.IsIdle.Should().BeFalse();
         vm.LoadCommand.CanExecute(null).Should().BeFalse();
         Card(vm, "Structure").IsLoaded.Should().BeTrue();
@@ -392,29 +395,52 @@ public class ProfileLoaderViewModelTests
     }
 
     [Fact]
-    public async Task Load_with_disable_on_previews_by_id_and_confirms_first()
+    public async Task Load_with_disable_on_confirms_the_plan_per_year_and_runs_exactly_that_plan()
     {
         var backend = LoaderFixtures.Backend();
-        var item = new DisablePreviewItem("Twinmotion", "Twinmotion.addin", "p", null, null, "MachineAddins");
-        (string Name, string? Id)? asked = null;
-        backend.OnPreview = (name, id) =>
+        (string Name, string? Id, bool Disable)? asked = null;
+        backend.OnPlan = (name, id, disable) =>
         {
-            asked = (name, id);
-            return new DisablePreviewOutcome(null, [item with { DisplayName = "Kinship" }], [item], [item with { DisplayName = "FormIt" }], []);
+            asked = (name, id, disable);
+            backend.OnPlan = null;
+            return backend.PlanLoad(name, id, disable);
         };
         var vm = Model(backend);
         vm.SelectedCard = Card(vm, "Structure");
         vm.DisableUnused.Should().BeTrue();
 
         await vm.LoadAsync();
-        asked.Should().Be(("Structure", LoaderFixtures.StructId));
-        _dialogs.Log.Should().Equal("ConfirmAddinChanges", "AddinCheck");
+
+        asked.Should().Be(("Structure", LoaderFixtures.StructId, true));
+        _dialogs.Log.Should().Equal("ConfirmAddinChanges", "AddinReport:Add-in Check");
         var model = _dialogs.AddinChanges.Single();
-        model.Staying.Should().Equal("Kinship");
-        model.Disabling.Should().Equal("Twinmotion");
-        model.TryDisable.Should().Equal("FormIt");
-        model.HasTryDisable.Should().BeTrue();
-        backend.LoadRequests.Single().DisableNonRequired.Should().BeTrue();
+        model.Subtitle.Should().Be("For your Windows user, in Revit 2026 and 2027.");
+        model.SwitchingOff.Should().Equal("Enscape (2026, 2027)", "DiRoots.One (2026, 2027)", "Ideate BIMLink (2026, 2027)");
+        model.SwitchingOn.Should().BeEmpty();
+        model.Staying.Should().Equal("PyRevitLoader (2026)");
+        model.CannotChange.Should().Equal("Revizto (2027): locked on by your administrator");
+        model.HasCannotChange.Should().BeTrue();
+
+        // Preview = commit (spec #18, AC2): the load runs the very plan the dialog showed.
+        var request = backend.LoadRequests.Single();
+        request.DisableNonRequired.Should().BeTrue();
+        request.Plan.Should().BeSameAs(backend.Plans.Single());
+        ConfirmAddinChangesModel.From(request.Plan!).SwitchingOff.Should().Equal(model.SwitchingOff);
+    }
+
+    [Fact]
+    public async Task Disable_off_with_add_ins_rst_c_switched_off_confirms_switching_them_back_on()
+    {
+        var backend = LoaderFixtures.Backend();
+        LoaderFixtures.IdeateSwitchedOffByRst(backend);
+        var vm = Model(backend);
+        vm.SelectedCard = Card(vm, "Architecture");
+        vm.DisableUnused.Should().BeFalse();
+        await vm.LoadAsync();
+        var model = _dialogs.AddinChanges.Single();
+        model.SwitchingOn.Should().Equal("Ideate BIMLink (2026, 2027)");
+        model.SwitchingOff.Should().BeEmpty();
+        _dialogs.AddinReports.Single().SwitchedOn.Should().Equal("Ideate BIMLink (2026, 2027)");
     }
 
     [Fact]
@@ -431,10 +457,10 @@ public class ProfileLoaderViewModelTests
     }
 
     [Fact]
-    public async Task A_preview_error_shows_error_and_stops()
+    public async Task A_plan_error_shows_error_and_stops()
     {
         var backend = LoaderFixtures.Backend();
-        backend.OnPreview = (name, _) => new DisablePreviewOutcome("Profile not found: " + name, [], [], [], []);
+        backend.OnPlan = (name, _, _) => new LoadPlanOutcome("Profile not found: " + name, null);
         var vm = Model(backend);
         vm.SelectedCard = Card(vm, "Structure");
         await vm.LoadAsync();
@@ -443,16 +469,17 @@ public class ProfileLoaderViewModelTests
     }
 
     [Fact]
-    public async Task A_preview_that_throws_proceeds_to_the_load_without_the_confirm()
+    public async Task A_plan_that_throws_loads_the_ribbon_changes_no_add_in_and_says_so()
     {
+        // v3.0 went ahead with Disable on and no confirmation (D15); now no add-in changes, and the report says why.
         var backend = LoaderFixtures.Backend();
-        backend.OnPreview = (_, _) => throw new InvalidOperationException("scan failed");
+        backend.OnPlan = (_, _, _) => throw new InvalidOperationException("scan failed");
         var vm = Model(backend);
         vm.SelectedCard = Card(vm, "Structure");
         await vm.LoadAsync();
         _dialogs.AddinChanges.Should().BeEmpty();
-        backend.LoadRequests.Should().ContainSingle().Which.DisableNonRequired.Should().BeTrue();
-        _dialogs.Log.Should().Equal("AddinCheck");
+        backend.LoadRequests.Should().ContainSingle().Which.Plan.Should().BeNull();
+        _dialogs.AddinReports.Single().Notes.Should().Equal("RST could not read the installed add-ins, so no add-in was changed: scan failed");
     }
 
     [Fact]
@@ -463,7 +490,7 @@ public class ProfileLoaderViewModelTests
         var vm = Model(backend);
         await vm.LoadAsync();
         AssertToast(vm, "Load Failed", "Failed to load profile.", BannerKind.Error);
-        _dialogs.AddinChecks.Should().BeEmpty();
+        _dialogs.AddinReports.Should().BeEmpty();
         vm.Busy.IsBusy.Should().BeFalse();
         vm.IsIdle.Should().BeTrue();
         _clock.Advance(TimeSpan.FromSeconds(5));
@@ -504,39 +531,38 @@ public class ProfileLoaderViewModelTests
     }
 
     [Fact]
-    public async Task The_check_lists_restored_and_missing_add_ins()
+    public async Task The_report_lists_what_changed_what_could_not_and_the_required_add_ins_missing_or_off()
     {
         var backend = LoaderFixtures.Backend();
-        var qa = new QaCheck(
-            [new QaRestoredItem("Kinship", "KinshipTools.addin"), new QaRestoredItem("Ideate", "Ideate")],
-            [new QaMissingItem("Lumion", "Lumion.addin", "https://lumion.com"), new QaMissingItem("Guardian", null, "")]);
-        backend.OnLoad = _ => Task.FromResult(new LoadResult(true, [], true, [], qa));
         var vm = Model(backend);
+        vm.SelectedCard = Card(vm, "Structure");
         await vm.LoadAsync();
 
-        var check = _dialogs.AddinChecks.Single();
-        check.Subtitle.Should().Be("Review the required-add-in status for \"Architecture\" before continuing.");
-        check.AllClear.Should().BeFalse();
-        check.Restored.Select(r => r.Text).Should().Equal("Kinship — KinshipTools.addin", "Ideate");
-        check.Missing.Should().Equal(new AddinCheckLine("Lumion", "https://lumion.com"), new AddinCheckLine("Guardian", null));
-        check.ShowRestartNote.Should().BeTrue();
-        check.OpenUrlCommand.Execute("https://lumion.com");
-        _opened.Should().Equal("https://lumion.com");
+        var report = _dialogs.AddinReports.Single();
+        report.Title.Should().Be("Add-in Check");
+        report.Subtitle.Should().Be("What changed for \"Structure\", and what could not.");
+        report.SwitchedOff.Should().Equal("Enscape (2026, 2027)", "DiRoots.One (2026, 2027)", "Ideate BIMLink (2026, 2027)");
+        report.NotChanged.Should().Equal("Revizto (2027): locked on by your administrator");
+        report.Missing.Should().Equal(new AddinCheckLine("Twinmotion", "https://twinmotion.com"));
+        report.RequiredOff.Should().Equal(
+            "Lumion LiveSync (2026) is required by this profile, but it is switched off in Autodesk's Add-Ins Manager. Turn it on there (Manage tab › Add-Ins Manager).",
+            "Guardian (2026) is required by this profile, but your administrator has switched it off.");
+        report.IsEmpty.Should().BeFalse();
+        report.OpenUrlCommand.Execute("https://twinmotion.com");
+        _opened.Should().Equal("https://twinmotion.com");
+        vm.Busy.Message.Should().StartWith("Add-in changes apply the next time Revit starts.");
     }
 
     [Fact]
-    public async Task Failed_disables_are_acknowledged_after_the_check_and_before_closing()
+    public async Task The_report_shows_before_loading_and_nothing_else_interrupts()
     {
         var backend = LoaderFixtures.Backend();
-        backend.OnLoad = _ => Task.FromResult(new LoadResult(true, [], true, [new FailedDisable("BatchPrint.addin"), new FailedDisable("eTransmit.addin")], QaCheck.Clear));
         var vm = Model(backend);
-        _dialogs.DuringAddinCheck = () => vm.Busy.IsBusy.Should().BeFalse("the check shows before Loading …");
+        vm.SelectedCard = Card(vm, "Structure");
+        _dialogs.DuringAddinReport = () => vm.Busy.IsBusy.Should().BeFalse("the report shows before Loading …");
         await vm.LoadAsync();
-
-        _dialogs.Log.Should().Equal("AddinCheck", "Message:Some Add-ins Were Not Disabled");
-        _dialogs.Messages.Single().Message.Should().Be(
-            "The following add-ins were not disabled (administrator permissions required): BatchPrint.addin, eTransmit.addin");
-        _dialogs.Messages.Single().AutomationId.Should().Be(ProfileLoaderViewModel.FailedDisablesDialogId);
+        _dialogs.Log.Should().Equal("ConfirmAddinChanges", "AddinReport:Add-in Check");
+        _dialogs.Messages.Should().BeEmpty("v3.0's separate failed-disable message is part of the report now");
         vm.Busy.IsBusy.Should().BeTrue();
     }
 
@@ -558,6 +584,11 @@ public class ProfileLoaderViewModelTests
         vm.UnloadCommand.Execute(null);
 
         backend.Calls.Should().Contain("Unload");
+        _dialogs.AddinReports.Should().BeEmpty("rst-c had switched nothing off");
+        // Nothing is silent (spec #18, In Scope 5): a short non-modal note instead of a dialog.
+        vm.Toast.IsOpen.Should().BeTrue();
+        vm.Toast.Text.Should().Be("Unloaded. No add-in changes were needed.");
+        vm.Toast.Kind.Should().Be(BannerKind.Info);
         vm.Profiles.Should().OnlyContain(c => !c.IsLoaded);
         vm.Busy.Title.Should().Be("Unloading");
         vm.Busy.Message.Should().Be("A blank RST tab will replace the current one.");
@@ -567,10 +598,30 @@ public class ProfileLoaderViewModelTests
     }
 
     [Fact]
+    public void Unload_reports_the_add_ins_it_switched_back_on()
+    {
+        var backend = LoaderFixtures.Backend();
+        var item = backend.Inventory.Items.First(i => i.Name == "Ideate BIMLink");
+        var entry = new PlanEntry(item.Year, item.Name, null, item.Scope, item.ManifestPath, item.FileName, item.AddinIds,
+            PlanAction.Enable, null, false, false, false, null);
+        backend.OnUnload = () => new UnloadOutcome(true, null, new ActivationReport(ActivationIntent.Unload,
+            [ActivationOutcome.For(entry, OutcomeResult.Done), ActivationOutcome.For(entry with { Year = 2027 }, OutcomeResult.NotChanged, ChangeReason.InUse)], []));
+        var vm = Model(backend);
+        vm.UnloadCommand.Execute(null);
+
+        _dialogs.Log.Should().Equal("AddinReport:Add-ins After Unloading");
+        vm.Toast.IsOpen.Should().BeFalse("the report already says what changed");
+        var report = _dialogs.AddinReports.Single();
+        report.SwitchedOn.Should().Equal("Ideate BIMLink (2026)");
+        report.NotChanged.Should().Equal("Ideate BIMLink (2027): a file was in use by another program; try again");
+        vm.Busy.Title.Should().Be("Unloading");
+    }
+
+    [Fact]
     public void Unload_failures_show_their_message()
     {
         var backend = LoaderFixtures.Backend();
-        backend.OnUnload = () => OpResult.Fail("x");
+        backend.OnUnload = () => UnloadOutcome.Fail("x");
         var vm = Model(backend);
         vm.UnloadCommand.Execute(null);
         AssertToast(vm, "Unload Failed", "Failed to unload profile.", BannerKind.Error);
@@ -580,6 +631,26 @@ public class ProfileLoaderViewModelTests
         vm.UnloadCommand.Execute(null);
         AssertToast(vm, "Error", "Error unloading profile: denied", BannerKind.Error);
         vm.Busy.IsBusy.Should().BeFalse();
+    }
+
+    // ── migration ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Rst_3_renames_are_moved_once_at_boot_and_reported_before_anything_else()
+    {
+        var backend = LoaderFixtures.Backend();
+        var item = backend.Inventory.Items.First(i => i.Name == "Ideate BIMLink");
+        var moved = new PlanEntry(2026, "Old Tool", null, AddinScope.User, item.ManifestPath, "OldTool.addin", item.AddinIds,
+            PlanAction.Disable, null, false, true, true, null);
+        backend.OnMigrate = () => new ActivationReport(ActivationIntent.MigrateLegacy, [ActivationOutcome.For(moved, OutcomeResult.Done)], []);
+        backend.ActiveIs(LoaderFixtures.Structure());
+        backend.Prefs.Profiles.Remove(LoaderFixtures.StructId);
+        var vm = Model(backend);
+
+        _dialogs.Log.Should().Equal("AddinReport:Add-ins Switched Off by RST 3.0", "Confirm:Adopt RSTify Presets?");
+        _dialogs.AddinReports.Single().Moved.Should().Equal("Old Tool (2026)");
+        backend.Calls.Count(c => c == "GetAddinInventory").Should().Be(2, "the pills are redrawn after the move");
+        vm.SelectedCard.Should().BeSameAs(Card(vm, "Structure"));
     }
 
     // ── delete ───────────────────────────────────────────────────────────────
@@ -643,7 +714,7 @@ public class ProfileLoaderViewModelTests
     public void A_failed_unload_during_delete_stops_before_deleting()
     {
         var backend = LoaderFixtures.Backend();
-        backend.OnUnload = () => OpResult.Fail("x");
+        backend.OnUnload = () => UnloadOutcome.Fail("x");
         var vm = Model(backend);
         _dialogs.ConfirmAnswers.Enqueue(true);
         vm.DeleteCommand.Execute(null);
@@ -694,18 +765,32 @@ public class ProfileLoaderViewModelTests
     // ── restore, close, links ────────────────────────────────────────────────
 
     [Fact]
-    public void Restore_all_reports_restart_or_no_changes_and_refreshes_the_user_config()
+    public void Restore_all_shows_the_report_and_redraws_the_add_in_rows()
     {
         var backend = LoaderFixtures.Backend();
         var vm = Model(backend);
-        backend.OnRestore = () => new RestoreOutcome(true, null, true, ["Kinship.addin", "Enscape.addin"], []);
-        vm.RestoreCommand.Execute(null);
-        AssertToast(vm, "Please Restart Revit", "After restart, the following add-ins will be restored: Kinship.addin, Enscape.addin", BannerKind.Warning);
-        backend.Calls.Count(c => c == "GetUserConfig").Should().Be(2);
+        vm.SelectedCard = Card(vm, "Structure");
+        vm.RequiredAddins.Single(r => r.TabName == "Lumion").StatusLabel.Should().Be("Disabled");
 
-        backend.OnRestore = () => new RestoreOutcome(true, null, false, [], []);
+        var lumion = backend.Inventory.Items.Single(i => i.Name == "Lumion LiveSync");
+        var entry = new PlanEntry(2026, lumion.Name, null, lumion.Scope, lumion.ManifestPath, lumion.FileName, lumion.AddinIds,
+            PlanAction.Enable, null, false, false, false, null);
+        backend.OnRestore = () =>
+        {
+            backend.Inventory = new AddinInventory(backend.Inventory.Years,
+                backend.Inventory.Items.Select(i => i.Name == lumion.Name ? i with { DisabledIds = [] } : i).ToList());
+            return new RestoreOutcome(true, null, new ActivationReport(ActivationIntent.RestoreAll, [ActivationOutcome.For(entry, OutcomeResult.Done)], []));
+        };
         vm.RestoreCommand.Execute(null);
-        AssertToast(vm, "No Changes", "No disabled add-ins found to restore.", BannerKind.Info);
+
+        _dialogs.Log.Should().Equal("AddinReport:Restore All Add-ins");
+        _dialogs.AddinReports.Single().SwitchedOn.Should().Equal("Lumion LiveSync (2026)");
+        vm.RequiredAddins.Single(r => r.TabName == "Lumion").StatusLabel.Should().Be("Loaded", "the rows show the new state (v3.0 left them stale)");
+
+        backend.OnRestore = () => new RestoreOutcome(true, null, ActivationReport.Empty(ActivationIntent.RestoreAll));
+        vm.RestoreCommand.Execute(null);
+        _dialogs.AddinReports.Last().IsEmpty.Should().BeTrue();
+        _dialogs.AddinReports.Last().NothingText.Should().Be("No add-in needed changing.");
     }
 
     [Fact]
@@ -713,17 +798,18 @@ public class ProfileLoaderViewModelTests
     {
         var backend = LoaderFixtures.Backend();
         var vm = Model(backend);
-        backend.OnRestore = () => new RestoreOutcome(false, "access denied", false, [], []);
+        backend.OnRestore = () => new RestoreOutcome(false, "access denied", null);
         vm.RestoreCommand.Execute(null);
         AssertToast(vm, "Restore Failed", "Failed to restore add-ins: access denied", BannerKind.Error);
 
-        backend.OnRestore = () => new RestoreOutcome(false, null, false, [], []);
+        backend.OnRestore = () => new RestoreOutcome(false, null, null);
         vm.RestoreCommand.Execute(null);
         vm.Toast.Text.Should().Be("Failed to restore add-ins: Unknown error");
 
         backend.OnRestore = () => throw new IOException("busy");
         vm.RestoreCommand.Execute(null);
         AssertToast(vm, "Error", "Error restoring add-ins: busy", BannerKind.Error);
+        _dialogs.AddinReports.Should().BeEmpty();
     }
 
     [Fact]
@@ -762,7 +848,8 @@ public class ProfileLoaderViewModelTests
         vm.SelectedCard = vm.Profiles[0];
         vm.RequiredAddins.Select(r => (r.TabName, r.HasInfoUrl)).Should().Equal(("Local", false), ("Script", false), ("Web", true));
 
-        var check = new AddinCheckModel("MEP", new QaCheck([], [new QaMissingItem("Local", null, "file:///C:/x.exe"), new QaMissingItem("Web", null, "https://example.com")]), _ => { });
+        var check = AddinReportModel.ForLoad("MEP", ActivationReport.Empty(ActivationIntent.Load),
+            new QaCheck([new QaMissingItem("Local", null, "file:///C:/x.exe"), new QaMissingItem("Web", null, "https://example.com")], []), _ => { });
         check.Missing.Select(m => m.HasUrl).Should().Equal(false, true);
     }
 
@@ -804,9 +891,7 @@ public class ProfileLoaderViewModelTests
 
         public IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup() => throw new IOException("x");
 
-        public IReadOnlyList<LoadedAddin> GetLoadedAddins() => throw new IOException("x");
-
-        public UserAddinConfig GetUserConfig() => throw new IOException("x");
+        public AddinInventory GetAddinInventory() => throw new IOException("x");
 
         public OpResult RecordPrefs(string profileId, IReadOnlyList<string> hiddenTabs, bool disableUnused, bool presetsAdopted) => _inner.RecordPrefs(profileId, hiddenTabs, disableUnused, presetsAdopted);
 
@@ -814,14 +899,16 @@ public class ProfileLoaderViewModelTests
 
         public ImportOutcome Import(string zipPath) => _inner.Import(zipPath);
 
-        public DisablePreviewOutcome GetDisablePreview(string name, string? id) => _inner.GetDisablePreview(name, id);
+        public LoadPlanOutcome PlanLoad(string name, string? id, bool disableUnused) => _inner.PlanLoad(name, id, disableUnused);
 
         public Task<LoadResult> LoadAsync(LoadRequest request) => _inner.LoadAsync(request);
 
-        public OpResult Unload() => _inner.Unload();
+        public UnloadOutcome Unload() => _inner.Unload();
 
         public DeleteOutcome Delete(string name, string? id) => _inner.Delete(name, id);
 
         public RestoreOutcome RestoreAll() => _inner.RestoreAll();
+
+        public ActivationReport? MigrateLegacy() => throw new IOException("x");
     }
 }

@@ -45,6 +45,28 @@ public static class OriginClassifier
         return CommandOrigin.Custom;
     }
 
+    /// <summary>The prefix Revit gives the ids of buttons an add-in creates through the Revit API.</summary>
+    public const string AddinButtonIdPrefix = "CustomCtrl_";
+
+    /// <summary>
+    /// The origin of a button found by walking the live ribbon (RibbonScanner), which has no
+    /// assembly or publisher to go on (spec #18, SC-007):
+    ///   - an add-in's own button (id <c>CustomCtrl_…</c>) is <see cref="CommandOrigin.Custom"/>,
+    ///     on any tab, so an add-in panel on a built-in tab still counts as an add-in;
+    ///   - any other button on one of Revit's own tabs (<see cref="BuiltinTabs"/>) is Revit's:
+    ///     <see cref="CommandOrigin.Native"/> (v3.0 left these Unknown, and the Builder then recorded
+    ///     their panels, "Build", "Select", "Model", as required add-ins);
+    ///   - anything else stays <see cref="CommandOrigin.Unknown"/>.
+    /// </summary>
+    public static CommandOrigin ClassifyRibbonButton(string? tabTitle, string? commandId)
+    {
+        if (commandId is not null && commandId.StartsWith(AddinButtonIdPrefix, StringComparison.Ordinal))
+            return CommandOrigin.Custom;
+        if (BuiltinTabs.Contains(tabTitle))
+            return CommandOrigin.Native;
+        return CommandOrigin.Unknown;
+    }
+
     private static bool ContainsAutodesk(string publisher) =>
         publisher.IndexOf("autodesk", StringComparison.OrdinalIgnoreCase) >= 0;
 

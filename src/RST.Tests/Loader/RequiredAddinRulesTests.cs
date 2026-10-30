@@ -1,13 +1,13 @@
 // rst-c's own (not vendored): RequiredAddinRules (spec #16, WU3, AC5), the C# port of
-// profile_loader.html's normalizeRequiredAddins, BUILTIN_TABS / isAddinLoaded /
-// getLoadedAddinName, the four-state status, the add-in row and getNotFoundAddins.
+// profile_loader.html's normalizeRequiredAddins, BUILTIN_TABS, the add-in row and
+// getNotFoundAddins; the row states (Native, Loaded, Disabled, Not Found, Locked) from the
+// add-in inventory of spec #18 (feature #16, In Scope 7, T-B7).
 
 using System.Text.Json;
 using FluentAssertions;
-using RST.Core.AddIns;
+using RST.Core.Activation;
 using RST.Core.Loader;
 using RST.Core.Profiles;
-using RST.Core.Scanning;
 using Xunit;
 
 namespace RST.Tests.Loader;
@@ -21,11 +21,11 @@ public class RequiredAddinRulesTests
         ["Enscape"] = new("Enscape", "Enscape.addin", "https://enscape3d.com"),
     };
 
-    private static LoadedAddin Loaded(string fileName, string? displayName = null, bool disabled = false) =>
-        new(fileName, @"C:\x\" + fileName, disabled, displayName ?? Path.GetFileNameWithoutExtension(fileName), null, null);
+    private static InventoryItem Installed(string name, bool off = false, string? fileName = null, AdminLock adminLock = AdminLock.None, bool renamed = false) =>
+        FakeAddinSwitching.Item(2026, name, fileName: fileName, off: off, adminLock: adminLock, renamed: renamed);
 
-    private static AddinSessionContext Session(string[]? tabs = null, LoadedAddin[]? loaded = null, UserAddinConfig? config = null) =>
-        new(tabs ?? [], loaded ?? [], Lookup, config);
+    private static AddinSessionContext Session(string[]? tabs = null, InventoryItem[]? installed = null) =>
+        new(tabs ?? [], Lookup, 2026, installed ?? []);
 
     // ── normalizeRequiredAddins ──────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ public class RequiredAddinRulesTests
         RequiredAddinRules.Normalize((IEnumerable<RequiredAddin>?)null).Should().BeEmpty();
     }
 
-    // ── BUILTIN_TABS / isAddinLoaded / getLoadedAddinName ───────────────────
+    // ── BUILTIN_TABS and the ribbon ──────────────────────────────────────────
 
     [Theory]
     [InlineData("Architecture")]
@@ -80,10 +80,10 @@ public class RequiredAddinRulesTests
     [InlineData("FormIt Converter")]
     [InlineData("eTransmit")]
     [InlineData("Massing & Site")]
-    public void Builtin_tabs_are_native_and_count_as_loaded(string tab)
+    public void Builtin_tabs_are_native(string tab)
     {
         RequiredAddinRules.IsNativeTab(tab).Should().BeTrue();
-        RequiredAddinRules.IsAddinLoaded(tab, Session()).Should().BeTrue();
+        RequiredAddinRules.Describe(new NormalizedRequiredAddin(tab, null, ""), Session()).Status.Should().Be(AddinRowStatus.Native);
     }
 
     [Theory]
@@ -95,69 +95,12 @@ public class RequiredAddinRulesTests
     [Fact]
     public void A_live_ribbon_tab_containing_or_contained_by_the_name_counts_case_insensitively()
     {
-        RequiredAddinRules.IsAddinLoaded("Enscape", Session(tabs: ["Enscape™ 4.0"])).Should().BeTrue();
-        RequiredAddinRules.IsAddinLoaded("pyRevit Tools", Session(tabs: ["PYREVIT"])).Should().BeTrue();
-        RequiredAddinRules.IsAddinLoaded("Enscape", Session(tabs: ["", "Lumion"])).Should().BeFalse();
+        RequiredAddinRules.IsOnRibbon("Enscape", Session(tabs: ["Enscape™ 4.0"])).Should().BeTrue();
+        RequiredAddinRules.IsOnRibbon("pyRevit Tools", Session(tabs: ["PYREVIT"])).Should().BeTrue();
+        RequiredAddinRules.IsOnRibbon("Enscape", Session(tabs: ["", "Lumion"])).Should().BeFalse();
     }
 
-    [Fact]
-    public void A_manifest_display_name_or_file_stem_counts_including_disabled_manifests()
-    {
-        RequiredAddinRules.IsAddinLoaded("Kinship", Session(loaded: [Loaded("Kinship.addin")])).Should().BeTrue();
-        RequiredAddinRules.IsAddinLoaded("Kinship", Session(loaded: [Loaded("x.addin", displayName: "Kinship for Revit")])).Should().BeTrue();
-        // The JS matched every scanned manifest, disabled ones too; the port keeps that.
-        RequiredAddinRules.IsAddinLoaded("Kinship", Session(loaded: [Loaded("Kinship.addin", disabled: true)])).Should().BeTrue();
-        RequiredAddinRules.IsAddinLoaded("Kinship", Session(loaded: [Loaded("Other.addin")])).Should().BeFalse();
-    }
-
-    [Fact]
-    public void A_file_name_with_the_disabled_suffix_is_stripped_before_matching()
-    {
-        var loaded = new LoadedAddin("Twin.addin.RSTdisabled", "p", true, "", null, null);
-        RequiredAddinRules.IsAddinLoaded("Twin", Session(loaded: [loaded])).Should().BeTrue();
-        RequiredAddinRules.GetLoadedAddinName("Twin", Session(loaded: [loaded])).Should().Be("Twin.addin.RSTdisabled");
-    }
-
-    [Fact]
-    public void The_lookup_file_stem_matches_an_installed_file_with_a_longer_name()
-    {
-        // Registry "Lumion.addin"; the install ships "LumionLiveSync.addin" under a vendor display name.
-        var session = Session(loaded: [Loaded("LumionLiveSync.addin", displayName: "Act-3D Live")]);
-        RequiredAddinRules.IsAddinLoaded("Lumion", session).Should().BeTrue();
-        RequiredAddinRules.GetLoadedAddinName("Lumion", session).Should().Be("Act-3D Live");
-    }
-
-    [Fact]
-    public void No_scanned_manifests_and_no_ribbon_match_is_not_loaded()
-    {
-        RequiredAddinRules.IsAddinLoaded("Lumion", Session()).Should().BeFalse();
-        RequiredAddinRules.GetLoadedAddinName("Lumion", Session()).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Ribbon_and_manifest_matching_agree_with_RequiredAddinQa_tier_3()
-    {
-        // The "Loaded" pill and the QA must agree whether an add-in counts as installed.
-        var manifests = new[]
-        {
-            FakeAddinPasses.Manifest("LumionLiveSync.addin", name: "Lumion LiveSync"),
-            FakeAddinPasses.Manifest("Enscape.addin"),
-        };
-        var source = new AddinSearchPath(@"C:\Addins", AddinPathKind.UserAddins, ReadOnly: false);
-        var ribbon = new[] { "Kinship Tools" };
-        var cases = new[] { "Lumion", "Enscape", "Kinship", "Twinmotion" };
-        var required = cases.Select(t => new RequiredAddin { TabName = t }).ToList();
-
-        var qa = RequiredAddinQa.Classify(manifests.Select(m => (m, source)), required, ribbon);
-        var session = new AddinSessionContext(ribbon, manifests.Select(LoadedAddin.FromManifest).ToList(), new Dictionary<string, AddinLookupEntry>());
-        foreach (var (tab, result) in cases.Zip(qa))
-        {
-            var loaded = RequiredAddinRules.IsAddinLoaded(tab, session);
-            loaded.Should().Be(result.Status == RequiredAddinStatus.InstalledActive, tab);
-        }
-    }
-
-    // ── the four-state row ───────────────────────────────────────────────────
+    // ── the row states (T-B7) ────────────────────────────────────────────────
 
     [Fact]
     public void Native_row_says_Revit_Builtin_with_no_link_or_badge()
@@ -175,24 +118,61 @@ public class RequiredAddinRulesTests
     }
 
     [Fact]
-    public void Loaded_row_names_the_matched_manifest_and_keeps_the_info_link()
+    public void Loaded_row_names_the_matched_add_in_and_keeps_the_info_link()
     {
-        var session = Session(loaded: [Loaded("Enscape.addin", displayName: "Enscape Render")]);
+        var session = Session(installed: [Installed("Enscape Render", fileName: "Enscape.addin")]);
         var row = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Enscape", null, ""), session);
         row.FileColumn.Should().Be("Enscape Render", "no addinFile: the matched name fills the file column");
         row.Status.Should().Be(AddinRowStatus.Loaded);
         row.StatusLabel.Should().Be("Loaded");
-        row.StatusTooltip.Should().Be("Loaded in current Revit session (Enscape Render)");
+        row.StatusTooltip.Should().Be("Installed and on for Revit 2026 (Enscape Render)");
         row.InfoUrl.Should().Be("https://enscape3d.com", "the lookup's URL backs a profile without one");
         row.Origin.Should().BeNull();
     }
 
     [Fact]
-    public void Loaded_by_the_ribbon_alone_has_no_matched_name()
+    public void Loaded_by_the_ribbon_alone_when_nothing_installed_matches()
     {
         var row = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Enscape", "Enscape.addin", "https://e"), Session(tabs: ["Enscape"]));
         row.FileColumn.Should().Be("Enscape.addin");
+        row.Status.Should().Be(AddinRowStatus.Loaded);
         row.StatusTooltip.Should().Be("Loaded in current Revit session");
+    }
+
+    [Fact]
+    public void A_switched_off_add_in_is_Disabled_never_Loaded_even_with_its_tab_still_on_the_ribbon()
+    {
+        // v3.0 matched disabled manifests and showed a green "Loaded" (investigation B8, D10).
+        foreach (var item in new[] { Installed("Kinship", off: true), Installed("Kinship", renamed: true) })
+        {
+            var row = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Kinship", "Kinship.addin", ""), Session(tabs: ["Kinship"], installed: [item]));
+            row.Status.Should().Be(AddinRowStatus.Disabled);
+            row.StatusLabel.Should().Be("Disabled");
+            row.StatusTooltip.Should().StartWith("Kinship is switched off for Revit 2026.");
+        }
+    }
+
+    [Fact]
+    public void An_add_in_locked_off_by_the_administrator_is_Locked_and_one_locked_on_is_Loaded()
+    {
+        var locked = RequiredAddinRules.Describe(new NormalizedRequiredAddin("DiRoots", null, ""),
+            Session(installed: [Installed("DiRoots.One", fileName: "DiRoots.One.addin", adminLock: AdminLock.AlwaysDisabled)]));
+        locked.Status.Should().Be(AddinRowStatus.Locked);
+        locked.StatusLabel.Should().Be("Locked");
+        locked.StatusTooltip.Should().Be("DiRoots.One is locked off by your administrator for Revit 2026.");
+
+        var on = RequiredAddinRules.Describe(new NormalizedRequiredAddin("DiRoots", null, ""),
+            Session(installed: [Installed("DiRoots.One", fileName: "DiRoots.One.addin", adminLock: AdminLock.AlwaysEnabled)]));
+        on.Status.Should().Be(AddinRowStatus.Loaded);
+        on.StatusTooltip.Should().EndWith("; locked on by your administrator");
+    }
+
+    [Fact]
+    public void One_matching_add_in_on_is_enough_for_Loaded()
+    {
+        var row = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Kinship", null, ""),
+            Session(installed: [Installed("Kinship", off: true), Installed("Kinship Library", fileName: "KinshipLibrary.addin")]));
+        row.Status.Should().Be(AddinRowStatus.Loaded);
     }
 
     [Fact]
@@ -216,41 +196,58 @@ public class RequiredAddinRulesTests
     }
 
     [Fact]
-    public void Installed_and_Disabled_come_from_the_user_config_with_their_origin_badge()
+    public void The_rows_use_the_running_year_only()
     {
-        var config = new UserAddinConfig(new Dictionary<string, UserAddinConfigEntry>
-        {
-            ["Mystery"] = new(true, "third-party", "Mystery.addin"),
-            ["Gone"] = new(false, "custom", null),
-            ["Builtin"] = new(true, "native", null),
-        });
-        var installed = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Mystery", null, "https://m"), Session(config: config));
-        installed.Should().Be(new RequiredAddinRow("Mystery", "", "https://m", "third-party", AddinRowStatus.Installed, "Installed", "Installed (Mystery.addin)"));
-
-        var disabled = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Gone", null, ""), Session(config: config));
-        disabled.Status.Should().Be(AddinRowStatus.Disabled);
-        disabled.StatusTooltip.Should().Be("Add-in is disabled (.addin.RSTdisabled) — enable via Restore All Add-ins");
-        disabled.Origin.Should().Be("custom");
-
-        // A "native" origin hides both the badge and the link.
-        var native = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Builtin", null, "https://b"), Session(config: config));
-        native.InfoUrl.Should().BeNull();
-        native.Origin.Should().BeNull();
-        native.StatusTooltip.Should().Be("Installed (Builtin)");
+        var inventory = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2027, "Kinship"));
+        var row = RequiredAddinRules.Describe(new NormalizedRequiredAddin("Kinship", null, ""), AddinSessionContext.For("2026", inventory, [], Lookup));
+        row.Status.Should().Be(AddinRowStatus.NotFound);
+        AddinSessionContext.For("", inventory, [], Lookup).RunningYear.Should().BeNull();
     }
 
     [Fact]
-    public void The_get_user_config_stub_never_reaches_Installed_or_Disabled()
+    public void The_rows_and_the_planner_use_the_same_matcher()
     {
-        var rows = new[] { "Lumion", "Kinship", "Mystery" }
-            .Select(t => RequiredAddinRules.Describe(new NormalizedRequiredAddin(t, null, ""), Session(config: UserAddinConfig.Empty)));
-        rows.Should().OnlyContain(r => r.Status == AddinRowStatus.NotFound && r.Origin == null);
+        // The pill, the Confirm dialog and the commit can never disagree (D3): the same items match.
+        var items = new[] { Installed("Lumion LiveSync", fileName: "LumionLiveSync.addin"), Installed("Enscape"), Installed("Twinmotion") };
+        var session = Session(installed: items);
+        foreach (var tab in new[] { "Lumion", "Enscape", "Kinship" })
+        {
+            var req = new RequiredAddin { TabName = tab };
+            RequiredAddinRules.Matches(new NormalizedRequiredAddin(tab, null, ""), session)
+                .Should().Equal(RequiredAddinMatch.Match(req, items), tab);
+        }
+    }
+
+    [Fact]
+    public void The_pills_pass_the_add_in_id_and_the_native_flag_to_the_same_matcher_as_the_planner()
+    {
+        // Review N2: a profile carrying addinId, or native, gets the same answer from the pill and the plan.
+        var probe = Installed("Probe", fileName: "Whatever.addin") with { AddinIds = ["d4c6e3e0-0000-4000-8000-525354500001"] };
+        var session = Session(installed: [probe, Installed("RSTProbe Tools", fileName: "RSTProbeTools.addin")]);
+        var profile = new Profile
+        {
+            RequiredAddins =
+            [
+                new RequiredAddin { TabName = "Elsewhere", AddinId = "D4C6E3E0-0000-4000-8000-525354500001" },
+                new RequiredAddin { TabName = "RSTProbe", Native = true },
+            ],
+        };
+
+        var rows = RequiredAddinRules.Rows(profile, session);
+        rows.Select(r => r.Status).Should().Equal(AddinRowStatus.Loaded, AddinRowStatus.Native);
+
+        var normalized = RequiredAddinRules.Normalize(profile.RequiredAddins);
+        normalized[0].AddinId.Should().Be("D4C6E3E0-0000-4000-8000-525354500001");
+        foreach (var (row, req) in normalized.Zip(profile.RequiredAddins))
+            RequiredAddinRules.Matches(row, session).Should().Equal(RequiredAddinMatch.Match(req, session.Installed));
+        RequiredAddinMatch.RequiredItems(profile.RequiredAddins, FakeAddinSwitching.InventoryOf([.. session.Installed]))
+            .Select(i => i.Name).Should().Equal("Probe");
     }
 
     // ── getNotFoundAddins and the warning ────────────────────────────────────
 
     [Fact]
-    public void Not_found_skips_native_loaded_and_configured_add_ins()
+    public void Not_found_skips_native_installed_and_ribbon_add_ins()
     {
         var profile = new Profile
         {
@@ -259,11 +256,11 @@ public class RequiredAddinRulesTests
                 new RequiredAddin { TabName = "Architecture" },
                 new RequiredAddin { TabName = "Kinship" },
                 new RequiredAddin { TabName = "Lumion" },
-                new RequiredAddin { TabName = "Configured" },
+                new RequiredAddin { TabName = "Off" },
+                new RequiredAddin { TabName = "Enscape" },
             ],
         };
-        var config = new UserAddinConfig(new Dictionary<string, UserAddinConfigEntry> { ["Configured"] = new(false, null, null) });
-        var notFound = RequiredAddinRules.NotFound(profile, Session(loaded: [Loaded("Kinship.addin")], config: config));
+        var notFound = RequiredAddinRules.NotFound(profile, Session(tabs: ["Enscape"], installed: [Installed("Kinship"), Installed("Off", off: true)]));
         notFound.Select(a => a.TabName).Should().Equal("Lumion");
     }
 

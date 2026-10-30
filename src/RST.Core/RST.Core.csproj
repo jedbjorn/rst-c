@@ -26,8 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Tests need internal seams (RestoreFiltered, BuildRequiredFileSet/IdSet,
-         IsRequired) for AddinDisabler / RequiredAddinQa coverage. -->
+    <!-- Tests use internal seams (for example PackageContents.Series and ProductDetection.RevitYears). -->
     <InternalsVisibleTo Include="RST.Tests" />
   </ItemGroup>
 

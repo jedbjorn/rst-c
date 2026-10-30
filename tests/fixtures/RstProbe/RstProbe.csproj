@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RST-Probe — rst-c's own (not vendored) test add-in for the VM checks of feature #16 (spec #18,
+    AC5). It is never shipped: it is not in RST-C.sln, the stage script or the MSI. A tiny
+    IExternalApplication that adds a ribbon tab "RSTProbe" (or "RSTProbeBundle" when it loads from
+    a .bundle), so a capture of the ribbon shows whether Revit loaded it.
+
+    Built per Revit year like RST.Engine (Directory.Build.props): -c "Release R26" gives
+    net8.0-windows against the 2026 API, -c "Release R27" net10.0-windows against 2027.
+    package.sh lays the builds out as the per-user and the bundle variant (the RST-Probe CI artifact).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <RootNamespace>RstProbe</RootNamespace>
+    <AssemblyName>RstProbe</AssemblyName>
+    <OutputType>Library</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
+    <IsPackable>false</IsPackable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(RevitVersion)' == '2025'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.0.2" PrivateAssets="all" VersionOverride="2025.0.2" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.0.2" PrivateAssets="all" VersionOverride="2025.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RevitVersion)' == '2027'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+  </ItemGroup>
+
+</Project>

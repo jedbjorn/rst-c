@@ -1,13 +1,16 @@
 // rst-c's own (not vendored): the Profile Loader's view-model (spec #16, WU3), a port of
 // profile_loader.html's script (911-1931): boot, card selection with the "Adopt RSTify Presets?"
-// prompt, the opacity override, import, load (not-found warnings, disable preview and confirm, QA,
-// failed-disable acknowledgement, "Loading …" for 3 s, close), unload, delete, restore and close.
-// Every message keeps its text. Changes are the spec's Planner defaults: the detail badge and the
-// disable preview go by id (5), the active profile is selected only after the tabs and prefs are
-// read (6), and the load's add-in renames run off the UI thread (8).
+// prompt, the opacity override, import, load (not-found warnings, add-in plan and confirm, the
+// report, "Loading …" for 3 s, close), unload, delete, restore and close. Changes are the spec's
+// Planner defaults: the detail badge and the plan go by id (5), the active profile is selected only
+// after the tabs and prefs are read (6), and the load's add-in changes run off the UI thread (8).
+// Spec #18 (feature #16): the plan the Confirm dialog shows is the plan the load runs; Load, Unload
+// and Restore All show the same add-in report; RST 3.0's renamed add-ins are moved once at boot;
+// the required add-in pills come from the add-in inventory.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -26,7 +29,6 @@ public sealed class ProfileLoaderViewModel : ObservableObject
 
     public const string AdoptPresetsDialogId = "AdoptPresetsDialog";
     public const string DeleteProfileDialogId = "DeleteProfileDialog";
-    public const string FailedDisablesDialogId = "FailedDisablesDialog";
 
     private readonly IProfileLoaderBackend _backend;
     private readonly IDialogService _dialogs;
@@ -35,6 +37,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject
     private readonly Action<string> _openUrl;
 
     private AddinSessionContext _session = new();
+    private IReadOnlyDictionary<string, AddinLookupEntry> _lookup = new Dictionary<string, AddinLookupEntry>();
     private UserProfilePrefs _prefs = new();
     private string? _activeId;
     private string? _activeName;
@@ -226,8 +229,8 @@ public sealed class ProfileLoaderViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Boot step 1 (before the window shows; no dialogs): the lookup, the scanned manifests, the
-    /// profiles, the active profile, the ribbon tabs, the user config, the prefs and the version.
+    /// Boot step 1 (before the window shows; no dialogs): the lookup, the add-in inventory, the
+    /// profiles, the active profile, the ribbon tabs, the prefs and the version.
     /// </summary>
     public void LoadData()
     {
@@ -235,10 +238,8 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         _dataLoaded = true;
         Log.Information("UI: selector boot");
 
-        var lookup = Safe(() => _backend.GetAddinLookup(), new Dictionary<string, AddinLookupEntry>(), "get_addin_lookup");
-        var loaded = Safe(() => _backend.GetLoadedAddins(), [], "get_loaded_addins");
-        var config = Safe(() => _backend.GetUserConfig(), UserAddinConfig.Empty, "get_user_config");
-        _session = new AddinSessionContext(_backend.AllTabs, loaded, lookup, config);
+        _lookup = Safe(() => _backend.GetAddinLookup(), new Dictionary<string, AddinLookupEntry>(), "get_addin_lookup");
+        RefreshAddinSession();
         _prefs = Safe(() => _backend.GetPrefs(), new UserProfilePrefs(), "get_user_profile_prefs");
         Log.Information("UI: selector: user_profile_prefs loaded {Payload}", _prefs.Profiles.Count);
 
@@ -261,16 +262,37 @@ public sealed class ProfileLoaderViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Boot step 2 (once the window shows): selects the active profile's card, now that the
-    /// tabs and prefs are in (Planner default 6).
+    /// Boot step 2 (once the window shows): moves RST 3.0's renamed add-ins into the settings file
+    /// and reports it (once: the first time there is something to move; spec #18, In Scope 9), then
+    /// selects the active profile's card, now that the tabs and prefs are in (Planner default 6).
     /// </summary>
     public void SelectActiveProfile()
     {
         LoadData();
         if (_activeSelected) return;
         _activeSelected = true;
+        MigrateLegacyAddins();
         var card = Profiles.FirstOrDefault(IsActive);
         if (card is not null) Select(card);
+    }
+
+    private void MigrateLegacyAddins()
+    {
+        var report = Safe<ActivationReport?>(() => _backend.MigrateLegacy(), null, "migrate_legacy_addins");
+        if (report is null) return;
+        Log.Information("UI: selector: moved RST 3.0 renames {Payload}", new { done = report.Done.Count, notChanged = report.NotChanged.Count });
+        RefreshAddinSession();
+        _loaderDialogs.ShowAddinReport(AddinReportModel.ForMigration(report));
+    }
+
+    /// <summary>Re-reads the inventory, so the status pills show the add-ins as they are now.</summary>
+    private void RefreshAddinSession()
+    {
+        var inventory = Safe(() => _backend.GetAddinInventory(), AddinInventory.Empty, "get_addin_inventory");
+        _session = AddinSessionContext.For(_backend.RevitVersion, inventory, _backend.AllTabs, _lookup);
+        if (_selected is not null)
+            RequiredAddins = RequiredAddinRules.Rows(_selected.Profile, _session)
+                .Select(r => new RequiredAddinRowViewModel(r, OpenUrlCommand)).ToList();
     }
 
     /// <summary>The slider was released (or moved by keyboard): saves the override when it changed.</summary>
@@ -494,36 +516,38 @@ public sealed class ProfileLoaderViewModel : ObservableObject
             .Select(a => RequiredAddinRules.NotFoundWarning(a.TabName, _backend.RevitVersion))
             .ToList();
 
-        // Check 2: with the disable switch on, show what will change first.
-        if (DisableUnused)
+        // Check 2: the add-in plan. It is what the Confirm dialog shows and exactly what the load
+        // runs (spec #18, AC2). A plan that cannot be made changes no add-in, and the report says so
+        // (v3.0 went ahead with Disable on and no confirmation, D15).
+        ActivationPlan? plan = null;
+        string? planFailure = null;
+        try
         {
-            DisablePreviewOutcome preview;
-            try
+            var outcome = _backend.PlanLoad(card.Name, card.Id, DisableUnused);
+            if (outcome.Error is not null)
             {
-                preview = _backend.GetDisablePreview(card.Name, card.Id);
-            }
-            catch (Exception ex)
-            {
-                // As before: a preview that throws falls through to the load.
-                Log.Error(ex, "UI: get_disable_preview error");
-                await DoLoadAsync(card, warnings);
+                ShowToast(UiStrings.Loader_Error, outcome.Error, BannerKind.Error);
                 return;
             }
-            if (preview.Error is not null)
-            {
-                ShowToast(UiStrings.Loader_Error, preview.Error, BannerKind.Error);
-                return;
-            }
-            if (!_loaderDialogs.ConfirmAddinChanges(ConfirmAddinChangesModel.From(preview))) return;
+            plan = outcome.Plan;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "UI: selector: add-in plan failed; loading without add-in changes");
+            planFailure = UiStrings.Loader_PlanFailed(ex.Message);
         }
 
-        await DoLoadAsync(card, warnings);
+        if (plan is not null && (DisableUnused || plan.HasChanges)
+            && !_loaderDialogs.ConfirmAddinChanges(ConfirmAddinChangesModel.From(plan)))
+            return;
+
+        await DoLoadAsync(card, warnings, plan, planFailure);
     }
 
-    private async Task DoLoadAsync(ProfileCardViewModel card, IReadOnlyList<string> notFoundWarnings)
+    private async Task DoLoadAsync(ProfileCardViewModel card, IReadOnlyList<string> notFoundWarnings, ActivationPlan? plan, string? planFailure)
     {
         var profile = card.Profile;
-        var request = new LoadRequest(card.Name, card.Id, DisableUnused, SelectedHiddenTabs);
+        var request = new LoadRequest(card.Name, card.Id, DisableUnused, SelectedHiddenTabs, plan);
         LoadResult result;
         Busy.Show(UiStrings.Loader_Loading(card.Name));
         IsWorking = true;
@@ -547,7 +571,13 @@ public sealed class ProfileLoaderViewModel : ObservableObject
             ShowToast(UiStrings.Loader_LoadFailed, UiStrings.Loader_LoadFailedText, BannerKind.Error);
             return;
         }
-        Log.Information("UI: selector: load_profile OK {Payload}", new { name = card.Name, id = card.Id, restart_needed = result.RestartNeeded, failed_disables = result.FailedDisables.Count });
+        var report = result.Report;
+        if (planFailure is not null) report = report with { Notes = [planFailure, .. report.Notes] };
+        Log.Information("UI: selector: load_profile OK {Payload}", new
+        {
+            name = card.Name, id = card.Id, restart_needed = result.RestartNeeded,
+            addins_done = report.Done.Count, addins_not_changed = report.NotChanged.Count,
+        });
         _activeId = card.Id;
         _activeName = card.Name;
         RefreshCards();
@@ -558,17 +588,11 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         lines.AddRange(notFoundWarnings);
         lines.AddRange(result.Warnings);
 
-        // The Add-in Check always shows, before anything closes the window.
-        var qa = result.Qa ?? QaCheck.Clear;
-        Log.Information("UI: selector: load_profile QA {Payload}", new { restored = qa.Restored.Count, notInstalled = qa.NotInstalled.Count, allClear = qa.AllClear });
-        _loaderDialogs.ShowAddinCheck(new AddinCheckModel(card.Name, qa, _openUrl));
-
-        // Failed disables need an acknowledgement (flag #15: a toast raced the auto-close).
-        if (FailedDisableMessages.Message(result.FailedDisables) is { } failedMessage)
-        {
-            Log.Warning("UI: selector: disables failed — surfacing to user {Payload}", result.FailedDisables.Count);
-            _dialogs.ShowMessage(FailedDisableMessages.Title, failedMessage, FailedDisablesDialogId);
-        }
+        // The Add-in Check always shows, before anything closes the window: what changed, what
+        // could not, and the required add-ins that are missing or switched off.
+        var qa = result.Qa ?? QaCheck.For(profile, _session, plan);
+        Log.Information("UI: selector: load_profile QA {Payload}", new { notInstalled = qa.NotInstalled.Count, requiredOff = qa.RequiredOff.Count, allClear = qa.AllClear });
+        _loaderDialogs.ShowAddinReport(AddinReportModel.ForLoad(card.Name, report, qa, _openUrl));
 
         ShowLoadingAndClose(UiStrings.Loader_Loading(card.Name), string.Join(" ", lines));
     }
@@ -590,9 +614,10 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         SelectFirstOrClear();
     }
 
+    /// <summary>Unloads, then reports the add-ins switched back on (decision #16.2), if rst-c had switched any off.</summary>
     private bool TryUnload()
     {
-        OpResult result;
+        UnloadOutcome result;
         try
         {
             result = _backend.Unload();
@@ -606,6 +631,16 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         {
             ShowToast(UiStrings.Loader_UnloadFailed, UiStrings.Loader_UnloadFailedText, BannerKind.Error);
             return false;
+        }
+        if (result.Addins.Outcomes.Count > 0 || result.Addins.Notes.Count > 0)
+        {
+            Log.Information("UI: selector: unload switched add-ins back on {Payload}", new { done = result.Addins.Done.Count, notChanged = result.Addins.NotChanged.Count });
+            _loaderDialogs.ShowAddinReport(AddinReportModel.ForUnload(result.Addins));
+        }
+        else
+        {
+            // Nothing is silent (spec #18, In Scope 5): a short non-modal note instead of a dialog.
+            Toast.Show(UiStrings.Loader_UnloadNoAddinChanges, BannerKind.Info, TransientMessage.InformDuration);
         }
         return true;
     }
@@ -660,6 +695,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         else ClearDetail();
     }
 
+    /// <summary>Restore All Add-ins: switches back on everything rst-c switched off, reports it, and redraws the status pills.</summary>
     private void RestoreAll()
     {
         RestoreOutcome result;
@@ -672,7 +708,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject
             ShowToast(UiStrings.Loader_Error, UiStrings.Loader_RestoreError(ex.Message), BannerKind.Error);
             return;
         }
-        if (!result.Ok)
+        if (!result.Ok || result.Addins is null)
         {
             ShowToast(UiStrings.Loader_RestoreFailed,
                 UiStrings.Loader_RestoreFailedText(string.IsNullOrEmpty(result.Error) ? UiStrings.Loader_UnknownError : result.Error),
@@ -680,14 +716,9 @@ public sealed class ProfileLoaderViewModel : ObservableObject
             return;
         }
 
-        // Refresh the user config cache (the add-in rows are not redrawn, as before).
-        var config = Safe(() => _backend.GetUserConfig(), UserAddinConfig.Empty, "get_user_config");
-        _session = new AddinSessionContext(_session.AllTabs, _session.LoadedAddins, _session.Lookup, config);
-
-        if (result.Restored.Count > 0)
-            ShowToast(UiStrings.Loader_PleaseRestart, UiStrings.Loader_PleaseRestartText(string.Join(", ", result.Restored)), BannerKind.Warning);
-        else
-            ShowToast(UiStrings.Loader_NoChanges, UiStrings.Loader_NoChangesText, BannerKind.Info);
+        // v3.0 left the add-in rows as they were (investigation B8); they show the new state now.
+        RefreshAddinSession();
+        _loaderDialogs.ShowAddinReport(AddinReportModel.ForRestoreAll(result.Addins));
     }
 
     private void RequestClose() => CloseRequested?.Invoke();
