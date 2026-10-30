@@ -3,6 +3,7 @@
 // Windows APIs, so RST.Tests checks it on Linux.
 //
 //   %LocalAppData%\Programs\RST\Tray\RST.Tray.exe   the tray (RST.msi, per user)
+//   C:\Program Files\RST\Tray\RST.Tray.exe          the tray (RST-Machine.msi, per machine; HKLM Run)
 //   %LocalAppData%\RST\Tray\cache\                  downloads (WU4); RST.msi removes it on uninstall
 //   %AppData%\RST\tray_settings.json                the tray's settings (user data, survives uninstall)
 //   %AppData%\RST\tray_updates.json                 the last update check and the versions announced (WU3)
@@ -91,6 +92,10 @@ public static class TrayPaths
     /// <summary>%LocalAppData%\Programs\RST\Tray\ (the per-user install folder).</summary>
     public static string PerUserInstallDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "RST", "Tray");
+
+    /// <summary>C:\Program Files\RST\Tray\ (RST-Machine.msi's install folder, spec #20 §7; F17 WU5).</summary>
+    public static string PerMachineInstallDir =>
+        InstallLayout.MachineTrayDir(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
 
     /// <summary>The single-instance mutex: <c>Local\RST.Tray.&lt;UserSid&gt;</c>.</summary>
     public static string MutexName(string userSid) => @"Local\RST.Tray." + RequireSid(userSid);

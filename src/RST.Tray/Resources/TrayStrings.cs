@@ -98,6 +98,12 @@ public static class TrayStrings
 
     public static string Notice_Message => Get(nameof(Notice_Message));
 
+    // The one-time "your own copy is used" notice (F17 WU5, spec #20 §7).
+
+    public static string Shadow_Heading => Get(nameof(Shadow_Heading));
+
+    public static string Shadow_Message => Get(nameof(Shadow_Message));
+
     // Updates and Apps pages, notifications (F17 WU3).
 
     public static string Updates_CheckNow => Get(nameof(Updates_CheckNow));

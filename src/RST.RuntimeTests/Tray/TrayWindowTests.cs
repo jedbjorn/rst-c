@@ -194,6 +194,29 @@ public class TrayWindowScreenshotTests
         }
     });
 
+    // F17 WU5 (spec #20 §7): the one-time "installed twice" notice, in the same dialog and family look.
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void The_installed_twice_notice(UiTheme theme) => Sta(theme, () =>
+    {
+        var dialog = new MessageDialog(
+            new MessageDialogModel(TrayStrings.Notice_Title, TrayStrings.Shadow_Heading, TrayStrings.Shadow_Message, []),
+            TrayHost.ShadowNoticeAutomationId);
+        try
+        {
+            WindowCapture.ShowOffScreen(dialog);
+            WindowCapture.DoEvents();
+            var bitmap = WindowCapture.Client(dialog);
+            Screenshots.Save(bitmap, Name("shadow-notice", theme));
+            AssertColor(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 1, 1), "notice background");
+            Assert.True(Screenshots.DistinctPixels(bitmap) > 30, "the notice looks blank");
+        }
+        finally
+        {
+            dialog.Close();
+        }
+    });
+
     [Theory]
     [MemberData(nameof(Themes))]
     public void The_tray_menu(UiTheme theme) => Sta(theme, () =>
