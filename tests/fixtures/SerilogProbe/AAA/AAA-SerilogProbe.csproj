@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    AAA-SerilogProbe — rst-c's own (not vendored) test add-in for VM step V3 of the v3.0.0
+    resolver hardening (decision #27). Never shipped: it is not in RST-C.sln, the stage script
+    or the MSI. Ships Serilog 3.1.1 (assembly 2.0.0.0) and registers its own Resolving handler.
+    Source: ../SerilogProbeApp.cs (PROBE_AAA).
+
+    Built per Revit year like RST.Engine (Directory.Build.props): -c "Release R26" gives
+    net8.0-windows against the 2026 API, -c "Release R27" net10.0-windows against 2027.
+    ../package.sh lays both out as the SerilogProbe CI artifact.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <RootNamespace>SerilogProbe</RootNamespace>
+    <AssemblyName>AAA-SerilogProbe</AssemblyName>
+    <DefineConstants>$(DefineConstants);PROBE_AAA</DefineConstants>
+    <OutputType>Library</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
+    <IsPackable>false</IsPackable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Copy Serilog next to the probe, as a real add-in ships it. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SerilogProbeApp.cs" Link="SerilogProbeApp.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog"            VersionOverride="3.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" VersionOverride="5.0.0" />
+  </ItemGroup>
+
+  <!-- The Revit API floor (decision #26), the same pins as RST.Engine. -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RevitVersion)' == '2027'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -146,6 +146,22 @@ Remove-Item -Recurse -Force "$env:APPDATA\Autodesk\Revit\Addins\2025\RST" -Error
 Remove-Item -Recurse -Force "$env:APPDATA\RST\app" -ErrorAction SilentlyContinue
 ```
 
+## Compatibility
+
+rst-c supports **every update** of Revit 2025, 2026 and 2027. Each year is built against that year's earliest update (the "API floor"), so it uses no Revit API that a later update added, and it runs on the first update as well as the latest.
+
+| Revit year | Supported updates | Built against | Support |
+|---|---|---|---|
+| 2025 | every update | 2025.0.2 | **Partial.** Assumed to behave like 2026 and takes the same code paths; not on the test machine, so it is verified by hand after each public release |
+| 2026 | every update | 2026.0.4 | Full |
+| 2027 | every update | 2027.0.0 | Full |
+
+Years before 2025 are not supported.
+
+Revit's journal file logs `Assembly version conflict in some references in RST.Bootstrap.dll` at every start, naming RevitAPI and RevitAPIUI. This is Revit's normal notice for any add-in built against a different update than the one running. It is not an error, and rst-c loads normally.
+
+**Raising the floor** is a deliberate change: CI (`build/check-revit-api-floor.py`) fails any build that references a newer Revit update than the floor. If a feature needs newer API, raise the pins and the floor in the same pull request and update this table, so dropping the older updates is a visible decision. The steps are in [docs/DEVELOPING.md](docs/DEVELOPING.md#revit-api-floor).
+
 ## Build
 
 Local builds need the .NET 8 SDK. Revit 2027 additionally requires the .NET 10 SDK. Revit API references resolve from NuGet.

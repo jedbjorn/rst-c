@@ -50,6 +50,9 @@
     <ProjectReference Include="..\RST.Core\RST.Core.csproj" />
     <ProjectReference Include="..\RST.UI\RST.UI.csproj" />
     <ProjectReference Include="..\RST.Engine\RST.Engine.csproj" />
+    <!-- Bootstrap: the assembly resolver's branches (decision #27). The tests touch only
+         EngineDependencyResolver, never the Revit-typed RstBootstrap. -->
+    <ProjectReference Include="..\RST.Bootstrap\RST.Bootstrap.csproj" />
   </ItemGroup>
 
 </Project>

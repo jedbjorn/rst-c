@@ -33,6 +33,8 @@ internal static class BootLog
 
     public static void Info(string message) => Write("INF", message);
 
+    public static void Warn(string message) => Write("WRN", message);
+
     public static void Error(string message) => Write("ERR", message);
 
     public static void Error(string message, Exception ex) =>

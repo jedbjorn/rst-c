@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AAA-SerilogProbe: copied to %AppData%\Autodesk\Revit\Addins\<year>\AAA-SerilogProbe.addin, next to
+  RST.addin, with the probe and its Serilog 3.1.1 in the AAA-SerilogProbe\ folder beside it. The
+  file name sorts before RST.addin. rst-c's test add-in for VM step V3 (decision #27); never shipped.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>AAA-SerilogProbe</Name>
+    <Assembly>AAA-SerilogProbe\AAA-SerilogProbe.dll</Assembly>
+    <FullClassName>SerilogProbe.ProbeApp</FullClassName>
+    <ClientId>d4c6e3e0-0000-4000-8000-53524c470001</ClientId>
+    <VendorId>RSTPROBE</VendorId>
+    <VendorDescription>rst-c test add-in (not shipped)</VendorDescription>
+  </AddIn>
+</RevitAddIns>
