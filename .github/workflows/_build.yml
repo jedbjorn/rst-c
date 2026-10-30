@@ -41,6 +41,11 @@ name: _build (reusable)
 #   • bundle-smoke — Windows runner, matrix Chain/BareMsiFirst/Companions:
 #                    installer-bundle/ci-bundle-smoke.ps1 (install order,
 #                    bare RST.msi first, the real companions).
+#   • release-sums — build/sha256sums.sh self-test over this build's
+#                    RST.msi and RST-Setup.exe (feature #17, spec #20 §8).
+#   • tray-detect  — Windows runner: the tray's companion detection against
+#                    the fixture companion MSI (installer/ci-tray-detect.ps1,
+#                    feature #17 AC5).
 #
 # WiX MSI emission is officially Windows-only (installer/README.md). The
 # WiX SDK MSBuild path on Linux emits WIX0000 ("behavior is undefined")
@@ -393,4 +398,55 @@ jobs:
             ${{ runner.temp }}/bundle-*.log
             ${{ runner.temp }}/*.log
             ${{ runner.temp }}/bundle-ui/*.png
+          if-no-files-found: ignore
+
+  # SHA256SUMS.txt (feature #17, spec #20 §8): release.yml writes it with
+  # build/sha256sums.sh and checks the published release against it. This
+  # runs the same script on every PR over this build's RST.msi and
+  # RST-Setup.exe: the lines name exactly the assets and verify, and the
+  # release check refuses a wrong digest, a missing or an extra line.
+  release-sums:
+    name: Release SHA256SUMS.txt
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: artifacts/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: artifacts/
+      - run: build/sha256sums.sh self-test artifacts RST.msi RST-Setup.exe
+
+  # Companion detection (feature #17, spec #20 §6, AC5's fixture half): the
+  # tray's MsiProducts and ProductDetection against the bundle job's fixture
+  # companion MSI (bundle-test artifact), installed per user, upgraded,
+  # installed per machine and hand-copied as a bare .addin. Each scenario's
+  # versions and context must match what Windows Installer reports.
+  tray-detect:
+    name: Tray detection (fixture MSI)
+    needs: bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle-test
+          path: bundle-test/
+      - run: dotnet build src/RST.RuntimeTests/RST.RuntimeTests.csproj -c "Release R25" --nologo
+      - name: Detection smoke
+        shell: pwsh
+        run: installer/ci-tray-detect.ps1 -FixtureDir bundle-test/test
+      - name: Upload detection results and msiexec logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-detect
+          path: ${{ runner.temp }}/tray-detect/
           if-no-files-found: ignore

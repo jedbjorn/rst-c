@@ -14,6 +14,8 @@ name: release
 #      Its bundle version is the same numeric a.b.c; a same-version bundle
 #      (rc -> final) replaces the installed one (Burn treats an equal
 #      version as an upgrade).
+#   5. Also attaches SHA256SUMS.txt (feature #17, spec #20 §8), one line
+#      per asset, and checks the published release against it.
 #
 # Tag → Release. Nothing else triggers a release; pushes to main do not
 # auto-tag.
@@ -69,6 +71,13 @@ jobs:
         with:
           name: RST-Setup.exe
           path: ./artifacts/
+      # SHA256SUMS.txt (feature #17, spec #20 §8): one `sha256sum` line per
+      # attached asset. The RST tray installs a download only when its hash
+      # matches its line here and GitHub's own asset digest (WU4). Written
+      # and checked (names exactly the assets, every hash verifies) before
+      # anything is published.
+      - name: SHA256SUMS.txt
+        run: build/sha256sums.sh write artifacts RST.msi RST-Setup.exe
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -79,11 +88,25 @@ jobs:
           if [[ "$tag" == *-* ]]; then
             prerel=(--prerelease)
           fi
-          # Attach RST.msi and RST-Setup.exe by name so a stray artifact can
-          # never ship.
+          # Attach RST.msi, RST-Setup.exe and SHA256SUMS.txt by name so a
+          # stray artifact can never ship. One `gh release create` with every
+          # asset: gh uploads them to a draft and publishes it complete, the
+          # one-step publish that immutable releases need (assets and tag are
+          # fixed at publication).
           gh release create "$tag" \
             artifacts/RST.msi \
             artifacts/RST-Setup.exe \
+            artifacts/SHA256SUMS.txt \
             --title "$tag" \
             --generate-notes \
             "${prerel[@]}"
+      # The published release, as GitHub serves it: SHA256SUMS.txt lists
+      # exactly its other assets, and each line equals GitHub's digest.
+      - name: Check the published release against SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release view "$tag" --json assets > "$RUNNER_TEMP/release-assets.json"
+          gh release download "$tag" -p SHA256SUMS.txt -D "$RUNNER_TEMP/published"
+          build/sha256sums.sh check-release "$RUNNER_TEMP/published/SHA256SUMS.txt" "$RUNNER_TEMP/release-assets.json"
