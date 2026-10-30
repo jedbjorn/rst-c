@@ -47,11 +47,13 @@ $Trees = [ordered]@{
 }
 
 $Installer = New-Object -ComObject WindowsInstaller.Installer
+# `return , $x` stops PowerShell unrolling an enumerable COM result (a
+# StringList, an empty one would otherwise arrive as $null).
 function Get-ComProp($Obj, [string]$Name, [object[]]$ArgList = @()) {
-  $Obj.GetType().InvokeMember($Name, [Reflection.BindingFlags]::GetProperty, $null, $Obj, $ArgList)
+  return , $Obj.GetType().InvokeMember($Name, [Reflection.BindingFlags]::GetProperty, $null, $Obj, $ArgList)
 }
 function Invoke-ComMethod($Obj, [string]$Name, [object[]]$ArgList = @()) {
-  $Obj.GetType().InvokeMember($Name, [Reflection.BindingFlags]::InvokeMethod, $null, $Obj, $ArgList)
+  return , $Obj.GetType().InvokeMember($Name, [Reflection.BindingFlags]::InvokeMethod, $null, $Obj, $ArgList)
 }
 
 function Get-Related([string]$UpgradeCode) {
