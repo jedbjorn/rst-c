@@ -100,4 +100,23 @@
     </ItemGroup>
   </Target>
 
+  <!-- The RST tray (feature #17, spec #20 §1). Tray.wxs (the Run value,
+       CloseApplication, RemoveFolderEx) is compiled by the default glob;
+       its file components are generated from the staged build/Tray/ by
+       gen-tray.ps1, the same way as the Revit years, so
+       `build/stage.sh tray` must be run first. The util extension supplies
+       CloseApplication and RemoveFolderEx; the version is pinned centrally. -->
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" />
+  </ItemGroup>
+  <PropertyGroup>
+    <RstTrayWxs>$(MSBuildProjectDirectory)\obj\Tray.g.wxs</RstTrayWxs>
+  </PropertyGroup>
+  <Target Name="RstGenerateTray" BeforeTargets="CoreCompile">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-tray.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstTrayWxs)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(RstTrayWxs)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

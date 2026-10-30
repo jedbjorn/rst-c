@@ -330,7 +330,7 @@ public sealed class RstApplication : IExternalApplication
     {
         try
         {
-            var existing = Directory.GetFiles(logsDir, "rst_*.log")
+            var existing = Directory.GetFiles(logsDir, AppDataPaths.EngineSessionLogGlob)
                 .Where(p => !string.Equals(p, newSessionPath, StringComparison.OrdinalIgnoreCase))
                 .Select(p => new FileInfo(p))
                 .Where(fi => fi.Exists)

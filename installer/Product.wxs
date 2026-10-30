@@ -26,6 +26,10 @@
                                                       stage time)
       *.pdb
 
+  Plus, once for every Revit year, the RST tray (feature #17, Tray.wxs):
+    %LocalAppData%\Programs\RST\Tray\RST.Tray.exe and its files, and the
+    HKMU Run value RST that starts it at sign-in.
+
   Only the Revit years detected on the computer are installed (decision
   #10, the gantt-it / splash-it pattern; see "Revit detection" below).
   A first install with no supported Revit is refused by a launch
@@ -212,6 +216,10 @@
       <ComponentGroupRef Id="Revit2025" />
       <ComponentGroupRef Id="Revit2026" />
       <ComponentGroupRef Id="Revit2027" />
+      <!-- The RST tray (feature #17): not per Revit year, so unconditional.
+           Its files, Run value, CloseApplication and RemoveFolderEx are in
+           Tray.wxs. -->
+      <ComponentGroupRef Id="Tray" />
     </Feature>
 
   </Package>

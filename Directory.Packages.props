@@ -35,6 +35,10 @@
          the WixToolset.Sdk version pinned in the installer .wixproj files. -->
     <PackageVersion Include="WixToolset.UI.wixext" Version="6.0.2" />
 
+    <!-- RST.msi's tray (feature #17): util:CloseApplication and
+         util:RemoveFolderEx. Same 6.0.2 line as the SDK. -->
+    <PackageVersion Include="WixToolset.Util.wixext" Version="6.0.2" />
+
     <!-- Setup bundle — WixStandardBootstrapperApplication for RST-Setup.exe
          (installer-bundle/RST.Setup.wixproj). Same 6.0.2 line as the SDK. -->
     <PackageVersion Include="WixToolset.BootstrapperApplications.wixext" Version="6.0.2" />

@@ -42,6 +42,13 @@ public static class AppDataPaths
     /// <summary>%AppData%\RST\profiles\.</summary>
     public static string ProfilesDir => Path.Combine(Root, "profiles");
 
+    /// <summary>
+    /// The engine's boot-time prune glob for its session logs under <c>%AppData%\RST\logs\</c>
+    /// (<c>rst_&lt;ts&gt;_boot.log</c> and <c>rst_&lt;ts&gt;.log</c>). The RST tray's logs there are
+    /// <c>tray_*.log</c> (RST.Core.Tray.TrayPaths), which this never matches.
+    /// </summary>
+    public const string EngineSessionLogGlob = "rst_*.log";
+
     private static string? _telemetryRootOverride;
 
     /// <summary>

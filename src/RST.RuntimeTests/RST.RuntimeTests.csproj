@@ -74,4 +74,14 @@
     <ProjectReference Include="..\RST.Bootstrap\RST.Bootstrap.csproj" />
   </ItemGroup>
 
+  <!-- The RST tray (feature #17, spec #20 §1; F17 WU1): RST.Tray is built once, on net8.0-windows with the
+       R25 configuration (src/RST.Tray/RST.Tray.csproj), so its tests (Tray/) build and run on the R25 leg
+       only, the leg that uploads the RST-screenshots artifact. -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2025'">
+    <ProjectReference Include="..\RST.Tray\RST.Tray.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' != '2025'">
+    <Compile Remove="Tray\**" />
+  </ItemGroup>
+
 </Project>
