@@ -1,7 +1,7 @@
 ---
 title: Ribbon Tools
 tags: [rst-c, rstify, required-addins, ribbon]
-date: 2026-06-24
+date: 2026-10-30
 project: rst-c
 purpose: Guide to RSTify tab-hiding and required add-in enforcement
 ---
@@ -12,7 +12,7 @@ purpose: Guide to RSTify tab-hiding and required add-in enforcement
 
 ## Overview
 
-Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are accessible from the Loader.
+Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are set up in the Loader.
 
 ## RSTify
 
@@ -22,19 +22,19 @@ RSTify is a tab-hiding mode. When enabled, rst-c hides every Revit and add-in ta
 
 The intent is to remove the route back into the unfiltered Revit ribbon mid-session. A curated ribbon is only effective if users work from it — RSTify removes the distraction of the full tab bar while keeping the escape hatch (turning RSTify off) obvious and one click away.
 
-The admin sets which tabs a profile hides in the Builder's RST Presets dialog:
+The admin sets which tabs a profile hides by default in the Builder's RST Presets dialog:
 
-![The RST Presets dialog in the Builder — a per-tab toggle list under "RSTify: hide these tabs", with Structure, Steel, Precast, Systems, and Analyze switched on and Architecture, Insert, and Massing & Site left off](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
+![The RST Presets dialog in the Builder: a switch per ribbon tab under "RSTify — Hide These Tabs", some switched on, and the Disable Unused Add-ins switch below](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
 
 ### Turning RSTify on and off
 
-The RSTify button is on the RST panel of the Add-Ins tab. The button icon shows the current state — tabs-hidden (on) or tabs-visible (off). Clicking it toggles the state and the icon updates immediately.
+The **RSTify** button is on the **RST** panel of the **Add-Ins** tab. The button icon shows the current state: tabs hidden (on) or tabs visible (off). Clicking it toggles the state and the icon updates immediately.
 
-The Loader also exposes a toggle in its footer, next to the Apply button, so the user can set RSTify state as part of choosing a profile.
+Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create) and the profile's own tab are never listed. Your switches are applied when you click **Load Profile →** and remembered for that profile.
 
 ### How admin defaults work
 
-The admin sets a default RSTify state and a list of tabs to hide in the Builder, stored in the profile's `presets` field. When a user applies the profile for the first time, those defaults are used. After the user has overridden them, their preference (stored in `active_profile.json`) takes priority on every subsequent apply — the admin default only seeds the first load.
+The admin sets a list of tabs to hide, and the starting position of **Disable unused add-ins**, in the Builder's **RST Presets** dialog; they are stored in the profile's `presets` field. The first time a user selects the profile in the Loader, the Loader asks **Adopt RSTify Presets?** and summarises them. **Continue** adopts them; **Cancel** starts with no tabs hidden. Either way the question is asked only once per profile. From then on the user's own choices, stored per profile in `%AppData%\RST\user_profile_prefs.json`, apply on every load: the admin defaults only seed the first one.
 
 ### Switching profiles with RSTify active
 
@@ -56,7 +56,7 @@ RSTify sets `IsVisible` on `Autodesk.Windows.RibbonTab` objects — the same pro
 
 ### What it does
 
-A profile can declare the add-ins it depends on. On Apply, rst-c checks the live Revit session against that list and takes one of three actions per entry:
+A profile can declare the add-ins it depends on; the Builder works this list out from the commands used when the profile is saved. The Loader shows each one's status (Native, Loaded, Installed, Disabled or Not Found) as soon as you select the profile. When the profile is loaded, rst-c checks the machine against that list and takes one of three actions per entry, then shows the result in the **Add-in Check** dialog:
 
 | Status | What happened | rst-c action |
 |---|---|---|
@@ -66,11 +66,15 @@ A profile can declare the add-ins it depends on. On Apply, rst-c checks the live
 
 ### Auto-enabling disabled add-ins
 
-When rst-c finds a required add-in that is disabled (its `.addin` manifest has been renamed to `.addin.RSTdisabled`), it renames it back to `.addin`. This takes effect on the next Revit launch — add-in DLLs already loaded in the current session do not hot-reload, so a restart is required and rst-c notifies the user.
+When rst-c finds a required add-in that is disabled (its `.addin` manifest has been renamed to `.addin.RSTdisabled`), it renames it back to `.addin` and lists it under **Auto-Restored (Was Disabled)**. This takes effect on the next Revit launch: add-in DLLs already loaded in the current session do not hot-reload, so a restart is required, and the Add-in Check says so.
 
 ### Surfacing missing add-ins
 
-When a required add-in is not found on the machine, rst-c shows its display name and, if the profile includes one, a download URL. The URL is baked into the profile at build time from a curated registry in the Builder — if the registry knew the add-in's download page at profile-creation time, the user gets a clickable link. If not, the name alone is shown.
+When a required add-in is not found on the machine, the Add-in Check lists it under **Missing — Not Installed** with its name and, if the profile includes one, a **download ↗** link. The link is baked into the profile when it is saved, from a curated registry of add-ins in rst-c: if the registry knows the add-in's download page, the user gets a link; if not, the row reads "(no link)". Only `http://` and `https://` links open (in the default browser); anything else in a shared profile is treated as no link.
+
+### Disabling unused add-ins
+
+The Loader's **Disable unused add-ins** switch goes further: on load, every add-in the profile does not require is disabled by renaming its manifest to `.addin.RSTdisabled`, so it does not load next time Revit starts. Before anything is renamed, **Confirm Add-in Changes** lists what stays active, what will be disabled and what rst-c will try to disable; **Cancel** is its default button. **Restore All Add-ins** in the Loader renames every `.addin.RSTdisabled` back. See [Profile Loader](profile-loader.md#loading-a-profile).
 
 ### How matching works
 
@@ -84,7 +88,8 @@ Tier 3 handles the common case where the installed `.addin` filename differs fro
 
 ## Notes & limits
 
+- Changing Revit's UI theme makes Revit rebuild its ribbon, and the hidden tabs come back until the next profile load.
 - RSTify uses tab titles to identify tabs. Tabs with identical titles (rare but possible with some add-ins) will both be affected by a hide rule targeting that title.
-- Auto-enabling a disabled add-in requires write access to the Revit add-in directory. On machines where the add-in directory is locked down, the rename may fail — rst-c logs the failure and surfaces the add-in as still requiring attention.
-- The required add-in check runs on Apply, not on Loader open. A profile's requirements are evaluated against the machine it is applied on, not the machine it was built on.
+- Enabling or disabling an add-in requires write access to its add-in folder. Add-ins installed for all users (under `%ProgramData%`) usually need admin rights; where a rename fails, rst-c logs it and lists the add-in as not changed (for disables, under **Some Add-ins Were Not Disabled**).
+- The Add-in Check and its auto-enable run when a profile is loaded. The status pills the Loader shows on selection only read the running session; they change nothing. A profile's requirements are always evaluated against the machine it is loaded on, not the machine it was built on.
 - Profiles built before the required add-in feature (pre-RST-022) have an empty `requiredAddins` list; the check is a no-op for them.
