@@ -25,7 +25,7 @@ graph LR
 |---|---|---|
 | `RST.Core` | The palette (`Theming/UiPalette`) and every rule with no WPF dependency: the Loader services and rules (`RST.Core.Loader`), the Builder's catalogue, drops, icon picker, editing and save rules (`RST.Core.Builder`), Health severity, formatters and chart maths (`RST.Core.Health`) | `RST.Tests`, on Linux and Windows |
 | `RST.UI` | The vendored kit, the windows, their view-models, the shared controls (`RibbonPreview`, `ActivityChart`, `IconPicker`), and the services that need WPF, dialogs or the file system (logo resize, Health scan and clean). **Revit-free** | `RST.RuntimeTests`, Windows only |
-| `RST.Engine` | The ribbon commands, `RevitThemeDetector`, the ribbon builder | Integration runner (VM) |
+| `RST.Engine` | The ribbon commands, `RevitThemeDetector`, the ribbon builder | Integration runner (VM); the profile tab's AdWindows mapping also in `RST.RuntimeTests` (see [Ribbon stacks](#ribbon-stacks-f15)) |
 
 - **Commands → launchers.** `LoaderCommand`, `BuilderCommand` and `HealthCommand` first capture
   what the window needs from Revit (the command catalogue, the ribbon's tab titles, the profile
@@ -134,7 +134,8 @@ falls back to light.
 - **`ShowInTaskbar="False"`** on every `Window`, dialogs included. An owned window still gets its
   own taskbar entry (grouped under Revit) unless this is set; the VM found that on the first Health
   build. The runtime tests assert it per window: `LoaderTaskbarTests`, `HealthWindowScreenshotTests`,
-  `ProfileBuilderScreenshotTests` and `ProfileBuilderInteractionScreenshotTests`.
+  `ProfileBuilderScreenshotTests`, `ProfileBuilderInteractionScreenshotTests` and
+  `ProfileBuilderStackWindowTests` (the delete-stack confirm).
 
 ### Behavior
 
@@ -312,7 +313,9 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
 - **`RibbonPreview` (`RST.UI/Controls`):** the shared preview. Set `Profile`, optionally
   `OverrideOpacity`, `Mode` (`Loader` or `Builder`: tool labels by name, "(empty)" stacks,
   "No panels configured.") and `TopBarContent`; bump `Revision` or call `Refresh()` after editing
-  the profile in place.
+  the profile in place. Stack rows draw the tools' pack icons at 16 px. The Loader draws a stack
+  only when the ribbon would (`RibbonLayoutPlanner.PlanStack`); the Builder draws every stack,
+  faded when the ribbon would skip it.
 - **Theme.xaml "Loader" block:** `LoaderLink` (Hyperlink: accent text, underlined on hover; its
   contrast is in `UiPalette.Requirements`), `LoaderStrip` (header and footer strips), `LoaderRow`
   (list rows with a divider).
@@ -340,6 +343,7 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
 - **Dialogs:** `IDialogService.Choose` is the three-way prompt (MessageDialog's optional
   `SecondaryText` button) used for Save & Exit / Discard & Exit / Cancel. Every Builder window and
   dialog sets `ShowInTaskbar="False"`.
+- **Stacks (F15):** the Properties pane's Stacks section; see [Ribbon stacks](#ribbon-stacks-f15).
 - **Tests:** `RST.RuntimeTests/Builder`: view-model flows with fakes, screenshots `builder-*`,
   AC6 (`ProfileBuilderDataCompatibilityTests`, over the v2.2.0 fixtures and the captured v2.2.0 save
   payloads in `src/RST.Tests/Fixtures/V220/builder`), and AC7 (`ProfileBuilderPerformanceTests`: 823
@@ -432,6 +436,50 @@ Serilog is older than compiled, which means another add-in's resolver supplied i
 The handler cannot prevent that. Only one Serilog can load into the shared context, so when
 another add-in loads a different major version first, one of the two add-ins loses. RST still shares
 Serilog's global `Log.Logger`; moving to a private logger is planned for v3.1.
+
+## Ribbon stacks (F15)
+
+Feature #15 (spec #17, v3.1) draws profile stacks on the ribbon and brings back their authoring.
+
+- **The planner (`RST.Core/Ribbon/RibbonLayoutPlanner`, tested in `RST.Tests/Ribbon`):** a pure
+  function from a profile panel to an ordered list of `LargeButtonItem`, `StackItem` (2-3 small
+  buttons) and `SkippedItem` (with a reason). Only tool items (a command id, or `URL:`) can be
+  stacked; a stack with fewer than 2 or more than 3 valid items is skipped, never drawn as 1 or 4.
+  Small buttons get one-line labels (`ButtonLabel.Wrap` is for large buttons only). Ids: a rendered
+  item takes the next number in its panel (`RST_ProfileBtn_<panel>_<n>`, unchanged for profiles
+  without stacks); a stack is `RST_ProfileStack_<panel>_<n>` and its buttons `…_<n>_<k>`.
+  `EstimatePanelWidth` feeds `PanelStyling.ApplyColor`. `SlotKind` and `SlotTarget` live here too.
+- **The Engine:** `ProfileTabBuilder.BuildPanel(layout, handler)` maps the layout through
+  `RibbonItemFactory`: a large button, or an AdWindows `RibbonRowPanel` of `Standard` buttons
+  separated by `RibbonRowBreak` (what `AddStackedItems` builds; it only works in `OnStartup`, so it
+  cannot serve a live switch). Each button dispatches through its own `SlotInvokeCommand`, which
+  logs every click. Every skip is logged as a warning. `IconAssets.ResolveSlotIcon16` decodes the
+  32 px pack PNG at 16 px (cached apart from the 32 px icon); `ResolveNativeToolIcon16` and
+  `Default16` are the fallbacks. The old `Slot###` pool (`Slots.cs`, `SlotRegistry.cs`,
+  `SlotCommandBase.cs`) is gone.
+- **Testing the mapping outside Revit (T-A7):** `RST.RuntimeTests` references
+  `Nice3point.Revit.Api.AdWindows` (the version per Revit major, as the Engine) and copies its
+  `ref/` AdWindows.dll next to the tests, because the package ships no runtime asset.
+  `Ribbon/RibbonItemFactoryTests` builds real row panels and buttons with
+  `ProfileTabBuilder.BuildPanel` and a recording `ICommand`; it runs on both CI legs (net8, net10).
+  `BuildPanel` and `RibbonItemFactory` must not touch a Revit API type (RevitAPIUI does not load
+  outside Revit): the click handler comes from the caller. How Revit draws the row panel is proven on
+  the VM only.
+- **Validation:** a stack needs a name and 2-3 items, each `type: "tool"` with a `commandId`
+  (`ProfileSerializer.Validate`, so a file breaking it does not load). A stack no panel refers to is
+  a warning (`ProfileSerializer.Warnings`), and the save drops it (`ProfileEditing.RemoveOrphanStacks`).
+- **The Builder:** the rules are `RST.Core.Builder.StackEditing` (add, rename, delete, tools,
+  place) and the `DragKind.Stack` drops in `PanelDrops`. `StackCardViewModel` and
+  `StackToolRowViewModel` are the Stacks section's rows. A rename comes from the name box's
+  `LostFocus` binding, so the view-model posts the box's re-read to after the write (the same rule
+  as the Closing and ComboBox cases above). The stack name box forwards a `BuilderDrag` to its card
+  in the Preview phase (the TextBox lesson). A stack slot's name box in a panel card is read-only.
+  The only new dialog is the delete confirm, a `MessageDialog` (`DeleteStackDialogId`); its
+  `ShowInTaskbar` is asserted in `ProfileBuilderStackWindowTests`.
+- **Tests:** `RST.Tests` (`RibbonLayoutPlannerTests`, `StackValidationTests` with
+  `Fixtures/Profiles/stacks.json`, `StackEditingTests`) and `RST.RuntimeTests`
+  (`RibbonItemFactoryTests`, `ProfileBuilderStackTests`, `ProfileBuilderStackWindowTests`, and the
+  `builder-stacks` and `loader-stacks` screenshots in `StackScreenshotTests`).
 
 ## History (v2.x to v3.0)
 

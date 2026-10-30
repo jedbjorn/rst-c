@@ -1,9 +1,9 @@
 ---
 title: Ribbon Tools
-tags: [rst-c, rstify, required-addins, ribbon]
+tags: [rst-c, rstify, required-addins, ribbon, stacks]
 date: 2026-10-30
 project: rst-c
-purpose: Guide to RSTify tab-hiding and required add-in enforcement
+purpose: Guide to RSTify tab-hiding, required add-in enforcement and how stacks render on the ribbon
 ---
 
 # Ribbon Tools
@@ -12,7 +12,7 @@ purpose: Guide to RSTify tab-hiding and required add-in enforcement
 
 ## Overview
 
-Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are set up in the Loader.
+Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are set up in the Loader. [Stacks](#stacks-on-the-ribbon) at the end of this page describes how a profile's stacked buttons are drawn on its tab.
 
 ## RSTify
 
@@ -30,7 +30,7 @@ The admin sets which tabs a profile hides by default in the Builder's RST Preset
 
 The **RSTify** button is on the **RST** panel of the **Add-Ins** tab. The button icon shows the current state: tabs hidden (on) or tabs visible (off). Clicking it toggles the state and the icon updates immediately.
 
-Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create), the profile's own tab and the tabs its commands come from are never listed. Your switches are applied when you click **Load Profile →** and remembered for that profile.
+Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create), the profile's own tab and the tabs its commands come from (the tools in its stacks included) are never listed. Your switches are applied when you click **Load Profile →** and remembered for that profile.
 
 ### How admin defaults work
 
@@ -85,6 +85,18 @@ Tier 1: match by addin filename (case-insensitive) :::class1 -> Tier 2: match by
 ```
 
 Tier 3 handles the common case where the installed `.addin` filename differs from what the builder's registry recorded (for example, the registry says `Lumion.addin` but the install ships `LumionLiveSync.addin`). The fuzzy match checks whether the live ribbon has a tab whose title contains the required add-in's tab name (or vice versa), and whether any manifest's display name or file stem is a substring match. This mirrors the logic the Loader's picker uses to decide whether an add-in shows as "Loaded", so the two views agree.
+
+## Stacks on the ribbon
+
+A profile panel can hold [stacks](profile-builder.md#stacks): two or three small buttons, one above the other, built in the Builder.
+
+- **How they look.** A stack is drawn like Revit's own stacked buttons: one small button per row, each with a 16 px icon (the tool's pack icon, decoded at 16 px, or rst-c's default) and its label on one line. Large buttons keep their 32 px icon and two-line label. The panel's colour is drawn behind the whole panel, stacks included.
+- **What they do.** A stacked button works like a large one: it runs its Revit or add-in command, or opens its URL.
+- **When a stack is not drawn.** rst-c draws a stack only when it has two or three valid tools (each a tool with a command id). Otherwise the stack is skipped and the log (`%AppData%\RST\logs\`) records why, for example `stack 'Draw' has 1 valid item; a stack needs 2 or 3`. A tool slot without a command id is skipped the same way. A profile saved by the Builder never contains such a stack.
+- **Switching and unloading.** Stacks are part of the profile tab, so a live profile switch or **Unload** removes them with the tab's other panels, and the next profile is built from scratch.
+- **Required add-ins and RSTify.** Commands in stacks count towards the profile's required add-ins, and the tabs they come from are never offered for hiding.
+
+Stacks are built through the same AdWindows interface as the rest of the profile tab (a row panel of small buttons), because Revit's own `AddStackedItems` only works while Revit starts, and profiles switch while Revit runs.
 
 ## Notes & limits
 
