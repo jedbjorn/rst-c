@@ -70,7 +70,10 @@ function Assert-Layout([string]$Exe, [string[]]$Expect, [string[]]$Checkboxes) {
   $log = Join-Path $Tmp "layout-$name.log"
   $p = Start-Process $Exe -ArgumentList @('/layout', "`"$dir`"", '/quiet', '/log', "`"$log`"") -Wait -PassThru
   if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40 | Write-Host; throw "$name /layout exited $($p.ExitCode)" }
-  $msis = @(Get-ChildItem $dir -Recurse -Filter *.msi -File | ForEach-Object { $_.Name } | Sort-Object)
+  $all = @(if (Test-Path $dir) { Get-ChildItem $dir -Recurse -File })
+  Write-Host "$name /layout exit $($p.ExitCode); $($all.Count) file(s) in ${dir}: $(($all | ForEach-Object { "$($_.FullName.Substring($dir.Length)) ($($_.Length))" }) -join ', ')"
+  if (Test-Path $log) { Select-String -Path $log -Pattern 'layout', 'Layout', 'Apply complete', 'error', 'Plan' -SimpleMatch | Select-Object -First 30 | ForEach-Object { Write-Host "  log: $($_.Line)" } }
+  $msis = @($all | Where-Object { $_.Extension -eq '.msi' } | ForEach-Object { $_.Name } | Sort-Object)
   Write-Host "$name embeds: $($msis -join ', ')"
   Assert (($msis -join '|') -eq ((@($Expect) | Sort-Object) -join '|')) "$name embeds exactly: $((@($Expect) | Sort-Object) -join ', ')"
 
