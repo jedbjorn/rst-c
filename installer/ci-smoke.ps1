@@ -244,7 +244,8 @@ if ($StagedRoot) {
 $launch = Get-MsiQuery $Msi 'SELECT `Condition`, `Description` FROM `LaunchCondition`' 2
 Assert (@($launch | Where-Object { $_[0] -eq $LaunchConditionText -and $_[1] -eq $LaunchMessage }).Count -eq 1) 'LaunchCondition table holds the "none was found" check'
 $secure = Get-MsiProperty $Msi 'SecureCustomProperties'
-Assert ((@('REVIT2025FOUND', 'REVIT2026FOUND', 'REVIT2027FOUND') | Where-Object { ($secure -split ';') -notcontains $_ }).Count -eq 0) 'REVIT<year>FOUND properties are Secure'
+$notSecure = @(@('REVIT2025FOUND', 'REVIT2026FOUND', 'REVIT2027FOUND') | Where-Object { ($secure -split ';') -notcontains $_ })
+Assert ($notSecure.Count -eq 0) "REVIT<year>FOUND properties are Secure (missing: $($notSecure -join ', '))"
 
 Show-Related 'start'
 Assert ((Get-Related $UnifiedCode).Count -eq 0 -and (Get-Related $PreviewCode).Count -eq 0) 'runner starts with no RST product'
