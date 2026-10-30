@@ -43,9 +43,9 @@
                                       helper not run; uninstall, no elevation
       S2  InstallScope=machine, an older RST.msi (-OlderRstMsi, 1.0.0)
           installed for this user, the fixture ticked
-                                      one elevated engine; the helper removes
-                                      the user's own 1.0.0 BEFORE RST-Machine
-                                      installs; RST-Machine per machine (the
+                                      one elevated engine; RST-Machine installs,
+                                      THEN the helper removes the user's own
+                                      1.0.0 (review D1); RST-Machine per machine (the
                                       layout, HKLM Run); the fixture per user;
                                       the bundle stays registered per user
       S3  re-run with no InstallScope, then with InstallScope=user, while
@@ -54,8 +54,8 @@
       S4  bundle uninstalled (ARP)    RST-Machine removed (one elevation), the
                                       fixture stays (Permanent)
       S5  InstallScope=machine over the SAME-version RST.msi installed bare
-                                      the user's copy is gone first, then
-                                      RST-Machine; uninstall clean
+                                      RST-Machine installs first, then the
+                                      user's copy goes (review D1); uninstall clean
       S6  InstallScope=machine over the public v2.2.0 RST.msi AND the
           retired RST-R27.msi preview (-V220RstMsi, -V220PreviewMsi)
                                       the helper removes both; exactly "RST
@@ -67,7 +67,7 @@
           ping.exe), an older RST.msi installed
                                       the helper stops before removing
                                       anything (exit 32): the user keeps RST,
-                                      RST-Machine is not installed
+                                      RST-Machine is rolled back (review D1)
 
   Product queries go through the WindowsInstaller.Installer COM object via
   InvokeMember (it has no type library PowerShell can bind to).
@@ -556,7 +556,7 @@ if ($Mode -eq 'Scope') {
   Assert (Select-String -Path $helper -Pattern "$($older[0].ProductCode): RST 1.0.0 is installed for this user; cached package" -SimpleMatch -Quiet) '[S2] the helper found and removed the user''s own RST 1.0.0'
   Assert (Select-String -Path $helper -Pattern "$($older[0].ProductCode): Windows Installer returned 0" -SimpleMatch -Quiet) '[S2] that removal returned 0'
   $iHelper = Get-AppliedIndex $log 'RemoveUserRst'; $iMachine = Get-AppliedIndex $log 'RSTMachine'
-  Assert ($iHelper -gt 0 -and $iMachine -gt $iHelper) "[S2] the user's copy was removed before RST-Machine installed (log lines $iHelper < $iMachine)"
+  Assert ($iMachine -gt 0 -and $iHelper -gt $iMachine) "[S2] RST-Machine installed first, then the user's copy was removed (log lines $iMachine < $iHelper; review D1)"
   Assert-Rst $false 'S2 user copy removed'
   Assert-MachineProduct $true 'S2'
   Assert-Fixture '1.1.0' 'S2 companion for this user'
@@ -590,13 +590,14 @@ if ($Mode -eq 'Scope') {
   $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallScope=Machine') 'S5-machine-same'
   Show-State 'S5' $codes; Show-Scope $log
   Observe "S5 RST plan: $((Get-PlanLine $log 'RST').Trim())"
-  $null = Get-HelperLog $log
+  $helper = Get-HelperLog $log
+  Assert ($null -ne $helper -and (Select-String -Path $helper -Pattern 'Windows Installer returned 0' -SimpleMatch -Quiet)) '[S5] the helper removed the same-version RST.msi (Burn''s own RST package then finds it gone)'
   Assert ((Get-Elevations $log) -eq 1) '[S5] one elevated engine'
   Assert-Rst $false 'S5 user copy removed'
   Assert-MachineProduct $true 'S5 (InstallScope=Machine: any case)'
   $iMachine = Get-AppliedIndex $log 'RSTMachine'
-  $iUser = @((Get-AppliedIndex $log 'RST'), (Get-AppliedIndex $log 'RemoveUserRst')) | Where-Object { $_ -gt 0 } | Sort-Object | Select-Object -First 1
-  Assert ($iUser -gt 0 -and $iMachine -gt $iUser) "[S5] the user's copy was removed before RST-Machine installed (log lines $iUser < $iMachine)"
+  $iUser = Get-AppliedIndex $log 'RemoveUserRst'
+  Assert ($iMachine -gt 0 -and $iUser -gt $iMachine) "[S5] RST-Machine installed first, then the user's copy was removed (log lines $iMachine < $iUser; review D1)"
   Uninstall-BundleViaArp 'S5-uninstall' | Out-Null
   Assert-MachineProduct $false 'S5 uninstalled'
 
@@ -613,6 +614,8 @@ if ($Mode -eq 'Scope') {
   Assert ($null -ne $helper) '[S6] the helper wrote its log'
   Assert (Select-String -Path $helper -Pattern "$($userPreview[0].ProductCode): Windows Installer returned 0" -SimpleMatch -Quiet) '[S6] the helper removed the 2027 preview'
   Assert (Select-String -Path $helper -Pattern "$($userRst[0].ProductCode): Windows Installer returned 0" -SimpleMatch -Quiet) '[S6] the helper removed RST.msi 2.2.0'
+  $iMachine = Get-AppliedIndex $log 'RSTMachine'; $iHelper = Get-AppliedIndex $log 'RemoveUserRst'
+  Assert ($iMachine -gt 0 -and $iHelper -gt $iMachine) "[S6] RST-Machine installed first, then the user's copies were removed (log lines $iMachine < $iHelper)"
   Assert ((Get-Related $PreviewCode).Count -eq 0) '[S6] no 2027 preview product left'
   Assert-Rst $false 'S6 no per-user RST left'
   Assert-MachineProduct $true 'S6'
@@ -638,7 +641,7 @@ if ($Mode -eq 'Scope') {
   Assert-MachineProduct $false 'S7 uninstalled'
 
   # S8 (review N2, B2) - Revit running in this session: the helper stops before it removes anything, so the user
-  # keeps their RST and RST-Machine is not installed. A copy of ping.exe named Revit.exe stands in for Revit.
+  # keeps their RST, and Burn rolls RST-Machine (installed first, review D1) back. A copy of ping.exe named Revit.exe stands in for Revit.
   Invoke-Msiexec '/i' $OlderRstMsi 'S8-older-user-rst'
   Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   $fakeDir = New-Item -ItemType Directory -Force (Join-Path $LogDir 'fake-revit')
@@ -655,14 +658,16 @@ if ($Mode -eq 'Scope') {
     Assert (Select-String -Path $helper -Pattern 'Revit is running in this session' -SimpleMatch -Quiet) '[S8] the helper saw Revit running'
     Assert (Select-String -Path $helper -Pattern 'stopped before removing anything' -SimpleMatch -Quiet) '[S8] it stopped before removing anything'
     Assert (Select-String -Path $log -Pattern 'The process for package: RemoveUserRst exited with code: 0x20' -SimpleMatch -Quiet) '[S8] Burn records the helper''s exit 32 (Revit is running)'
-    Assert ((Get-AppliedIndex $log 'RSTMachine') -lt 0) '[S8] RST-Machine was never applied'
+    $iMachine = Get-AppliedIndex $log 'RSTMachine'; $iHelper = Get-AppliedIndex $log 'RemoveUserRst'
+    Assert ($iMachine -gt 0 -and $iHelper -gt $iMachine) "[S8] RST-Machine was applied first, then the helper stopped (log lines $iMachine < $iHelper)"
+    Assert (Select-String -Path $log -Pattern 'Applied rollback package: RSTMachine' -SimpleMatch -Quiet) '[S8] Burn rolled RST-Machine back after the helper stopped (review D1)'
   } finally {
     $revit | Stop-Process -Force -ErrorAction SilentlyContinue
   }
   $kept = Get-Related $RstCode
   Assert ($kept.Count -eq 1 -and $kept[0].Version -eq '1.0.0') '[S8] the user still has their RST 1.0.0'
   Assert (Test-Path (Join-Path $AppData 'Autodesk\Revit\Addins\2026\RST.addin')) '[S8] and its files'
-  Assert ((Get-Related $MachineUpgradeCode).Count -eq 0) '[S8] RST-Machine is not installed'
+  Assert-MachineProduct $false 'S8 RST-Machine rolled back: nothing left in Program Files, no HKLM Run'
   foreach ($p in $kept) { Invoke-Msiexec '/x' $p.ProductCode 'S8-cleanup' }
   Assert ((Get-BundleArp).Count -eq 0) '[S8] no bundle left registered'
   Assert-Rst $false 'end'

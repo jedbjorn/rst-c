@@ -156,7 +156,7 @@ RST-Setup.exe /quiet /norestart InstallScope=machine InstallGanttIt=1
 
 Deploy `RST-Machine.msi` on its own as SYSTEM. `RST-Setup.exe` is for an administrator signed in at the PC: as SYSTEM it would register itself, and install companions, for no real user.
 
-**Both installed:** if a user also has their own `RST.msi`, Revit loads their own copy. "Everyone on this PC" in `RST-Setup.exe` removes the installing user's own copies first (including the retired Revit 2027 preview). It changes nothing if Revit is open or a copy can't be removed. A bare `RST-Machine.msi` refuses to install until that copy is removed. Any other user is told once by their tray how to remove theirs.
+**Both installed:** if a user also has their own `RST.msi`, Revit loads their own copy. "Everyone on this PC" in `RST-Setup.exe` installs RST for everyone, then removes the installing user's own copies (including the retired Revit 2027 preview). If Revit is open or a copy can't be removed, it rolls back: the user keeps their own RST. A bare `RST-Machine.msi` refuses to install until that copy is removed. Any other user is told once by their tray how to remove theirs.
 
 **Switching back** to just for me is uninstall, then install: remove "RST (all users)", then install `RST.msi`. Details: [`installer/README.md`](installer/README.md#per-machine-install-rst-machinemsi) and [docs/tray.md](docs/tray.md#installed-for-everyone-on-this-pc-it).
 

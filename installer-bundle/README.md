@@ -26,9 +26,9 @@ A same-version bundle (an rc and its final, both `3.0.0`) replaces the installed
 
 | Package | When | Burn attributes | Add/Remove Programs |
 |---|---|---|---|
-| `RST.msi` (`RST`) | "Just for me" (the default). On "Everyone on this PC", Burn removes it if this version is installed for the user | vital (a failure fails the setup and rolls back) | hidden behind the bundle's `RST` entry |
-| `RST.RemoveUserRst.exe` (`RemoveUserRst`, from `helper\RemoveUserRst.cs`), first in the chain | "Everyone on this PC" only: checks Revit is closed and every copy can be removed, then removes the user's own `RST.msi` (any version) and the retired 2027 preview, unelevated | `PerMachine="no"`, `Permanent="yes"`, `Vital="yes"`, no detection, `Cache="remove"` | none |
-| `RST-Machine.msi` (`RSTMachine`) | "Everyone on this PC" only | per machine, vital, `Visible="yes"` | its own `RST (all users)` entry, which every administrator sees |
+| `RST-Machine.msi` (`RSTMachine`), first in the chain | "Everyone on this PC" only | per machine, vital, `Visible="yes"`, `RSTFROMSETUP=1` | its own `RST (all users)` entry, which every administrator sees |
+| `RST.RemoveUserRst.exe` (`RemoveUserRst`, from `helper\RemoveUserRst.cs`), after `RST-Machine.msi` | "Everyone on this PC" only: checks Revit is closed and every copy can be removed, then removes the user's own `RST.msi` (any version) and the retired 2027 preview, unelevated. A stop rolls `RST-Machine.msi` back | `PerMachine="no"`, `Permanent="yes"`, `Vital="yes"`, no detection, `Cache="remove"` | none |
+| `RST.msi` (`RST`) | "Just for me" (the default). On "Everyone on this PC", Burn removes it if this version is installed for the user (the helper already has) | vital (a failure fails the setup and rolls back) | hidden behind the bundle's `RST` entry |
 | each shippable companion (`GanttIt-1.1.0.msi`, `SplashIt-1.1.0.msi`) | only when its box is ticked, on either path, for the installing user | `Permanent="yes"`, `Visible="yes"`, `Vital="no"`, `InstallCondition="Install<Id> = 1"` | its own entry |
 
 Everything is embedded: `RST-Setup.exe` is one offline file, and nothing is downloaded at install time.
@@ -46,18 +46,18 @@ The first page has two radio buttons, worded as spec #20 §7 words them:
 
 On the "Everyone on this PC" path, the companions' header says the same: they install for your Windows account only, and other users add them from the RST tray. WixStdBA 6.0.2's theme radio buttons (`RadioButtons Name="InstallScope"`) bind to a Burn variable, so the two-button fallback was not needed. The theme uses Windows' classic system colours: it has no dark variant.
 
-They set the Burn variable `InstallScope` to `user` or `machine`. In chain order, the "Everyone on this PC" path runs these steps:
-1. **The user's own RST goes first, unelevated, as that user.** `RemoveUserRst` runs first in the chain. Burn cannot remove an older version through a package it does not carry, hence the helper.
-   - **What it removes:** every per-user product of that user with `RST.msi`'s UpgradeCode, at any version (installed bare or by an older setup), and the retired Revit 2027 preview `RST-R27.msi` (`02BE4399-…`).
+They set the Burn variable `InstallScope` to `user` or `machine`. **The user always ends with RST, in one form or the other.** In chain order, the "Everyone on this PC" path runs these steps (review D1):
+1. **`RST-Machine.msi` installs first.** It is the one per-machine package, so Windows asks for an administrator once. Burn shows the prompt when the install starts, before any package runs: declining it changes nothing.
+   - Setup passes `RSTFROMSETUP=1`, so `RST-Machine.msi` installs beside the user's own per-user RST, which is still there at this point. The two share no component, folder or Run key.
+   - **If this step fails,** nothing per-user has been touched; the user keeps their RST.
+2. **Then the user's own RST is removed, unelevated, as that user,** by `RemoveUserRst`. Burn cannot remove an older version through a package it does not carry, hence the helper.
+   - **What it removes:** every per-user product of that user with `RST.msi`'s UpgradeCode, at any version (installed bare or by an older setup), and the retired Revit 2027 preview `RST-R27.msi` (`02BE4399-…`), the preview first.
    - **What it checks first, before anything is removed:**
      - Revit must be closed in the user's session. With the full UI it asks "Close Revit, then click Retry"; otherwise it stops with exit 32.
      - Each product must be removable, with its cached installer present; otherwise it stops with exit 1612.
-   - **After a stop:** nothing has changed, the setup fails before `RST-Machine.msi`, and the user keeps their RST.
-   - **The order:** the preview goes first, then `RST.msi`.
-   - **Burn's own `RST` package,** whose condition is false on this path, then finds the bundled version already gone. Burn logs that and carries on; if a later package fails, Burn's rollback reinstalls that version.
-2. **`RST-Machine.msi` installs.** It is the one per-machine package, so Windows asks for an administrator once, when the install starts. Burn shows the prompt before any package runs; the user's own packages still run in the setup's unelevated process.
-   - Setup passes `RSTFROMSETUP=1`, so a leftover per-user `RST.addin` that no installer can remove (a hand copy) doesn't fail the install. It is reported like any shadow: the engine logs it, and the tray tells the user once. A bare `RST-Machine.msi` still refuses it and names the file.
-   - **If this step fails after the user's copy was removed** (for example, the elevation prompt is declined or Windows Installer reports an error), the user may be left without RST for their account. Run `RST-Setup.exe` again, or choose "Just for me".
+   - **After a stop or a failure:** the helper is vital, so Burn rolls `RST-Machine.msi` back. The user keeps their own RST, and the setup reports the failure. A removal that fails midway (the preview gone, then `RST.msi` fails) still leaves `RST.msi`.
+   - **A leftover per-user `RST.addin` that no installer can remove** (a hand copy) stays. It is reported like any shadow: the engine logs it, and the tray tells the user once. A bare `RST-Machine.msi` refuses it instead and names the file.
+   - **Burn's own `RST` package,** whose condition is false on this path, then finds the bundled version already gone. Burn logs that and carries on.
 3. **Ticked companions install for the installing user.** Companions stay per user (contract C1). Every other user adds them from their RST tray.
 
 **The scope is found again on every run.** While `RST-Machine.msi` is installed, the scope is `machine`. "Just for me" is then disabled, and its text says to uninstall "RST (all users)" first. So a repair, an upgrade or a re-run never silently switches scope, and never quietly needs an administrator. Otherwise the scope comes from the radio buttons or the command line, and anything but `machine` (in any case) is `user`.
@@ -164,7 +164,7 @@ dotnet build installer-bundle\RST.Setup.wixproj -c Release
   - `Companions`: the real `RST-Setup.exe` with both companions ticked. Both install silently with their own entries and `.addin` files, survive the bundle's uninstall, uninstall with `msiexec /x`, and install alone without rst-c.
 
   - `UI`: the real `RST-Setup.exe` through its own UI. It checks the scope radio buttons' wording, that "Just for me" is the default, and the companions' header on each path, then installs per user with no elevated engine. It then installs `RST-Machine.msi` bare and checks the locked state: "Just for me" disabled, with its "uninstall RST (all users) first" text. Screenshots are uploaded.
-  - `Scope` (feature #17, AC10): both install-scope paths with the test bundle. "Just for me" launches no elevated engine. "Everyone on this PC" launches exactly one, and removes the user's own `RST.msi` (a 1.0.0 build of the same commit, then the same version installed bare) before `RST-Machine.msi` installs. It also checks that re-runs keep the scope and that uninstall is clean. With v2.2.0 `RST.msi` and the `RST-R27.msi` preview installed it ends with only "RST (all users)". A hand-copied manifest does not block it. With Revit running, the helper stops before removing anything.
+  - `Scope` (feature #17, AC10): both install-scope paths with the test bundle. "Just for me" launches no elevated engine. "Everyone on this PC" launches exactly one, and installs `RST-Machine.msi`, then removes the user's own `RST.msi` (a 1.0.0 build of the same commit, then the same version installed bare). It also checks that re-runs keep the scope and that uninstall is clean. With v2.2.0 `RST.msi` and the `RST-R27.msi` preview installed it ends with only "RST (all users)". A hand-copied manifest does not block it. With Revit running, the helper stops before removing anything and `RST-Machine.msi` is rolled back, so the user keeps their RST.
 
   `Chain` and `Companions` also assert from the Burn log that the bundle registered per-user and never launched an elevated engine. The elevation check is Burn's own: it logs "Launching elevated engine process" whenever it starts its elevated engine, even on CI's already-elevated runner. Every silent run uses `/quiet /norestart`, the documented form.
 

@@ -206,7 +206,7 @@ Deploy `RST-Machine.msi` on its own as SYSTEM. Run as SYSTEM, `RST-Setup.exe` wo
   ```
 
   Each tray comes back at that user's next sign-in, or when Revit starts it. Until then the icon may linger until the pointer passes over it. Revit open in any session still holds RST's engine files, and needs the restart as any add-in does.
-- **Installed twice:** a user who also has their own `RST.msi` runs their own copy. Revit lets a per-user add-in of the same name win. RST logs it at every Revit start, and the tray tells that user once: "RST is installed twice … To use the shared one, remove "RST" in Settings > Apps, and keep "RST (all users)"." Their profiles and settings stay. `RST-Machine.msi` refuses to install while the installing administrator has their own copy, and `RST-Setup.exe`'s "Everyone on this PC" removes it for them first. Setup checks first that Revit is closed and that every copy can be removed; if not, it changes nothing.
+- **Installed twice:** a user who also has their own `RST.msi` runs their own copy. Revit lets a per-user add-in of the same name win. RST logs it at every Revit start, and the tray tells that user once: "RST is installed twice … To use the shared one, remove "RST" in Settings > Apps, and keep "RST (all users)"." Their profiles and settings stay. A bare `RST-Machine.msi` refuses to install while the installing administrator has their own copy. `RST-Setup.exe`'s "Everyone on this PC" installs RST for everyone, then removes that copy. If Revit is open or a copy can't be removed, it rolls back, and the administrator keeps their own RST.
 - **Going back to per user** is uninstall, then install: remove "RST (all users)", then install `RST.msi`.
 
 ## Allowlisting (AppLocker, antivirus)

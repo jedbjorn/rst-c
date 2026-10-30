@@ -482,12 +482,12 @@ jobs:
   #                page's "companions stay installed" note; screenshots uploaded.
   #   Scope        the test bundle on both install-scope paths (feature #17,
   #                AC10): "Just for me" (the default) launches no elevated
-  #                engine; "Everyone on this PC" launches exactly one, removes
-  #                the user's own RST.msi (an older build, then the same
-  #                version, then v2.2.0 with the retired R27 preview) before
-  #                RST-Machine.msi installs, keeps the scope on re-runs,
-  #                installs over a hand-copied manifest, stops untouched while
-  #                Revit runs, and uninstalls cleanly. UI also checks the
+  #                engine; "Everyone on this PC" launches exactly one, installs
+  #                RST-Machine.msi, then removes the user's own RST.msi (an older
+  #                build, the same version, v2.2.0 with the retired R27 preview),
+  #                keeps the scope on re-runs,
+  #                installs over a hand-copied manifest, rolls back while
+  #                Revit runs (the user keeps RST), uninstalls cleanly. UI checks the
   #                locked "Just for me" while RST-Machine.msi is installed.
   bundle-smoke:
     name: Bundle smoke (${{ matrix.mode }})
