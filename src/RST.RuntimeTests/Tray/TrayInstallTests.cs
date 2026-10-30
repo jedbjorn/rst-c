@@ -399,18 +399,89 @@ public class TrayInstanceClaimTests
     {
         const string sid = "S-1-5-21-0-0-0-424242"; // a test-only name, never a real user's tray
         var claim = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromSeconds(5));
-        Assert.NotNull(claim);
+        Assert.True(claim.Held);
         try
         {
             Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { })); // a tray started now exits
-            Assert.Null(TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(200)));  // nor can a second updater take it
+            using var second = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(200)); // nor can a second updater take it
+            Assert.False(second.Held);
+            Assert.False(second.Release());
         }
         finally
         {
-            claim!.Dispose();
+            Assert.True(claim.Release());
         }
+        Assert.False(claim.Held);
         using var tray = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
         Assert.NotNull(tray); // the new tray takes it after the hand-over
+    }
+
+    /// <summary>
+    /// SC-022: the tray was still running when the updater asked (it was never told to quit), so the claim was not held
+    /// in time; it keeps waiting and takes the mutex the moment the tray lets it go (Restart Manager closing it for
+    /// msiexec), so a tray started after that exits instead of running from the folder being replaced.
+    /// </summary>
+    [Fact]
+    public void A_claim_not_held_in_time_takes_the_mutex_the_moment_the_tray_lets_it_go()
+    {
+        var sid = "S-1-5-21-0-0-1-" + Random.Shared.Next(100000, 999999);
+        var log = new List<string>();
+        using var trayExits = new ManualResetEventSlim();
+        using var trayRuns = new ManualResetEventSlim();
+        var trayOwned = false;
+        var tray = new Thread(() =>
+        {
+            using var running = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
+            trayOwned = running is not null;
+            trayRuns.Set();
+            trayExits.Wait();
+        });
+        tray.Start();
+        Assert.True(trayRuns.Wait(TimeSpan.FromSeconds(10)));
+        Assert.True(trayOwned);
+
+        using var claim = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(300), log.Add);
+        Assert.False(claim.Held);
+        trayExits.Set(); // the old tray quits (Restart Manager)
+        tray.Join();
+        Assert.True(SpinWait.SpinUntil(() => claim.Held, TimeSpan.FromSeconds(10)), "the pending claim did not take the freed mutex");
+        Assert.Contains(log, l => l.Contains("took the tray's single-instance mutex", StringComparison.Ordinal));
+        Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { })); // Restart Manager's restart exits
+        Assert.True(claim.Release());
+        using var next = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
+        Assert.NotNull(next); // the updater's tray, after the hand-over
+    }
+
+    /// <summary>A killed tray leaves its mutex abandoned: the waiting claim gets it (exactly one owner) and hands it over.</summary>
+    [Fact]
+    public void A_claim_waiting_on_a_killed_tray_takes_the_abandoned_mutex()
+    {
+        var sid = "S-1-5-21-0-0-2-" + Random.Shared.Next(100000, 999999);
+        using var trayDies = new ManualResetEventSlim();
+        using var trayRuns = new ManualResetEventSlim();
+        var trayOwned = false;
+        var tray = new Thread(() =>
+        {
+            var mutex = new Mutex(false, TrayPaths.MutexName(sid));
+            trayOwned = mutex.WaitOne(0);
+            trayRuns.Set();
+            trayDies.Wait();
+            // The thread ends owning it, never released: Windows marks it abandoned (a killed tray).
+            GC.KeepAlive(mutex);
+        });
+        tray.Start();
+        Assert.True(trayRuns.Wait(TimeSpan.FromSeconds(10)));
+        Assert.True(trayOwned);
+
+        using var claim = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(300));
+        Assert.False(claim.Held);
+        trayDies.Set();
+        tray.Join();
+        Assert.True(SpinWait.SpinUntil(() => claim.Held, TimeSpan.FromSeconds(10)), "the pending claim did not take the abandoned mutex");
+        Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { }));
+        Assert.True(claim.Release());
+        using var next = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
+        Assert.NotNull(next);
     }
 }
 
