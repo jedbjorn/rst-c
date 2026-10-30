@@ -391,55 +391,74 @@ public static class HealthScanner
         return os;
     }
 
-    // ─── GPU (EnumDisplayDevices + the display-class registry) ─────────
+    // ─── GPU (present display-class devices; EnumDisplayDevices for the primary) ──
 
     /// <summary>
-    /// Every display adapter (integrated + discrete) from EnumDisplayDevices,
-    /// each with its driver version and real 64-bit VRAM matched from the
-    /// registry by name. The first entry is the primary adapter; callers use
-    /// it for the backward-compatible single <see cref="Gpu"/> field. When
-    /// EnumDisplayDevices lists nothing, the registry's adapters stand in.
+    /// Every installed display adapter (integrated + discrete, and a remote
+    /// display adapter in an RDP session), each with its own driver version
+    /// and real 64-bit VRAM. The first entry is the primary adapter; callers
+    /// use it for the backward-compatible single <see cref="Gpu"/> field.
     /// </summary>
     private static List<Gpu> ReadGpus()
     {
-        var gpus = new List<Gpu>();
         try
         {
-            // All adapters' driver version and VRAM, keyed by DriverDesc.
-            var adapters = ReadAdapterTable();
-
-            var names = HealthNative.DisplayAdapters().Select(a => a.Name).ToList();
-            if (names.Count == 0)
-                names = adapters.Select(a => a.Desc).Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-            foreach (var name in names)
-            {
-                // Matched by name, so a multi-GPU box never reports one card's
-                // driver or VRAM for another.
-                var match = adapters.FirstOrDefault(a => string.Equals(a.Desc, name, StringComparison.OrdinalIgnoreCase));
-                var gpu = new Gpu
-                {
-                    Name          = name,
-                    DriverVersion = match.DriverVersion ?? "",
-                };
-                if (match.Mb > 0) gpu.VramTotalMB = match.Mb;
-                gpus.Add(gpu);
-            }
-
-            // Unambiguous single-adapter fallback: exactly one GPU and exactly
-            // one sized registry adapter that didn't name-match (DriverDesc can
-            // differ from the adapter name on some single-GPU rigs). Safe
-            // because there is only one card it could be.
-            var sized = adapters.Where(a => a.Mb > 0).ToList();
-            if (gpus.Count == 1 && sized.Count == 1 && gpus[0].VramTotalMB is null)
-            {
-                gpus[0].VramTotalMB = sized[0].Mb;
-                if (string.IsNullOrEmpty(gpus[0].DriverVersion)) gpus[0].DriverVersion = sized[0].DriverVersion ?? "";
-            }
+            var debug = (Action<Exception, string>)((ex, what) => Log.Debug(ex, "HealthScanner.ReadGpus: {What} failed", what));
+            var devices = HealthNative.PresentDisplayDevices(debug);
+            var outputs = HealthNative.DisplayAdapters();
+            return ComposeGpus(devices, outputs, devices.Count == 0 ? ReadAdapterTable() : []);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "HealthScanner.ReadGpus (EnumDisplayDevices) failed");
+            Log.Warning(ex, "HealthScanner.ReadGpus failed");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// The GPU rows (review B2). Normally one per present display-class device (<paramref name="devices"/>,
+    /// each with the values of its own driver key), the one driving the primary monitor first. Only when
+    /// setupapi lists nothing: one per session output (<paramref name="outputs"/>), matched to
+    /// <paramref name="classTable"/> by name, and a lone unmatched adapter takes the lone sized class entry
+    /// only when it has no class entry of its own (so a remote display adapter never takes the physical
+    /// card's VRAM).
+    /// </summary>
+    internal static List<Gpu> ComposeGpus(
+        IReadOnlyList<HealthNative.PresentDevice> devices,
+        IReadOnlyList<HealthNative.Adapter> outputs,
+        IReadOnlyList<(string Desc, long Mb, string? DriverVersion)> classTable)
+    {
+        static long? Mb(long bytes) => bytes > 0 ? (long)Math.Round(bytes / (1024.0 * 1024.0)) : null;
+
+        if (devices.Count > 0)
+        {
+            var primary = HealthNative.PrimaryIndex(devices, outputs);
+            var order = Enumerable.Range(0, devices.Count).OrderBy(i => i == primary ? 0 : 1).ThenBy(i => i);
+            return order.Select(i => new Gpu
+            {
+                Name = devices[i].Name,
+                DriverVersion = devices[i].DriverVersion,
+                VramTotalMB = Mb(devices[i].VramBytes),
+            }).ToList();
+        }
+
+        var gpus = new List<Gpu>();
+        foreach (var output in outputs)
+        {
+            var match = classTable.FirstOrDefault(a => string.Equals(a.Desc, output.Name, StringComparison.OrdinalIgnoreCase));
+            gpus.Add(new Gpu
+            {
+                Name = output.Name,
+                DriverVersion = match.DriverVersion ?? "",
+                VramTotalMB = match.Mb > 0 ? match.Mb : null,
+            });
+        }
+        var sized = classTable.Where(a => a.Mb > 0).ToList();
+        if (gpus.Count == 1 && sized.Count == 1 && gpus[0].VramTotalMB is null
+            && !classTable.Any(a => string.Equals(a.Desc, gpus[0].Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            gpus[0].VramTotalMB = sized[0].Mb;
+            if (string.IsNullOrEmpty(gpus[0].DriverVersion)) gpus[0].DriverVersion = sized[0].DriverVersion ?? "";
         }
         return gpus;
     }
@@ -485,7 +504,7 @@ public static class HealthScanner
         return list;
     }
 
-    private static long ReadMemorySizeBytes(RegistryKey adapter)
+    internal static long ReadMemorySizeBytes(RegistryKey adapter)
     {
         // qwMemorySize is the modern 64-bit QWORD; .NET surfaces REG_QWORD as a
         // boxed long, but some drivers store it as an 8-byte REG_BINARY.

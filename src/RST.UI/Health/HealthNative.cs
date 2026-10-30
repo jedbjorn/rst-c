@@ -3,8 +3,12 @@
 // or the registry, needs no elevation, and returns empty values on any failure; HealthScanner degrades
 // per section, as before.
 //
-//   Display adapters  user32 EnumDisplayDevices (was Win32_VideoController); the driver version and
-//                     VRAM come from each adapter's display-class registry key, as the VRAM did before
+//   Display adapters  setupapi: every PRESENT display-class device (was Win32_VideoController, which
+//                     reflects the same devices), with the name, driver version and VRAM read from
+//                     each device's own driver key. user32 EnumDisplayDevices only marks the primary
+//                     adapter: it lists the outputs of this session, so over RDP it sees only the
+//                     remote display adapter and on a hybrid laptop only the GPU that drives a screen
+//                     (review B2)
 //   Monitors          user32 GetSystemMetrics(SM_CMONITORS) (was Win32_DesktopMonitor)
 //   Resolution        user32 EnumDisplaySettings(primary, current mode) (was Win32_DesktopMonitor, then
 //                     Win32_VideoController's CurrentHorizontal/VerticalResolution)
@@ -87,12 +91,16 @@ internal static class HealthNative
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
 
-    /// <summary>One display adapter: its name, and whether it drives the primary monitor.</summary>
-    internal sealed record Adapter(string Name, bool Primary);
+    /// <summary>
+    /// One adapter with outputs in this session: its name, its PnP hardware ID (<c>PCI\VEN_…&amp;DEV_…</c>,
+    /// the prefix of the device's instance ID) and whether it drives the primary monitor.
+    /// </summary>
+    internal sealed record Adapter(string Name, string HardwareId, bool Primary);
 
     /// <summary>
-    /// Every display adapter, primary first: EnumDisplayDevices lists one entry per adapter output, so
-    /// entries are merged by adapter (the device key's adapter part), and mirroring drivers are skipped.
+    /// The adapters with outputs in this session, primary first: EnumDisplayDevices lists one entry per
+    /// adapter output, so entries are merged by adapter (the device key's adapter part), and mirroring
+    /// drivers are skipped. Used for the primary flag only: the GPU list is <see cref="PresentDisplayDevices"/>.
     /// </summary>
     internal static List<Adapter> DisplayAdapters()
     {
@@ -112,10 +120,133 @@ internal static class HealthNative
                 if (primary && !known.Primary) seen[key] = known with { Primary = true };
                 continue;
             }
-            seen[key] = new Adapter(name, primary);
+            seen[key] = new Adapter(name, (d.DeviceID ?? "").Trim(), primary);
             order.Add(key);
         }
         return order.Select(k => seen[k]).OrderByDescending(a => a.Primary).ToList();
+    }
+
+    // ─── Present display-class devices (setupapi) ────────────────────────
+
+    private static readonly Guid DisplayClassGuid = new("4d36e968-e325-11ce-bfc1-08002be10318");
+    private static readonly IntPtr InvalidHandle = new(-1);
+    private const int DigcfPresent = 0x2;
+    private const int DicsFlagGlobal = 0x1;
+    private const int DiregDrv = 0x2;
+    private const int KeyRead = 0x20019;
+    private const int SpdrpDeviceDesc = 0x0;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SpDevinfoData
+    {
+        public int cbSize;
+        public Guid ClassGuid;
+        public int DevInst;
+        public IntPtr Reserved;
+    }
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "SetupDiGetClassDevsW")]
+    private static extern IntPtr SetupDiGetClassDevs(ref Guid classGuid, string? enumerator, IntPtr hwndParent, int flags);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetupDiEnumDeviceInfo(IntPtr deviceInfoSet, int memberIndex, ref SpDevinfoData deviceInfoData);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    private static extern IntPtr SetupDiOpenDevRegKey(IntPtr deviceInfoSet, ref SpDevinfoData deviceInfoData, int scope, int hwProfile, int keyType, int samDesired);
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "SetupDiGetDeviceInstanceIdW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetupDiGetDeviceInstanceId(IntPtr deviceInfoSet, ref SpDevinfoData deviceInfoData, [Out] char[] buffer, int bufferSize, out int requiredSize);
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "SetupDiGetDeviceRegistryPropertyW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetupDiGetDeviceRegistryProperty(IntPtr deviceInfoSet, ref SpDevinfoData deviceInfoData, int property,
+        out int propertyRegDataType, byte[] buffer, int bufferSize, out int requiredSize);
+
+    /// <summary>A present display-class device, read from its own driver key (VRAM in bytes, 0 when not reported).</summary>
+    internal sealed record PresentDevice(string InstanceId, string Name, string DriverVersion, long VramBytes);
+
+    /// <summary>
+    /// Every present display-class device (DIGCF_PRESENT: devices no longer present, which still have a
+    /// class-key subkey, are left out), in setupapi's order. Each device's name, driver version and VRAM
+    /// come from its own driver key (<c>SetupDiOpenDevRegKey(DIREG_DRV)</c>), so two cards never mix.
+    /// Empty on any failure.
+    /// </summary>
+    internal static List<PresentDevice> PresentDisplayDevices(Action<Exception, string>? debug = null)
+    {
+        var list = new List<PresentDevice>();
+        var guid = DisplayClassGuid;
+        var set = SetupDiGetClassDevs(ref guid, null, IntPtr.Zero, DigcfPresent);
+        if (set == InvalidHandle || set == IntPtr.Zero) return list;
+        try
+        {
+            for (var i = 0; i < 64; i++)
+            {
+                var data = new SpDevinfoData { cbSize = Marshal.SizeOf<SpDevinfoData>() };
+                if (!SetupDiEnumDeviceInfo(set, i, ref data)) break;
+                try
+                {
+                    var buffer = new char[512];
+                    var instanceId = SetupDiGetDeviceInstanceId(set, ref data, buffer, buffer.Length, out _)
+                        ? new string(buffer).TrimEnd('\0')
+                        : "";
+                    string? name = null, version = null;
+                    long vram = 0;
+                    var hkey = SetupDiOpenDevRegKey(set, ref data, DicsFlagGlobal, 0, DiregDrv, KeyRead);
+                    if (hkey != InvalidHandle && hkey != IntPtr.Zero)
+                    {
+                        using var key = Microsoft.Win32.RegistryKey.FromHandle(new Microsoft.Win32.SafeHandles.SafeRegistryHandle(hkey, ownsHandle: true));
+                        name = key.GetValue("DriverDesc")?.ToString();
+                        version = key.GetValue("DriverVersion")?.ToString();
+                        vram = HealthScanner.ReadMemorySizeBytes(key);
+                    }
+                    if (string.IsNullOrWhiteSpace(name)) name = DeviceDescription(set, ref data);
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    list.Add(new PresentDevice(instanceId, name!.Trim(), version ?? "", vram));
+                }
+                catch (Exception ex)
+                {
+                    debug?.Invoke(ex, $"display device {i}");
+                }
+            }
+        }
+        finally
+        {
+            SetupDiDestroyDeviceInfoList(set);
+        }
+        return list;
+    }
+
+    private static string? DeviceDescription(IntPtr set, ref SpDevinfoData data)
+    {
+        var buffer = new byte[1024];
+        return SetupDiGetDeviceRegistryProperty(set, ref data, SpdrpDeviceDesc, out _, buffer, buffer.Length, out _)
+            ? Encoding.Unicode.GetString(buffer).Split('\0')[0]
+            : null;
+    }
+
+    /// <summary>
+    /// Which present device drives the primary monitor: its instance ID starts with the primary
+    /// output's hardware ID. With several identical cards, the one whose name matches; else the first.
+    /// -1 when none does (for example over RDP, where the primary output is the remote display adapter).
+    /// </summary>
+    internal static int PrimaryIndex(IReadOnlyList<PresentDevice> devices, IReadOnlyList<Adapter> outputs)
+    {
+        var primary = outputs.FirstOrDefault(o => o.Primary);
+        if (primary is null || string.IsNullOrEmpty(primary.HardwareId)) return -1;
+        var hw = primary.HardwareId;
+        var matches = Enumerable.Range(0, devices.Count)
+            .Where(i => devices[i].InstanceId.Equals(hw, StringComparison.OrdinalIgnoreCase)
+                        || devices[i].InstanceId.StartsWith(hw + "\\", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (matches.Count == 0) return -1;
+        var byName = matches.Where(i => devices[i].Name.Equals(primary.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        return byName.Count > 0 ? byName[0] : matches[0];
     }
 
     /// <summary>
@@ -185,10 +316,11 @@ internal static class HealthNative
     /// <summary>What the disk under C: reports; empty strings for what it does not.</summary>
     internal sealed record DiskMedia(string MediaType, string BusType, string FriendlyName);
 
-    /// <summary>The bus, model and SSD/HDD kind of the physical disk holding C: (disk 0 when that is unknown).</summary>
+    /// <summary>The bus, model and SSD/HDD kind of the physical disk holding C:; null when that disk cannot be found.</summary>
     internal static DiskMedia? SystemDiskMedia(Action<Exception, string>? debug = null)
     {
-        var disk = SystemDiskNumber(debug) ?? 0;
+        // Review N3: no guessing PhysicalDrive0 when C:'s disk is unknown; the row is labelled "Disk (C:)".
+        if (SystemDiskNumber(debug) is not { } disk) return null;
         using var h = CreateFile($@"\\.\PhysicalDrive{disk}", 0, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
         if (h.IsInvalid)
         {
