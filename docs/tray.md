@@ -14,10 +14,10 @@ purpose: What the RST tray app is, where it lives, how its update checks work an
 
 From v3.1, `RST.msi` also installs **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
-The tray shows which versions of RST, Gantt-It and Splash-It are installed and tells you when a newer one is out. Later v3.1 builds also install updates when you click, and switch Revit add-ins on or off before you start Revit. Its window has four pages:
+The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). Later v3.1 builds also switch Revit add-ins on or off before you start Revit. Its window has four pages:
 
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
-- **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. The **Install** and **Update** buttons say "Coming soon" and are greyed out for now. Until they work, **Release page** opens the app's latest release on GitHub.
+- **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
 - **Add-ins:** says "Coming in a later update".
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
@@ -55,7 +55,7 @@ If a check fails (no network, a proxy that refuses, GitHub down), the tray write
 
 When a check finds a newer version of an app you have installed, the tray shows one Windows notification, for example **RST 3.1.1 is available**. Click it to open the Updates page. Each version is announced once: you won't see the same notification again the next day, or after you restart. A version counts as announced only once its notification has actually been shown; if the tray's icon isn't in the notification area yet (Windows still starting), the notification waits for it. A later version gets its own notification. If one check finds several new versions, they share one notification.
 
-The tray never announces an app you haven't installed, or one you installed by hand (below). It installs nothing by itself. In this build the **Install** and **Update** buttons are not active yet, so update from the app's release page or with `RST-Setup.exe`.
+The tray never announces an app you haven't installed, or one you installed by hand (below). It installs nothing by itself: only when you click **Update** or **Install**.
 
 Only full releases count. A release candidate such as `v3.2.0-rc.1` is never offered.
 
@@ -70,9 +70,9 @@ Only full releases count. A release candidate such as `v3.2.0-rc.1` is never off
 - **Only GitHub.** For each of RST, Gantt-It and Splash-It, the tray sends one request to `https://github.com/<owner>/<repo>/releases/latest`, which answers with the name of the latest release. That is three small requests per check.
 - **Nothing about you.** The requests carry no account, no ID, no version, nothing about your PC, your models or your projects: only the address above and the User-Agent `RST-Tray`. GitHub sees your network's IP address, as it does for any web request. The tray has no telemetry.
 - **No sign-in.** The tray never sends credentials to GitHub and keeps no cookies. If your network uses a proxy, the tray uses the Windows proxy settings (as Edge does), and your Windows sign-in only to authenticate to that proxy.
-- **Later builds** also download an update you click Install on, from `github.com` and GitHub's release-asset hosts, and make one `api.github.com` call to read its checksum.
+- **Installs:** when you click Install or Update, the tray downloads that release's `SHA256SUMS.txt` and the installer from `github.com` (redirected to GitHub's release-asset host), and makes one `api.github.com` call to read GitHub's checksum. Nothing else.
 
-The hosts, for an allowlist: `github.com`, `api.github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com`. With checks off, none of them is contacted unless someone clicks Check now.
+The hosts, for an allowlist: `github.com`, `api.github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com`. With checks off, none of them is contacted unless someone clicks Check now, Install or Update.
 
 ### Switching checks off
 
@@ -88,7 +88,45 @@ From v3.1 each rst-c release on GitHub includes `SHA256SUMS.txt`, one line per f
 <64 hex digits: the SHA256 of RST-Setup.exe>  RST-Setup.exe
 ```
 
-To check a download by hand, compare the line with `Get-FileHash .\RST.msi -Algorithm SHA256` (PowerShell) or `sha256sum -c SHA256SUMS.txt`. The release workflow creates each release as a draft, checks that every line matches GitHub's own digest of that upload, and only then publishes it.
+To check a download by hand, compare the line with `Get-FileHash .\RST.msi -Algorithm SHA256` (PowerShell) or `sha256sum -c SHA256SUMS.txt`. The release workflow creates each release as a draft, checks that every line matches GitHub's own digest of that upload, and only then publishes it. A re-run of a failed release job first deletes the draft the failed run left for that tag (it never touches a published release), so there is only ever one draft per tag (`build/release-draft.sh`).
+
+## Installing and updating
+
+Click **Update** or **Install** on the Updates or Apps page. Installs are for your Windows account only and need no administrator.
+
+### What is checked first
+
+Before anything runs, the tray checks the download four ways, and installs nothing unless all four pass:
+
+1. **The address is built, never followed from a page:** `https://github.com/<the app's repo>/releases/download/<tag>/<file>`, for a full release tag (`v3.1.1`, never a pre-release) and the app's own file name (`RST.msi`, `GanttIt-<version>.msi`, `SplashIt-<version>.msi`). GitHub redirects downloads to its release-asset host; the tray follows a redirect only to `release-assets.githubusercontent.com` or `objects.githubusercontent.com`.
+2. **The file's SHA256** must equal its line in that release's `SHA256SUMS.txt` **and** the digest GitHub itself computed for the upload (one call to `api.github.com/repos/<repo>/releases/tags/<tag>`).
+3. **The installer says what it is:** its UpgradeCode is that app's, its version is the release's, and it installs for you, not for everyone on the PC.
+4. **It is newer** than what you have. The tray never downgrades.
+
+If a check fails, the row says so in plain words, for example "RST didn't install Gantt-It 1.2.0: the download doesn't match its checksum. Nothing was changed." The details are in the tray log.
+
+### Never while Revit is open
+
+While Revit is running, the button reads **Install when Revit closes** (or **Update when Revit closes**). Click it and the tray downloads and checks the update, then waits; it installs as soon as the last Revit window closes. **Cancel** stops the wait.
+
+### How it installs
+
+The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file> /qn /norestart`, and keeps its log in `%LocalAppData%\RST\Tray\logs\install-<app>-<date>-<time>.log` (**Open log** on the row).
+
+- **Installed:** the row says so.
+- **Restart needed** (msiexec 3010): the app is installed, and Windows asks for a restart to finish. The tray never restarts the PC.
+- **Another installation is running** (1618): the tray tries again after three minutes, three times in all.
+- **Anything else:** the row gives the error number, and **Open log** shows the details.
+
+The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\<app>\<version>\`. Gantt-It and Splash-It remove their old version before they install the new one, so a failed upgrade can leave neither installed. The row then offers **Reinstall previous version (x.y.z)**: from the cache, or, if the tray didn't install that version itself, downloaded and checked the same four ways.
+
+### RST updating itself
+
+`RST.msi` contains the tray, which is running, so the tray copies itself to `%LocalAppData%\RST\Tray\updater\` as **RST.TrayUpdater.exe**, starts that copy, and closes. The copy checks the file again, waits for the tray to close, runs `msiexec`, and starts the new tray, whose window says how it went. The installer closes running copies of `RST.Tray.exe` by name; the updater's different name keeps it out of that.
+
+### Installed for everyone on this PC
+
+If RST, or Gantt-It or Splash-It, is installed for everyone on the PC, a tray running for your account doesn't install over it. The row says, for example: "RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here," with the release page link.
 
 ## Quitting it
 
@@ -136,10 +174,10 @@ Run per-user `RST.msi` as the user, not from an elevated prompt, so that the res
 
 ## Uninstalling
 
-Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app, the `RST` Run value and the download cache. The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
+Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app, the `RST` Run value and `%LocalAppData%\RST\Tray\` (the download cache, the updater copy and the install logs). The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
 
 A repair or an upgrade also closes a running tray while its files are replaced. If Windows shows a **Files in Use** dialog, the default choice closes the tray, and Windows starts it again, hidden in the notification area, when the install finishes. An installer only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone.
 
 ## For developers
 
-The installer's `util:CloseApplication` finds `RST.Tray.exe` by file name in every session. The updater copy that later versions run from `%LocalAppData%\RST\Tray\updater\` therefore has to use a different exe name, for example `RST.Tray.Updater.exe`. Otherwise the install it starts asks it to close part-way through.
+The installer's `util:CloseApplication` finds `RST.Tray.exe` by file name in every session. The updater copy that runs from `%LocalAppData%\RST\Tray\updater\` is therefore `RST.TrayUpdater.exe` (the apphost renamed; it still loads `RST.Tray.dll` beside it). Otherwise the install it starts would ask it to close part-way through. `--apply` is honoured only by that copy in that folder, and only for an `RST.msi` the tray verified into its cache (`verified.json`, SHA256 and Property table checked again).
