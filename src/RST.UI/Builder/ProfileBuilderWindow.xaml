@@ -384,14 +384,14 @@
                                         AutomationProperties.AutomationId="Builder.RemoveTool"
                                         AutomationProperties.Name="{x:Static res:UiStrings.Builder_RemoveSlotTip}" />
                             </StackPanel>
-                            <Button DockPanel.Dock="Left" Style="{StaticResource IconSlot}" Command="{Binding PickIconCommand}" VerticalAlignment="Center"
+                            <Button DockPanel.Dock="Left" Style="{StaticResource IconSlot}" Padding="1" Margin="0,0,3,0" Command="{Binding PickIconCommand}" VerticalAlignment="Center"
                                     ToolTip="{x:Static res:UiStrings.Builder_PickIconTip}"
                                     AutomationProperties.AutomationId="Builder.PickIcon"
                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_PickIconTip}">
                                 <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
                             </Button>
                             <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource InlineName}" FontSize="11"
-                                     Padding="2,0" Margin="2,0,0,0"
+                                     Padding="0" Margin="0"
                                      AutomationProperties.AutomationId="Builder.ToolName"
                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_ToolName}" />
                         </DockPanel>
