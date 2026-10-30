@@ -4,6 +4,10 @@
 // effective opacity, tool slots with their pack icon (Planner default 9, both pages) or ⬜, stacks
 // as columns of "≡" rows, "Empty" panels and "No panels configured". Builder mode labels tools by
 // name and shows empty stacks as "(empty)". The canvas follows the window theme, not the OS.
+// Stacks (feature #15, spec #17) draw as the ribbon draws them: a row per tool with its 16 px pack
+// icon (or the "≡" glyph) and a one-line label. The Loader draws a stack only when the ribbon
+// would (RibbonLayoutPlanner: 2 or 3 valid tools), with the tools the ribbon draws; the Builder
+// draws every stack being authored, faded when the ribbon would skip it.
 
 using System.IO;
 using System.Windows;
@@ -248,38 +252,63 @@ public partial class RibbonPreview : UserControl
     private FrameworkElement? BuildStack(Profile profile, Slot slot)
     {
         var tools = profile.Stacks.TryGetValue(slot.Name ?? "", out var def) && def is not null ? def.Tools : [];
-        var column = new StackPanel { Width = 84, Margin = new Thickness(0, 0, 5, 0) };
+        var planned = RibbonLayoutPlanner.PlanStack(profile, slot).Item;
+        var column = new StackPanel { MinWidth = 84, MaxWidth = 150, Margin = new Thickness(0, 0, 5, 0), Tag = slot };
+        if (Mode != RibbonPreviewMode.Builder)
+        {
+            // The Loader shows what the ribbon shows: nothing for a stack the ribbon skips.
+            if (planned is null) return null;
+            foreach (var button in planned.Buttons) column.Children.Add(StackRow(button.Label, button.Source, dim: false));
+            return column;
+        }
         if (tools.Count == 0)
         {
-            // The Loader skips an empty stack; the Builder keeps a stub row so the stack stays visible.
-            if (Mode != RibbonPreviewMode.Builder) return null;
-            column.Children.Add(StackRow(UiStrings.Preview_EmptyStack(slot.Name), dim: true));
+            // The Builder keeps a stub row so an empty stack stays visible.
+            column.Children.Add(StackRow(UiStrings.Preview_EmptyStack(slot.Name), null, dim: true));
             return column;
         }
         foreach (var tool in tools)
-            if (tool is not null) column.Children.Add(StackRow(tool.Name ?? "", dim: false));
+            if (tool is not null) column.Children.Add(StackRow(RibbonLayoutPlanner.SingleLine(tool.Name), tool, dim: false));
+        if (planned is null)
+        {
+            // Being authored, but the ribbon would skip it (fewer than 2 or more than 3 valid tools).
+            column.Opacity = 0.55;
+            column.ToolTip = UiStrings.Preview_StackNotDrawn;
+        }
         return column;
     }
 
-    private Border StackRow(string text, bool dim)
+    private Border StackRow(string text, Slot? tool, bool dim)
     {
-        var glyph = new Border
-        {
-            Width = 13,
-            Height = 13,
-            CornerRadius = new CornerRadius(2),
-            BorderBrush = Frozen(_colors.StackBorder),
-            BorderThickness = new Thickness(1),
-            Margin = new Thickness(0, 0, 4, 0),
-            Child = new TextBlock
+        // The tool's pack icon at 16 px, as the ribbon's stacked button; the "≡" glyph without one.
+        var icon = tool is not null && RibbonPreviewRules.PackIcon(tool) is { } pack ? PackIcons.Load(pack, PackDirectory, 16) : null;
+        FrameworkElement glyph = icon is not null
+            ? new Image
             {
-                Text = "≡",
-                FontSize = 9,
-                Foreground = Frozen(_colors.StackGlyph),
-                HorizontalAlignment = HorizontalAlignment.Center,
+                Source = icon,
+                Width = 16,
+                Height = 16,
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(0, 0, 4, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-            },
-        };
+            }
+            : new Border
+            {
+                Width = 13,
+                Height = 13,
+                CornerRadius = new CornerRadius(2),
+                BorderBrush = Frozen(_colors.StackBorder),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 0, 4, 0),
+                Child = new TextBlock
+                {
+                    Text = "≡",
+                    FontSize = 9,
+                    Foreground = Frozen(_colors.StackGlyph),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
         var row = new DockPanel();
         row.Children.Add(glyph);
         row.Children.Add(new TextBlock
