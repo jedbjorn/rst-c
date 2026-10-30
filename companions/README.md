@@ -52,7 +52,7 @@ This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a run
 | `addinClientId` | The ClientId in the companion's `.addin`. `null` until known; required when `shippable`. |
 | `vendorId` | The VendorId in the companion's `.addin`. Must be `DSOS` when `shippable` (C6). |
 | `defaultSelected` | Whether the checkbox starts ticked. `false` for every companion: installing one is opt-in. |
-| `release` | The pinned release, or `null`. Required when `shippable`; when present it must be complete: `tag`, `asset` (an `.msi`), `sha256` (64 hex), `upgradeCode` (GUID), `version`. |
+| `release` | The pinned release, or `null`. Required when `shippable`; when present it must be complete: `tag`, `asset` (an `.msi`), `sha256` (64 lowercase hex), `upgradeCode` (GUID), `version`. |
 
 Every field is present on every entry (use `null` where a value is not known yet). Unknown fields are rejected, so a misspelt field fails the build instead of being ignored.
 
@@ -63,7 +63,7 @@ Every field is present on every entry (use `null` where a value is not known yet
 - the file is not valid JSON, has an unknown or missing field, or a field has the wrong type;
 - an `id` is not kebab-case or is used twice (or a `name` is used twice);
 - a `shippable` entry has no complete `release`, no `addinClientId`, or a VendorId other than `DSOS`;
-- any `upgradeCode` or `addinClientId` is rst-c's own (`RST.msi`'s `AF0331FC-5280-492A-94BD-95EDF108BE74`, `RST-R27.msi`'s `02BE4399-A563-4B15-BD12-ECF5D8486FB3`, any other UpgradeCode in an `installer*/` `.wxs`, or the ClientId in `src/RST.Bootstrap/RST.addin`), or two companions share one.
+- any `upgradeCode` or `addinClientId` is rst-c's own (`RST.msi`'s `AF0331FC-5280-492A-94BD-95EDF108BE74`, `RST-R27.msi`'s `02BE4399-A563-4B15-BD12-ECF5D8486FB3`, or the UpgradeCode declared on the `<Package>` or `<Bundle>` of any other `.wxs` source under `installer*/` (build output in `bin/` and `obj/` is skipped), or the ClientId in `src/RST.Bootstrap/RST.addin`), or two companions share one.
 
 Run it locally:
 
@@ -103,7 +103,7 @@ Do this when a companion publishes a new release, or to make an `in_development`
 
 2. **Asset.** Record the exact name of the release's single `.msi` asset (`GanttIt-1.1.0.msi`). The per-year `.zip` files are manual-install packages and are never pinned.
 
-3. **sha256.** Download the MSI and hash it yourself. It must equal both GitHub's `digest` from step 1 and the line in the release's `SHA256SUMS.txt` (both companions publish one). Record it in lowercase.
+3. **sha256.** Download the MSI and hash it yourself. It must equal both GitHub's `digest` from step 1 and the line in the release's `SHA256SUMS.txt` (both companions publish one). Record it in lowercase; the validation test rejects uppercase (PowerShell's `Get-FileHash` prints uppercase, so lower it first).
 
    ```sh
    gh release download v1.1.0 -R jedbjorn/gantt-it -p GanttIt-1.1.0.msi -p SHA256SUMS.txt -D pin/
@@ -111,7 +111,7 @@ Do this when a companion publishes a new release, or to make an `in_development`
    grep GanttIt-1.1.0.msi pin/SHA256SUMS.txt
    ```
 
-4. **upgradeCode.** Read it from the downloaded MSI, not from memory, and check it against the companion's `installer/Product.wxs` at the tag. For an existing companion it must be **unchanged** from the previous pin (C2). If it changed, stop: the companion broke C2, and the bump does not go ahead.
+4. **upgradeCode.** Read it from the downloaded MSI, not from memory, and check it against the companion's `installer/Product.wxs` at the tag. For an existing companion it must be **unchanged** from the previous pin (C2). If it changed, stop: the companion broke C2, and the bump does not go ahead. Record it without braces (`644FCAD5-…`, not `{644FCAD5-…}` as `msiinfo` prints it); the validation test accepts only that form.
 
    ```sh
    # Linux (msitools):
@@ -137,10 +137,10 @@ Each check runs against the **downloaded asset** from step 3, not a local build 
 |---|---|
 | C1 | The package needs no elevation: the summary information's Word Count has bit `8` set (`msiinfo suminfo <asset>`), and `ALLUSERS` is absent from the `Property` table (or is `2` with `MSIINSTALLPERUSER=1`); never `1`. The MSI holds files for every year in `revitYears`. `inspect-msi.ps1` checks all of this. |
 | C2 | `UpgradeCode` equals the previous pin's (step 4). |
-| C3 | The `Upgrade` table holds exactly the two `MajorUpgrade` rows for the companion's UpgradeCode: `WIX_UPGRADE_DETECTED` removes every version up to and including this one, and `WIX_DOWNGRADE_DETECTED` only detects newer versions, which the downgrade message then blocks (`msiinfo export <asset> Upgrade`). `inspect-msi.ps1` checks both rows. |
+| C3 | The `Upgrade` table holds exactly the two `MajorUpgrade` rows for the companion's UpgradeCode: `WIX_UPGRADE_DETECTED` removes older versions, and `WIX_DOWNGRADE_DETECTED` only detects newer versions, which the downgrade message then blocks (`msiinfo export <asset> Upgrade`). `inspect-msi.ps1` checks both rows. Both current companions also set `AllowSameVersionUpgrades="yes"`, so their removal row includes the same version too; C3 does not require that. |
 | C4 | On Windows with a Revit year installed (the W10C-Testing VM, skill `rst_c_vm`): `msiexec /i <asset> /qn /l*v install.log`, then `msiexec /x <asset> /qn /l*v uninstall.log`. Both exit `0` (not `3010`, which means a reboot), and neither shows a window. |
 | C5 | Step 1–3: the asset is on a full GitHub Release of `repo` under exactly the recorded name. |
 | C6 | After the C4 install: the companion's manifest (`GanttIt.addin`, `SplashIt.addin`) exists in `%AppData%\Autodesk\Revit\Addins\<year>\` for each detected year, its `<ClientId>` equals `addinClientId` and its `<VendorId>` is `DSOS`; nothing was written under `%AppData%\RST\`. The validation test separately ensures the ClientId is not rst-c's. |
 | C7 | The C4 install succeeds with rst-c **not** installed. Open Revit: the companion loads with no RST tab present. Then install rst-c and uninstall it through Add/Remove Programs: the companion still loads. |
 
-The Phase 2 bundle smoke test and acceptance check AC6 (both companions installed through `RST-Setup.exe` on the VM, then loaded in Revit) cover C4, C6 and C7 again for every release of rst-c.
+**These checks are the bump author's job, every time.** Nothing in rst-c's CI re-checks a real companion MSI against C1–C7. The bundle job checks only that the pinned asset exists and matches its sha256. The bundle smoke test chains a test-only fixture MSI, never a real companion, so it proves Burn's chaining mechanics and nothing about Gantt-It or Splash-It. Acceptance check AC6 (both companions installed through `RST-Setup.exe` on the VM, then loaded in Revit) runs only on the Phase 2 PR and the v3.0.0 release candidate, not on every pin bump or release. Put the C1–C7 results for the new pin in the bump PR.
