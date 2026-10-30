@@ -195,6 +195,28 @@ public sealed class RibbonItemFactoryTests
         return pixels;
     }
 
+    /// <summary>The straight (not premultiplied) BGRA pixel at (x, y).</summary>
+    private static (byte B, byte G, byte R, byte A) Pixel(BitmapSource bitmap, int x, int y)
+    {
+        var converted = new FormatConvertedBitmap(bitmap, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        var p = new byte[4];
+        converted.CopyPixels(new System.Windows.Int32Rect(x, y, 1, 1), p, 4, 0);
+        return (p[0], p[1], p[2], p[3]);
+    }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    public void The_default_icons_are_the_pack_s_opaque_tile_with_a_dark_glyph(int size)
+    {
+        // The VM found both defaults blank translucent tiles; review N1 (spec #17): the pack's opaque
+        // #D9D9D9 tile with #3C3C3C bars, readable on any panel colour, opacity and theme.
+        var icon = (size == 16 ? IconAssets.Default16 : IconAssets.Default32).Should().BeAssignableTo<BitmapSource>().Subject;
+        (icon.PixelWidth, icon.PixelHeight).Should().Be((size, size));
+        Pixel(icon, size / 8, size / 2).Should().Be(((byte)0xD9, (byte)0xD9, (byte)0xD9, (byte)0xFF), "the tile is opaque");
+        Pixel(icon, size / 2, size / 4).Should().Be(((byte)0x3C, (byte)0x3C, (byte)0x3C, (byte)0xFF), "the top bar of the glyph");
+    }
+
     [Fact]
     public void Default16_has_a_visible_glyph_and_the_previews_draw_the_same_image()
     {
