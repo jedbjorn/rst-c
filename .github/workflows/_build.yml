@@ -709,8 +709,14 @@ jobs:
           foreach ($c in $reg.companions) { $c.status = 'in_development'; $c.release = $null }
           $none = Join-Path $env:RUNNER_TEMP 'companions-none.json'
           $reg | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $none
+          # The bundle also chains RST-Machine.msi ("Everyone on this PC", F17 WU5). These legs take the default
+          # "Just for me" path, so it is never installed here; one build of this commit serves both bundles.
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstScope=machine -p:RstMsiVersion=3.1.91
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $machine = Join-Path $env:RUNNER_TEMP 'RST-Machine.msi'
+          Copy-Item installer/bin/Release/RST-Machine.msi $machine
           foreach ($v in '3.1.90', '3.1.91') {
-            dotnet build installer-bundle/RST.Setup.wixproj -c Release --nologo "-p:RstMsi=$env:RUNNER_TEMP/RST-$v.msi" "-p:RstBundleVersion=$v" "-p:CompanionRegistry=$none" "-p:OutputName=RST-Setup" "-p:IntermediateOutputPath=obj\b$v\"
+            dotnet build installer-bundle/RST.Setup.wixproj -c Release --nologo "-p:RstMsi=$env:RUNNER_TEMP/RST-$v.msi" "-p:RstMachineMsi=$machine" "-p:RstBundleVersion=$v" "-p:CompanionRegistry=$none" "-p:OutputName=RST-Setup" "-p:IntermediateOutputPath=obj\b$v\"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Copy-Item installer-bundle/bin/Release/RST-Setup.exe "$env:RUNNER_TEMP/RST-Setup-$v.exe"
           }

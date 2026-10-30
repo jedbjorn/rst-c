@@ -45,8 +45,10 @@
       paths differ.
     - TrayStartup has its own fixed GUID (WU1 review N6): the per-user GUID
       with a key path that resolves to HKLM would break the component rules.
-    - No RemoveFolderEx: the download cache is per user, and an uninstall by
-      one administrator cannot reach every user's.
+    - No RemoveFolderEx, neither RemoveTrayCache nor WU4's RemoveTrayLocal
+      (both inside Scope=user below): %LocalAppData%\RST\Tray\ is per user,
+      and an administrator's uninstall must never delete their own (WU4
+      review DN5), nor can it reach every user's.
     - The tray is never started by the installer, and Restart Manager does not
       restart it (Product.wxs, MSIRESTARTMANAGERCONTROL=Disable), so it
       never runs elevated (WU1 review N8). It starts at each user's next

@@ -297,6 +297,11 @@ $tables = Get-Tables $Msi
 Write-Host "tables: $($tables -join ', ')"
 $privileged = @($tables | Where-Object { $_ -match '^(ServiceInstall|ServiceControl|LockPermissions|MsiLockPermissionsEx)$|SecureObject|PermissionEx|User$|Group$|UserGroup' })
 Assert ($privileged.Count -eq 0) "no service, permission, user or group table ($($privileged -join ', '))"
+# WU4 review DN5: RST.msi's per-user RemoveFolderEx rows (the tray cache, and %LocalAppData%\RST\Tray\ itself) must
+# never reach a per-machine package: an administrator's uninstall would delete their own folder.
+Assert (@($tables | Where-Object { $_ -match 'RemoveFolderEx' }).Count -eq 0) 'no RemoveFolderEx table: a per-machine uninstall never deletes anyone''s %LocalAppData%\RST\Tray'
+$trayFolderCas = @((Get-MsiQuery $Msi 'SELECT `Action`, `Target` FROM `CustomAction`' 2) | Where-Object { ($_ -join '|') -match 'RSTTRAY' })
+Assert ($trayFolderCas.Count -eq 0) "and no SetProperty for RSTTRAYCACHEDIR or RSTTRAYLOCALDIR ($(($trayFolderCas | ForEach-Object { $_[0] }) -join ', '))"
 $cas = @((Get-MsiQuery $Msi 'SELECT `Action`, `Type`, `Source`, `Target` FROM `CustomAction`' 4))
 $cas | ForEach-Object { Write-Host "  CustomAction: $($_ -join ' | ')" }
 $unexpected = @($cas | Where-Object { $_[0] -notmatch '^(Wix4(Sched|Exec)XmlFile.*|Wix4ExecXmlFileRollback.*|Wix4CloseApplications.*|Wix4CheckRebootRequired.*|WixUI.*|WIXUI.*)$' })
