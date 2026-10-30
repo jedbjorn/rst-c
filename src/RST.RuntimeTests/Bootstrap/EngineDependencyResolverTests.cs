@@ -1,4 +1,4 @@
-// rst-c's own (not vendored): the bootstrap's assembly resolver (decision #27, research M3).
+// rst-c's own (not vendored): the bootstrap's assembly resolver (decisions #27 and #32, research M3).
 
 using System.IO; // not in WPF's implicit usings
 using System.Reflection;
@@ -10,10 +10,12 @@ namespace RST.RuntimeTests.Bootstrap;
 
 /// <summary>
 /// Every branch of <see cref="EngineDependencyResolver"/>, the bootstrap's process-wide
-/// <c>AssemblyLoadContext.Default.Resolving</c> handler: not ours, requested newer than shipped,
-/// a compatible copy already loaded, an older copy already loaded, a fresh load by path, a request
-/// without a version, and every failure (it must never throw from inside the event). Plus the
-/// startup "Serilog bound" line and the production wiring over a real deps.json resolver.
+/// <c>AssemblyLoadContext.Default.Resolving</c> handler: not ours, nothing loaded and requested
+/// newer than shipped, a compatible copy already loaded, an older same-major copy already loaded
+/// (handed over with one warning per session, decision #32), an older different-major copy (refused),
+/// a fresh load by path, a request without a version, and every failure (it must never throw from
+/// inside the event). Plus the startup "Serilog bound" line, the requester lookup, and the
+/// production wiring over a real deps.json resolver.
 /// </summary>
 public class EngineDependencyResolverTests
 {
@@ -34,6 +36,7 @@ public class EngineDependencyResolverTests
         public Func<string, Version?> VersionAt { get; set; } = _ => new Version(4, 0, 0, 0);
         public Func<IEnumerable<Assembly>> InContext { get; set; } = () => Array.Empty<Assembly>();
         public Func<string, Assembly>? Load { get; set; }
+        public Func<string?> Requester { get; set; } = () => "ZZZ-SerilogProbe";
 
         /// <summary>What a load by path returns (any real assembly; the tests check identity).</summary>
         public Assembly LoadResult { get; } = typeof(object).Assembly;
@@ -48,8 +51,12 @@ public class EngineDependencyResolverTests
                 return Load is null ? LoadResult : Load(p);
             },
             Info.Add,
-            Warn.Add);
+            Warn.Add,
+            () => Requester());
     }
+
+    /// <summary>A version above the loaded one with the same major (a 4.0 loaded, 4.2 asked).</summary>
+    private static Version SameMajorNewer => new(LoadedVersion.Major, LoadedVersion.Minor + 2, 0, 0);
 
     private static AssemblyName Name(string name, string? version) =>
         new(version is null ? name : $"{name}, Version={version}");
@@ -68,10 +75,10 @@ public class EngineDependencyResolverTests
     }
 
     [Fact]
-    public void RequestedNewerThanShipped_Declines_AndWarnsWithBothVersionsAndPath()
+    public void NothingLoaded_RequestedNewerThanShipped_Declines_AndWarnsWithBothVersionsAndPath()
     {
-        // A neighbour built against Serilog 4.2 asks after RST (which ships 4.0) registered:
-        // handing it our 4.0 would be handing it an older copy than it asked for.
+        // Nothing has loaded Serilog yet and a requester wants 4.2 while RST ships 4.0: decline, so
+        // the requester's own 4.2 can load (RST then binds up to it).
         var h = new Harness();
 
         var result = h.Build().Resolve(Name("Serilog", "4.2.0.0"));
@@ -83,6 +90,82 @@ public class EngineDependencyResolverTests
         Assert.Contains("4.2.0.0", warning);
         Assert.Contains("4.0.0.0", warning);
         Assert.Contains(SerilogPath, warning);
+        Assert.Contains("ZZZ-SerilogProbe", warning);
+    }
+
+    [Fact]
+    public void LoadedOlderSameMajor_IsHandedOver_WithAWarningNamingRequestedGivenAndRequester()
+    {
+        // Decision #32: RST's Serilog 4.0 is loaded and ZZZ asks for 4.2. Refusing makes ZZZ fail
+        // to load at all; handing over 4.0 lets it run.
+        var h = new Harness { InContext = () => new[] { typeof(object).Assembly, Loaded } };
+        var requested = SameMajorNewer;
+
+        var result = h.Build().Resolve(Name(Loaded.GetName().Name!, requested.ToString()));
+
+        Assert.Same(Loaded, result);
+        Assert.Empty(h.LoadedPaths);
+        var warning = Assert.Single(h.Warn);
+        Assert.Equal(
+            $"  resolve managed: {Loaded.GetName().Name} {requested} requested by ZZZ-SerilogProbe; handing over the loaded {LoadedVersion} at {Loaded.Location} (same major; one copy per context; warned once per session)",
+            warning);
+    }
+
+    [Fact]
+    public void SameMajorHandOver_WarnsOncePerAssemblyPerSession()
+    {
+        var other = typeof(FactAttribute).Assembly; // xunit.core: a second loaded assembly
+        var otherVersion = other.GetName().Version!;
+        var h = new Harness { InContext = () => new[] { Loaded, other } };
+        var resolver = h.Build();
+        var name = Loaded.GetName().Name!;
+
+        Assert.Same(Loaded, resolver.Resolve(Name(name, SameMajorNewer.ToString())));
+        Assert.Same(Loaded, resolver.Resolve(Name(name, SameMajorNewer.ToString())));
+        Assert.Same(Loaded, resolver.Resolve(Name(name.ToUpperInvariant(), new Version(LoadedVersion.Major, LoadedVersion.Minor + 5, 0, 0).ToString())));
+        Assert.Single(h.Warn);
+
+        Assert.Same(other, resolver.Resolve(Name(other.GetName().Name!, new Version(otherVersion.Major, otherVersion.Minor + 1, 0, 0).ToString())));
+        Assert.Equal(2, h.Warn.Count);
+        Assert.Contains(other.GetName().Name!, h.Warn[1]);
+
+        // A new session (a new resolver) warns again.
+        var again = new Harness { InContext = () => new[] { Loaded } };
+        again.Build().Resolve(Name(name, SameMajorNewer.ToString()));
+        Assert.Single(again.Warn);
+    }
+
+    [Fact]
+    public void SameMajorHandOver_WithUnknownRequester_SaysSo()
+    {
+        var h = new Harness { InContext = () => new[] { Loaded }, Requester = () => null };
+
+        h.Build().Resolve(Name(Loaded.GetName().Name!, SameMajorNewer.ToString()));
+
+        Assert.Contains("requested by an unknown requester;", Assert.Single(h.Warn));
+    }
+
+    [Fact]
+    public void SameMajorHandOver_WithThrowingRequesterLookup_StillHandsOver()
+    {
+        var h = new Harness { InContext = () => new[] { Loaded }, Requester = () => throw new InvalidOperationException("no stack") };
+
+        Assert.Same(Loaded, h.Build().Resolve(Name(Loaded.GetName().Name!, SameMajorNewer.ToString())));
+        Assert.Contains("an unknown requester", Assert.Single(h.Warn));
+    }
+
+    [Fact]
+    public void LikelyRequester_IsTheFirstCallerOutsideTheFrameworkAndTheBootstrap()
+    {
+        Assert.Equal("RST.RuntimeTests", EngineDependencyResolver.LikelyRequester());
+
+        // And the default wiring uses it: the requester here is this test assembly.
+        var warn = new List<string>();
+        var resolver = new EngineDependencyResolver(
+            _ => SerilogPath, _ => new Version(4, 0, 0, 0), () => new[] { Loaded },
+            _ => typeof(object).Assembly, _ => { }, warn.Add);
+        resolver.Resolve(Name(Loaded.GetName().Name!, SameMajorNewer.ToString()));
+        Assert.Contains("requested by RST.RuntimeTests;", Assert.Single(warn));
     }
 
     [Theory]
@@ -106,25 +189,31 @@ public class EngineDependencyResolverTests
     }
 
     [Fact]
-    public void AlreadyLoadedOlderThanRequested_Declines_AndWarnsWithBothVersionsAndLoadedPath()
+    public void LoadedOlderDifferentMajor_IsRefused_AndWarnsWithBothVersionsAndLoadedPath()
     {
-        // A neighbour loaded Serilog 3.1.1 (assembly 2.0.0.0) by path first; RST's engine asks for
-        // 4.0. Loading ours by path would throw FileLoadException inside the event.
+        // A neighbour loaded Serilog 3.1.1 (assembly 2.0.0.0) first; RST's engine asks for 4.0.
+        // A different major is not handed over, and loading ours by path would throw
+        // FileLoadException inside the event.
         var requested = new Version(LoadedVersion.Major + 1, 0, 0, 0);
         var h = new Harness
         {
             VersionAt = _ => new Version(LoadedVersion.Major + 10, 0, 0, 0),
             InContext = () => new[] { Loaded },
         };
+        var resolver = h.Build();
 
-        var result = h.Build().Resolve(Name(Loaded.GetName().Name!, requested.ToString()));
+        var result = resolver.Resolve(Name(Loaded.GetName().Name!, requested.ToString()));
 
         Assert.Null(result);
         Assert.Empty(h.LoadedPaths);
         var warning = Assert.Single(h.Warn);
-        Assert.Contains(requested.ToString(), warning);
-        Assert.Contains(LoadedVersion.ToString(), warning);
-        Assert.Contains(Loaded.Location, warning);
+        Assert.Equal(
+            $"  resolve managed: {Loaded.GetName().Name} {requested} requested by ZZZ-SerilogProbe, {LoadedVersion} already loaded at {Loaded.Location}; declining (different major; a second copy cannot load into this context)",
+            warning);
+
+        // Refusals are not limited to one per session.
+        resolver.Resolve(Name(Loaded.GetName().Name!, requested.ToString()));
+        Assert.Equal(2, h.Warn.Count);
     }
 
     [Fact]

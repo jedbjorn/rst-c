@@ -164,17 +164,21 @@ public sealed class RstBootstrap : IExternalApplication
 }
 
 /// <summary>
-/// The bootstrap's managed <c>Resolving</c> handler (decision #27, research M3). It answers only
-/// for assemblies in the engine's deps.json (Serilog, Serilog.Sinks.File, System.Management,
-/// RST.Core, RST.UI). For those it:
+/// The bootstrap's managed <c>Resolving</c> handler (decisions #27 and #32, research M3). It
+/// answers only for assemblies in the engine's deps.json (Serilog, Serilog.Sinks.File,
+/// System.Management, RST.Core, RST.UI). For those:
 /// <list type="number">
-/// <item>declines (returns null) when the requested version is newer than the copy RST ships, so
-/// a neighbour add-in is never handed an older copy than it asked for;</item>
-/// <item>reuses a same-named assembly already loaded in the context when its version is at or
-/// above the requested one, instead of loading ours by path;</item>
-/// <item>declines with a warning naming both versions and the loaded path when an older copy is
-/// already loaded (a second copy cannot load into the same context);</item>
-/// <item>never throws: any failure is logged as a warning and the handler returns null.</item>
+/// <item>a same-named assembly already loaded in the context at or above the requested version
+/// is reused, instead of loading ours by path;</item>
+/// <item>an already-loaded copy older than requested but of the <b>same major</b> version is
+/// handed over (decision #32): only one copy can load into the shared context, and a requester
+/// failing to load is worse than it running on the older minor. One <c>WRN</c> per assembly
+/// per session names the requested version, the version given and the likely requester;</item>
+/// <item>an already-loaded copy of a <b>different major</b> version is refused (null) with a
+/// <c>WRN</c> naming both versions and the loaded path;</item>
+/// <item>when nothing is loaded yet, a request above the copy RST ships is declined (null), so
+/// the requester's own newer copy can load and RST later binds up to it;</item>
+/// <item>it never throws: any failure is logged as a warning and the handler returns null.</item>
 /// </list>
 /// Its seams are delegates so RST.RuntimeTests can drive every branch without Revit. It cannot
 /// stop a neighbour's own resolver handing RST an older copy (research M3); the startup
@@ -190,6 +194,8 @@ internal sealed class EngineDependencyResolver
     private readonly Func<string, Assembly> _loadFromPath;
     private readonly Action<string> _info;
     private readonly Action<string> _warn;
+    private readonly Func<string?> _requester;
+    private readonly HashSet<string> _handOverWarned = new(StringComparer.OrdinalIgnoreCase);
 
     public EngineDependencyResolver(
         Func<AssemblyName, string?> pathFor,
@@ -197,7 +203,8 @@ internal sealed class EngineDependencyResolver
         Func<IEnumerable<Assembly>> loaded,
         Func<string, Assembly> loadFromPath,
         Action<string> info,
-        Action<string> warn)
+        Action<string> warn,
+        Func<string?>? requester = null)
     {
         _pathFor = pathFor;
         _versionAt = versionAt;
@@ -205,6 +212,7 @@ internal sealed class EngineDependencyResolver
         _loadFromPath = loadFromPath;
         _info = info;
         _warn = warn;
+        _requester = requester ?? LikelyRequester;
     }
 
     /// <summary>The production wiring: the engine's deps.json resolver over one load context.</summary>
@@ -236,13 +244,6 @@ internal sealed class EngineDependencyResolver
         if (path is null) return null; // not one of the engine's dependencies
 
         var wanted = requested.Version ?? Any;
-        var shipped = _versionAt(path);
-        if (shipped is not null && shipped < wanted)
-        {
-            Safe(_warn, $"  resolve managed: {requested.Name} {wanted} requested, RST ships {shipped} at {path}; declining (never hand out an older copy)");
-            return null;
-        }
-
         var loaded = FindLoaded(_loaded(), requested.Name);
         if (loaded is not null)
         {
@@ -252,12 +253,72 @@ internal sealed class EngineDependencyResolver
                 Safe(_info, $"  resolve managed: {requested.Name} {wanted} -> already loaded {have} at {LocationOf(loaded)}");
                 return loaded;
             }
-            Safe(_warn, $"  resolve managed: {requested.Name} {wanted} requested, {have} already loaded at {LocationOf(loaded)}; declining (a second copy cannot load into this context)");
+            if (have.Major == wanted.Major)
+            {
+                // Decision #32: same major, so hand over the loaded copy rather than let the
+                // requester fail; a second copy cannot load into this context.
+                bool first;
+                lock (_handOverWarned) first = _handOverWarned.Add(requested.Name ?? "");
+                if (first)
+                    Safe(_warn, $"  resolve managed: {requested.Name} {wanted} requested by {RequesterText()}; handing over the loaded {have} at {LocationOf(loaded)} (same major; one copy per context; warned once per session)");
+                return loaded;
+            }
+            Safe(_warn, $"  resolve managed: {requested.Name} {wanted} requested by {RequesterText()}, {have} already loaded at {LocationOf(loaded)}; declining (different major; a second copy cannot load into this context)");
+            return null;
+        }
+
+        var shipped = _versionAt(path);
+        if (shipped is not null && shipped < wanted)
+        {
+            // Nothing loaded yet: let the requester's own newer copy load instead of ours.
+            Safe(_warn, $"  resolve managed: {requested.Name} {wanted} requested by {RequesterText()}, RST ships {shipped} at {path} and none is loaded; declining (never hand out an older copy)");
             return null;
         }
 
         Safe(_info, $"  resolve managed: {requested.Name} -> {path}");
         return _loadFromPath(path);
+    }
+
+    private string RequesterText()
+    {
+        try
+        {
+            return _requester() ?? "an unknown requester";
+        }
+        catch
+        {
+            return "an unknown requester";
+        }
+    }
+
+    /// <summary>
+    /// Best effort: <c>AssemblyLoadContext.Resolving</c> does not name the requester, so take the
+    /// first managed frame below the load context's resolving-event frames that is outside the
+    /// runtime, the framework and this assembly: the code whose JIT or type load asked for the
+    /// assembly. Without such frames (a direct call), the first such frame of the whole stack.
+    /// Null when there is none.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static string? LikelyRequester()
+    {
+        var self = typeof(EngineDependencyResolver).Assembly;
+        var frames = new System.Diagnostics.StackTrace(1, false).GetFrames();
+        var start = 0;
+        for (var i = 0; i < frames.Length; i++)
+            if (frames[i].GetMethod()?.DeclaringType == typeof(AssemblyLoadContext)) start = i + 1;
+        foreach (var frame in frames.Skip(start))
+        {
+            var asm = frame.GetMethod()?.DeclaringType?.Assembly;
+            if (asm is null || asm == self || asm.IsDynamic) continue;
+            var name = asm.GetName().Name ?? "";
+            if (name.StartsWith("System", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("mscorlib", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("netstandard", StringComparison.OrdinalIgnoreCase))
+                continue;
+            return name;
+        }
+        return null;
     }
 
     /// <summary>The first non-dynamic assembly with this simple name (case-insensitive), or null.</summary>

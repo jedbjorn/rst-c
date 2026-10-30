@@ -410,21 +410,27 @@ whole block, not its first line:
 `RST.Bootstrap` loads the engine into Revit's shared default load context and registers a
 process-wide `AssemblyLoadContext.Default.Resolving` handler over `RST.Engine.deps.json`. Any
 add-in's request for Serilog, Serilog.Sinks.File, System.Management, RST.Core or RST.UI can reach
-it. `EngineDependencyResolver` (in `RstBootstrap.cs`, decision #27):
+it. `EngineDependencyResolver` (in `RstBootstrap.cs`, decisions #27 and #32):
 
-- returns `null` when the requested version is above the copy RST ships, so it never hands
-  another add-in an older copy than it asked for;
 - returns an already-loaded assembly of the same name when its version is at or above the request,
   instead of loading ours by path;
-- otherwise, when an older copy is already loaded, writes a `WRN` line to the boot log naming
-  both versions and the loaded path, and returns `null`;
+- when the loaded copy is older than the request but has the **same major** version (RST's
+  Serilog 4.0 loaded, another add-in asks for 4.2), hands that copy over. Only one copy can load
+  into the shared context, and the requester failing to load is worse than it running on an
+  older minor version. One `WRN` per assembly per session names the requested version, the
+  version given and the likely requester (the first caller on the stack outside .NET and the
+  bootstrap);
+- when the loaded copy has a **different major** version, writes a `WRN` naming both versions,
+  the requester and the loaded path, and returns `null`;
+- when nothing is loaded yet and the request is above the copy RST ships, returns `null` with a
+  `WRN`, so the requester's own newer copy can load (RST then binds up to it);
 - never throws from inside the event: a failure becomes a `WRN` line and `null`.
 
 After the engine's `OnStartup`, the boot log records the Serilog the engine bound to:
 `Serilog bound: 4.0.0.0 at <path> (engine compiled against 4.0.0.0)`. That line is a `WRN` when
 Serilog is older than compiled, which means another add-in's resolver supplied its copy first.
 The handler cannot prevent that. Only one Serilog can load into the shared context, so when
-another add-in loads a different version first, one of the two add-ins loses. RST still shares
+another add-in loads a different major version first, one of the two add-ins loses. RST still shares
 Serilog's global `Log.Logger`; moving to a private logger is planned for v3.1.
 
 ## History (v2.x to v3.0)
