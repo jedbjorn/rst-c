@@ -8,7 +8,9 @@
 //     Revit's, which an add-in may have changed.
 //   - The job refuses a breakaway: the desktop shell (Explorer) starts it, through its own ShellExecute
 //     (IShellDispatch2), so the tray is Explorer's child: outside Revit's process tree and job, at Explorer's normal
-//     integrity, with --startup kept (explorer.exe's command line cannot pass arguments).
+//     integrity, with --startup kept (explorer.exe's command line cannot pass arguments). Only when Explorer runs as
+//     the same Windows user as Revit: under runas it would start the desktop user's tray, not Revit's user's (delta
+//     review D2), so that route is skipped and the log line says why.
 //   - No desktop shell either: the shell starts it inside the job, as before; the log line says so.
 // Only the BCL here (RuntimeTests loads this type into a process it puts in a job).
 
@@ -123,6 +125,7 @@ internal static class TrayProcessStart
 
     private static string? DesktopShellStartSta(string path, string arguments)
     {
+        if (DesktopUserDiffers() is { } why) return why;
         var type = Type.GetTypeFromCLSID(ShellWindowsClsid, throwOnError: false);
         if (type is null || Activator.CreateInstance(type) is not IShellWindows windows) return "no ShellWindows";
         object location = 0; // CSIDL_DESKTOP
@@ -144,6 +147,59 @@ internal static class TrayProcessStart
             [path, arguments, Path.GetDirectoryName(path) ?? "", "open", 1 /* SW_SHOWNORMAL */]);
         return null;
     }
+
+    /// <summary>
+    /// Why the desktop shell must not start the tray: it runs as another Windows user than this process (Revit under
+    /// runas), or its user cannot be read. Null when it is this process's own user.
+    /// </summary>
+    internal static string? DesktopUserDiffers()
+    {
+        var shell = GetShellWindow();
+        if (shell == IntPtr.Zero) return "no desktop shell window";
+        GetWindowThreadProcessId(shell, out var pid);
+        var process = OpenProcess(ProcessQueryLimitedInformation, false, pid);
+        if (process == IntPtr.Zero) return "the desktop shell's user cannot be read";
+        try
+        {
+            if (!OpenProcessToken(process, TokenQuery, out var token)) return "the desktop shell's user cannot be read";
+            try
+            {
+                using var shellUser = new WindowsIdentity(token);
+                using var self = WindowsIdentity.GetCurrent();
+                return shellUser.User is { } a && self.User is { } b && a.Equals(b)
+                    ? null
+                    : "the desktop belongs to another Windows user (" + shellUser.Name + "; Revit runs as " + self.Name + ")";
+            }
+            finally
+            {
+                CloseHandle(token);
+            }
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
+
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+    private const uint TokenQuery = 0x0008;
+
+    [DllImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern IntPtr GetShellWindow();
+
+    [DllImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
 
     [ComImport, Guid("85CB6900-4D95-11CF-960C-0080C7F4EE85"), InterfaceType(ComInterfaceType.InterfaceIsDual)]
     private interface IShellWindows

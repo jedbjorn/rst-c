@@ -327,6 +327,17 @@ internal sealed class AddInsViewModel : ObservableObject
         StartAction();
         Log.Information("add-ins: Apply profile {Name} (disable unused {Disable})", option.Name, DisableUnused);
 
+        // The saved choices as they are on disk now, not as the page last read them: a Loader in an open Revit may
+        // have changed this profile's RSTify tabs, or answered the adopt question, since (delta review D1).
+        try
+        {
+            _prefs = await Run(_backend.Prefs);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "add-ins: saved choices not re-read; using the page's last read");
+        }
+
         // The Loader asks once per profile per machine, before its saved choices exist (ProfileLoaderViewModel.Select
         // and AskAdoptPresets): the same rule, the same dialog, the same record.
         var hidden = TrayAddinService.Choices(entry, _prefs).HiddenTabs;
@@ -478,9 +489,17 @@ internal sealed class AddInsViewModel : ObservableObject
 
     private void FailAction(string message)
     {
-        _actionError = message;
+        Log.Warning("add-ins: {Failure}", message);
+        _actionError = WithoutPaths(message);
         RaiseError();
     }
+
+    /// <summary>
+    /// A failure for the banner: a full path Windows quotes in its messages (<c>'C:\Users\…\active_profile.json'</c>)
+    /// becomes its file name. The log keeps the full message (delta review D3).
+    /// </summary>
+    internal static string WithoutPaths(string message) =>
+        System.Text.RegularExpressions.Regex.Replace(message, @"'(?:[A-Za-z]:|\\)\\[^']*\\([^'\\]+)'", "'$1'");
 
     private void SetReadError(string? message)
     {

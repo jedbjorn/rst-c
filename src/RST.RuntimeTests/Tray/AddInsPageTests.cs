@@ -421,6 +421,28 @@ public class AddInsViewModelTests
         Assert.DoesNotContain(f.Backend.Calls, c => c.StartsWith("Adopt", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Apply_reads_the_saved_choices_fresh_so_a_Loader_change_meanwhile_is_kept()
+    {
+        // Delta review D1: the page was read, then the Loader in an open Revit changed the saved choices.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        var loader = new LoaderPrefsService(f.Root.Paths);
+        loader.Record(AddInsFixture.LeanId, ["Collaborate"], disableUnused: true, presetsAdopted: true);
+        loader.Record(AddInsFixture.OfficeId, ["Massing"], disableUnused: false, presetsAdopted: true); // answered there
+
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        await vm.ApplyAsync();
+        Assert.Equal(new[] { "Collaborate" }, f.Backend.Applied.Last().Hidden);
+
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "Office");
+        await vm.ApplyAsync();
+        Assert.Empty(f.Dialogs.Confirms); // not asked again: the Loader's answer stands
+        Assert.Equal(new[] { "Massing" }, f.Backend.Applied.Last().Hidden);
+        Assert.True(UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.OfficeId)!.PresetsAdopted);
+    }
+
     // ── Review B3: a failed Apply stays on the page ───────────────────────────
 
     [Fact]
@@ -437,6 +459,8 @@ public class AddInsViewModelTests
         Assert.NotNull(vm.ErrorText);
         Assert.StartsWith(AddInsStrings.ApplyFailed("Failed to write active profile: "), vm.ErrorText);
         Assert.True(vm.HasError);
+        Assert.Contains("'active_profile.json'", vm.ErrorText); // delta review D3: the file, not its full path
+        Assert.DoesNotContain(f.Root.Root, vm.ErrorText);
         Assert.Empty(f.Dialogs.AddinReports); // no report for a load that did not happen
         Assert.Null(vm.ResultText);
         Assert.Equal(AddInsStrings.ActiveProfileUnreadable, vm.ActiveProfileText); // never "No profile loaded" for a locked file
@@ -488,6 +512,14 @@ public class AddInsViewModelTests
         Assert.True(vm.IsLoaded);
         Assert.Null(vm.ErrorText);
     }
+
+    [Theory]
+    [InlineData(@"Failed to write active profile: The process cannot access the file 'C:\Users\jed\AppData\Roaming\RST\active_profile.json' because it is being used by another process.",
+                "Failed to write active profile: The process cannot access the file 'active_profile.json' because it is being used by another process.")]
+    [InlineData(@"Access to the path '\\server\share\RST\prefs.json' is denied.", "Access to the path 'prefs.json' is denied.")]
+    [InlineData("Profile not found: F16 Lean", "Profile not found: F16 Lean")]
+    public void Banners_name_the_file_not_its_full_path(string message, string shown) =>
+        Assert.Equal(shown, AddInsViewModel.WithoutPaths(message));
 
     [Fact]
     public async Task The_tray_waits_for_add_in_work_in_flight_before_it_quits()

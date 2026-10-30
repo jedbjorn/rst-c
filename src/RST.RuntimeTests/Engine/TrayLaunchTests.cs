@@ -282,6 +282,15 @@ public class TrayLaunchWindowsTests
     }
 
     [Fact]
+    public void The_desktop_shell_route_is_used_only_for_Revits_own_user()
+    {
+        // Delta review D2: under runas, Explorer belongs to another user and would start that user's tray. On this seat
+        // the desktop (if any) is this user's, so the check passes, or it says why the route is off.
+        var why = TrayProcessStart.DesktopUserDiffers();
+        Assert.True(why is null || why == "no desktop shell window" || why.Contains("user", StringComparison.Ordinal), why);
+    }
+
+    [Fact]
     public void The_shell_start_returns_without_waiting_for_the_process()
     {
         var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
