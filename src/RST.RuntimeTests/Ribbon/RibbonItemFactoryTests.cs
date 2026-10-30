@@ -138,6 +138,23 @@ public sealed class RibbonItemFactoryTests
     });
 
     [Fact]
+    public void An_item_that_throws_while_built_is_skipped_and_the_rest_of_the_panel_still_builds() => Screenshots.RunSta(() =>
+    {
+        // Review N4: the Build stack's Door handler throws (as AdWindows might for a row panel in
+        // Revit); the large button before it and the Mixed stack after it are still built.
+        var profile = StackProfile();
+        var layout = RibbonLayoutPlanner.PlanPanel(profile, profile.Panels[0], 0);
+        var failed = new List<RibbonLayoutItem>();
+
+        var panel = ProfileTabBuilder.BuildPanel(layout,
+            t => t.Payload == "ID_OBJECTS_DOOR" ? throw new InvalidOperationException("boom") : new RecordingCommand(t, []),
+            failed.Add);
+
+        panel.Source.Items.Select(i => i.Id).Should().Equal("RST_ProfileBtn_000_000", "RST_ProfileStack_000_002");
+        failed.Should().ContainSingle().Which.Should().BeOfType<StackItem>().Which.StackName.Should().Be("Build");
+    });
+
+    [Fact]
     public void The_factory_refuses_a_stack_of_one_or_four()
     {
         var one = new StackItem(0, "S", "id", [new PlannedButton(Tool("A", "A"), SlotTarget.Parse("A", "A"), "A", "a", PlannedButtonSize.Small)]);
