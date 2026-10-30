@@ -4,8 +4,8 @@
   after fetch-companions.ps1 has downloaded and verified the pinned
   companion MSIs into installer-bundle\payload\.
 
-  Builds three bundles and checks what each one embeds, by laying it out
-  (RST-Setup.exe /layout <dir> /quiet extracts every package it carries):
+  Builds three bundles and checks what each one chains and embeds (see
+  Assert-Embeds):
     1. RST-Setup.exe          from companions/companions.json: RST.msi plus
                               exactly the shippable companions' pinned assets,
                               one theme checkbox per shippable companion.
@@ -62,20 +62,36 @@ function Build-Bundle([string]$Name, [string[]]$Extra) {
   Copy-Item (Join-Path $Gen 'Companions.g.wxs'), (Join-Path $Gen 'thm.xml') $keep
   return $exe
 }
-# Lays the bundle out and compares the packages it carries with $Expect.
-function Assert-Layout([string]$Exe, [string[]]$Expect, [string[]]$Checkboxes) {
+# What the bundle carries, two ways:
+#  - its chain: RST-Setup.exe /layout <dir> /quiet plans every package, and
+#    the log names each one ("Planned package: <Id>,"). Embedded payloads
+#    stay inside the exe on a layout, so the folder itself proves nothing.
+#  - its bytes: `wix burn extract` (the WiX 6.0.2 CLI) unpacks the attached
+#    container; the extracted files' sha256 must be exactly the expected
+#    packages' (RST.msi as built, each companion's pin): embedded unmodified.
+$WixTool = Join-Path $Tmp 'wixtool'
+Invoke-Dotnet @('tool', 'install', 'wix', '--version', '6.0.2', '--tool-path', $WixTool)
+function Assert-Embeds([string]$Exe, [hashtable]$Expect, [string[]]$Checkboxes) {
   $name = [IO.Path]::GetFileNameWithoutExtension($Exe)
   $dir = Join-Path $Tmp "layout-$name"
   if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
   $log = Join-Path $Tmp "layout-$name.log"
   $p = Start-Process $Exe -ArgumentList @('/layout', "`"$dir`"", '/quiet', '/log', "`"$log`"") -Wait -PassThru
   if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40 | Write-Host; throw "$name /layout exited $($p.ExitCode)" }
-  $all = @(if (Test-Path $dir) { Get-ChildItem $dir -Recurse -File })
-  Write-Host "$name /layout exit $($p.ExitCode); $($all.Count) file(s) in ${dir}: $(($all | ForEach-Object { "$($_.FullName.Substring($dir.Length)) ($($_.Length))" }) -join ', ')"
-  if (Test-Path $log) { Select-String -Path $log -Pattern 'layout', 'Layout', 'Apply complete', 'error', 'Plan' -SimpleMatch | Select-Object -First 30 | ForEach-Object { Write-Host "  log: $($_.Line)" } }
-  $msis = @($all | Where-Object { $_.Extension -eq '.msi' } | ForEach-Object { $_.Name } | Sort-Object)
-  Write-Host "$name embeds: $($msis -join ', ')"
-  Assert (($msis -join '|') -eq ((@($Expect) | Sort-Object) -join '|')) "$name embeds exactly: $((@($Expect) | Sort-Object) -join ', ')"
+  $planned = @(Select-String -Path $log -Pattern 'Planned package: ([^,]+),' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object)
+  $want = @($Expect.Keys | Sort-Object)
+  Write-Host "$name chain: $($planned -join ', ')"
+  Assert (($planned -join '|') -eq ($want -join '|')) "$name chains exactly: $($want -join ', ')"
+
+  $x = Join-Path $Tmp "extract-$name"
+  if (Test-Path $x) { Remove-Item $x -Recurse -Force }
+  & (Join-Path $WixTool 'wix.exe') burn extract $Exe -o $x | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "wix burn extract $name exited $LASTEXITCODE" }
+  $files = @(Get-ChildItem $x -Recurse -File)
+  foreach ($f in $files) { Write-Host "  extracted $($f.FullName.Substring($x.Length)) ($($f.Length) bytes)" }
+  $got = @($files | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } | Sort-Object)
+  $wantHash = @($Expect.Values | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object)
+  Assert (($got -join '|') -eq ($wantHash -join '|')) "$name embeds exactly these bytes: $(($Expect.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value.Substring(0, 12).ToLowerInvariant())" }) -join ', ')"
 
   [xml]$thm = Get-Content -Raw -Encoding UTF8 (Join-Path $Ci "generated\$name\thm.xml")
   $boxes = @($thm.SelectNodes("//*[local-name()='Checkbox']") | ForEach-Object { $_.GetAttribute('Name') } | Where-Object { $_ -ne 'EulaAcceptCheckbox' } | Sort-Object)
@@ -89,14 +105,17 @@ $registry = Join-Path $Root 'companions\companions.json'
 $reg = Get-Content -Raw -Encoding UTF8 $registry | ConvertFrom-Json
 $ship = @($reg.companions | Where-Object { $_.status -eq 'shippable' })
 $exe = Build-Bundle 'RST-Setup' @()
-Assert-Layout $exe (@('RST.msi') + @($ship | ForEach-Object { $_.release.asset })) @($ship | ForEach-Object { "Install$(PascalId $_.id)" })
+$rstHash = (Get-FileHash $RstMsi -Algorithm SHA256).Hash
+$expect = @{ RST = $rstHash }
+foreach ($c in $ship) { $expect[(PascalId $c.id)] = $c.release.sha256 }
+Assert-Embeds $exe $expect @($ship | ForEach-Object { "Install$(PascalId $_.id)" })
 
 # 2. Zero shippable companions: still builds, no checkboxes.
 $none = Join-Path $Tmp 'companions-none.json'
 foreach ($c in $reg.companions) { $c.status = 'in_development'; $c.release = $null }
 $reg | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $none
 $exe = Build-Bundle 'RST-Setup-none' @("-p:CompanionRegistry=$none")
-Assert-Layout $exe @('RST.msi') @()
+Assert-Embeds $exe @{ RST = $rstHash } @()
 
 # 3. Fixture companion builds and the smoke's test bundle.
 foreach ($v in '1.0.0', '1.1.0', '2.0.0') {
@@ -130,6 +149,6 @@ $testRegistry = [ordered]@{
 $testRegistryPath = Join-Path $Ci 'test\companions.fixture.json'
 $testRegistry | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $testRegistryPath
 $exe = Build-Bundle 'RST-Setup-Fixture' @("-p:CompanionRegistry=$testRegistryPath", "-p:CompanionPayloadDir=$payload")
-Assert-Layout $exe @('RST.msi', 'RST-CompanionFixture-1.1.0.msi') @('InstallCompanionFixture')
+Assert-Embeds $exe @{ RST = $rstHash; CompanionFixture = (Get-FileHash $fixtureMsi -Algorithm SHA256).Hash } @('InstallCompanionFixture')
 Copy-Item $exe "$Ci\test\"
 Write-Host 'ci-bundle-build: done'
