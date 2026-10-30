@@ -452,17 +452,6 @@ public class ProfileBuilderViewModelTests
         h.Model.Panels[0].SlotCount.Should().Be("2 slots");
     }
 
-    [Fact]
-    public void Pick_icon_is_a_placeholder_until_WU5()
-    {
-        var h = BuilderHarness.Create();
-        h.Model.SelectedProfileOption = h.Option("Structure");
-        var slot = h.Model.Panels[0].Slots[0];
-        slot.PickIconCommand.CanExecute(null).Should().BeTrue();
-        slot.PickIconCommand.Execute(null);
-        h.Model.IsDirty.Should().BeFalse("the placeholder changes nothing");
-    }
-
     // ── the Properties pane ──────────────────────────────────────────────────
 
     [Fact]
@@ -576,14 +565,6 @@ public class ProfileBuilderViewModelTests
         h.Model.HasSelectedPanel.Should().BeFalse();
         h.Model.PickColorCommand.CanExecute(null).Should().BeFalse();
         h.Model.OpenUrlEditorCommand.CanExecute(null).Should().BeFalse();
-    }
-
-    [Fact]
-    public void The_configure_buttons_wait_for_WU5()
-    {
-        var h = BuilderHarness.Create();
-        h.Model.ConfigurePresetsCommand.CanExecute(null).Should().BeFalse();
-        h.Model.ConfigureCleanupCommand.CanExecute(null).Should().BeFalse();
     }
 
     // ── save ─────────────────────────────────────────────────────────────────
@@ -881,5 +862,6 @@ public class ProfileBuilderViewModelTests
         public LogoOutcome StoreLogo(string sourcePath) => throw new InvalidOperationException();
         public OpResult ClearLogo() => throw new InvalidOperationException();
         public Task<LoadResult> LoadAsync(LoadRequest request) => throw new InvalidOperationException();
+        public IReadOnlyList<RST.Core.Ribbon.IconPackEntry> GetIconPack() => throw new InvalidOperationException();
     }
 }
