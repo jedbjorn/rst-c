@@ -1,0 +1,927 @@
+<!doctype html>
+<!--
+  F18 Builder UX Redesign — interactive mockup v1 (Planner-02, 2026-10-30).
+  Throwaway design artifact, not product code. Colours: src/RST.Core/Theming/UiPalette.cs.
+  Icons: a copy of part of src/RST.Engine/Assets/icons/pack. Option state lives in the URL hash so
+  a redline can name the exact variant (e.g. #pane=B&layout=tiles&actions=pane&theme=dark).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RST — Profile Builder (F18 mockup v1)</title>
+<style>
+:root, .light {
+  --win:#F4F5F7; --surf:#FFFFFF; --alt:#F9FAFB; --border:#D3D7DE; --strong:#6B7380; --div:#E6E8EC;
+  --text:#1F2328; --muted:#5E6672; --accent:#2F6AD0; --accentHover:#2559B4; --accentSoft:#E8F0FD; --accentFg:#2F6AD0;
+  --danger:#B3261E; --dangerFg:#B3261E; --hover:#EEF0F3; --pressed:#E2E5EA; --success:#187534; --successSoft:#EAF6EE;
+  --warnSoft:#FFF5E0; --warnBorder:#E9C27A; --warnText:#8A5A00; --infoSoft:#EAF1FC; --infoBorder:#A9C3EC;
+  --scrim:rgba(0,0,0,.35); --ribbon:#E9EBEE; --ribbonBar:#F7F8FA;
+}
+.dark {
+  --win:#1F2329; --surf:#2A2F37; --alt:#252A31; --border:#525B67; --strong:#8C96A3; --div:#3A414B;
+  --text:#E6E9ED; --muted:#AEB6C1; --accent:#2F6AD0; --accentHover:#2559B4; --accentSoft:#213454; --accentFg:#79AEFF;
+  --danger:#B3261E; --dangerFg:#FF9C94; --hover:#353B44; --pressed:#3E454F; --success:#5FC27E; --successSoft:#1F3327;
+  --warnSoft:#3A3123; --warnBorder:#806633; --warnText:#EDB95A; --infoSoft:#1E2D44; --infoBorder:#3E5C88;
+  --scrim:rgba(0,0,0,.55); --ribbon:#30353D; --ribbonBar:#3A4048;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; }
+body { font:12px "Segoe UI", system-ui, sans-serif; background:var(--win); color:var(--text); display:flex; flex-direction:column; }
+button { font:inherit; color:var(--text); background:var(--surf); border:1px solid var(--border); border-radius:3px; padding:4px 12px; min-height:28px; cursor:pointer; }
+button:hover { background:var(--hover); } button:active { background:var(--pressed); }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; } button.primary:hover { background:var(--accentHover); }
+button:disabled { opacity:.45; cursor:default; }
+button.ghost { border-color:transparent; background:transparent; padding:2px 6px; min-height:22px; }
+button.ghost:hover { background:var(--hover); border-color:var(--border); }
+button.danger, button.x { color:var(--dangerFg); }
+input[type=text] { font:inherit; color:var(--text); background:var(--surf); border:1px solid var(--border); border-radius:3px; padding:4px 7px; min-height:26px; }
+input[type=text]:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.muted { color:var(--muted); } .small { font-size:11px; } .tiny { font-size:10px; }
+.section-title { font-weight:600; font-size:13px; }
+.pill { display:inline-block; border:1px solid var(--border); border-radius:10px; padding:0 7px; font-size:11px; color:var(--muted); background:var(--surf); }
+.label { color:var(--muted); margin:0 0 4px; display:block; }
+.spacer { flex:1; }
+
+/* Mockup strip (not part of the design) */
+#mock { background:repeating-linear-gradient(45deg,#3b2a5c,#3b2a5c 10px,#43316a 10px,#43316a 20px); color:#fff; padding:5px 12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:11px; }
+#mock .seg { display:inline-flex; border:1px solid rgba(255,255,255,.5); border-radius:4px; overflow:hidden; }
+#mock .seg button { background:transparent; color:#fff; border:0; border-radius:0; min-height:22px; padding:2px 9px; font-size:11px; }
+#mock .seg button.on { background:#fff; color:#3b2a5c; font-weight:600; }
+#mock .grp { display:flex; align-items:center; gap:6px; }
+
+/* Window */
+#app { flex:1; display:flex; flex-direction:column; min-height:0; }
+header.top { height:54px; background:var(--alt); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 16px; gap:10px; flex:none; }
+.vsep { width:1px; height:20px; background:var(--div); margin:0 6px; }
+.dirty { color:var(--warnText); font-size:11px; display:flex; align-items:center; gap:5px; }
+.dirty::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--warnText); }
+.profile-btn { width:250px; display:flex; justify-content:space-between; align-items:center; text-align:left; }
+.menu { position:absolute; z-index:40; background:var(--surf); border:1px solid var(--strong); border-radius:5px; box-shadow:0 6px 18px rgba(0,0,0,.25); padding:4px; min-width:250px; }
+.menu .mi { padding:6px 10px; border-radius:3px; cursor:pointer; display:flex; justify-content:space-between; gap:12px; }
+.menu .mi:hover { background:var(--hover); }
+.menu .mi.cur { font-weight:600; }
+.menu .hd { padding:6px 10px 2px; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
+.menu hr { border:0; border-top:1px solid var(--div); margin:4px 0; }
+
+main { flex:1; display:grid; grid-template-columns:320px 1fr 330px; min-height:0; }
+.pane { display:flex; flex-direction:column; min-height:0; }
+.pane-head { height:42px; border-bottom:1px solid var(--border); padding:0 14px; display:flex; align-items:center; gap:8px; flex:none; }
+.scroll { overflow:auto; flex:1; min-height:0; }
+
+/* Commands */
+#left { background:var(--alt); border-right:1px solid var(--border); }
+.filter-row { display:flex; gap:6px; padding:10px 12px 8px; }
+.filter-row input { flex:1; min-width:0; }
+.filter-row button { white-space:nowrap; }
+.tree { padding:0 8px 10px; }
+.node { display:flex; align-items:center; gap:5px; padding:3px 4px; border-radius:3px; user-select:none; min-height:24px; }
+.node:hover { background:var(--hover); }
+.node .tw { width:14px; color:var(--muted); font-size:9px; text-align:center; cursor:pointer; }
+.node .lbl { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.node.grp { cursor:pointer; } .node.grp .lbl { font-weight:600; } .node.grp.sub .lbl { font-weight:400; }
+.node .sid { color:var(--muted); font-size:10px; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.node.cmd { cursor:grab; }
+.node .acts { display:none; gap:2px; } .node:hover .acts { display:flex; }
+.node .acts button { min-height:20px; padding:0 6px; font-size:11px; }
+.custom-group { margin:2px 0 8px; border:1px solid var(--infoBorder); background:var(--infoSoft); border-radius:5px; padding:2px 2px 4px; }
+.custom-group .note { padding:2px 8px 4px 24px; }
+.kind { font-size:9px; border:1px solid var(--border); border-radius:3px; padding:0 4px; color:var(--muted); text-transform:uppercase; }
+.ico16 { width:16px; height:16px; flex:none; }
+.ico16.blank { display:inline-block; border:1px dashed var(--border); border-radius:2px; }
+
+/* Canvas */
+#center { background:var(--win); }
+.tabchip { border:1px solid var(--accent); color:var(--accentFg); border-radius:3px; padding:2px 10px; background:var(--accentSoft); cursor:pointer; }
+#canvas { padding:16px 20px 30px; min-height:100%; }
+.card { background:var(--surf); border:1px solid var(--border); border-radius:6px; margin-bottom:14px; position:relative; }
+.card.sel { box-shadow:0 0 0 2px var(--accentFg); border-color:transparent; }
+.card .stripe { height:4px; border-radius:5px 5px 0 0; }
+.card-head { display:flex; align-items:center; gap:8px; padding:7px 10px; background:var(--alt); border-bottom:1px solid var(--div); }
+.handle { cursor:grab; color:var(--muted); padding:0 2px; font-size:13px; user-select:none; }
+.swatch { width:22px; height:22px; border-radius:4px; border:1px solid rgba(0,0,0,.25); cursor:pointer; flex:none; }
+.pname { font-weight:600; font-size:13px; width:220px; border-color:transparent !important; background:transparent !important; box-shadow:none !important; }
+.pname:hover { border-color:var(--border) !important; } .pname:focus { background:var(--surf) !important; border-color:var(--accent) !important; }
+.hover-acts { display:flex; gap:2px; opacity:0; transition:opacity .1s; }
+.card:hover .hover-acts, .card.sel .hover-acts { opacity:1; }
+.card-body { padding:10px 12px; min-height:56px; }
+.card-body.rows { display:flex; flex-direction:column; gap:6px; }
+.card-body.tiles { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start; }
+.empty { color:var(--muted); text-align:center; padding:12px; border:1px dashed var(--border); border-radius:4px; flex:1; }
+
+/* tool row */
+.tool { position:relative; display:flex; align-items:center; gap:8px; background:var(--win); border:1px solid var(--border); border-radius:4px; padding:3px 6px; }
+.tool:hover { border-color:var(--strong); }
+.iconbtn { display:inline-flex; align-items:center; border:1px solid var(--border); background:var(--surf); border-radius:3px; padding:3px 4px; cursor:pointer; }
+.iconbtn:hover { background:var(--hover); border-color:var(--accent); }
+input.tname { flex:1; min-width:80px; border-color:transparent; background:transparent; }
+input.tname:hover { border-color:var(--border); } input.tname:focus { background:var(--surf); }
+.src { color:var(--muted); font-size:10px; max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tacts { display:flex; gap:2px; align-items:center; }
+.tool .hov, .srow .hov, .tile .hov { visibility:hidden; } .tool:hover .hov, .srow:hover .hov, .tile:hover .hov { visibility:visible; }
+.x { font-size:14px; line-height:1; }
+.badge-custom { font-size:9px; color:var(--accentFg); border:1px solid var(--infoBorder); background:var(--infoSoft); border-radius:3px; padding:0 4px; text-transform:uppercase; }
+
+/* stack (rows) */
+.stack { position:relative; border:1px solid var(--strong); border-left:4px solid var(--strong); border-radius:4px; background:var(--alt); padding:6px 6px 6px 6px; display:flex; gap:6px; }
+.stack .members { flex:1; display:flex; flex-direction:column; gap:4px; }
+.stack .stack-side { display:flex; flex-direction:column; align-items:center; gap:3px; justify-content:center; }
+.stack .stack-tag { font-size:9px; color:var(--muted); writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:.5px; }
+.stack .tool { background:var(--surf); }
+
+/* tiles */
+.tile { position:relative; width:100px; border:1px solid var(--border); border-radius:4px; background:var(--win); display:flex; flex-direction:column; align-items:center; padding:9px 4px 5px; gap:4px; cursor:grab; }
+.tile:hover { border-color:var(--strong); }
+.tile img, .blank32 { width:32px; height:32px; }
+.blank32 { display:inline-block; border:1px dashed var(--border); border-radius:3px; }
+.tile input.tname { width:100%; text-align:center; font-size:11px; padding:2px; min-height:20px; flex:none; min-width:0; }
+.tile .src { max-width:92px; font-size:9px; }
+.tile .corner { position:absolute; top:1px; right:1px; display:flex; gap:0; }
+.tile .corner button, .srow button, .tstack-head button { min-height:18px; padding:0 4px; font-size:11px; }
+.tstack { position:relative; border:1px solid var(--strong); border-top:3px solid var(--strong); border-radius:4px; background:var(--alt); padding:4px 6px 6px; display:flex; flex-direction:column; gap:3px; width:200px; cursor:grab; }
+.tstack-head { display:flex; align-items:center; gap:4px; font-size:9px; color:var(--muted); letter-spacing:.5px; }
+.srow { display:flex; align-items:center; gap:5px; background:var(--surf); border:1px solid var(--border); border-radius:3px; padding:2px 4px; cursor:grab; position:relative; }
+.srow input.tname { font-size:11px; padding:1px 4px; min-height:20px; min-width:40px; }
+
+/* drop markers */
+.mk-before::before, .mk-after::after { content:""; position:absolute; background:var(--success); z-index:5; pointer-events:none; }
+.v.mk-before::before { left:0; right:0; top:-4px; height:2px; } .v.mk-after::after { left:0; right:0; bottom:-4px; height:2px; }
+.h.mk-before::before { top:0; bottom:0; left:-6px; width:2px; } .h.mk-after::after { top:0; bottom:0; right:-6px; width:2px; }
+.mk-center { outline:2px dashed var(--success); outline-offset:1px; background:var(--successSoft) !important; }
+.mk-refuse { outline:2px dashed var(--dangerFg); outline-offset:1px; }
+.mk-body { background:var(--successSoft); }
+.dragging { opacity:.4; }
+
+/* Right pane */
+#right { background:var(--surf); border-left:1px solid var(--border); }
+.psec { padding:14px 16px; border-bottom:1px solid var(--div); }
+.psec h4 { margin:0 0 8px; font-size:12px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+.field { margin-bottom:10px; } .field > input[type=text] { width:100%; }
+.help { color:var(--muted); font-size:11px; margin-top:3px; }
+.tabs { display:flex; border-bottom:1px solid var(--border); padding:0 10px; gap:2px; flex:none; }
+.tabs button { border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; padding:8px 10px; }
+.tabs button.on { border-bottom-color:var(--accent); color:var(--accentFg); font-weight:600; }
+.switch { position:relative; width:32px; height:18px; border-radius:9px; background:var(--strong); flex:none; cursor:pointer; border:0; padding:0; min-height:0; }
+.switch::after { content:""; position:absolute; top:3px; left:3px; width:12px; height:12px; border-radius:50%; background:#fff; transition:left .1s; }
+.switch.on { background:var(--accent); } .switch.on::after { left:17px; } .switch:hover { background:var(--strong); } .switch.on:hover { background:var(--accentHover); }
+.swrow { display:flex; align-items:center; gap:10px; padding:5px 0; }
+.swrow .grow { flex:1; }
+.range { display:flex; align-items:center; gap:8px; } .range input { flex:1; accent-color:var(--accent); }
+
+/* Preview */
+#preview { background:var(--alt); border-top:1px solid var(--border); padding:8px 16px 12px; flex:none; }
+.ribbon { background:var(--ribbon); border:1px solid var(--border); border-radius:4px; overflow-x:auto; }
+.rtabs { display:flex; align-items:flex-end; gap:6px; padding:5px 8px 0; border-bottom:1px solid var(--border); background:var(--ribbonBar); }
+.rtab { border:1px solid var(--border); border-bottom:0; border-radius:3px 3px 0 0; padding:2px 12px; background:var(--ribbon); font-weight:600; }
+.rpanels { display:flex; gap:6px; padding:6px; align-items:stretch; }
+.rpanel { border-radius:5px; display:flex; flex-direction:column; min-width:60px; }
+.rpanel .ritems { display:flex; gap:4px; padding:6px 6px 3px; align-items:flex-start; flex:1; }
+.rpanel .rtitle { text-align:center; font-size:10px; padding:2px 8px; border-radius:0 0 5px 5px; }
+.rbig { width:54px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; text-align:center; line-height:1.15; }
+.rbig img, .rbig .blank32 { width:32px; height:32px; }
+.rstk { display:flex; flex-direction:column; gap:2px; font-size:10px; padding:0 4px; }
+.rstk div { display:flex; align-items:center; gap:4px; white-space:nowrap; height:19px; }
+
+/* Modal + popovers + toast */
+#scrim { position:fixed; inset:0; background:var(--scrim); display:none; align-items:center; justify-content:center; z-index:60; }
+.modal { background:var(--surf); border:1px solid var(--strong); border-radius:6px; width:440px; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+.modal .mh { padding:14px 16px 6px; font-weight:600; font-size:14px; }
+.modal .mb { padding:6px 16px 10px; overflow:auto; }
+.modal .mf { padding:10px 16px; border-top:1px solid var(--div); display:flex; justify-content:flex-end; gap:8px; }
+.seg2 { display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+.seg2 button { border:0; border-radius:0; } .seg2 button.on { background:var(--accentSoft); color:var(--accentFg); font-weight:600; }
+.pop { position:absolute; z-index:50; background:var(--surf); border:1px solid var(--strong); border-radius:5px; padding:10px; box-shadow:0 6px 18px rgba(0,0,0,.25); }
+.icongrid { display:grid; grid-template-columns:repeat(7, 34px); gap:4px; }
+.icongrid .ic { width:34px; height:34px; border:1px solid var(--border); border-radius:3px; display:flex; align-items:center; justify-content:center; cursor:pointer; background:var(--win); }
+.icongrid .ic:hover, .icongrid .ic.on { border-color:var(--accent); background:var(--accentSoft); }
+.icongrid img { width:22px; height:22px; }
+.colors { display:grid; grid-template-columns:repeat(6, 24px); gap:5px; }
+.colors .c { width:24px; height:24px; border-radius:4px; cursor:pointer; border:1px solid rgba(0,0,0,.2); }
+.chk { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:3px; cursor:pointer; }
+.chk:hover { background:var(--hover); }
+.callout { border:1px solid var(--infoBorder); background:var(--infoSoft); border-radius:4px; padding:8px 10px; margin:8px 0; }
+.callout.warn { border-color:var(--warnBorder); background:var(--warnSoft); color:var(--warnText); }
+#toast { position:fixed; left:50%; bottom:190px; transform:translateX(-50%); background:var(--text); color:var(--surf); padding:8px 16px; border-radius:5px; display:none; z-index:70; box-shadow:0 4px 14px rgba(0,0,0,.3); }
+#toast.err { background:var(--danger); color:#fff; }
+</style>
+</head>
+<body>
+<div id="mock"></div>
+<div id="app">
+  <header class="top" id="header"></header>
+  <main>
+    <section class="pane" id="left"></section>
+    <section class="pane" id="center"></section>
+    <section class="pane" id="right"></section>
+  </main>
+  <section id="preview"></section>
+</div>
+<div id="scrim"></div>
+<div id="toast"></div>
+<script>
+// ───────────────────────── option state (URL hash) ─────────────────────────
+const OPTS = { pane:['A','B'], layout:['rows','tiles'], actions:['header','pane'], theme:['light','dark'] };
+const OPT_LABELS = {
+  pane:['Profile pane', { A:'A · Sections', B:'B · Tabs' }],
+  layout:['Panel layout', { rows:'Rows', tiles:'Tiles (ribbon-like)' }],
+  actions:['Rename / Duplicate', { header:'In profile menu', pane:'In Profile pane' }],
+  theme:['Theme', { light:'Light', dark:'Dark' }],
+};
+const opt = {};
+function readHash() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  for (const k in OPTS) opt[k] = OPTS[k].includes(q.get(k)) ? q.get(k) : OPTS[k][0];
+}
+function writeHash() { history.replaceState(null, '', '#' + new URLSearchParams(opt).toString()); }
+
+// ───────────────────────── seed data ─────────────────────────
+let _id = 0; const uid = p => (p || 'u') + (++_id);
+const cmd = (name, id, tab, panel, icon) => ({ uid:uid('t'), name, base:name, type:'cmd', cmd:id, icon:icon || null, source:`${tab} · ${panel}` });
+const url = (name, link, icon) => ({ uid:uid('t'), name, base:name, type:link.startsWith('mailto:') ? 'email' : 'url', link, icon:icon || null });
+const stack = (...tools) => ({ sid:uid('s'), tools });
+const DEFAULT_CLEANUP = () => [
+  { name:'Windows Temp', on:true }, { name:'Revit package cache', on:true }, { name:'Revit journals', on:true },
+  { name:'Collaboration cache', on:true }, { name:'Recent-file list', on:false }, { name:'RST logs', on:true }];
+const RIBBON_TABS = ['Enscape','Kinship','pyRevit','Analyze','Collaborate','Systems','Massing & Site','Insert','Steel','Precast'];
+
+function seedProfiles() {
+  return [
+    { id:'p1', name:'Structure', tab:'Studio Struct', loaded:true, minVersion:'2.1.0', opacity:60,
+      presets:{ hidden:['Massing & Site','Precast'], disableUnused:true }, cleanup:DEFAULT_CLEANUP(),
+      panels:[
+        { pid:uid('p'), name:'Frame', color:'#e05a5a', items:[
+          cmd('Beam','ID_BEAM','Structure','Structure','parallel_red'),
+          cmd('Column','ID_OBJECTS_COLUMN','Structure','Structure','box_stack_dark_grey'),
+          cmd('Brace','ID_BRACE','Structure','Structure','arrow_45_orange') ]},
+        { pid:uid('p'), name:'Review', color:'#14b8a6', items:[
+          cmd('Kinship','ID_KINSHIP','Kinship','Kinship','box_open_blue'),
+          stack(cmd('Warnings','PYR_WARNINGS','pyRevit','Analysis','checklist_orange'),
+                cmd('Audit','PYR_AUDIT','pyRevit','Analysis','check_green'),
+                cmd('Purge','PYR_PURGE','pyRevit','Analysis','filter_red')),
+          cmd('Notes','ID_TEXT_NOTE','Annotate','Text',null) ]},
+        { pid:uid('p'), name:'Links', color:'#f0b44c', items:[
+          url('Wiki','https://wiki.studio.example','link_external_blue'),
+          url('Help','mailto:bim@studio.example','question') ]},
+      ]},
+    { id:'p2', name:'Architecture', tab:'Studio Arch', loaded:false, minVersion:'2.1.0', opacity:80,
+      presets:{ hidden:['Steel','Precast'], disableUnused:false }, cleanup:DEFAULT_CLEANUP(),
+      panels:[
+        { pid:uid('p'), name:'Build', color:'#4f7fd9', items:[
+          cmd('Wall','ID_OBJECTS_WALL','Architecture','Build','house_blue'),
+          cmd('Door','ID_OBJECTS_DOOR','Architecture','Build','box_blue'),
+          cmd('Window','ID_OBJECTS_WINDOW','Architecture','Build','plans_blue') ]},
+        { pid:uid('p'), name:'Studio', color:'#8e6bd1', items:[
+          url('Wiki','https://wiki.studio.example','link_external_purple'),
+          url('BIM Standards','https://standards.studio.example','sheets_purple'),
+          url('Help','mailto:bim@studio.example','question_purple') ]},
+      ]},
+    { id:'p3', name:'Documentation', tab:'Docs', loaded:false, minVersion:'0.1.0', opacity:20,
+      presets:{ hidden:[], disableUnused:false }, cleanup:DEFAULT_CLEANUP(),
+      panels:[
+        { pid:uid('p'), name:'Align Tools', color:'#e3a1ce', items:[
+          cmd('Align Left','CUSTOM_ALIGN_LEFT','pyRevit','Align','align_left'),
+          cmd('Align Right','CUSTOM_ALIGN_RIGHT','pyRevit','Align','align_right') ]},
+        { pid:uid('p'), name:'Help', color:'#9aa4b1', items:[
+          url('Support','mailto:support@studio.example','at_green') ]},
+      ]},
+  ];
+}
+const CATALOG = [
+  { label:'Autodesk Native', kids:[
+    { label:'Architecture', kids:[
+      { label:'Build', cmds:[['Wall','ID_OBJECTS_WALL'],['Door','ID_OBJECTS_DOOR'],['Window','ID_OBJECTS_WINDOW'],['Roof','ID_OBJECTS_ROOF'],['Floor','ID_OBJECTS_FLOOR']]},
+      { label:'Datum', cmds:[['Level','ID_OBJECTS_LEVEL'],['Grid','ID_OBJECTS_GRID']]} ]},
+    { label:'Structure', kids:[
+      { label:'Structure', cmds:[['Beam','ID_BEAM'],['Structural Column','ID_OBJECTS_COLUMN'],['Brace','ID_BRACE']]} ]},
+    { label:'Annotate', kids:[ { label:'Text', cmds:[['Text','ID_TEXT_NOTE']]}, { label:'Tag', cmds:[['Tag by Category','ID_TAG'],['Multi-Category','ID_TAG_MULTI']]} ]},
+    { label:'View', kids:[ { label:'Create', cmds:[['3D View','ID_VIEW_DEFAULT_3DVIEW'],['Section','ID_OBJECTS_SECTION']]} ]},
+  ]},
+  { label:'Enscape', kids:[
+    { label:'Enscape', cmds:[['Start Enscape','Enscape.Start'],['Live Updates','Enscape.Sync']]},
+    { label:'Assets', cmds:[['Asset Library','Enscape.Assets']]} ]},
+  { label:'Kinship', kids:[ { label:'Kinship', cmds:[['Open Kinship','ID_KINSHIP'],['Upload to Library','KIN_UPLOAD']]} ]},
+  { label:'pyRevit', kids:[
+    { label:'Analysis', cmds:[['Warnings','PYR_WARNINGS'],['Audit','PYR_AUDIT'],['Purge','PYR_PURGE']]},
+    { label:'Selection', cmds:[['Select Similar','PYR_SELECT_SIMILAR']]} ]},
+];
+const ICONS = ['align_left','align_right','parallel','perpendicular','level','box_stack','box_open','box_cube','arrow_45','link_external','question','search','select','repeat','house','building_office','sheets','checklist','check','filter','tag','sync','camera','at','sparkle','hammer','plans','elevation'];
+const ICON_COLORS = ['', '_blue', '_green', '_orange', '_purple', '_red', '_dark_grey'];
+const PANEL_COLORS = ['#e05a5a','#f0b44c','#e8d44d','#6cc070','#14b8a6','#4f7fd9','#8e6bd1','#e3a1ce','#9aa4b1','#5e6672','#c97b4a','#2f6ad0'];
+
+// ───────────────────────── app state ─────────────────────────
+const S = { saved:seedProfiles(), cur:0, work:null, selPanel:null, dirty:false, rtab:'general',
+            expanded:new Set(['Custom Tools','pyRevit','pyRevit/Analysis']), filter:'' };
+const clone = o => JSON.parse(JSON.stringify(o));
+function openProfile(i) { S.cur = i; S.work = clone(S.saved[i]); S.selPanel = S.work.panels[0]?.pid || null; S.dirty = false; }
+const W = () => S.work;
+function markDirty() { S.dirty = true; renderHeader(); }
+
+// ───────────────────────── helpers ─────────────────────────
+const $ = (sel, el = document) => el.querySelector(sel);
+// Element.append writes "null" for null children; every append in this file skips them.
+const _append = Element.prototype.append;
+Element.prototype.append = function (...k) { _append.apply(this, k.flat(3).filter(x => x != null && x !== false)); };
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k === 'class') el.className = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k === 'value') el.value = v;
+    else if (k === 'checked') el.checked = true;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat(3)) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
+  return el;
+}
+const iconImg = (icon, cls) => icon ? h('img', { src:`icons/32_${icon}.png`, class:cls || '', draggable:'false' }) : h('span', { class:cls === 'ico16' ? 'ico16 blank' : 'blank32' });
+function toast(msg, err) { const t = $('#toast'); t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2800); }
+function closeFloating() { document.querySelectorAll('.menu,.pop').forEach(m => m.remove()); }
+document.addEventListener('mousedown', e => { if (!e.target.closest('.menu,.pop,[data-opens]')) closeFloating(); });
+function floatAt(anchor, el, alignRight) {
+  closeFloating(); document.body.append(el);
+  const r = anchor.getBoundingClientRect();
+  const top = r.bottom + 4 + el.offsetHeight > innerHeight ? Math.max(8, r.top - el.offsetHeight - 4) : r.bottom + 4;
+  el.style.top = top + 'px';
+  el.style.left = (alignRight ? Math.max(8, r.right - el.offsetWidth) : Math.min(r.left, innerWidth - el.offsetWidth - 8)) + 'px';
+  return el;
+}
+function modal(title, body, buttons) {
+  const sc = $('#scrim'); sc.innerHTML = '';
+  const foot = h('div', { class:'mf' });
+  sc.append(h('div', { class:'modal' }, h('div', { class:'mh' }, title), h('div', { class:'mb' }, body), foot));
+  for (const b of buttons) {
+    const el = h('button', { class:b.cls || '', onclick:() => { if (b.run && b.run() === false) return; if (!b.keepOpen) closeModal(); } }, b.label);
+    foot.append(el); if (b.ref) b.ref(el);
+  }
+  sc.style.display = 'flex';
+  setTimeout(() => sc.querySelector('.mb input[type=text]')?.focus(), 0);
+}
+function closeModal() { $('#scrim').style.display = 'none'; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeFloating(); closeModal(); } });
+const shortLink = l => l.replace(/^mailto:/, '').replace(/^https?:\/\//, '');
+function normalizeLink(type, raw) {
+  const v = raw.trim(); if (!v) return '';
+  if (type === 'email') return v.startsWith('mailto:') ? v : 'mailto:' + v;
+  return /^(https?:\/\/|mailto:|ftp:\/\/|file:\/\/|tel:)/i.test(v) ? v : 'https://' + v;
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+// ───────────────────────── model operations ─────────────────────────
+function* toolsOf(p) { for (const pn of p.panels) for (const it of pn.items) { if (it.tools) yield* it.tools; else yield it; } }
+function findTool(u, p = W()) {
+  for (const pn of p.panels) for (let i = 0; i < pn.items.length; i++) {
+    const it = pn.items[i];
+    if (it.uid === u) return { panel:pn, idx:i, tool:it, stack:null };
+    if (it.tools) { const j = it.tools.findIndex(t => t.uid === u); if (j >= 0) return { panel:pn, idx:i, tool:it.tools[j], stack:it, sidx:j }; }
+  }
+  return null;
+}
+function findStack(s, p = W()) { for (const pn of p.panels) { const i = pn.items.findIndex(it => it.sid === s); if (i >= 0) return { panel:pn, idx:i, stack:pn.items[i] }; } return null; }
+const panelById = pid => W().panels.find(p => p.pid === pid);
+// Remove a tool; a stack left with one tool dissolves into a plain button (decision #19).
+function removeTool(u, p = W(), quiet) {
+  const f = findTool(u, p); if (!f) return null;
+  if (!f.stack) { f.panel.items.splice(f.idx, 1); return f.tool; }
+  f.stack.tools.splice(f.sidx, 1);
+  if (f.stack.tools.length === 1) { f.panel.items.splice(f.idx, 1, f.stack.tools[0]); if (!quiet) toast('Stack dissolved — one tool on its own is not a stack.'); }
+  else if (!f.stack.tools.length) f.panel.items.splice(f.idx, 1);
+  return f.tool;
+}
+function unstack(sid) { const f = findStack(sid); f.panel.items.splice(f.idx, 1, ...f.stack.tools); changed(); toast('Stack removed — its tools stay on the panel.'); }
+function changed() { markDirty(); renderCanvas(); renderPreview(); renderLeft(); }
+
+// Custom Tools library: derived from every saved profile (the open one = its working copy). Decision #20.
+function library() {
+  const map = new Map();
+  S.saved.forEach((sp, i) => {
+    const p = i === S.cur ? W() : sp;
+    for (const t of toolsOf(p)) if (t.type !== 'cmd') {
+      if (!map.has(t.link)) map.set(t.link, { link:t.link, type:t.type, label:t.base, icon:t.icon, profiles:new Set() });
+      map.get(t.link).profiles.add(p.name);
+    }
+  });
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+function eachProfile(fn) { S.saved.forEach((sp, i) => fn(i === S.cur ? W() : sp, i === S.cur)); }
+
+// ───────────────────────── drag and drop ─────────────────────────
+let drag = null;
+function startDrag(e, payload, ghostEl) {
+  drag = payload; e.dataTransfer.effectAllowed = 'copyMove'; e.dataTransfer.setData('text/plain', payload.src);
+  if (ghostEl) { e.dataTransfer.setDragImage(ghostEl, 14, 14); setTimeout(() => ghostEl.classList.add('dragging'), 0); }
+  e.stopPropagation();
+}
+document.addEventListener('dragend', () => { drag = null; clearMarks(); document.querySelectorAll('.dragging').forEach(x => x.classList.remove('dragging')); });
+function clearMarks() { document.querySelectorAll('.mk-before,.mk-after,.mk-center,.mk-refuse,.mk-body').forEach(x => x.classList.remove('mk-before', 'mk-after', 'mk-center', 'mk-refuse', 'mk-body')); }
+function zone(el, e) {
+  const r = el.getBoundingClientRect(), horiz = el.classList.contains('h');
+  const p = horiz ? (e.clientX - r.left) / r.width : (e.clientY - r.top) / r.height;
+  return p < .28 ? 'before' : p > .72 ? 'after' : 'center';
+}
+function resolveTarget(e) {
+  if (!drag) return null;
+  const toolEl = e.target.closest('[data-tool]'), stackEl = e.target.closest('[data-stack]'), cardEl = e.target.closest('[data-card]');
+  if (!cardEl) return null;
+  const pid = cardEl.dataset.card;
+  if (drag.src === 'panel') { const r = cardEl.getBoundingClientRect(); return { kind:'card', el:cardEl, id:pid, pid, zone:(e.clientY - r.top) < r.height / 2 ? 'before' : 'after' }; }
+  if (drag.src === 'stack') {
+    // A stack moves as a unit; it never goes inside another stack.
+    if (stackEl) { const z = zone(stackEl, e); return { kind:'stack', el:stackEl, id:stackEl.dataset.stack, pid, zone:z === 'center' ? 'after' : z }; }
+    if (toolEl) { const z = zone(toolEl, e); return { kind:'tool', el:toolEl, id:toolEl.dataset.tool, pid, zone:z === 'center' ? 'after' : z }; }
+    return { kind:'panel', el:cardEl.querySelector('.card-body'), id:pid, pid };
+  }
+  if (toolEl) return { kind:'tool', el:toolEl, id:toolEl.dataset.tool, pid, zone:zone(toolEl, e) };
+  if (stackEl) return { kind:'stack', el:stackEl, id:stackEl.dataset.stack, pid, zone:zone(stackEl, e) };
+  return { kind:'panel', el:cardEl.querySelector('.card-body'), id:pid, pid };
+}
+// The stack a dragged tool would join, if any.
+function joiningStack(t) {
+  if (t.kind === 'tool') return findTool(t.id)?.stack || null;
+  if (t.kind === 'stack' && t.zone === 'center') return findStack(t.id)?.stack || null;
+  return null;
+}
+function refusal(t) {
+  if (drag.src === 'tool' && t.kind === 'tool' && t.id === drag.id) return 'self';
+  if (drag.src === 'stack' && t.kind === 'stack' && t.id === drag.id) return 'self';
+  if (drag.src === 'stack' && t.kind === 'tool' && findTool(t.id)?.stack) return 'self';
+  if (drag.src === 'stack') return null;
+  const st = joiningStack(t);
+  if (st && st.tools.length >= 3 && !(drag.src === 'tool' && st.tools.some(x => x.uid === drag.id))) return 'full';
+  return null;
+}
+function onDragOver(e) {
+  const t = resolveTarget(e); clearMarks(); if (!t) return;
+  const r = refusal(t); if (r === 'self') return;
+  e.preventDefault();
+  if (r === 'full') { (t.el.closest('[data-stack]') || t.el).classList.add('mk-refuse'); e.dataTransfer.dropEffect = 'none'; return; }
+  if (t.kind === 'panel') t.el.classList.add('mk-body');
+  else if (t.kind === 'card') t.el.classList.add(t.zone === 'before' ? 'mk-before' : 'mk-after', 'v');
+  else if (t.zone === 'center') t.el.classList.add('mk-center');
+  else t.el.classList.add(t.zone === 'before' ? 'mk-before' : 'mk-after');
+}
+function onDrop(e) {
+  const t = resolveTarget(e); clearMarks(); if (!t) return; e.preventDefault();
+  const r = refusal(t);
+  if (r === 'self') return;
+  if (r === 'full') { toast('A stack holds 2–3 tools. This one is full.', true); return; }
+  doDrop(drag, t); drag = null; changed();
+}
+function newToolFrom(d) {
+  if (d.src === 'cmd') return cmd(d.name, d.cmd, d.tab, d.panel, null);
+  const L = library().find(x => x.link === d.link); return url(L.label, L.link, L.icon);
+}
+function doDrop(d, t) {
+  if (d.src === 'panel') {
+    const ps = W().panels, from = ps.findIndex(p => p.pid === d.id); if (d.id === t.id) return;
+    const [pn] = ps.splice(from, 1); const to = ps.findIndex(p => p.pid === t.id);
+    ps.splice(t.zone === 'after' ? to + 1 : to, 0, pn); return;
+  }
+  if (d.src === 'stack') { const f = findStack(d.id); f.panel.items.splice(f.idx, 1); placeItem(f.stack, t); return; }
+  let tool;
+  if (d.src === 'tool') {
+    const f = findTool(d.id);
+    if (f.stack && t.kind === 'tool') {
+      const g = findTool(t.id);
+      if (g.stack === f.stack) { // reorder inside the same stack; never dissolves it
+        if (t.zone === 'center') return;
+        f.stack.tools.splice(f.sidx, 1); const j = f.stack.tools.findIndex(x => x.uid === t.id);
+        f.stack.tools.splice(t.zone === 'after' ? j + 1 : j, 0, f.tool); return;
+      }
+    }
+    if (f.stack && t.kind === 'stack' && t.id === f.stack.sid && t.zone === 'center') return;
+    tool = removeTool(d.id);
+  } else { tool = newToolFrom(d); S.selPanel = t.pid; }
+  placeItem(tool, t);
+}
+function placeItem(item, t) {
+  const fallback = () => (panelById(t.pid) || W().panels[0]).items.push(item);
+  if (t.kind === 'panel' || t.kind === 'card') return fallback();
+  if (t.kind === 'stack') {
+    const f = findStack(t.id); if (!f) return fallback();
+    if (t.zone === 'center') { f.stack.tools.push(item); return; }
+    f.panel.items.splice(t.zone === 'after' ? f.idx + 1 : f.idx, 0, item); return;
+  }
+  const g = findTool(t.id); if (!g) return fallback();
+  if (g.stack) { g.stack.tools.splice(t.zone === 'before' ? g.sidx : g.sidx + 1, 0, item); return; }
+  if (t.zone === 'center' && !item.tools) { g.panel.items.splice(g.idx, 1, stack(g.tool, item)); toast('Stack created.'); return; }
+  g.panel.items.splice(t.zone === 'before' ? g.idx : g.idx + 1, 0, item);
+}
+
+// ───────────────────────── render: mockup strip ─────────────────────────
+function renderMock() {
+  const m = $('#mock'); m.innerHTML = '';
+  m.append(h('b', {}, 'MOCKUP v1 · F18 Builder UX'));
+  for (const k in OPTS) {
+    const [title, labels] = OPT_LABELS[k];
+    m.append(h('span', { class:'grp' }, title + ':', h('span', { class:'seg' },
+      OPTS[k].map(v => h('button', { class:opt[k] === v ? 'on' : '', onclick:() => { opt[k] = v; writeHash(); renderAll(); } }, labels[v])))));
+  }
+  m.append(h('span', { class:'spacer' }),
+    h('button', { style:'background:transparent;color:#fff;border-color:rgba(255,255,255,.6);min-height:22px;padding:1px 9px', onclick:() => { S.saved = seedProfiles(); openProfile(0); renderAll(); toast('Mockup data reset.'); } }, 'Reset data'));
+}
+
+// ───────────────────────── render: header ─────────────────────────
+function renderHeader() {
+  const el = $('#header'); el.innerHTML = '';
+  const p = W();
+  el.append(
+    h('button', { class:'profile-btn', 'data-opens':'1', title:'Switch profile', onclick:e => profileMenu(e.currentTarget) },
+      h('span', {}, h('b', {}, p.name || '(unnamed)'), S.saved[S.cur]?.loaded ? h('span', { class:'muted' }, '  (loaded)') : null), h('span', { class:'muted' }, '▾')),
+    h('button', { title:'Export this profile as a .zip', onclick:() => toast(`Exported to Desktop\\${p.name}.zip`) }, 'Export ZIP'),
+    h('div', { class:'vsep' }),
+    h('span', { class:'section-title', style:'font-size:14px' }, 'Profile Builder'),
+    h('div', { class:'spacer' }),
+    S.dirty ? h('span', { class:'dirty' }, 'Unsaved changes') : null,
+    h('button', { 'data-opens':'1', title:'Settings for this machine (not saved in profiles)', onclick:e => gearMenu(e.currentTarget) }, '⚙ Settings'),
+    h('button', { class:'primary', style:'min-width:72px', disabled:!S.dirty, onclick:save }, 'Save'),
+    h('button', { style:'min-width:72px', onclick:() => S.dirty ? confirmLeave('Exit', () => toast('(the Builder would close)')) : toast('(the Builder would close)') }, 'Exit'));
+}
+function profileMenu(anchor) {
+  floatAt(anchor, h('div', { class:'menu' }, h('div', { class:'hd' }, 'Switch profile'),
+    S.saved.map((sp, i) => h('div', { class:'mi' + (i === S.cur ? ' cur' : ''), onclick:() => { closeFloating(); if (i !== S.cur) switchTo(i); } },
+      h('span', {}, i === S.cur ? '✓ ' : ' ', sp.name), h('span', { class:'muted small' }, sp.loaded ? 'loaded · ' : '', `tab “${sp.tab}”`))),
+    h('hr'),
+    h('div', { class:'mi', onclick:() => { closeFloating(); newProfile(); } }, '+ New profile'),
+    opt.actions === 'header' ? [
+      h('div', { class:'mi', onclick:() => { closeFloating(); renameDialog(); } }, 'Rename…', h('span', { class:'muted small' }, 'same profile, new name')),
+      h('div', { class:'mi', onclick:() => { closeFloating(); duplicateDialog(); } }, 'Duplicate…', h('span', { class:'muted small' }, 'a copy; original kept')) ] : null));
+}
+function gearMenu(anchor) {
+  floatAt(anchor, h('div', { class:'menu' }, h('div', { class:'hd' }, 'This machine — not saved in profiles'),
+    h('div', { class:'mi', onclick:() => { closeFloating(); brandingDialog(); } }, 'Branding…', h('span', { class:'muted small' }, 'logo + link on every tab')),
+    h('div', { class:'mi', onclick:() => { closeFloating(); toast('(room for future machine settings)'); } }, 'Builder preferences…')), true);
+}
+function switchTo(i) { const go = () => { openProfile(i); renderAll(); }; S.dirty ? confirmLeave('Switch', go) : go(); }
+function confirmLeave(verb, go) {
+  modal('Unsaved changes', h('div', {}, `“${W().name}” has changes that are not saved.`), [
+    { label:'Cancel' }, { label:`Discard & ${verb}`, run:go }, { label:`Save & ${verb}`, cls:'primary', run:() => { save(); go(); } }]);
+}
+function save() {
+  const prev = S.saved[S.cur];
+  S.saved[S.cur] = Object.assign(clone(W()), { loaded:prev.loaded });
+  S.dirty = false; renderAll();
+  toast(prev.name !== W().name ? `Saved — “${prev.name}” is now “${W().name}”.` : prev.loaded ? 'Saved & ribbon reloaded.' : 'Saved.');
+}
+function newProfile() {
+  const go = () => {
+    S.saved.push({ id:uid('p'), name:'New Profile', tab:'New Tab', loaded:false, minVersion:'0.1.0', opacity:100, presets:{ hidden:[], disableUnused:false }, cleanup:DEFAULT_CLEANUP(), panels:[{ pid:uid('p'), name:'Panel 1', color:'#4f7fd9', items:[] }] });
+    openProfile(S.saved.length - 1); S.dirty = true; renderAll(); toast('New profile — name it in the Profile pane, then Save.');
+  };
+  S.dirty ? confirmLeave('Continue', go) : go();
+}
+function renameDialog() {
+  const inp = h('input', { type:'text', value:W().name, style:'width:100%' });
+  modal('Rename profile', h('div', {}, h('label', { class:'label' }, 'Name'), inp,
+    h('div', { class:'help' }, 'Same profile, new name. Users who have it loaded keep it.')), [
+    { label:'Cancel' }, { label:'Rename', cls:'primary', run:() => { const v = inp.value.trim(); if (!v) return false; W().name = v; S.dirty = true; renderAll(); } }]);
+}
+function duplicateDialog() {
+  const inp = h('input', { type:'text', value:W().name + ' copy', style:'width:100%' });
+  modal('Duplicate profile', h('div', {}, h('label', { class:'label' }, 'Name of the copy'), inp,
+    h('div', { class:'help' }, 'Makes a new profile from what you see now. The original stays as last saved.')), [
+    { label:'Cancel' }, { label:'Duplicate', cls:'primary', run:() => {
+      const v = inp.value.trim(); if (!v) return false;
+      if (S.saved.some(p => p.name === v)) { toast('Another profile already has that name.', true); return false; }
+      S.saved.push(Object.assign(clone(W()), { id:uid('p'), name:v, loaded:false }));
+      openProfile(S.saved.length - 1); renderAll(); toast(`Duplicated as “${v}”; the original is kept.`); } }]);
+}
+function brandingDialog() {
+  modal('Branding — this machine', h('div', {},
+    h('div', { class:'callout' }, 'Shown at the start of every profile tab on this machine. Not part of any profile.'),
+    h('label', { class:'label' }, 'Logo'), h('div', { style:'display:flex;gap:6px;align-items:center;margin-bottom:10px' }, h('button', {}, 'Pick…'), h('button', { class:'ghost danger', title:'Clear logo' }, '×'), h('span', {}, 'studio-logo.png')),
+    h('label', { class:'label' }, 'Link'), h('input', { type:'text', value:'https://studio.example', style:'width:100%' })), [{ label:'Cancel' }, { label:'Done', cls:'primary' }]);
+}
+
+// ───────────────────────── render: left (Commands) ─────────────────────────
+function renderLeft() {
+  const el = $('#left'); const keepScroll = $('#left .scroll')?.scrollTop || 0; el.innerHTML = '';
+  const q = S.filter.toLowerCase().trim();
+  const lib = library();
+  let count = 0; CATALOG.forEach(function walk(n) { if (n.cmds) count += n.cmds.length; (n.kids || []).forEach(walk); });
+  el.append(h('div', { class:'pane-head' }, h('span', { class:'section-title' }, 'Commands'), h('span', { class:'spacer' }), h('span', { class:'pill' }, count + lib.length)));
+  const fin = h('input', { type:'text', placeholder:'Filter…', value:S.filter, oninput:e => { S.filter = e.target.value; renderLeft(); const f = $('#left .filter-row input'); f.focus(); f.setSelectionRange(f.value.length, f.value.length); } });
+  el.append(h('div', { class:'filter-row' }, fin, h('button', { title:'Create a URL or email tool', onclick:() => toolDialog(null) }, '+ Create new')));
+  const tree = h('div', { class:'tree' });
+  const libShown = lib.filter(L => !q || L.label.toLowerCase().includes(q) || L.link.toLowerCase().includes(q));
+  const open = S.expanded.has('Custom Tools') || q;
+  const cg = h('div', { class:'custom-group' },
+    h('div', { class:'node grp', onclick:() => toggle('Custom Tools') }, h('span', { class:'tw' }, open ? '▼' : '▶'), h('span', { class:'lbl' }, 'Custom Tools'), h('span', { class:'pill' }, libShown.length)));
+  if (open) {
+    cg.append(h('div', { class:'note muted tiny' }, 'URL and email tools found in your profiles. Drag onto a panel.'));
+    for (const L of libShown) {
+      cg.append(h('div', { class:'node cmd', draggable:'true', style:'padding-left:22px', title:`${L.link}\nUsed in: ${[...L.profiles].join(', ')}`,
+        ondragstart:e => startDrag(e, { src:'lib', link:L.link }), ondblclick:() => addToSelected({ src:'lib', link:L.link }) },
+        iconImg(L.icon, 'ico16'), h('span', { class:'lbl' }, L.label), h('span', { class:'kind' }, L.type),
+        h('span', { class:'acts' }, h('button', { class:'ghost', title:'Edit this tool everywhere it is used', onclick:e => { e.stopPropagation(); toolDialog(L); } }, '✎'),
+          h('button', { class:'ghost danger', title:'Remove from every profile', onclick:e => { e.stopPropagation(); removeLibTool(L); } }, '×'))));
+    }
+    if (!libShown.length) cg.append(h('div', { class:'note muted' }, q ? 'No matches.' : 'None yet — use + Create new.'));
+  }
+  tree.append(cg);
+  function walk(n, path, depth) {
+    const key = path ? path + '/' + n.label : n.label;
+    const cmds = n.cmds ? n.cmds.filter(c => !q || c[0].toLowerCase().includes(q) || c[1].toLowerCase().includes(q)) : [];
+    const kids = (n.kids || []).map(k => walk(k, key, depth + 1)).filter(Boolean);
+    const total = cmds.length + kids.reduce((a, k) => a + k.n, 0);
+    if (q && !total) return null;
+    const isOpen = q ? true : S.expanded.has(key);
+    const box = h('div', {}, h('div', { class:'node grp' + (depth > 1 ? ' sub' : ''), style:`padding-left:${4 + depth * 14}px`, onclick:() => toggle(key) },
+      h('span', { class:'tw' }, isOpen ? '▼' : '▶'), h('span', { class:'lbl' }, n.label), h('span', { class:'pill' }, total)));
+    if (isOpen) {
+      kids.forEach(k => box.append(k.el));
+      cmds.forEach(([name, id]) => {
+        const d = { src:'cmd', name, cmd:id, tab:path.split('/').pop() || n.label, panel:n.label };
+        box.append(h('div', { class:'node cmd', draggable:'true', style:`padding-left:${22 + depth * 14}px`, title:id + ' — drag to a panel, or double-click',
+          ondragstart:e => startDrag(e, d), ondblclick:() => addToSelected(d) }, h('span', { class:'lbl' }, name), h('span', { class:'sid' }, id)));
+      });
+    }
+    return { el:box, n:total };
+  }
+  CATALOG.forEach(n => { const r = walk(n, '', 0); if (r) tree.append(r.el); });
+  const sc = h('div', { class:'scroll' }, tree); el.append(sc); sc.scrollTop = keepScroll;
+}
+function toggle(k) { S.expanded.has(k) ? S.expanded.delete(k) : S.expanded.add(k); renderLeft(); }
+function addToSelected(d) {
+  const pn = panelById(S.selPanel) || W().panels[0];
+  if (!pn) { toast('Add a panel first.', true); return; }
+  pn.items.push(newToolFrom(d)); changed(); toast(`Added to “${pn.name}”.`);
+}
+function toolDialog(L) {
+  const editing = !!L; let type = L ? L.type : 'url'; let icon = L ? L.icon : 'link_external_blue';
+  const lab = h('input', { type:'text', value:L ? L.label : '', placeholder:'Button label', style:'width:100%' });
+  const addr = h('input', { type:'text', value:L ? shortLink(L.link) : '', style:'width:100%' });
+  const addrLabel = h('label', { class:'label' });
+  const prev = h('div', { class:'help' });
+  const seg = h('span', { class:'seg2' });
+  const icBtn = h('button', { 'data-opens':'1', style:'display:flex;gap:6px;align-items:center', onclick:e => iconPop(e.currentTarget, icon, v => { icon = v; draw(); }) });
+  function draw() {
+    seg.innerHTML = ''; ['url', 'email'].forEach(t => seg.append(h('button', { class:type === t ? 'on' : '', onclick:() => { type = t; draw(); } }, t === 'url' ? 'URL' : 'Email')));
+    addrLabel.textContent = type === 'url' ? 'Address' : 'Email address';
+    addr.placeholder = type === 'url' ? 'wiki.studio.example' : 'bim@studio.example';
+    const n = normalizeLink(type, addr.value); prev.textContent = n ? 'Opens: ' + n : '';
+    icBtn.innerHTML = ''; icBtn.append(iconImg(icon, 'ico16'), icon ? icon.replace(/_/g, ' ') : 'No icon');
+  }
+  addr.addEventListener('input', draw); draw();
+  const pn = panelById(S.selPanel) || W().panels[0];
+  const body = h('div', {},
+    h('div', { style:'margin-bottom:10px' }, seg),
+    h('div', { class:'field' }, h('label', { class:'label' }, 'Label'), lab),
+    h('div', { class:'field' }, addrLabel, addr, prev),
+    h('div', { class:'field' }, h('label', { class:'label' }, 'Icon'), icBtn),
+    editing ? h('div', { class:'callout warn' }, `Changes apply everywhere this tool is used: ${[...L.profiles].join(', ')}. Names you gave it on a panel are kept.`)
+            : h('div', { class:'callout' }, `Added to the panel “${pn?.name}”. Tools live in profiles: a tool on no panel of any profile leaves Custom Tools.`));
+  modal(editing ? 'Edit custom tool' : 'Create new tool', body, [{ label:'Cancel' },
+    { label:editing ? `Update in ${plural(L.profiles.size, 'profile')}` : 'Create', cls:'primary', run:() => {
+      const label = lab.value.trim(), link = normalizeLink(type, addr.value);
+      if (!label || !link) { toast('Label and address are both required.', true); return false; }
+      if (editing) {
+        let n = 0;
+        eachProfile((p, isWork) => { let hit = false; for (const t of toolsOf(p)) if (t.link === L.link) { if (t.name === t.base) t.name = label; Object.assign(t, { base:label, link, type, icon }); hit = true; } if (hit) { n++; if (isWork) S.dirty = true; } });
+        toast(`Updated in ${plural(n, 'profile')}.` + (S.saved.some(p => p.loaded && L.profiles.has(p.name)) ? ' Ribbon reloaded.' : ''));
+      } else {
+        if (!pn) { toast('Add a panel first.', true); return false; }
+        if (library().some(x => x.link === link)) toast('That link is already in Custom Tools — another copy was added to the panel.');
+        pn.items.push(url(label, link, icon)); S.dirty = true;
+      }
+      renderAll();
+    } }]);
+}
+function removeLibTool(L) {
+  modal('Remove custom tool', h('div', {}, h('p', {}, `Remove “${L.label}” (${shortLink(L.link)}) from every profile that uses it?`),
+    h('div', { class:'callout warn' }, 'Used in: ' + [...L.profiles].join(', ') + '. A stack left with one tool becomes a plain button.')), [
+    { label:'Cancel' }, { label:`Remove from ${plural(L.profiles.size, 'profile')}`, cls:'primary', run:() => {
+      eachProfile((p, isWork) => { const hits = [...toolsOf(p)].filter(t => t.link === L.link); hits.forEach(t => removeTool(t.uid, p, true)); if (hits.length && isWork) S.dirty = true; });
+      renderAll(); toast(`Removed from ${plural(L.profiles.size, 'profile')}.`); } }]);
+}
+function iconPop(anchor, current, pick) {
+  let design = current ? current.replace(/_(blue|green|orange|purple|red|dark_grey)$/, '') : null;
+  const pop = h('div', { class:'pop', style:'width:290px' });
+  function draw() {
+    pop.innerHTML = '';
+    pop.append(h('div', { class:'small muted', style:'margin-bottom:6px' }, 'Pick an icon'));
+    pop.append(h('div', { class:'icongrid' }, h('div', { class:'ic', title:'no icon', onclick:() => { pick(null); closeFloating(); } }, '∅'),
+      ICONS.map(n => h('div', { class:'ic' + (design === n ? ' on' : ''), title:n.replace(/_/g, ' '), onclick:() => { design = n; draw(); } }, h('img', { src:`icons/32_${n}_blue.png` })))));
+    if (design) pop.append(h('div', { class:'small muted', style:'margin:8px 0 4px' }, design.replace(/_/g, ' ') + ' — pick a colour'),
+      h('div', { class:'icongrid' }, ICON_COLORS.map(c => h('div', { class:'ic', title:c ? c.slice(1).replace('_', ' ') : 'default', onclick:() => { pick(design + c); closeFloating(); } }, h('img', { src:`icons/32_${design}${c}.png` })))));
+  }
+  draw(); floatAt(anchor, pop);
+}
+
+// ───────────────────────── render: centre (panel cards) ─────────────────────────
+function renderCanvas() {
+  const el = $('#center'); const keepScroll = $('#center .scroll')?.scrollTop || 0; el.innerHTML = '';
+  const p = W();
+  el.append(h('div', { class:'pane-head' }, h('span', { class:'section-title' }, 'Panels'),
+    h('span', { class:'muted small' }, 'on tab'), h('span', { class:'tabchip', title:'Edit the tab name in the Profile pane', onclick:focusTabName }, p.tab || '(no tab name)'),
+    h('span', { class:'spacer' }), h('button', { onclick:addPanel }, '+ Add Panel')));
+  const canvas = h('div', { id:'canvas', ondragover:onDragOver, ondrop:onDrop });
+  if (!p.panels.length) canvas.append(h('div', { class:'empty', style:'padding:30px' }, 'No panels yet. + Add Panel, then drag commands in.'));
+  p.panels.forEach((pn, i) => canvas.append(cardEl(pn, i)));
+  const sc = h('div', { class:'scroll', ondragleave:e => { if (!e.relatedTarget || !sc.contains(e.relatedTarget)) clearMarks(); } }, canvas);
+  el.append(sc); sc.scrollTop = keepScroll;
+}
+function focusTabName() {
+  if (opt.pane === 'B' && S.rtab !== 'general') { S.rtab = 'general'; renderRight(); }
+  const f = $('#tabName'); if (f) { f.focus(); f.select(); }
+}
+function addPanel() { const p = W(); const pn = { pid:uid('p'), name:'Panel ' + (p.panels.length + 1), color:'#4f7fd9', items:[] }; p.panels.push(pn); S.selPanel = pn.pid; changed(); }
+function select(pid) { if (S.selPanel === pid) return; S.selPanel = pid; document.querySelectorAll('.card').forEach(c => c.classList.toggle('sel', c.dataset.card === pid)); }
+function cardEl(pn, i) {
+  const p = W(), tiles = opt.layout === 'tiles';
+  const nTools = pn.items.reduce((a, it) => a + (it.tools ? it.tools.length : 1), 0);
+  const card = h('div', { class:'card' + (S.selPanel === pn.pid ? ' sel' : ''), 'data-card':pn.pid, onmousedown:() => select(pn.pid) });
+  const move = d => { p.panels.splice(i, 1); p.panels.splice(i + d, 0, pn); changed(); };
+  card.append(h('div', { class:'stripe', style:`background:${pn.color}` }),
+    h('div', { class:'card-head' },
+      h('span', { class:'handle', draggable:'true', title:'Drag to reorder panels', ondragstart:e => startDrag(e, { src:'panel', id:pn.pid }, card) }, '⠿'),
+      h('span', { class:'swatch', 'data-opens':'1', style:`background:${pn.color}`, title:'Panel colour ' + pn.color, onclick:e => colorPop(e.currentTarget, pn) }),
+      h('input', { type:'text', class:'pname', value:pn.name, title:'Panel name', oninput:e => { pn.name = e.target.value; markDirty(); renderPreview(); } }),
+      h('span', { class:'muted small' }, plural(nTools, 'tool')), h('span', { class:'spacer' }),
+      h('button', { title:'Group 2–3 of this panel’s tools into a stack', onclick:() => stackDialog(pn, null) }, '+ New Stack'),
+      h('span', { class:'hover-acts' },
+        h('button', { class:'ghost', title:'Move left on the ribbon', disabled:i === 0, onclick:() => move(-1) }, '▲'),
+        h('button', { class:'ghost', title:'Move right on the ribbon', disabled:i === p.panels.length - 1, onclick:() => move(1) }, '▼'),
+        h('button', { class:'ghost danger', title:'Delete panel', onclick:() => modal('Delete panel', h('div', {}, `Delete panel “${pn.name}” and its ${plural(nTools, 'tool')}?`), [{ label:'Cancel' }, { label:'Delete', cls:'primary', run:() => { p.panels.splice(i, 1); changed(); } }]) }, '×'))));
+  const body = h('div', { class:'card-body ' + (tiles ? 'tiles' : 'rows') });
+  if (!pn.items.length) body.append(h('div', { class:'empty' }, 'Drag commands or custom tools here, or double-click one in Commands.'));
+  for (const it of pn.items) body.append(it.tools ? (tiles ? tileStackEl(it, pn) : rowStackEl(it, pn)) : (tiles ? tileEl(it) : rowEl(it)));
+  card.append(body);
+  return card;
+}
+const srcText = t => t.type === 'cmd' ? t.source : shortLink(t.link);
+function toolActions(t) {
+  return [
+    t.type !== 'cmd' ? h('button', { class:'ghost hov', title:'Edit this custom tool (everywhere it is used)', onclick:() => { const L = library().find(x => x.link === t.link); if (L) toolDialog(L); } }, '✎') : null,
+    h('button', { class:'ghost x', title:'Remove from this panel', onclick:() => { removeTool(t.uid); changed(); } }, '×')];
+}
+function nameInput(t) {
+  return h('input', { type:'text', class:'tname', value:t.name, title:t.name !== t.base ? `Name on this panel (original: ${t.base})` : 'Button label — rename it for this panel',
+    oninput:e => { t.name = e.target.value; markDirty(); renderPreview(); } });
+}
+const iconButton = t => h('span', { class:'iconbtn', 'data-opens':'1', title:'Pick icon', onclick:e => iconPop(e.currentTarget, t.icon, v => { t.icon = v; changed(); }) }, iconImg(t.icon, 'ico16'));
+// Firefox will not place a caret in an input inside a draggable element: only arm dragging off the inputs.
+const armDrag = el => { el.addEventListener('mousedown', e => { el.draggable = e.target.tagName !== 'INPUT'; }); return el; };
+function rowEl(t) {
+  const row = h('div', { class:'tool v', 'data-tool':t.uid });
+  row.append(h('span', { class:'handle', draggable:'true', title:'Drag to move — drop onto another tool to stack them', ondragstart:e => startDrag(e, { src:'tool', id:t.uid }, row) }, '⠿'),
+    iconButton(t), nameInput(t),
+    t.type !== 'cmd' ? h('span', { class:'badge-custom' }, t.type) : null,
+    h('span', { class:'src', title:t.type === 'cmd' ? t.cmd : t.link }, srcText(t)),
+    h('span', { class:'tacts' }, toolActions(t)));
+  return row;
+}
+function rowStackEl(s, pn) {
+  const el = h('div', { class:'stack v', 'data-stack':s.sid });
+  el.append(h('div', { class:'stack-side' },
+      h('span', { class:'handle', draggable:'true', title:'Drag the whole stack', ondragstart:e => startDrag(e, { src:'stack', id:s.sid }, el) }, '⠿'),
+      h('span', { class:'stack-tag' }, `STACK ${s.tools.length}/3`)),
+    h('div', { class:'members' }, s.tools.map(rowEl)),
+    h('div', { class:'stack-side' },
+      h('button', { class:'ghost', title:'Edit stack', onclick:() => stackDialog(pn, s) }, '✎'),
+      h('button', { class:'ghost x', title:'Remove stack (its tools stay on the panel)', onclick:() => unstack(s.sid) }, '×')));
+  return el;
+}
+function tileEl(t) {
+  const tile = armDrag(h('div', { class:'tile h', 'data-tool':t.uid, draggable:'true', title:(t.type === 'cmd' ? t.cmd : t.link) + '\nDrop onto another tool to stack them',
+    ondragstart:e => startDrag(e, { src:'tool', id:t.uid }, tile) },
+    h('span', { 'data-opens':'1', title:'Pick icon', style:'cursor:pointer', onclick:e => iconPop(e.currentTarget, t.icon, v => { t.icon = v; changed(); }) }, iconImg(t.icon)),
+    nameInput(t), h('span', { class:'src' }, srcText(t)),
+    h('span', { class:'corner' }, toolActions(t).map(b => { b?.classList.add('hov'); return b; }))));
+  return tile;
+}
+function tileStackEl(s, pn) {
+  const el = armDrag(h('div', { class:'tstack h', 'data-stack':s.sid, draggable:'true', ondragstart:e => startDrag(e, { src:'stack', id:s.sid }, el) }));
+  el.append(h('div', { class:'tstack-head' }, h('span', {}, `STACK · ${s.tools.length}/3`), h('span', { class:'spacer' }),
+    h('button', { class:'ghost', title:'Edit stack', onclick:() => stackDialog(pn, s) }, '✎'),
+    h('button', { class:'ghost x', title:'Remove stack (its tools stay on the panel)', onclick:() => unstack(s.sid) }, '×')));
+  for (const t of s.tools) {
+    const r = armDrag(h('div', { class:'srow v', 'data-tool':t.uid, draggable:'true', ondragstart:e => startDrag(e, { src:'tool', id:t.uid }, r) },
+      h('span', { 'data-opens':'1', style:'cursor:pointer;display:flex', onclick:e => iconPop(e.currentTarget, t.icon, v => { t.icon = v; changed(); }) }, iconImg(t.icon, 'ico16')),
+      nameInput(t), toolActions(t).map(b => { b?.classList.add('hov'); return b; })));
+    el.append(r);
+  }
+  return el;
+}
+function colorPop(anchor, pn) {
+  const hex = h('input', { type:'text', value:pn.color, style:'width:90px;margin-top:8px' });
+  const set = c => { pn.color = c; changed(); };
+  hex.addEventListener('change', () => /^#[0-9a-f]{6}$/i.test(hex.value) ? (set(hex.value), closeFloating()) : toast('Use #RRGGBB.', true));
+  floatAt(anchor, h('div', { class:'pop' }, h('div', { class:'small muted', style:'margin-bottom:6px' }, 'Panel colour'),
+    h('div', { class:'colors' }, PANEL_COLORS.map(c => h('div', { class:'c', style:`background:${c}`, title:c, onclick:() => { set(c); closeFloating(); } }))), hex));
+}
+function stackDialog(pn, s) {
+  const editing = !!s;
+  const pool = pn.items.filter(it => !it.tools);
+  const chosen = editing ? s.tools.slice() : [];
+  const body = h('div');
+  let okBtn;
+  function draw() {
+    body.innerHTML = '';
+    body.append(h('div', { class:'help', style:'margin-bottom:8px' }, editing ? 'Top to bottom is the order on the ribbon. Untick a tool to put it back on the panel.' : 'Pick 2 or 3 of this panel’s tools. (Or drop one tool onto another on the panel.)'));
+    const list = editing ? [...s.tools, ...pool] : pool;
+    if (!list.length) body.append(h('div', { class:'empty' }, 'This panel has no loose tools to stack.'));
+    list.forEach(t => {
+      const idx = chosen.indexOf(t), on = idx >= 0;
+      body.append(h('div', { class:'chk', onclick:() => { if (on) chosen.splice(idx, 1); else if (chosen.length < 3) chosen.push(t); else toast('A stack holds 2–3 tools.', true); draw(); } },
+        h('input', { type:'checkbox', checked:on, onclick:e => e.preventDefault() }), iconImg(t.icon, 'ico16'), h('span', { style:'flex:1' }, t.name),
+        on ? h('span', { class:'pill' }, '#' + (idx + 1)) : null,
+        on && idx > 0 ? h('button', { class:'ghost', title:'Move up', onclick:e => { e.stopPropagation(); chosen.splice(idx, 1); chosen.splice(idx - 1, 0, t); draw(); } }, '▲') : null));
+    });
+    body.append(h('div', { class:'help', style:'margin-top:8px' }, `${chosen.length} selected · a stack holds 2–3 tools` + (editing && chosen.length < 2 ? ' — saving now removes the stack and keeps its tools on the panel' : '')));
+    if (okBtn) okBtn.disabled = editing ? false : chosen.length < 2;
+  }
+  draw();
+  modal(editing ? 'Edit stack' : `New stack on “${pn.name}”`, body, [{ label:'Cancel' },
+    { label:editing ? 'Save' : 'Create stack', cls:'primary', ref:b => { okBtn = b; draw(); }, run:() => {
+      if (editing) {
+        const dropped = s.tools.filter(t => !chosen.includes(t)), added = chosen.filter(t => !s.tools.includes(t));
+        added.forEach(t => pn.items.splice(pn.items.indexOf(t), 1));
+        const at = pn.items.indexOf(s);
+        if (chosen.length < 2) { pn.items.splice(at, 1, ...chosen, ...dropped); toast('Stack removed — its tools stay on the panel.'); }
+        else { s.tools = chosen; pn.items.splice(at + 1, 0, ...dropped); }
+      } else {
+        const at = Math.min(...chosen.map(t => pn.items.indexOf(t)));
+        chosen.forEach(t => pn.items.splice(pn.items.indexOf(t), 1));
+        pn.items.splice(at, 0, stack(...chosen)); toast('Stack created.');
+      }
+      changed();
+    } }]);
+}
+
+// ───────────────────────── render: right (Profile pane) ─────────────────────────
+function renderRight() {
+  const el = $('#right'); el.innerHTML = '';
+  const p = W();
+  el.append(h('div', { class:'pane-head' }, h('span', { class:'section-title' }, 'Profile'), h('span', { class:'muted' }, '· editing ' + p.name)));
+  const nameF = h('div', { class:'field' }, h('label', { class:'label' }, 'Profile name'),
+    opt.actions === 'pane'
+      ? h('input', { type:'text', value:p.name, oninput:e => { p.name = e.target.value; markDirty(); } })
+      : h('div', { style:'display:flex;gap:6px' }, h('input', { type:'text', value:p.name, readonly:true, style:'flex:1', onfocus:e => e.target.blur() }), h('button', { onclick:renameDialog }, 'Rename…')),
+    h('div', { class:'help' }, opt.actions === 'pane' ? 'Saving renames this profile; users who have it loaded keep it.' : 'Shown in the Loader’s list.'));
+  const tabF = h('div', { class:'field' }, h('label', { class:'label' }, 'Ribbon tab name'),
+    h('input', { type:'text', id:'tabName', value:p.tab, oninput:e => { p.tab = e.target.value; markDirty(); renderPreview(); const c = $('.tabchip'); if (c) c.textContent = p.tab || '(no tab name)'; } }));
+  const minF = h('div', { class:'field' }, h('label', { class:'label' }, 'Min Revit version'),
+    h('input', { type:'text', value:p.minVersion, oninput:e => { p.minVersion = e.target.value; markDirty(); } }), h('div', { class:'help' }, 'Informational — the Loader shows it; nothing enforces it.'));
+  const pct = h('span', { style:'min-width:36px;text-align:right' }, p.opacity + '%');
+  const opF = h('div', { class:'field' }, h('label', { class:'label' }, 'Panel colour strength'),
+    h('div', { class:'range' }, h('input', { type:'range', min:10, max:100, step:5, value:p.opacity, oninput:e => { p.opacity = +e.target.value; pct.textContent = p.opacity + '%'; markDirty(); renderPreview(); } }), pct),
+    h('div', { class:'help' }, 'One value for every panel. Users can override it in the Loader.'));
+  const dup = opt.actions === 'pane' ? h('div', { class:'psec' }, h('h4', {}, 'Copies'), h('button', { onclick:duplicateDialog }, 'Duplicate profile…'), h('div', { class:'help' }, 'A copy with its own name; this profile stays as last saved.')) : null;
+  const presetsBody = () => h('div', {},
+    h('div', { class:'swrow' }, h('span', { class:'grow' }, h('b', {}, 'Disable unused add-ins'), h('div', { class:'help' }, 'Starting position of the Loader’s switch')), sw(p.presets.disableUnused, v => { p.presets.disableUnused = v; })),
+    h('div', { class:'label', style:'margin-top:10px' }, 'Hide these tabs (RSTify)'),
+    RIBBON_TABS.map(t => h('div', { class:'swrow' }, h('span', { class:'grow' }, t), sw(p.presets.hidden.includes(t), v => { p.presets.hidden = v ? [...p.presets.hidden, t] : p.presets.hidden.filter(x => x !== t); }))));
+  const cleanupBody = () => h('div', {},
+    p.cleanup.map((c, i) => h('div', { class:'swrow' }, sw(c.on, v => { c.on = v; }), h('input', { type:'text', value:c.name, style:'flex:1', oninput:e => { c.name = e.target.value; markDirty(); } }),
+      h('button', { class:'ghost danger', title:'Remove target', onclick:() => { p.cleanup.splice(i, 1); markDirty(); renderRight(); } }, '×'))),
+    h('button', { style:'margin-top:6px', onclick:() => { p.cleanup = DEFAULT_CLEANUP(); markDirty(); renderRight(); } }, 'Restore defaults'),
+    h('div', { class:'help' }, 'Fixed preset paths. The Health tool’s Clean Junk Files offers the ones switched on.'));
+  const presetSummary = `${plural(p.presets.hidden.length, 'tab')} hidden · Disable unused: ${p.presets.disableUnused ? 'on' : 'off'}`;
+  const cleanupSummary = `${p.cleanup.filter(c => c.on).length} of ${p.cleanup.length} targets on`;
+  if (opt.pane === 'A') {
+    el.append(h('div', { class:'scroll' },
+      h('div', { class:'psec' }, h('h4', {}, 'Identity'), nameF, tabF),
+      h('div', { class:'psec' }, h('h4', {}, 'Look'), opF),
+      h('div', { class:'psec' }, h('h4', {}, 'Loader defaults', h('button', { onclick:() => modal('Loader defaults — ' + p.name, presetsBody(), [{ label:'Done', cls:'primary', run:renderRight }]) }, 'Configure…')),
+        h('div', {}, presetSummary), h('div', { class:'help' }, 'What the Loader offers the first time a user picks this profile.')),
+      h('div', { class:'psec' }, h('h4', {}, 'Junk cleanup', h('button', { onclick:() => modal('Junk cleanup targets — ' + p.name, cleanupBody(), [{ label:'Done', cls:'primary', run:renderRight }]) }, 'Configure…')),
+        h('div', {}, cleanupSummary), h('div', { class:'help' }, 'Targets for the Health tool’s Clean Junk Files.')),
+      h('div', { class:'psec' }, h('h4', {}, 'Advanced'), minF),
+      dup));
+  } else {
+    const tabs = [['general', 'General'], ['loader', 'Loader defaults'], ['cleanup', 'Junk cleanup']];
+    el.append(h('div', { class:'tabs' }, tabs.map(([k, l]) => h('button', { class:S.rtab === k ? 'on' : '', onclick:() => { S.rtab = k; renderRight(); } }, l))));
+    const content = S.rtab === 'general' ? [h('div', { class:'psec' }, nameF, tabF, opF, minF), dup]
+      : S.rtab === 'loader' ? [h('div', { class:'psec' }, h('div', { class:'help', style:'margin:0 0 8px' }, 'What the Loader offers the first time a user picks this profile.'), presetsBody())]
+      : [h('div', { class:'psec' }, cleanupBody())];
+    el.append(h('div', { class:'scroll' }, content));
+  }
+}
+function sw(on, set) { return h('button', { class:'switch' + (on ? ' on' : ''), onclick:e => { const v = !e.currentTarget.classList.contains('on'); e.currentTarget.classList.toggle('on', v); set(v); markDirty(); } }); }
+
+// ───────────────────────── render: Live Preview (read only) ─────────────────────────
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+function renderPreview() {
+  const el = $('#preview'); el.innerHTML = '';
+  const p = W(), a = p.opacity / 100;
+  el.append(h('div', { style:'display:flex;align-items:center;margin-bottom:6px' }, h('span', { class:'section-title' }, 'Live Preview'), h('span', { class:'muted small', style:'margin-left:8px' }, 'how the tab will look'), h('span', { class:'spacer' }), h('span', { class:'pill' }, 'Read only')));
+  const row = h('div', { class:'rpanels' }, h('div', { class:'rpanel', style:'background:var(--surf);border:1px solid var(--border)' }, h('div', { class:'ritems', style:'align-items:center;justify-content:center;font-weight:700;color:var(--muted);min-height:58px' }, 'LOGO'), h('div', { class:'rtitle' }, ' ')));
+  for (const pn of p.panels) {
+    const items = h('div', { class:'ritems' });
+    for (const it of pn.items) items.append(it.tools ? h('div', { class:'rstk' }, it.tools.map(t => h('div', {}, iconImg(t.icon, 'ico16'), t.name))) : h('div', { class:'rbig' }, iconImg(it.icon), it.name));
+    if (!pn.items.length) items.append(h('span', { class:'muted tiny', style:'padding:14px 6px' }, '(empty)'));
+    row.append(h('div', { class:'rpanel', style:`background:${hexA(pn.color, a * .55)}` }, items, h('div', { class:'rtitle', style:`background:${hexA(pn.color, Math.min(1, a * .9))}` }, pn.name)));
+  }
+  el.append(h('div', { class:'ribbon' }, h('div', { class:'rtabs' }, h('span', { class:'muted small', style:'padding-bottom:3px' }, 'Architecture  ·  Structure  ·  Annotate  ·  …'), h('span', { class:'rtab' }, p.tab || '(tab)')), row));
+}
+
+function renderAll() {
+  document.body.className = opt.theme;
+  renderMock(); renderHeader(); renderLeft(); renderCanvas(); renderRight(); renderPreview();
+}
+readHash(); openProfile(0); renderAll();
+window.addEventListener('hashchange', () => { readHash(); renderAll(); });
+</script>
+</body>
+</html>
