@@ -2,7 +2,8 @@
 // src/SplashIt.UI/Settings/SettingsWindow.xaml.cs (OnSourceInitialized, the work-area cap)
 // (splash-it commit ba86a71), MIT, same owner.
 // Changes: one shared helper for rst-c's three windows instead of per-window code; the width is
-// capped as well as the height; no owner falls back to CenterScreen (spec #16, Beyond Intention).
+// capped as well as the height; no owner falls back to CenterScreen (spec #16, Beyond Intention); the window is moved
+// back inside the work area whether it was centred on its owner or on the screen (WU3).
 
 using System.Windows;
 using System.Windows.Interop;
@@ -45,10 +46,13 @@ public static class WindowPlacement
         var area = workArea ?? MonitorWorkArea.Of(window);
         if (area.Height > 0) window.MaxHeight = area.Height;
         if (area.Width > 0) window.MaxWidth = area.Width;
-        if (window.WindowStartupLocation != WindowStartupLocation.CenterOwner) return;
+        // A window placed by hand (Manual: the screenshot tests' off-screen windows) stays where it was put.
+        if (window.WindowStartupLocation == WindowStartupLocation.Manual) return;
         window.Loaded += (_, _) =>
         {
-            // Centred on a tall or wide owner, the window could start outside the work area.
+            // Centred on a tall or wide owner, or (with no owner) centred on the screen at its full
+            // size before the cap applied, the window could start outside the work area, with its
+            // title bar off screen (WU1 review N3): both modes are moved back inside.
             if (window.Top < area.Top) window.Top = area.Top;
             if (window.Top + window.ActualHeight > area.Bottom) window.Top = Math.Max(area.Top, area.Bottom - window.ActualHeight);
             if (window.Left < area.Left) window.Left = area.Left;
