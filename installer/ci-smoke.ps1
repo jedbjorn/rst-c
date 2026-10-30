@@ -55,7 +55,7 @@
           installed R27 engine must be the newly staged one.
         Unified (AC5): RST.msi v2.2.0 or v3.0.0 -> new RST.msi. MajorUpgrade must leave
           exactly one RST product, at the new version, with all six trees.
-        Both: the tray and its Run value are installed after the upgrade.
+        Every leg: the tray and its Run value are installed after the upgrade.
 
   Product queries go through the WindowsInstaller.Installer COM object via
   InvokeMember (it has no type library PowerShell can bind to).
