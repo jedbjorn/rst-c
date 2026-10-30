@@ -13,7 +13,14 @@
         RST, at the new version; the updater's own log lines.
     (3) the same with -NewerMsi in "race" mode: the tray is NOT closed, so msiexec meets it running: Windows
         Installer's Restart Manager closes it and starts it again, and the updater starts one as well. The
-        single-instance mutex must leave exactly one tray.
+        single-instance mutex must leave exactly one tray. SC-022: the old tray is never asked to quit here, so the
+        updater cannot take the mutex in time; it must take it the moment msiexec's Restart Manager closes that tray
+        and hand it over before it starts the new one.
+    (3b) SC-022: RST.RuntimeTests TraySingleInstanceRaceTests starts two installed RST.Tray.exe at the same instant,
+        -RaceRounds times, in every pairing of --startup and no switch, killing every fifth survivor (an abandoned
+        mutex next): exactly one survives every round. Then a tray is started again for (4).
+    Trays are counted only once every launch has made its single-instance decision (Wait-OneTray), never at a fixed
+    delay: on a slow runner a launch can still be starting when a fixed delay runs out (SC-022).
     (4) uninstall: no tray, no updater, and %LocalAppData%\RST\Tray\ (updater copy included) is removed.
     (5) decision #34: RST installed by -OldBundle (RST-Setup.exe at -OldVersion). The tray must find the bundle's
         per-user registration and update with -NewBundle (RST-Setup.exe at -NewVersion, /quiet /norestart, no companion
@@ -35,6 +42,8 @@ param(
   [Parameter(Mandatory)][string]$OldBundle,
   [Parameter(Mandatory)][string]$NewBundle,
   [string]$Configuration = 'Release R25',
+  # SC-022: rounds of two trays started at the same instant in (3b).
+  [int]$RaceRounds = 40,
   [string]$OutDir = $(if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'tray-selfupdate' } else { Join-Path $env:TEMP 'tray-selfupdate' })
 )
 
@@ -126,6 +135,30 @@ function Wait-Until([scriptblock]$Cond, [int]$Seconds, [string]$What) {
     Start-Sleep -Milliseconds 500
   }
 }
+# SC-022: one tray, counted once every launch has decided. A launch has decided when it has exited (it found a tray:
+# "already running (pid N exits)") or, as the tray, logged "RST tray … starting (pid N, …)" since $LinesBefore. Until
+# then a slow runner can show two RST.Tray.exe that are both still starting, so a count at a fixed delay can see two
+# (run 41135858346). Then it must stay one for a while: a second tray that stays running fails here.
+function Wait-OneTray([int]$LinesBefore, [string]$Label, [string]$What = 'exactly one RST.Tray.exe runs', [int]$Seconds = 120) {
+  $deadline = (Get-Date).AddSeconds($Seconds)
+  while ($true) {
+    $t = Get-Trays
+    if ($t.Count -eq 1) {
+      $id = $t[0].ProcessId
+      if (@((Get-TrayLog) | Select-Object -Skip $LinesBefore | Where-Object { $_ -match "RST tray \S+ starting \(pid $id," }).Count -gt 0) { break }
+    }
+    if ((Get-Date) -gt $deadline) {
+      foreach ($p in $t) { Write-Host "  tray pid $($p.ProcessId) parent $($p.ParentProcessId) $($p.CommandLine)" }
+      Assert $false "$Label $What (got $($t.Count) after $Seconds s: no single tray settled)"
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  Start-Sleep -Seconds 5   # anything still to start a second tray (Restart Manager, the updater) has done so by now
+  $trays = Get-Trays
+  foreach ($p in $trays) { Write-Host "  tray pid $($p.ProcessId) parent $($p.ParentProcessId) $($p.CommandLine)" }
+  Assert ($trays.Count -eq 1 -and $trays[0].ProcessId -eq $id) "$Label $What (got $($trays.Count), pid $id settled)"
+  return $trays[0]
+}
 function Start-Tray {
   $p = Start-Process $TrayExe -ArgumentList '--startup' -PassThru
   Wait-Until { Test-TrayMutex } 45 'the tray takes its mutex'
@@ -192,11 +225,7 @@ Assert ([array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'released th
 Assert (@($lines | Where-Object { $_ -match 'updater: msiexec exited 0 ' }).Count -eq 1) '(2) msiexec exited 0'
 Assert (@($lines | Where-Object { $_ -match 'updater: started the installed tray' }).Count -eq 1) '(2) the updater started the installed tray'
 $updaterPid = [int](([regex]::Match(($lines | Where-Object { $_ -match 'RST updater \(pid' } | Select-Object -First 1), 'RST updater \(pid (\d+)\)')).Groups[1].Value)
-Wait-Until { (Get-Trays).Count -ge 1 } 30 '(2) a tray runs again'
-Start-Sleep -Seconds 10   # anything that would start a second tray has done so by now
-$trays = Get-Trays
-Assert ($trays.Count -eq 1) "(2) exactly one RST.Tray.exe runs (got $($trays.Count))"
-$newTray = $trays[0]
+$newTray = Wait-OneTray $before '(2)'
 Assert ($newTray.ProcessId -ne $oldTray) "(2) it is a new process (pid $($newTray.ProcessId), the old was $oldTray)"
 Assert ($newTray.ExecutablePath -eq $TrayExe) "(2) it runs from the install folder ($($newTray.ExecutablePath))"
 Assert ($newTray.ParentProcessId -eq $updaterPid) "(2) the updater (pid $updaterPid) started it (parent $($newTray.ParentProcessId))"
@@ -216,11 +245,13 @@ $before = @(Get-TrayLog).Count
 $h = Invoke-HandOff $NewerMsi $NewerVersion 'race' $newTray.ProcessId
 $lines = Wait-Updater $before 'race'
 Assert (@($lines | Where-Object { $_ -match 'updater: msiexec exited 0 ' }).Count -eq 1) '(3) msiexec exited 0 with the tray running (no reboot needed)'
-Wait-Until { (Get-Trays).Count -ge 1 } 30 '(3) a tray runs'
-Start-Sleep -Seconds 15
-$trays = Get-Trays
-foreach ($t in $trays) { Write-Host "  tray pid $($t.ProcessId) parent $($t.ParentProcessId) $($t.CommandLine)" }
-Assert ($trays.Count -eq 1) "(3) Restart Manager's restart and the updater's start leave exactly one tray (got $($trays.Count))"
+# SC-022: the old tray was never asked to quit, so the mutex is not free in time; the updater keeps waiting and takes it
+# the moment msiexec closes that tray, then hands it over before it starts the new tray (never "going on without it").
+Assert (@($lines | Where-Object { $_ -match 'updater: the tray.s single-instance mutex was not free within' }).Count -eq 1) '(3) the mutex was not free in time (the tray still ran) and the updater went on waiting for it'
+Assert (@($lines | Where-Object { $_ -match 'updater: took the tray.s single-instance mutex .* once the tray let it go' }).Count -eq 1) '(3) the updater took the mutex once msiexec closed the tray'
+Assert (@($lines | Where-Object { $_ -match 'going on without it' }).Count -eq 0) '(3) the updater never replaced RST without the mutex'
+Assert ([array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'released the tray.s single-instance mutex' } | Select-Object -First 1)) -lt [array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'updater: started the installed tray' } | Select-Object -First 1))) '(3) it handed the mutex over before starting the new tray'
+$null = Wait-OneTray $before '(3)' "Restart Manager's restart and the updater's start leave exactly one tray"
 # Two launches, one tray: whichever came second (Restart Manager's --startup or the updater's) found the first and exited.
 $second = @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match 'RST tray already running for this user' })
 $second | ForEach-Object { Write-Host "  log: $_" }
@@ -230,6 +261,25 @@ Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -
 Assert (-not (Test-Path (Join-Path $LocalRoot 'selfupdate.json'))) '(3) the result is shown once'
 Assert-OneRst $NewerVersion '(3) after the race'
 Show-State '(3)'
+
+# ---- (3b) SC-022: two installed trays started at the same instant, round after round; exactly one survives each
+$raceResult = Join-Path $OutDir 'single-instance-race.json'
+$env:RST_TRAY_RACE_EXE = $TrayExe
+$env:RST_TRAY_RACE_ROUNDS = "$RaceRounds"
+$env:RST_TRAY_RACE_RESULT = $raceResult
+& dotnet test src/RST.RuntimeTests/RST.RuntimeTests.csproj -c $Configuration --no-build --nologo `
+    --filter 'FullyQualifiedName~RST.RuntimeTests.Tray.TraySingleInstanceRaceTests' --logger 'console;verbosity=normal' | Out-Host
+$code = $LASTEXITCODE
+Remove-Item Env:RST_TRAY_RACE_EXE, Env:RST_TRAY_RACE_ROUNDS, Env:RST_TRAY_RACE_RESULT
+Assert ($code -eq 0) "(3b) two trays started together, $RaceRounds rounds: exactly one survived every round (TraySingleInstanceRaceTests)"
+Assert (Test-Path $raceResult) "(3b) the race test ran (not skipped) and wrote $raceResult"
+$race = Get-Content $raceResult -Raw | ConvertFrom-Json
+$rounds = @($race.record)
+Assert ($rounds.Count -eq $RaceRounds) "(3b) all $RaceRounds rounds ran (got $($rounds.Count))"
+$decided = @($rounds | ForEach-Object { [int]$_.decidedMs } | Sort-Object)
+Write-Host "OBSERVE: (3b) $($rounds.Count) rounds; second launch gone after median $($decided[[int][math]::Floor($decided.Count / 2)]) ms, max $($decided[-1]) ms; survivors killed (abandoned mutex next): $(@($rounds | Where-Object { $_.ended -like 'killed*' }).Count)"
+Wait-Until { (Get-Trays).Count -eq 0 } 30 '(3b) no tray is left running after the race'
+$null = Start-Tray   # (4) uninstalls with a tray running, as before
 
 # ---- (4) uninstall (the updater's msiexec logs are kept first: the uninstall removes them)
 Copy-Item (Join-Path $LocalRoot 'logs\*') $OutDir -ErrorAction SilentlyContinue
@@ -266,11 +316,8 @@ Assert (@($lines | Where-Object { $_ -match "RST updater \(pid \d+\) applying .*
 Assert (@($lines | Where-Object { $_ -match 'updater: ".*RST-Setup\.exe" /quiet /norestart /log' }).Count -eq 1) '(5) it ran the bundle /quiet /norestart, with no companion switches'
 Assert (@($lines | Where-Object { $_ -match 'updater: RST-Setup\.exe exited 0 ' }).Count -eq 1) '(5) RST-Setup.exe exited 0'
 Assert (@($lines | Where-Object { $_ -match 'updater: holding the tray.s single-instance mutex' }).Count -eq 1) '(5) the updater held the tray''s single-instance mutex while RST was replaced'
-Wait-Until { (Get-Trays).Count -ge 1 } 30 '(5) a tray runs again'
-Start-Sleep -Seconds 10
-$trays = Get-Trays
-Assert ($trays.Count -eq 1) "(5) exactly one RST.Tray.exe runs (got $($trays.Count))"
-Assert ($trays[0].ProcessId -ne $bundleTray) '(5) it is a new process'
+$bundleNew = Wait-OneTray $before '(5)'
+Assert ($bundleNew.ProcessId -ne $bundleTray) '(5) it is a new process'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewVersion)): installed" }).Count -gt 0 } 30 '(5) the new tray shows the updater''s result'
 Assert-OneRst $NewVersion '(5) after the bundle self-update' -Bundle
 Show-State '(5) after'
