@@ -3,10 +3,12 @@
 //
 //   1. Windows Installer, by UpgradeCode (RST.Tray's MsiProducts: MsiEnumRelatedProducts, then
 //      MsiGetProductInfoEx for the version and the context). This is the real signal.
-//   2. Secondary: the companion's ClientId in any .addin found in the Addins and ApplicationPlugins roots (the
-//      roots v3.0's scanner used, read with AddinManifestParser, for every Revit year 2025+ present).
-//      A ClientId with no Windows Installer product means a copy put there by hand: "installed manually:
-//      updates not managed by RST".
+//   2. Secondary: the companion's ClientId in any add-in an installed Revit year (2025+) would load, found by
+//      feature #16's inventory (RST.Core.Activation.AddinInventory over RevitInstallations and AddinRoots), the one
+//      source of truth for add-in locations: from 2027, Program Files' Addins\<year> and ApplicationPlugins, and
+//      not %ProgramData%, which 2027 ignores; a bundle counts only in the years its PackageContents.xml names
+//      (F16 review delta N1). A ClientId with no Windows Installer product means a copy put there by hand:
+//      "installed manually: updates not managed by RST".
 //
 // A per-user install by another Windows user is invisible to this user, which is correct: the pages say "for you".
 // The state rules (ProductStatus.Compute) are pure, so RST.Tests covers them on Linux.
@@ -16,7 +18,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using RST.Core.Scanning;
+using RST.Core.Activation;
 
 namespace RST.Core.Updates;
 
@@ -133,9 +135,6 @@ public sealed record ProductStatus(
 
 public static class ProductDetection
 {
-    /// <summary>The first Revit year rst-c supports (decision #21). Later years are found by their folders.</summary>
-    public const int FirstRevitYear = 2025;
-
     /// <summary>
     /// Decides how <paramref name="product"/> is present from what Windows Installer reports
     /// (<paramref name="installed"/>, for its UpgradeCodes; null when it could not be read) and the ClientIds
@@ -188,89 +187,52 @@ public static class ProductDetection
     }
 
     /// <summary>
-    /// The .addin roots to scan for ClientIds, for every Revit year from <see cref="FirstRevitYear"/> that has an
-    /// Addins folder, in this order and only when they exist: the user's Addins\&lt;year&gt;, the user's
-    /// ApplicationPlugins, %ProgramData%'s Addins\&lt;year&gt; and %ProgramData%'s ApplicationPlugins. The Revit
-    /// install folder is left out (a companion is never put there, and it is large). Duplicates (ApplicationPlugins,
-    /// once per year) are dropped. These are the roots v3.0's AddinDirectoryScanner used; that scanner was retired by
-    /// feature #16, whose RST.Core.Activation.AddinInventory now serves the Loader.
+    /// ClientId (lower-case GUID) to the manifest declaring it, for every add-in an installed Revit year (2025+) would
+    /// load, from feature #16's inventory (<see cref="AddinInventory"/>): the user's and the machine's Addins folders and
+    /// ApplicationPlugins bundles as Revit reads them per year. Revit's own install folder is not scanned (a companion is
+    /// never put there). A manifest switched off by RST 3.0's rename (<c>.addin.RSTdisabled</c>) counts, with its
+    /// on-disk path: the add-in is still there. Unreadable files are skipped. Never throws.
     /// </summary>
-    public static IReadOnlyList<string> ManifestRoots(string? appData, string? programData)
-    {
-        var roots = new List<string>();
-        void Add(string? baseDir, params string[] parts)
-        {
-            if (string.IsNullOrEmpty(baseDir)) return;
-            var path = Path.Combine([baseDir, .. parts]);
-            if (Directory.Exists(path) && !roots.Contains(path, StringComparer.OrdinalIgnoreCase)) roots.Add(path);
-        }
-        foreach (var year in RevitYears(appData, programData))
-        {
-            var y = year.ToString(CultureInfo.InvariantCulture);
-            Add(appData, "Autodesk", "Revit", "Addins", y);
-            Add(appData, "Autodesk", "ApplicationPlugins");
-            Add(programData, "Autodesk", "Revit", "Addins", y);
-            Add(programData, "Autodesk", "ApplicationPlugins");
-        }
-        return roots;
-    }
-
-    /// <summary>The Revit years (2025+) with a folder under either Addins root, ascending.</summary>
-    internal static IReadOnlyList<int> RevitYears(string? appData, string? programData)
-    {
-        var years = new SortedSet<int>();
-        foreach (var baseDir in new[] { appData, programData })
-        {
-            if (string.IsNullOrEmpty(baseDir)) continue;
-            var addins = Path.Combine(baseDir, "Autodesk", "Revit", "Addins");
-            try
-            {
-                if (!Directory.Exists(addins)) continue;
-                foreach (var dir in Directory.EnumerateDirectories(addins))
-                {
-                    var name = Path.GetFileName(dir);
-                    if (name.Length == 4 && int.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out var year)
-                        && year >= FirstRevitYear)
-                        years.Add(year);
-                }
-            }
-            catch (Exception)
-            {
-                // An unreadable folder is skipped, as the scanner skips it.
-            }
-        }
-        return years.ToList();
-    }
-
-    /// <summary>The ManifestRoots for this user's %AppData% and %ProgramData%.</summary>
-    public static IReadOnlyList<string> ManifestRoots() => ManifestRoots(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
-
-    /// <summary>
-    /// ClientId (lower-case GUID) to the first manifest declaring it, across <paramref name="roots"/>, read with
-    /// RST.Core's own parser. Disabled manifests (<c>.addin.RSTdisabled</c>) count: the add-in is still there.
-    /// Unreadable files are skipped. Never throws.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> ManifestClientIds(IEnumerable<string> roots, Action<string>? log = null)
+    public static IReadOnlyDictionary<string, string> InstalledClientIds(AddinRoots roots, IReadOnlyList<RevitYear> years, Action<string>? log = null)
     {
         ArgumentNullException.ThrowIfNull(roots);
+        ArgumentNullException.ThrowIfNull(years);
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var root in roots)
+        try
         {
-            try
+            var inventory = AddinInventory.Scan(roots, years, (path, ex) => Log(log, $"detection: {path} not readable: {ex.Message}"),
+                includeRevitInstall: false);
+            foreach (var item in inventory.Items)
             {
-                foreach (var manifest in AddinManifestParser.ParseDirectory(root, onSkip: null))
-                    foreach (var entry in manifest.Entries)
-                        if (ProductCatalog.NormalizeGuid(entry.AddinId)?.ToLowerInvariant() is { } id && !ids.ContainsKey(id))
-                            ids[id] = manifest.FilePath;
-            }
-            catch (Exception ex)
-            {
-                Log(log, $"detection: manifests under {root} not readable: {ex.Message}");
+                if (item.Scope == AddinScope.RevitInstall) continue;
+                foreach (var addinId in item.AddinIds)
+                    if (ProductCatalog.NormalizeGuid(addinId)?.ToLowerInvariant() is { } id && !ids.ContainsKey(id))
+                        ids[id] = item.CurrentPath;
             }
         }
+        catch (Exception ex)
+        {
+            Log(log, $"detection: add-in scan failed: {ex.Message}");
+        }
         return ids;
+    }
+
+    /// <summary>
+    /// <see cref="InstalledClientIds(AddinRoots, IReadOnlyList{RevitYear}, Action{string})"/> for this user and the Revit
+    /// years installed here (decision #10 detection).
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> InstalledClientIds(Action<string>? log = null)
+    {
+        try
+        {
+            var roots = AddinRoots.FromEnvironment();
+            return InstalledClientIds(roots, RevitInstallations.Detect(roots), log);
+        }
+        catch (Exception ex)
+        {
+            Log(log, $"detection: Revit years not readable: {ex.Message}");
+            return new Dictionary<string, string>();
+        }
     }
 
     private static void Log(Action<string>? log, string message)

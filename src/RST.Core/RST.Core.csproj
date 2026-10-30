@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Tests use internal seams (for example PackageContents.Series and ProductDetection.RevitYears). -->
+    <!-- Tests use internal seams (for example PackageContents.Series). -->
     <InternalsVisibleTo Include="RST.Tests" />
   </ItemGroup>
 

@@ -112,8 +112,12 @@ public sealed class AddinInventory
         return Scan(roots, RevitInstallations.Detect(roots), onSkip);
     }
 
-    /// <summary>Scans <paramref name="years"/> under <paramref name="roots"/>. Unreadable files are skipped (and reported to <paramref name="onSkip"/>).</summary>
-    public static AddinInventory Scan(AddinRoots roots, IReadOnlyList<RevitYear> years, Action<string, Exception>? onSkip = null)
+    /// <summary>
+    /// Scans <paramref name="years"/> under <paramref name="roots"/>. Unreadable files are skipped (and reported to
+    /// <paramref name="onSkip"/>). <paramref name="includeRevitInstall"/> false leaves out Revit's own AddIns folder
+    /// (scanned recursively; the tray's companion detection never needs it).
+    /// </summary>
+    public static AddinInventory Scan(AddinRoots roots, IReadOnlyList<RevitYear> years, Action<string, Exception>? onSkip = null, bool includeRevitInstall = true)
     {
         ArgumentNullException.ThrowIfNull(roots);
         var yearRows = new List<InventoryYear>();
@@ -131,6 +135,7 @@ public sealed class AddinInventory
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var root in roots.ManifestRoots(revit.Year, revit.InstallDir))
             {
+                if (!includeRevitInstall && root.Scope == AddinScope.RevitInstall) continue;
                 foreach (var found in Find(root, revit.Year, onSkip))
                 {
                     if (!seen.Add(Full(found.Canonical))) continue;

@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using RST.Core.Tray;
 using RST.Core.Updates;
+using RST.Tests.Activation;
 using Xunit;
 
 namespace RST.Tests.Updates;
@@ -423,40 +424,75 @@ public sealed class ProductDetectionTests : IDisposable
         new ProductStatus(ProductCatalog.Default.Rst, install, V(lastKnown), LatestFailed: true).State.Should().Be(expected);
     }
 
-    private string Write(string relative, string clientId, bool disabled = false)
+    // F16 review delta N1 (F17 WU2): the "installed manually" scan reads add-ins where each installed Revit year reads
+    // them, through feature #16's inventory, not a hand-kept folder list.
+    private const string GanttId = "9920fb42-542b-4ce1-9659-a078489af6b0";
+    private const string SplashId = "0b1cc712-e936-4da1-9680-2d9a95f88271";
+
+    [Fact]
+    public void Manifests_are_scanned_with_the_inventory_in_every_installed_2025_plus_year()
     {
-        var path = Path.Combine(_root, relative + (disabled ? ".RSTdisabled" : ""));
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, $"<?xml version=\"1.0\"?><RevitAddIns><AddIn Type=\"Application\"><Name>X</Name>"
-                                + $"<Assembly>X.dll</Assembly><ClientId>{clientId}</ClientId><VendorId>DSOS</VendorId></AddIn></RevitAddIns>");
-        return path;
+        using var tree = new FakeAddinTree();
+        var a = tree.Manifest(tree.UserAddins(2026), "GanttIt.addin", "Gantt-It", "{9920FB42-542B-4CE1-9659-A078489AF6B0}");
+        var b = tree.Manifest(tree.ProgramDataAddins(2026), "SplashIt.addin", "Splash-It", SplashId, renamed: true);
+        tree.Manifest(tree.UserAddins(2024), "Old.addin", "Old", "11111111-1111-1111-1111-111111111111");
+        tree.Bundle(tree.UserPlugins, "P", new FakeAddinTree.Component("R2026", 2026, 2026, "P.addin", "P", "22222222-2222-2222-2222-222222222222"));
+        File.WriteAllText(Path.Combine(tree.UserAddins(2026), "broken.addin"), "<not xml");
+
+        var ids = ProductDetection.InstalledClientIds(tree.Roots, [FakeAddinTree.Year(2024), FakeAddinTree.Year(2026)]);
+
+        ids.Should().ContainKey(GanttId).WhoseValue.Should().Be(a);
+        ids.Should().ContainKey(SplashId).WhoseValue.Should().Be(b + ".RSTdisabled", "a switched-off add-in is still installed");
+        ids.Should().ContainKey("22222222-2222-2222-2222-222222222222");
+        ids.Should().NotContainKey("11111111-1111-1111-1111-111111111111", "Revit 2024 is not supported (decision #21)");
+        ProductDetection.InstalledClientIds(tree.Roots, []).Should().BeEmpty("no Revit year is installed");
     }
 
     [Fact]
-    public void Manifests_are_scanned_with_the_Loaders_parser_in_every_2025_plus_year_folder()
+    public void Revit_2027_is_read_from_Program_Files_and_never_from_ProgramData()
     {
-        var appData = Path.Combine(_root, "Roaming");
-        var programData = Path.Combine(_root, "ProgramData");
-        var a = Write(Path.Combine("Roaming", "Autodesk", "Revit", "Addins", "2026", "GanttIt.addin"), "{9920FB42-542B-4CE1-9659-A078489AF6B0}");
-        var b = Write(Path.Combine("ProgramData", "Autodesk", "Revit", "Addins", "2028", "Splash", "SplashIt.addin"),
-                      "0b1cc712-e936-4da1-9680-2d9a95f88271", disabled: true);
-        Write(Path.Combine("Roaming", "Autodesk", "Revit", "Addins", "2024", "Old.addin"), "11111111-1111-1111-1111-111111111111");
-        Write(Path.Combine("Roaming", "Autodesk", "ApplicationPlugins", "P.bundle", "Contents", "P.addin"), "22222222-2222-2222-2222-222222222222");
-        Directory.CreateDirectory(Path.Combine(appData, "Autodesk", "Revit", "Addins", "notayear"));
-        File.WriteAllText(Path.Combine(appData, "Autodesk", "Revit", "Addins", "2026", "broken.addin"), "<not xml");
+        using var tree = new FakeAddinTree();
+        var gantt = tree.Manifest(tree.MachineAddins(2027), "GanttIt.addin", "Gantt-It", GanttId);
+        var splash = tree.Bundle(tree.ProgramFilesPlugins, "SplashIt",
+            new FakeAddinTree.Component("R2027", 2027, null, "SplashIt.addin", "Splash-It", SplashId));
+        tree.Manifest(tree.ProgramDataAddins(2027), "Ignored.addin", "Ignored", "33333333-3333-3333-3333-333333333333");
+        tree.Bundle(tree.ProgramDataPlugins, "Ignored2027",
+            new FakeAddinTree.Component("R2027", 2027, 2027, "I.addin", "I", "44444444-4444-4444-4444-444444444444"));
+        tree.Manifest(Path.Combine(tree.RevitInstallAddins(2027), "Own"), "Own.addin", "Own", "55555555-5555-5555-5555-555555555555");
 
-        var roots = ProductDetection.ManifestRoots(appData, programData);
-        roots.Should().Equal(
-            Path.Combine(appData, "Autodesk", "Revit", "Addins", "2026"),
-            Path.Combine(appData, "Autodesk", "ApplicationPlugins"),
-            Path.Combine(programData, "Autodesk", "Revit", "Addins", "2028"));
+        var ids = ProductDetection.InstalledClientIds(tree.Roots, [FakeAddinTree.Year(2026), FakeAddinTree.Year(2027)]);
 
-        var ids = ProductDetection.ManifestClientIds(roots);
-        ids.Should().ContainKey("9920fb42-542b-4ce1-9659-a078489af6b0").WhoseValue.Should().Be(a);
-        ids.Should().ContainKey("0b1cc712-e936-4da1-9680-2d9a95f88271").WhoseValue.Should().Be(b, "a switched-off add-in is still installed");
-        ids.Should().ContainKey("22222222-2222-2222-2222-222222222222");
-        ids.Should().NotContainKey("11111111-1111-1111-1111-111111111111", "Revit 2024 is not supported (decision #21)");
-        ProductDetection.ManifestRoots(Path.Combine(_root, "none"), null).Should().BeEmpty();
+        ids.Should().ContainKey(GanttId).WhoseValue.Should().Be(gantt, "2027 reads machine-wide add-ins from Program Files\\Autodesk\\Revit\\Addins\\2027");
+        ids.Should().ContainKey(SplashId).WhoseValue.Should().StartWith(splash, "and machine-wide bundles from Program Files\\Autodesk\\ApplicationPlugins");
+        ids.Should().NotContainKey("33333333-3333-3333-3333-333333333333", "Revit 2027 ignores %ProgramData%'s Addins\\2027");
+        ids.Should().NotContainKey("44444444-4444-4444-4444-444444444444",
+            "2027 ignores %ProgramData%'s ApplicationPlugins, and 2026 reads that bundle only for the years it names");
+        ids.Should().NotContainKey("55555555-5555-5555-5555-555555555555", "Revit's own add-ins are never a companion");
+        ProductDetection.Decide(Gantt, [], ids).Kind.Should().Be(InstallKind.Manual);
+    }
+
+    [Fact]
+    public void The_scan_can_leave_out_Revits_own_folder()
+    {
+        // Review N10: the companion scan never needs Revit's AddIns folder (scanned recursively), so it skips it.
+        using var tree = new FakeAddinTree();
+        tree.Manifest(Path.Combine(tree.RevitInstallAddins(2026), "Own"), "Own.addin", "Own", "55555555-5555-5555-5555-555555555555");
+        tree.Manifest(tree.UserAddins(2026), "GanttIt.addin", "Gantt-It", GanttId);
+
+        RST.Core.Activation.AddinInventory.Scan(tree.Roots, [FakeAddinTree.Year(2026)]).Items
+            .Should().Contain(i => i.Scope == RST.Core.Activation.AddinScope.RevitInstall);
+        RST.Core.Activation.AddinInventory.Scan(tree.Roots, [FakeAddinTree.Year(2026)], includeRevitInstall: false).Items
+            .Should().ContainSingle().Which.Name.Should().Be("Gantt-It");
+    }
+
+    [Fact]
+    public void A_2026_only_bundle_does_not_count_for_2027()
+    {
+        using var tree = new FakeAddinTree();
+        tree.Bundle(tree.UserPlugins, "GanttIt", new FakeAddinTree.Component("R2026", 2026, 2026, "GanttIt.addin", "Gantt-It", GanttId));
+
+        ProductDetection.InstalledClientIds(tree.Roots, [FakeAddinTree.Year(2027)]).Should().NotContainKey(GanttId);
+        ProductDetection.InstalledClientIds(tree.Roots, [FakeAddinTree.Year(2026)]).Should().ContainKey(GanttId);
     }
 }
 

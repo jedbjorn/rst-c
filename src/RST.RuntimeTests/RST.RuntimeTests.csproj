@@ -83,6 +83,8 @@
     <Compile Include="..\RST.Tests\Updates\UpdateTestDoubles.cs" Link="Tray\Shared\UpdateTestDoubles.cs" />
     <!-- F17 WU4: the fake GitHub (feed, SHA256SUMS.txt, API digest, redirects) and the scripted installers. -->
     <Compile Include="..\RST.Tests\Updates\InstallTestDoubles.cs" Link="Tray\Shared\InstallTestDoubles.cs" />
+    <!-- F17 WU2 (review N9): the Core tests' fake add-in machine, for the tray-versus-real-Loader test. -->
+    <Compile Include="..\RST.Tests\Activation\FakeAddinTree.cs" Link="Tray\Shared\FakeAddinTree.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(RevitVersion)' != '2025'">
     <Compile Remove="Tray\**" />

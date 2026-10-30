@@ -4,8 +4,10 @@
 //   OnStartup               — wire RST tab + Loader button (UIControlledApplication path),
 //                             configure logging, subscribe to ApplicationInitialized.
 //   ApplicationInitialized  — Revit's main loop is running; UIApplication is available.
-//                             Build the active profile tab via ProfileTabBuilder
-//                             (AdWindows-direct), then unsubscribe (one-shot).
+//                             Start the RST tray if it isn't running (a thread-pool
+//                             task, never awaited; spec #20 §2), build the active
+//                             profile tab via ProfileTabBuilder (AdWindows-direct),
+//                             then unsubscribe (one-shot).
 //   OnShutdown              — flush logs, dispose handlers, persist any pending state.
 
 using System;
@@ -21,6 +23,7 @@ using RST.Core.Scanning;
 using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
 using RST.Engine.Telemetry;
+using RST.Engine.Tray;
 using Serilog;
 
 namespace RST.Engine;
@@ -37,6 +40,7 @@ public sealed class RstApplication : IExternalApplication
     private EventHandler<ApplicationInitializedEventArgs>? _initializedHandler;
     private UIControlledApplication? _uiControlledApp;
     private bool _reassertQueued;
+    private bool _readyQueued;
     private static ProfileSwitchScheduler? _switchScheduler;
     private static TelemetryCollector? _telemetry;
 
@@ -132,13 +136,103 @@ public sealed class RstApplication : IExternalApplication
             _initializedHandler = null;
         }
 
+        // Spec #20 §2 (AC2): how long Revit took to get here; then the tray launch, off Revit's UI thread and never
+        // waited for; then, at Revit's first Idling, how long Revit took to be ready. That last line is AC2's
+        // measure: it comes after the launch has started, so the launch's cost on Revit's start shows in it
+        // (review B1).
+        LogStartupTime("ApplicationInitialized");
+        StartTrayInBackground();
+        QueueReadyTime();
+
+        var tab = System.Diagnostics.Stopwatch.StartNew();
         BuildProfileTab(sender);
+        Log.Information("ApplicationInitialized: profile tab step took {Ms} ms", tab.ElapsedMilliseconds);
 
         // One-time consent notice (telemetry spec Consent & Config) —
         // after the profile tab is up, so the modal never sits between
         // Revit and the ribbon build. Runs on the paths that skip the
         // build too (no active profile); its own guard, never throws.
         ConsentNotice.ShowIfDue(_telemetry, m => Log.Warning("Telemetry: {Message}", m));
+    }
+
+    /// <summary>One line: the time from Revit.exe's start to <paramref name="point"/>.</summary>
+    private static void LogStartupTime(string point)
+    {
+        try
+        {
+            using var revit = System.Diagnostics.Process.GetCurrentProcess();
+            var elapsed = DateTime.Now - revit.StartTime;
+            if (point == "ApplicationInitialized")
+                Log.Information("Revit startup: ApplicationInitialized {Ms} ms after Revit.exe started", (long)elapsed.TotalMilliseconds);
+            else
+                Log.Information("Revit ready: first Idling {Ms} ms after Revit.exe started (after the tray launch was queued)", (long)elapsed.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Revit startup time not readable (non-fatal)");
+        }
+    }
+
+    /// <summary>
+    /// One-shot: at Revit's first Idling after ApplicationInitialized (the ribbon built, the start page up), log
+    /// "Revit ready". Spec #20 AC2 compares this time with and without the tray launch (review B1).
+    /// </summary>
+    private void QueueReadyTime()
+    {
+        if (_uiControlledApp is null) return;
+        try
+        {
+            _uiControlledApp.Idling += OnFirstIdling;
+            _readyQueued = true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Revit ready time not queued (non-fatal)");
+        }
+    }
+
+    private void OnFirstIdling(object? sender, Autodesk.Revit.UI.Events.IdlingEventArgs e)
+    {
+        if (!_readyQueued) return;
+        _readyQueued = false;
+        if (_uiControlledApp is not null)
+        {
+            try { _uiControlledApp.Idling -= OnFirstIdling; }
+            catch (Exception ex) { Log.Debug(ex, "Idling unsubscribe failed (non-fatal)"); }
+        }
+        LogStartupTime("first Idling");
+    }
+
+    /// <summary>
+    /// Starts the RST tray when it is not running (spec #20 §2): a thread-pool task that Revit never waits for. Its
+    /// outcome is one log line (started, already running, switched off in Task Manager, Revit elevated, not
+    /// installed, or why it failed). Nothing here can fail or delay Revit's startup.
+    /// </summary>
+    private static void StartTrayInBackground()
+    {
+        try
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    var result = TrayLauncher.EnsureRunning(new MachineTrayLaunchEnvironment());
+                    if (result.Outcome == TrayLaunchOutcome.Failed)
+                        Log.Warning("Tray: {Message} ({Ms} ms, off the UI thread)", result.Message, sw.ElapsedMilliseconds);
+                    else
+                        Log.Information("Tray: {Message} ({Ms} ms, off the UI thread)", result.Message, sw.ElapsedMilliseconds);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Tray: launch check failed ({Ms} ms); Revit is unaffected", sw.ElapsedMilliseconds);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Tray: could not queue the launch check; Revit is unaffected");
+        }
     }
 
     private static void BuildProfileTab(object? sender)
@@ -268,6 +362,12 @@ public sealed class RstApplication : IExternalApplication
             {
                 try { _uiControlledApp.Idling -= OnIdlingReassert; }
                 catch { /* fine */ }
+            }
+            if (_readyQueued)
+            {
+                try { _uiControlledApp.Idling -= OnFirstIdling; }
+                catch { /* fine */ }
+                _readyQueued = false;
             }
             _uiControlledApp = null;
         }

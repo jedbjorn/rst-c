@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    rst-c's own (not vendored): the RST tray's Add-ins page strings (spec #20 §3; F17 WU2), in their own resource
+    so the page and the other tray pages never edit the same file. The add-in plans and reports themselves use the
+    Loader's wording (RST.UI UiStrings, RST.Core ActivationWording), never a copy. English only (spec #16).
+    AddInsStrings.cs has one accessor per entry; RuntimeTests' AddInsStringsTests checks each resolves.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Heading" xml:space="preserve">
+    <value>Add-ins</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>Switch your profile and add-ins before you start Revit. This is the Profile Loader's own switching, for your Windows user, in every Revit year installed here.</value>
+  </data>
+  <data name="ActiveProfileLabel" xml:space="preserve">
+    <value>Active profile</value>
+  </data>
+  <data name="ActiveProfileNone" xml:space="preserve">
+    <value>No profile loaded</value>
+  </data>
+  <data name="ActiveProfileUnreadable" xml:space="preserve">
+    <value>Couldn't read it right now (the file is in use)</value>
+    <comment>Shown for the active profile while active_profile.json cannot be opened.</comment>
+  </data>
+  <data name="ApplyHeading" xml:space="preserve">
+    <value>Apply a profile</value>
+  </data>
+  <data name="ProfileLabel" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="ApplyButton" xml:space="preserve">
+    <value>Apply profile…</value>
+    <comment>Opens Confirm Add-in Changes when add-ins would change, as Load Profile does.</comment>
+  </data>
+  <data name="ApplyHint" xml:space="preserve">
+    <value>Revit uses the profile the next time it starts. You see what would change before anything does.</value>
+  </data>
+  <data name="NoProfiles" xml:space="preserve">
+    <value>No profiles yet. Create or import one in Revit: RST tab › Loader or Builder.</value>
+  </data>
+  <data name="RestoreHeading" xml:space="preserve">
+    <value>Switch back on</value>
+  </data>
+  <data name="YearsHeading" xml:space="preserve">
+    <value>By Revit year</value>
+  </data>
+  <data name="YearRunning" xml:space="preserve">
+    <value>Open now</value>
+    <comment>A pill beside "Revit 2027" while that Revit runs in this Windows session.</comment>
+  </data>
+  <data name="YearSwitchedOff" xml:space="preserve">
+    <value>Switched off by RST</value>
+  </data>
+  <data name="YearCouldNotChange" xml:space="preserve">
+    <value>RST can't switch these back on</value>
+  </data>
+  <data name="YearClear" xml:space="preserve">
+    <value>Nothing switched off by RST.</value>
+  </data>
+  <data name="NoRevit" xml:space="preserve">
+    <value>No Revit 2025 or later is installed on this PC, so there are no add-ins to switch.</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Reading your add-ins…</value>
+  </data>
+  <data name="BusyPlanning" xml:space="preserve">
+    <value>Checking what would change…</value>
+  </data>
+  <data name="BusyApplying" xml:space="preserve">
+    <value>Applying “{0}”…</value>
+  </data>
+  <data name="BusyRestoring" xml:space="preserve">
+    <value>Switching add-ins back on…</value>
+  </data>
+  <data name="Applied" xml:space="preserve">
+    <value>“{0}” is your profile now. Revit uses it, and any add-in changes, the next time it starts.</value>
+  </data>
+  <data name="Restored" xml:space="preserve">
+    <value>Done. Add-in changes apply the next time Revit starts.</value>
+  </data>
+  <data name="ReadFailed" xml:space="preserve">
+    <value>RST could not read your add-ins: {0}</value>
+  </data>
+  <data name="ApplyFailed" xml:space="preserve">
+    <value>The profile was not applied: {0}</value>
+  </data>
+  <data name="RefreshLink" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+</root>

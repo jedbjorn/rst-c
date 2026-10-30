@@ -36,6 +36,11 @@ Set-StrictMode -Version Latest
 $FixtureCode = '{A0E85F7A-BF17-4052-AB6A-010781D8CF6D}'   # installer-bundle/fixture/Product.wxs
 $FixtureClientId = '7e57f1c7-a5e5-4c3d-8f0e-000000000ae5'  # test-only, for the hand-copied manifest
 $ManualAddin = Join-Path $env:APPDATA 'Autodesk\Revit\Addins\2026\RSTCompanionFixture.addin'
+# F17 WU2: the manual scan reads add-ins only for the Revit years installed here (feature #16's inventory, decision #10
+# detection: Revit.exe in Revit's folder). The runner has no Revit, so the manual scenarios stand up an empty
+# Revit.exe at 2026's default folder, and remove it again, only when this script put it there.
+$StubRevit = Join-Path $env:ProgramFiles 'Autodesk\Revit 2026\Revit.exe'
+$script:StubRevitCreated = $false
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
 
@@ -99,6 +104,16 @@ function Remove-Fixture([string]$Label) {
   Assert ((Get-Installed).Count -eq 0) "[$Label] no fixture product left"
 }
 function Set-ManualAddin([bool]$Present) {
+  if ($Present -and -not (Test-Path $StubRevit)) {
+    New-Item -ItemType Directory -Force (Split-Path $StubRevit) | Out-Null
+    New-Item -ItemType File -Force $StubRevit | Out-Null
+    $script:StubRevitCreated = $true
+  } elseif (-not $Present -and $script:StubRevitCreated) {
+    Remove-Item $StubRevit -Force -ErrorAction SilentlyContinue
+    $dir = Split-Path $StubRevit
+    if ((Test-Path $dir) -and -not (Get-ChildItem $dir -Force)) { Remove-Item $dir -Force }
+    $script:StubRevitCreated = $false
+  }
   if ($Present) {
     New-Item -ItemType Directory -Force (Split-Path $ManualAddin) | Out-Null
     Set-Content -Path $ManualAddin -Encoding UTF8 -Value @"
