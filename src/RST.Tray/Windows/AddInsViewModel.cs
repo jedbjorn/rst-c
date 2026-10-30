@@ -1,8 +1,9 @@
 // rst-c's own (not vendored): the RST tray's Add-ins page (spec #20 §3; F17 WU2). It shows the active profile and,
 // per installed Revit year, what RST switched off and what it cannot switch back on, and runs Apply profile and
 // Restore All through the Profile Loader's own code (RST.Core's TrayAddinService) and the Loader's own dialogs:
-//   Apply profile    the Loader's Load Profile: the plan, Confirm Add-in Changes when add-ins would change (the
-//                    Loader's rule: Disable unused is on, or the plan changes something), then the Add-in Check;
+//   Apply profile    the Loader's Load Profile: "Adopt RSTify Presets?" when the Loader would ask it, the plan,
+//                    Confirm Add-in Changes when add-ins would change (the Loader's rule: Disable unused is on,
+//                    or the plan changes something), then the Add-in Check;
 //   Restore All      the Loader's Restore All Add-ins and its report.
 // Every report ends with the Loader's "Add-in changes apply the next time Revit starts.", plus "Revit <year> is
 // open: restart it to see the change." for each Revit open now. The files and the plans run off the UI thread;
@@ -17,6 +18,7 @@ using RST.Core.Profiles;
 using RST.Core.Tray;
 using RST.Tray.AddIns;
 using RST.Tray.Resources;
+using RST.UI.Dialogs;
 using RST.UI.Loader;
 using RST.UI.Mvvm;
 using RST.UI.Resources;
@@ -64,6 +66,8 @@ internal sealed class AddInsViewModel : ObservableObject
 {
     private readonly ITrayAddinsBackend _backend;
     private readonly ILoaderDialogs _dialogs;
+    private readonly IDialogService _messages;
+    private readonly AddinsWork? _work;
     private readonly bool _inline;
     private UserProfilePrefs _prefs = new();
     private bool _isLoaded;
@@ -74,17 +78,22 @@ internal sealed class AddInsViewModel : ObservableObject
     private IReadOnlyList<ProfileOption> _profiles = [];
     private ProfileOption? _selected;
     private bool _disableUnused;
-    private string? _error;
+    private string? _readError;
+    private string? _actionError;
     private string? _result;
     private Task? _refreshing;
 
     /// <param name="backend">The Loader's services over this user's files.</param>
     /// <param name="dialogs">The Loader's Confirm Add-in Changes and report dialogs.</param>
+    /// <param name="messages">The family confirm dialog the Loader asks "Adopt RSTify Presets?" with.</param>
+    /// <param name="work">Tracks the file work in flight, so the tray waits for it before quitting (review N7).</param>
     /// <param name="runInline">Run the backend on the calling thread (RuntimeTests); the thread pool otherwise.</param>
-    public AddInsViewModel(ITrayAddinsBackend backend, ILoaderDialogs dialogs, bool runInline = false)
+    public AddInsViewModel(ITrayAddinsBackend backend, ILoaderDialogs dialogs, IDialogService messages, AddinsWork? work = null, bool runInline = false)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _messages = messages ?? throw new ArgumentNullException(nameof(messages));
+        _work = work;
         _inline = runInline;
         ApplyCommand = new RelayCommand(() => _ = ApplyAsync(), () => CanApply);
         RestoreAllCommand = new RelayCommand(() => _ = RestoreAllAsync(), () => IsIdle && _isLoaded);
@@ -97,7 +106,7 @@ internal sealed class AddInsViewModel : ObservableObject
 
     public ICommand RefreshCommand { get; }
 
-    /// <summary>The first read finished.</summary>
+    /// <summary>A read succeeded (until then the page claims nothing: no profile, no years).</summary>
     public bool IsLoaded
     {
         get => _isLoaded;
@@ -110,7 +119,7 @@ internal sealed class AddInsViewModel : ObservableObject
     }
 
     /// <summary>The first read is still running ("Reading your add-ins…").</summary>
-    public bool IsLoading => !_isLoaded && _error is null;
+    public bool IsLoading => !_isLoaded && _readError is null;
 
     public bool IsBusy
     {
@@ -149,7 +158,7 @@ internal sealed class AddInsViewModel : ObservableObject
     public bool HasYears => _years.Count > 0;
 
     /// <summary>Read, and no Revit 2025+ is installed.</summary>
-    public bool ShowNoRevit => _isLoaded && _years.Count == 0 && _error is null;
+    public bool ShowNoRevit => _isLoaded && _years.Count == 0 && _readError is null;
 
     public IReadOnlyList<ProfileOption> Profiles
     {
@@ -188,20 +197,13 @@ internal sealed class AddInsViewModel : ObservableObject
 
     public bool CanApply => IsIdle && _isLoaded && _selected is not null;
 
-    /// <summary>Why the add-ins could not be read, or the last action failed (a warning banner).</summary>
-    public string? ErrorText
-    {
-        get => _error;
-        private set
-        {
-            if (!SetField(ref _error, value)) return;
-            OnPropertyChanged(nameof(HasError));
-            OnPropertyChanged(nameof(IsLoading));
-            OnPropertyChanged(nameof(ShowNoRevit));
-        }
-    }
+    /// <summary>
+    /// The warning banner: the last action's failure, which stays until the next action (a read after it does not
+    /// clear it; review B3), else why the add-ins could not be read.
+    /// </summary>
+    public string? ErrorText => _actionError ?? _readError;
 
-    public bool HasError => _error is not null;
+    public bool HasError => ErrorText is not null;
 
     /// <summary>The last action's one-line result (an info banner).</summary>
     public string? ResultText
@@ -220,12 +222,34 @@ internal sealed class AddInsViewModel : ObservableObject
     /// <summary>Reads the page the first time it is shown; later calls are cheap no-ops while a read runs.</summary>
     public Task EnsureLoadedAsync() => _isLoaded || _refreshing is not null ? _refreshing ?? Task.CompletedTask : RefreshAsync();
 
-    /// <summary>Reads the active profile, the years, the profiles and the saved choices again.</summary>
-    public Task RefreshAsync()
+    /// <summary>
+    /// Reads the active profile, the years, the profiles and the saved choices again. While a read runs, it is
+    /// joined; with <paramref name="fresh"/> (after an action) a new read follows it, so what the page shows is read
+    /// after the action (review N6).
+    /// </summary>
+    public Task RefreshAsync(bool fresh = false)
     {
-        if (_refreshing is { IsCompleted: false } running) return running;
+        if (_refreshing is { IsCompleted: false } running)
+        {
+            if (!fresh) return running;
+            _refreshing = ThenRefresh(running);
+            return _refreshing;
+        }
         _refreshing = DoRefreshAsync();
         return _refreshing;
+    }
+
+    private async Task ThenRefresh(Task running)
+    {
+        try
+        {
+            await running;
+        }
+        catch (Exception)
+        {
+            // Reported by that read.
+        }
+        await DoRefreshAsync();
     }
 
     private async Task DoRefreshAsync()
@@ -243,20 +267,23 @@ internal sealed class AddInsViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Warning(ex, "add-ins: the page could not read the add-ins");
-            ErrorText = AddInsStrings.ReadFailed(ex.Message);
-        }
-        finally
-        {
-            _refreshing = null;
+            SetReadError(AddInsStrings.ReadFailed(ex.Message));
         }
     }
 
     private void Show(TrayAddinStatus status, IReadOnlyList<ProfileEntry> profiles)
     {
+        if (status.Error is not null)
+        {
+            // Nothing new is known: keep what was shown before (if anything), and say why (review N8).
+            Log.Warning("add-ins: the page could not read the add-ins: {Error}", status.Error);
+            SetReadError(AddInsStrings.ReadFailed(status.Error));
+            return;
+        }
+        SetReadError(null);
         _activeProfile = string.IsNullOrEmpty(status.ActiveProfile) ? null : status.ActiveProfile;
         OnPropertyChanged(nameof(ActiveProfileText));
         OnPropertyChanged(nameof(HasActiveProfile));
-        ErrorText = status.Error is null ? null : AddInsStrings.ReadFailed(status.Error);
 
         var keep = _selected;
         var options = profiles.Select(p => new ProfileOption(p)).ToList();
@@ -286,18 +313,48 @@ internal sealed class AddInsViewModel : ObservableObject
         !string.IsNullOrEmpty(a.Id) ? a.Id == b.Id : a.Name == b.Name;
 
     /// <summary>
-    /// Apply profile: the Loader's Load Profile (spec #20 §3). The plan; Confirm Add-in Changes when add-ins would
-    /// change; the load; the Add-in Check with the running-Revit notes; then the page again.
+    /// Apply profile: the Loader's Load Profile (spec #20 §3). The Loader's "Adopt RSTify Presets?" when it would
+    /// ask (review B2); the plan; Confirm Add-in Changes when add-ins would change; the load; the Add-in Check with
+    /// the running-Revit notes; then the page again. A failure stays on the page (review B3).
     /// </summary>
     public async Task ApplyAsync()
     {
         if (!CanApply || _selected is not { } option) return;
+        await JoinRefresh();
         var entry = option.Entry;
+        StartAction();
+        Log.Information("add-ins: Apply profile {Name} (disable unused {Disable})", option.Name, DisableUnused);
+
+        // The Loader asks once per profile per machine, before its saved choices exist (ProfileLoaderViewModel.Select
+        // and AskAdoptPresets): the same rule, the same dialog, the same record.
+        var hidden = TrayAddinService.Choices(entry, _prefs).HiddenTabs;
+        if (TrayAddinService.AsksToAdoptPresets(entry, _prefs))
+        {
+            var yes = _messages.Confirm(RstifyRules.AdoptPresetsTitle, RstifyRules.AdoptPresetsMessage(entry.Profile), [],
+                UiStrings.Loader_Continue, danger: false, ProfileLoaderViewModel.AdoptPresetsDialogId);
+            Log.Information("add-ins: adopt RSTify presets for {Name}: {Answer}", option.Name, yes ? "yes" : "no");
+            try
+            {
+                var (adoptedDisable, adoptedHidden) = await Run(() => _backend.AdoptPresets(entry, yes));
+                _prefs.Profiles[entry.Profile.Id!] = new UserProfilePrefsEntry
+                {
+                    HiddenTabs = [.. adoptedHidden],
+                    DisableUnusedAddins = adoptedDisable,
+                    PresetsAdopted = true,
+                };
+                // Yes takes the presets; no keeps what the user set on the page (the Loader asks before they can).
+                if (yes)
+                {
+                    DisableUnused = adoptedDisable;
+                    hidden = adoptedHidden;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "add-ins: recording the RSTify presets answer failed");
+            }
+        }
         var disable = DisableUnused;
-        var (_, hidden) = TrayAddinService.Choices(entry, _prefs);
-        ErrorText = null;
-        ResultText = null;
-        Log.Information("add-ins: Apply profile {Name} (disable unused {Disable})", option.Name, disable);
 
         Busy(AddInsStrings.BusyPlanning);
         ActivationPlan? plan = null;
@@ -308,7 +365,8 @@ internal sealed class AddInsViewModel : ObservableObject
             if (outcome.Error is not null)
             {
                 Idle();
-                ErrorText = AddInsStrings.ApplyFailed(outcome.Error);
+                FailAction(AddInsStrings.ApplyFailed(outcome.Error));
+                await RefreshAsync(fresh: true);
                 return;
             }
             plan = outcome.Plan;
@@ -339,14 +397,16 @@ internal sealed class AddInsViewModel : ObservableObject
         {
             Log.Error(ex, "add-ins: Apply threw");
             Idle();
-            ErrorText = AddInsStrings.ApplyFailed(ex.Message);
+            FailAction(AddInsStrings.ApplyFailed(ex.Message));
+            await RefreshAsync(fresh: true);
             return;
         }
         Idle();
         if (!result.Ok)
         {
-            ErrorText = AddInsStrings.ApplyFailed(string.Join(" ", result.Warnings.DefaultIfEmpty(UiStrings.Loader_LoadFailedText)));
-            await RefreshAsync();
+            Log.Warning("add-ins: Apply failed: {Warnings}", string.Join(" ", result.Warnings));
+            FailAction(AddInsStrings.ApplyFailed(string.Join(" ", result.Warnings.DefaultIfEmpty(UiStrings.Loader_LoadFailedText))));
+            await RefreshAsync(fresh: true);
             return;
         }
 
@@ -355,15 +415,15 @@ internal sealed class AddInsViewModel : ObservableObject
         report = TrayAddinService.WithRunningNotes(report, running);
         _dialogs.ShowAddinReport(AddinReportModel.ForLoad(option.Name, report, TrayAddinService.QaFor(entry, plan)));
         ResultText = AddInsStrings.Applied(option.Name);
-        await RefreshAsync();
+        await RefreshAsync(fresh: true);
     }
 
     /// <summary>Restore All Add-ins: the Loader's, with its report and the running-Revit notes.</summary>
     public async Task RestoreAllAsync()
     {
         if (!IsIdle || !_isLoaded) return;
-        ErrorText = null;
-        ResultText = null;
+        await JoinRefresh();
+        StartAction();
         Log.Information("add-ins: Restore All");
         Busy(AddInsStrings.BusyRestoring);
         RestoreOutcome outcome;
@@ -377,18 +437,62 @@ internal sealed class AddInsViewModel : ObservableObject
         {
             Log.Error(ex, "add-ins: Restore All threw");
             Idle();
-            ErrorText = UiStrings.Loader_RestoreError(ex.Message);
+            FailAction(UiStrings.Loader_RestoreError(ex.Message));
             return;
         }
         Idle();
         if (!outcome.Ok || outcome.Addins is null)
         {
-            ErrorText = UiStrings.Loader_RestoreFailedText(string.IsNullOrEmpty(outcome.Error) ? UiStrings.Loader_UnknownError : outcome.Error);
+            FailAction(UiStrings.Loader_RestoreFailedText(string.IsNullOrEmpty(outcome.Error) ? UiStrings.Loader_UnknownError : outcome.Error));
             return;
         }
         _dialogs.ShowAddinReport(AddinReportModel.ForRestoreAll(TrayAddinService.WithRunningNotes(outcome.Addins, running)));
         ResultText = AddInsStrings.Restored;
-        await RefreshAsync();
+        await RefreshAsync(fresh: true);
+    }
+
+    /// <summary>An action waits for a read in flight, so it acts on, and then shows, what is on disk (review N6).</summary>
+    private async Task JoinRefresh()
+    {
+        if (_refreshing is not { IsCompleted: false } running) return;
+        Busy(AddInsStrings.Loading);
+        try
+        {
+            await running;
+        }
+        catch (Exception)
+        {
+            // Reported by that read.
+        }
+        Idle();
+    }
+
+    private void StartAction()
+    {
+        _actionError = null;
+        ResultText = null;
+        RaiseError();
+    }
+
+    private void FailAction(string message)
+    {
+        _actionError = message;
+        RaiseError();
+    }
+
+    private void SetReadError(string? message)
+    {
+        if (_readError == message) return;
+        _readError = message;
+        RaiseError();
+        OnPropertyChanged(nameof(IsLoading));
+        OnPropertyChanged(nameof(ShowNoRevit));
+    }
+
+    private void RaiseError()
+    {
+        OnPropertyChanged(nameof(ErrorText));
+        OnPropertyChanged(nameof(HasError));
     }
 
     private void Busy(string text)
@@ -412,5 +516,6 @@ internal sealed class AddInsViewModel : ObservableObject
         RelayCommand.Refresh();
     }
 
-    private Task<T> Run<T>(Func<T> work) => _inline ? Task.FromResult(work()) : Task.Run(work);
+    private Task<T> Run<T>(Func<T> work) =>
+        _inline ? Task.FromResult(work()) : _work is not null ? _work.Run(work) : Task.Run(work);
 }

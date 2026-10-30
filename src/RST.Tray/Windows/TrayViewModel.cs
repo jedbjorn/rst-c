@@ -62,7 +62,7 @@ internal sealed class TrayViewModel : ObservableObject
         OpenLogFolderCommand = new RelayCommand(host.OpenLogFolder);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
         Updates = new UpdatesViewModel(updates ?? new NoUpdatesHost(host), () => _host.UpdateChecks);
-        AddIns = addIns ?? new AddInsViewModel(NoTrayAddinsBackend.Instance, NoLoaderDialogs.Instance, runInline: true);
+        AddIns = addIns ?? new AddInsViewModel(NoTrayAddinsBackend.Instance, NoLoaderDialogs.Instance, new RST.UI.Dialogs.DialogService(), runInline: true);
         if (page == TrayPage.AddIns) _ = AddIns.EnsureLoadedAsync();
     }
 

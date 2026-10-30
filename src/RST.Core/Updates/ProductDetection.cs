@@ -189,7 +189,7 @@ public static class ProductDetection
     /// <summary>
     /// ClientId (lower-case GUID) to the manifest declaring it, for every add-in an installed Revit year (2025+) would
     /// load, from feature #16's inventory (<see cref="AddinInventory"/>): the user's and the machine's Addins folders and
-    /// ApplicationPlugins bundles as Revit reads them per year. Revit's own install folder is left out (a companion is
+    /// ApplicationPlugins bundles as Revit reads them per year. Revit's own install folder is not scanned (a companion is
     /// never put there). A manifest switched off by RST 3.0's rename (<c>.addin.RSTdisabled</c>) counts, with its
     /// on-disk path: the add-in is still there. Unreadable files are skipped. Never throws.
     /// </summary>
@@ -200,7 +200,8 @@ public static class ProductDetection
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
-            var inventory = AddinInventory.Scan(roots, years, (path, ex) => Log(log, $"detection: {path} not readable: {ex.Message}"));
+            var inventory = AddinInventory.Scan(roots, years, (path, ex) => Log(log, $"detection: {path} not readable: {ex.Message}"),
+                includeRevitInstall: false);
             foreach (var item in inventory.Items)
             {
                 if (item.Scope == AddinScope.RevitInstall) continue;

@@ -472,6 +472,20 @@ public sealed class ProductDetectionTests : IDisposable
     }
 
     [Fact]
+    public void The_scan_can_leave_out_Revits_own_folder()
+    {
+        // Review N10: the companion scan never needs Revit's AddIns folder (scanned recursively), so it skips it.
+        using var tree = new FakeAddinTree();
+        tree.Manifest(Path.Combine(tree.RevitInstallAddins(2026), "Own"), "Own.addin", "Own", "55555555-5555-5555-5555-555555555555");
+        tree.Manifest(tree.UserAddins(2026), "GanttIt.addin", "Gantt-It", GanttId);
+
+        RST.Core.Activation.AddinInventory.Scan(tree.Roots, [FakeAddinTree.Year(2026)]).Items
+            .Should().Contain(i => i.Scope == RST.Core.Activation.AddinScope.RevitInstall);
+        RST.Core.Activation.AddinInventory.Scan(tree.Roots, [FakeAddinTree.Year(2026)], includeRevitInstall: false).Items
+            .Should().ContainSingle().Which.Name.Should().Be("Gantt-It");
+    }
+
+    [Fact]
     public void A_2026_only_bundle_does_not_count_for_2027()
     {
         using var tree = new FakeAddinTree();

@@ -128,13 +128,23 @@ public sealed class TrayAddinService
             if (e.ExpectedBlock is not null)
                 couldNot.Add(ActivationWording.BlockedLine(e));
             else if (e.Renamed && ledger.HasV30Rename(e.Year, e.ManifestPath))
-                couldNot.Add(ActivationWording.NotChangedLine(ActivationOutcome.For(e, OutcomeResult.NotChanged, ChangeReason.NeedsAdmin)));
+                couldNot.Add(e.Scope == AddinScope.Machine
+                    ? ActivationWording.NotChangedLine(ActivationOutcome.For(e, OutcomeResult.NotChanged, ChangeReason.NeedsAdmin))
+                    : RenameNotUndoneLine(e));
             else if (!switchedOff.Contains(e.Name, StringComparer.OrdinalIgnoreCase))
                 switchedOff.Add(e.Name);
         }
         var notes = plan.Notes.Where(n => n.Year == year).Select(n => n.Text).ToList();
         return new TrayAddinYear(year, running, switchedOff, couldNot.Distinct().ToList(), notes);
     }
+
+    /// <summary>
+    /// A v3.0 rename RST recorded as not undone, for an add-in that is not installed for all users: the last try
+    /// failed for some other reason (a file in use, a settings file it could not write), which may have cleared, so
+    /// nothing is predicted (review N4).
+    /// </summary>
+    public static string RenameNotUndoneLine(PlanEntry e) =>
+        e.Name + " (" + e.Year.ToString(CultureInfo.InvariantCulture) + "): RST could not rename its file back last time; Restore All tries again";
 
     /// <summary>
     /// The saved "Disable unused add-ins" and RSTify choices for <paramref name="entry"/>, as the Loader seeds them
@@ -146,6 +156,33 @@ public sealed class TrayAddinService
         ArgumentNullException.ThrowIfNull(prefs);
         var saved = string.IsNullOrEmpty(entry.Profile.Id) ? null : prefs.Get(entry.Profile.Id!);
         return saved is null ? (false, []) : (saved.DisableUnusedAddins, [.. saved.HiddenTabs ?? []]);
+    }
+
+    /// <summary>
+    /// The Loader's rule for "Adopt RSTify Presets?" (ProfileLoaderViewModel.Select, review B2): the profile has an id
+    /// and presets (RstifyRules.HasPresets), and this user has no prefs entry for it yet. Asked once per profile per
+    /// machine, whichever of the Loader and the tray gets there first.
+    /// </summary>
+    public static bool AsksToAdoptPresets(ProfileEntry entry, UserProfilePrefs prefs)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(prefs);
+        return !string.IsNullOrEmpty(entry.Profile.Id) && prefs.Get(entry.Profile.Id!) is null && RstifyRules.HasPresets(entry.Profile);
+    }
+
+    /// <summary>
+    /// Records the answer as the Loader does (ProfileLoaderViewModel.AskAdoptPresets): yes takes the presets' hidden tabs
+    /// and Disable unused, no takes none; either way the entry is saved with presetsAdopted, so the question never
+    /// repeats. Returns what was recorded. A failed save is logged, as in the Loader, and the answer still applies.
+    /// </summary>
+    public (bool DisableUnused, IReadOnlyList<string> HiddenTabs) AdoptPresets(ProfileEntry entry, bool adopt)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        var presets = entry.Profile.Presets ?? new ProfilePresets();
+        IReadOnlyList<string> hidden = adopt ? [.. presets.HiddenTabs ?? []] : [];
+        var disable = adopt && presets.DisableUnusedAddins;
+        if (!string.IsNullOrEmpty(entry.Profile.Id)) _prefs.Record(entry.Profile.Id, hidden, disable, presetsAdopted: true);
+        return (disable, hidden);
     }
 
     /// <summary>What Apply would change (the Loader's Load plan; the Confirm dialog shows it). Pure.</summary>

@@ -254,6 +254,44 @@ public sealed class TrayAddinsMatchTheLoaderTests : IDisposable
     }
 
     [Fact]
+    public void A_per_user_v30_rename_not_undone_last_time_predicts_nothing()
+    {
+        // Review N4: the record keeps a V30Rename for any failed undo (a file in use, a settings file it could not
+        // write); for an add-in that is not installed for all users, the cause may have cleared.
+        var path = Path.Combine(_tree.UserAddins(2026), "Legacy.addin");
+        ActivationLedger.SaveMerged(Path.Combine(_paths.Root, ActivationLedger.FileName),
+            [l => l.Add(new LedgerEntry(2026, null, "Legacy", LedgerKind.V30Rename, path, DateTime.UtcNow))]);
+
+        var y26 = new TrayAddinService(_paths, Switching()).Status().Years.Single(y => y.Year == 2026);
+
+        y26.CouldNotChange.Should().Equal("Legacy (2026): RST could not rename its file back last time; Restore All tries again");
+        y26.SwitchedOff.Should().NotContain("Legacy");
+    }
+
+    [Fact]
+    public void The_adopt_presets_rule_and_record_are_the_Loaders()
+    {
+        var office = TempLoaderRoot.Profile("Office", "f1600000-0000-4000-8000-0000000000aa", "Office");
+        office.Presets = new ProfilePresets { HiddenTabs = ["Massing"], DisableUnusedAddins = true };
+        ProfileStore.Save(office, _paths.ProfilesDir);
+        var tray = new TrayAddinService(_paths, Switching());
+        var entry = tray.Profiles().Single(p => p.Profile.Id == office.Id);
+        var lean = tray.Profiles().Single(p => p.Profile.Id == _lean.Id);
+
+        TrayAddinService.AsksToAdoptPresets(entry, tray.Prefs()).Should().BeTrue();
+        TrayAddinService.AsksToAdoptPresets(lean, tray.Prefs()).Should().BeFalse("no presets");
+
+        var (disable, hidden) = tray.AdoptPresets(entry, adopt: true);
+        disable.Should().BeTrue();
+        hidden.Should().Equal("Massing");
+        var saved = tray.Prefs().Get(office.Id!)!;
+        saved.HiddenTabs.Should().Equal("Massing");
+        saved.DisableUnusedAddins.Should().BeTrue();
+        saved.PresetsAdopted.Should().BeTrue();
+        TrayAddinService.AsksToAdoptPresets(entry, tray.Prefs()).Should().BeFalse("asked once per profile per machine");
+    }
+
+    [Fact]
     public void The_saved_choices_seed_Apply_as_the_Loader_seeds_them()
     {
         var prefs = new UserProfilePrefs();

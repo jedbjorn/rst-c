@@ -16,6 +16,7 @@ using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Theming;
 using RST.Core.Tray;
+using RST.RuntimeTests.Loader;
 using RST.RuntimeTests.Support;
 using RST.Tests.Loader;
 using RST.Tray.AddIns;
@@ -27,24 +28,6 @@ using Xunit;
 
 namespace RST.RuntimeTests.Tray;
 
-/// <summary>The Loader's dialogs, recorded: Confirm answers <see cref="Confirms"/>.</summary>
-internal sealed class RecordingLoaderDialogs : ILoaderDialogs
-{
-    public bool Confirms { get; set; } = true;
-
-    public List<ConfirmAddinChangesModel> Confirmed { get; } = [];
-
-    public List<AddinReportModel> Reports { get; } = [];
-
-    public bool ConfirmAddinChanges(ConfirmAddinChangesModel model)
-    {
-        Confirmed.Add(model);
-        return Confirms;
-    }
-
-    public void ShowAddinReport(AddinReportModel model) => Reports.Add(model);
-}
-
 /// <summary>The real backend over a test root, with the open Revit years and failures scripted.</summary>
 internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAddinsBackend
 {
@@ -53,6 +36,12 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
     public IReadOnlyList<int> Running { get; set; } = [];
 
     public Exception? StatusThrows { get; set; }
+
+    /// <summary>The service's own way to say it could not read (TrayAddinService.Status catches and returns it).</summary>
+    public string? StatusError { get; set; }
+
+    /// <summary>Runs inside Apply, before the real one (to change the disk mid-flow).</summary>
+    public Action? BeforeApply { get; set; }
 
     public bool RestoreFails { get; set; }
 
@@ -64,6 +53,7 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
     {
         Calls.Add("Status");
         if (StatusThrows is not null) throw StatusThrows;
+        if (StatusError is not null) return new TrayAddinStatus(null, [], StatusError);
         return _real.Status(runningYears);
     }
 
@@ -82,8 +72,15 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
     public LoadResult Apply(ProfileEntry entry, bool disableUnused, IReadOnlyList<string> hiddenTabs, ActivationPlan? plan)
     {
         Calls.Add("Apply");
+        BeforeApply?.Invoke();
         Applied.Add((entry, disableUnused, hiddenTabs, plan));
         return _real.Apply(entry, disableUnused, hiddenTabs, plan);
+    }
+
+    public (bool DisableUnused, IReadOnlyList<string> HiddenTabs) AdoptPresets(ProfileEntry entry, bool adopt)
+    {
+        Calls.Add("Adopt:" + adopt);
+        return _real.AdoptPresets(entry, adopt);
     }
 
     public RestoreOutcome RestoreAll()
@@ -98,6 +95,7 @@ internal sealed class AddInsFixture : IDisposable
 {
     public const string LeanId = "f1600000-0000-4000-8000-000000000001";
     public const string ProbeId = "f1600000-0000-4000-8000-000000000002";
+    public const string OfficeId = "f1600000-0000-4000-8000-000000000003";
 
     public AddInsFixture(bool empty = false)
     {
@@ -138,6 +136,10 @@ internal sealed class AddInsFixture : IDisposable
             needsProbe.RequiredAddins = [new RequiredAddin { TabName = "Kinship", AddinFile = "Kinship.addin" }];
             Root.Add(lean);
             Root.Add(needsProbe);
+            // A BIM lead's profile with RSTify presets, never picked on this machine (review B2).
+            var office = TempLoaderRoot.Profile("Office", OfficeId, "Office");
+            office.Presets = new ProfilePresets { HiddenTabs = ["Massing", "Analyze"], DisableUnusedAddins = true };
+            Root.Add(office);
             new UserProfilePrefs().Set(LeanId, ["Massing"], disableUnusedAddins: true, path: Root.Paths.PrefsFile);
             ActiveProfile.FromProfile(needsProbe, "F16 Needs Probe.json").Write(Root.Paths.ActiveProfileFile);
         }
@@ -156,9 +158,9 @@ internal sealed class AddInsFixture : IDisposable
 
     public ScriptedAddinsBackend Backend { get; }
 
-    public RecordingLoaderDialogs Dialogs { get; } = new();
+    public LoaderTestDialogs Dialogs { get; } = new();
 
-    public AddInsViewModel ViewModel() => new(Backend, Dialogs, runInline: true);
+    public AddInsViewModel ViewModel() => new(Backend, Dialogs, Dialogs, runInline: true);
 
     public void Dispose() => Root.Dispose();
 }
@@ -225,7 +227,7 @@ public class AddInsViewModelTests
         await vm.ApplyAsync();
 
         // The tray confirmed the Loader's plan, through the Loader's Confirm model of it.
-        var confirm = Assert.Single(f.Dialogs.Confirmed);
+        var confirm = Assert.Single(f.Dialogs.AddinChanges);
         var expected = ConfirmAddinChangesModel.From(loaderPlan);
         Assert.Equal(expected.SwitchingOff, confirm.SwitchingOff);
         Assert.Equal(expected.CannotChange, confirm.CannotChange);
@@ -238,7 +240,7 @@ public class AddInsViewModelTests
         Assert.Equal(loaderPlan.ToJson(), applied.Plan!.ToJson());
         Assert.Same(f.Switching.Executed.Single(), applied.Plan); // what was confirmed is what ran
 
-        var report = Assert.Single(f.Dialogs.Reports);
+        var report = Assert.Single(f.Dialogs.AddinReports);
         Assert.Equal("Add-in Check", report.Title);
         Assert.Equal(new[] { "Enscape (2026)", "Kinship (2027)" }, report.SwitchedOff);
         Assert.Contains("Revit 2027 is open: restart it to see the change.", report.Notes);
@@ -255,16 +257,16 @@ public class AddInsViewModelTests
     public async Task Cancel_at_Confirm_changes_nothing()
     {
         using var f = new AddInsFixture();
-        f.Dialogs.Confirms = false;
+        f.Dialogs.ConfirmAddinChangesAnswer = false;
         var vm = f.ViewModel();
         await vm.RefreshAsync();
         vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
 
         await vm.ApplyAsync();
 
-        Assert.Single(f.Dialogs.Confirmed);
+        Assert.Single(f.Dialogs.AddinChanges);
         Assert.Empty(f.Backend.Applied);
-        Assert.Empty(f.Dialogs.Reports);
+        Assert.Empty(f.Dialogs.AddinReports);
         Assert.Equal("F16 Needs Probe", ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).ProfileName);
         Assert.True(vm.IsIdle);
     }
@@ -281,9 +283,9 @@ public class AddInsViewModelTests
 
         await vm.ApplyAsync();
 
-        Assert.Empty(f.Dialogs.Confirmed);
+        Assert.Empty(f.Dialogs.AddinChanges);
         Assert.Single(f.Backend.Applied);
-        var report = Assert.Single(f.Dialogs.Reports);
+        var report = Assert.Single(f.Dialogs.AddinReports);
         Assert.Equal("Add-in changes apply the next time Revit starts.", report.NextStartNote);
     }
 
@@ -297,8 +299,8 @@ public class AddInsViewModelTests
 
         await vm.RestoreAllAsync();
 
-        Assert.Empty(f.Dialogs.Confirmed); // as in the Loader: no Confirm before Restore All
-        var report = Assert.Single(f.Dialogs.Reports);
+        Assert.Empty(f.Dialogs.AddinChanges); // as in the Loader: no Confirm before Restore All
+        var report = Assert.Single(f.Dialogs.AddinReports);
         Assert.Equal("Restore All Add-ins", report.Title);
         Assert.Equal(new[] { "RST-Probe (2026, 2027)", "DiRoots.One (2026)" }, report.SwitchedOn);
         Assert.Equal(new[] { "Revizto (2027): locked off by your administrator" }, report.NotChanged);
@@ -327,7 +329,7 @@ public class AddInsViewModelTests
         f.Backend.RestoreFails = true;
         await vm.RestoreAllAsync();
         Assert.Equal("Failed to restore add-ins: the record is locked", vm.ErrorText);
-        Assert.Empty(f.Dialogs.Reports);
+        Assert.Empty(f.Dialogs.AddinReports);
     }
 
     [Fact]
@@ -341,6 +343,167 @@ public class AddInsViewModelTests
         Assert.True(vm.ShowNoProfiles);
         Assert.False(vm.CanApply);
         Assert.Equal(AddInsStrings.ActiveProfileNone, vm.ActiveProfileText);
+    }
+
+    // ── Review B2: the Loader's "Adopt RSTify Presets?" ───────────────────────
+
+    [Fact]
+    public async Task Apply_asks_the_Loaders_adopt_presets_question_and_yes_takes_the_presets()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "Office");
+        Assert.False(vm.DisableUnused); // nothing saved yet, as in the Loader before it asks
+        f.Dialogs.ConfirmAnswers.Enqueue(true);
+
+        await vm.ApplyAsync();
+
+        // The Loader's question, through the same dialog service, title, text and dialog id.
+        var asked = Assert.Single(f.Dialogs.Confirms);
+        var office = f.Backend.Profiles().Single(p => p.Profile.Id == AddInsFixture.OfficeId).Profile;
+        Assert.Equal(RstifyRules.AdoptPresetsTitle, asked.Title);
+        Assert.Equal(RstifyRules.AdoptPresetsMessage(office), asked.Message);
+        Assert.Equal(ProfileLoaderViewModel.AdoptPresetsDialogId, asked.AutomationId);
+        Assert.False(asked.Danger);
+
+        // Yes: the presets' Disable unused and hidden tabs drive the plan and the load.
+        Assert.True(vm.DisableUnused);
+        var applied = Assert.Single(f.Backend.Applied);
+        Assert.True(applied.Disable);
+        Assert.Equal(new[] { "Massing", "Analyze" }, applied.Hidden);
+        Assert.Single(f.Dialogs.AddinChanges); // Disable unused is on: the Loader's Confirm follows
+        var saved = UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.OfficeId)!;
+        Assert.True(saved.PresetsAdopted);
+        Assert.Equal(new[] { "Massing", "Analyze" }, saved.HiddenTabs);
+        Assert.True(saved.DisableUnusedAddins);
+
+        // Asked once per profile per machine: never again, from the tray or the Loader.
+        await vm.ApplyAsync();
+        Assert.Single(f.Dialogs.Confirms);
+        Assert.Equal(new[] { "Adopt:True" }, f.Backend.Calls.Where(c => c.StartsWith("Adopt", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task No_to_the_presets_is_recorded_as_the_Loader_records_it_and_the_page_switch_is_kept()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "Office");
+        f.Dialogs.ConfirmAnswers.Enqueue(false);
+
+        await vm.ApplyAsync();
+
+        Assert.Single(f.Dialogs.Confirms);
+        var saved = UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.OfficeId)!;
+        Assert.True(saved.PresetsAdopted); // never asked again
+        Assert.Empty(saved.HiddenTabs);
+        Assert.False(saved.DisableUnusedAddins);
+        var applied = Assert.Single(f.Backend.Applied);
+        Assert.False(applied.Disable);
+        Assert.Empty(applied.Hidden);
+    }
+
+    [Fact]
+    public async Task A_profile_with_saved_choices_or_no_presets_is_never_asked()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean"); // saved choices, no presets
+        await vm.ApplyAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Needs Probe"); // no presets
+        await vm.ApplyAsync();
+
+        Assert.Empty(f.Dialogs.Confirms);
+        Assert.DoesNotContain(f.Backend.Calls, c => c.StartsWith("Adopt", StringComparison.Ordinal));
+    }
+
+    // ── Review B3: a failed Apply stays on the page ───────────────────────────
+
+    [Fact]
+    public async Task A_locked_active_profile_file_fails_Apply_and_the_failure_stays_after_the_page_is_read_again()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+
+        using (new FileStream(f.Root.Paths.ActiveProfileFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            await vm.ApplyAsync();
+
+        Assert.NotNull(vm.ErrorText);
+        Assert.StartsWith(AddInsStrings.ApplyFailed("Failed to write active profile: "), vm.ErrorText);
+        Assert.True(vm.HasError);
+        Assert.Empty(f.Dialogs.AddinReports); // no report for a load that did not happen
+        Assert.Null(vm.ResultText);
+
+        // Read again (Refresh): still there; the next action clears it.
+        await vm.RefreshAsync();
+        Assert.StartsWith(AddInsStrings.ApplyFailed("Failed to write active profile: "), vm.ErrorText);
+        await vm.ApplyAsync();
+        Assert.Null(vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task A_profile_deleted_mid_flow_fails_Apply_visibly_and_leaves_the_list()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        var lean = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        vm.SelectedProfile = lean;
+        // Deleted in the Loader of an open Revit after Confirm, before the load writes anything.
+        f.Backend.BeforeApply = () => File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, lean.Entry.FileName));
+
+        await vm.ApplyAsync();
+
+        Assert.Equal(AddInsStrings.ApplyFailed("Profile not found: F16 Lean"), vm.ErrorText);
+        Assert.Empty(f.Dialogs.AddinReports);
+        Assert.DoesNotContain(vm.Profiles, p => p.Name == "F16 Lean");
+        Assert.Equal("F16 Needs Probe", vm.ActiveProfileText);
+    }
+
+    // ── Review N8, N7 ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_read_the_service_reports_as_failed_claims_nothing()
+    {
+        using var f = new AddInsFixture();
+        f.Backend.StatusError = "the settings folder is not readable";
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+
+        Assert.False(vm.IsLoaded);
+        Assert.False(vm.IsLoading);
+        Assert.False(vm.ShowNoRevit);
+        Assert.False(vm.CanApply);
+        Assert.Equal(AddInsStrings.ReadFailed("the settings folder is not readable"), vm.ErrorText);
+
+        f.Backend.StatusError = null;
+        await vm.RefreshAsync();
+        Assert.True(vm.IsLoaded);
+        Assert.Null(vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task The_tray_waits_for_add_in_work_in_flight_before_it_quits()
+    {
+        var work = new AddinsWork();
+        Assert.True(work.IsIdle);
+        using var gate = new ManualResetEventSlim();
+        var task = work.Run(() =>
+        {
+            gate.Wait();
+            return 1;
+        });
+        Assert.False(work.IsIdle);
+        Assert.False(work.WaitIdle(TimeSpan.FromMilliseconds(50)));
+        gate.Set();
+        Assert.True(work.WaitIdle(TimeSpan.FromSeconds(5)));
+        Assert.True(work.IsIdle);
+        Assert.Equal(1, await task);
     }
 
     [Fact]
@@ -477,8 +640,8 @@ public class AddInsPageScreenshotTests
             Assert.Contains(AddInsStrings.Applied("F16 Lean"), Visible(window.AddInsView).Select(t => t.Text));
             Assert.Equal("F16 Lean", window.AddInsView.ActiveProfile.Text);
         });
-        CaptureDialog(new ConfirmAddinChangesWindow(f.Dialogs.Confirmed.Single()), theme, "confirm");
-        CaptureDialog(new AddinReportWindow(f.Dialogs.Reports.Single()), theme, "report-apply");
+        CaptureDialog(new ConfirmAddinChangesWindow(f.Dialogs.AddinChanges.Single()), theme, "confirm");
+        CaptureDialog(new AddinReportWindow(f.Dialogs.AddinReports.Single()), theme, "report-apply");
     });
 
     [Theory]
@@ -491,7 +654,7 @@ public class AddInsPageScreenshotTests
         vm.RefreshAsync().GetAwaiter().GetResult();
         vm.RestoreAllAsync().GetAwaiter().GetResult();
 
-        CaptureDialog(new AddinReportWindow(f.Dialogs.Reports.Single()), theme, "report-restore");
+        CaptureDialog(new AddinReportWindow(f.Dialogs.AddinReports.Single()), theme, "report-restore");
     });
 
     [Theory]
@@ -516,7 +679,7 @@ public class AddInsPageScreenshotTests
     public void The_add_ins_could_not_be_read(UiTheme theme) => Sta(theme, () =>
     {
         using var f = new AddInsFixture();
-        f.Backend.StatusThrows = new IOException("Access to the path 'AddInsSettings.json' is denied.");
+        f.Backend.StatusError = "Access to the path 'AddInsSettings.json' is denied.";
         var vm = f.ViewModel();
         vm.RefreshAsync().GetAwaiter().GetResult();
         Capture(vm, theme, "error", window =>
