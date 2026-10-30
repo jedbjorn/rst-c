@@ -4,8 +4,8 @@
 // the panels list (add, select, rename, ▲ ▼ ×), the slot rows (rename, ▲ ▼ ×), drag and drop (the
 // four kinds, WU5), the icon picker (WU5), the Properties pane (Min Revit, opacity, the selected
 // panel's name and color, the URL button editor, RST Presets and Junk Cleanup with their Configure
-// modals, WU5), the live preview, Save (rename-as-copy, required add-ins, the auto-reload of the
-// active profile), Export ZIP and Exit. Every toast keeps its text.
+// modals, WU5), the live preview, Save (a rename keeps the id since spec #19, required add-ins, the
+// auto-reload of the active profile), Export ZIP and Exit. Every toast keeps its text.
 // Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
 // (Planner default 3), the panel delete confirm is the family's destructive MessageDialog, and the
 // Cleanup modal's Cancel reverts (Planner default 4).
