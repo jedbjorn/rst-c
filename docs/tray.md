@@ -17,7 +17,7 @@ From v3.1, `RST.msi` also installs **RST.Tray.exe**, a small app that sits in th
 The tray shows which versions of RST, Gantt-It and Splash-It are installed and tells you when a newer one is out. Later v3.1 builds also install updates when you click, and switch Revit add-ins on or off before you start Revit. Its window has four pages:
 
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
-- **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed** or **Installed manually**. The **Install** and **Update** buttons say "Coming soon" and are greyed out for now. Until they work, **Release page** opens the app's latest release on GitHub.
+- **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. The **Install** and **Update** buttons say "Coming soon" and are greyed out for now. Until they work, **Release page** opens the app's latest release on GitHub.
 - **Add-ins:** says "Coming in a later update".
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
@@ -47,13 +47,13 @@ The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own 
 
 - Once, 2 to 10 minutes after the tray starts. The delay is random, so a whole office signing in at 9 am doesn't ask GitHub at the same moment.
 - Then once every 24 hours while the tray runs. If the PC was asleep when a check was due, the tray checks a few minutes after it wakes.
-- Whenever you click **Check now** on the Updates page, or **Check for updates** in the icon's menu.
+- Whenever you click **Check now** on the Updates page, or **Check for updates** in the icon's menu. Within 30 seconds of the last check, Check now asks nothing and the page keeps showing that check's result.
 
-If a check fails (no network, a proxy that refuses, GitHub down), the tray writes one line to its log and tries again at the next daily check. It never shows an error dialog or a notification about it; the Updates page says "Couldn't check for updates".
+If a check fails (no network, a proxy that refuses, GitHub down), the tray writes one line to its log and tries again at the next daily check. It never shows an error dialog or a notification about it. The Updates page says "Couldn't check: <the reason>" and shows when the last *successful* check was, and it never calls an app "Up to date" on the strength of an older check. A newer version an earlier check found is still shown as available.
 
 ### What it tells you
 
-When a check finds a newer version of an app you have installed, the tray shows one Windows notification, for example **RST 3.1.1 is available**. Click it to open the Updates page. Each version is announced once: you won't see the same notification again the next day, or after you restart. A later version gets its own notification. If one check finds several new versions, they share one notification.
+When a check finds a newer version of an app you have installed, the tray shows one Windows notification, for example **RST 3.1.1 is available**. Click it to open the Updates page. Each version is announced once: you won't see the same notification again the next day, or after you restart. A version counts as announced only once its notification has actually been shown; if the tray's icon isn't in the notification area yet (Windows still starting), the notification waits for it. A later version gets its own notification. If one check finds several new versions, they share one notification.
 
 The tray never announces an app you haven't installed, or one you installed by hand (below). It installs nothing by itself. In this build the **Install** and **Update** buttons are not active yet, so update from the app's release page or with `RST-Setup.exe`.
 
@@ -63,6 +63,7 @@ Only full releases count. A release candidate such as `v3.2.0-rc.1` is never off
 
 - **Windows Installer:** the tray asks it, by each app's UpgradeCode, which version is installed and whether it is installed for you or for everyone on this PC. This needs no administrator rights. An app another Windows user installed for themselves isn't visible to you, and isn't shown.
 - **Installed manually:** if an app isn't known to Windows Installer but its `.addin` file is in one of Revit's add-in folders (for Revit 2025 or later), the Apps page shows **Installed manually: updates not managed by RST**. That happens when someone copied the add-in in by hand, for example from a zip.
+- **Unknown:** if Windows Installer itself can't be read, the pages say **Unknown (couldn't read installed apps)** rather than guess "not installed" or "installed manually", and the tray announces nothing for those apps.
 
 ### Privacy: what is sent, and to whom
 
@@ -87,7 +88,7 @@ From v3.1 each rst-c release on GitHub includes `SHA256SUMS.txt`, one line per f
 <64 hex digits: the SHA256 of RST-Setup.exe>  RST-Setup.exe
 ```
 
-To check a download by hand, compare the line with `Get-FileHash .\RST.msi -Algorithm SHA256` (PowerShell) or `sha256sum -c SHA256SUMS.txt`. The release workflow checks after publishing that every line matches GitHub's own digest of that file.
+To check a download by hand, compare the line with `Get-FileHash .\RST.msi -Algorithm SHA256` (PowerShell) or `sha256sum -c SHA256SUMS.txt`. The release workflow creates each release as a draft, checks that every line matches GitHub's own digest of that upload, and only then publishes it.
 
 ## Quitting it
 

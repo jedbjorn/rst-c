@@ -186,7 +186,35 @@ To turn this off, open RST from the notification area and go to Settings.</value
     <value>Automatic checks were turned off on this computer by whoever manages its software. Check now still asks GitHub when you click it.</value>
   </data>
   <data name="Updates_CheckFailed" xml:space="preserve">
-    <value>Couldn't check for updates. RST tries again at the next daily check. Details are in the log.</value>
+    <value>Couldn't check: {0}. RST tries again at the next daily check. Details are in the log.</value>
+    <comment>{0} is why, e.g. "no answer in 30 s" or "HTTP 407".</comment>
+  </data>
+  <data name="Updates_LastSuccessToday" xml:space="preserve">
+    <value>Last successful check today at {0}</value>
+    <comment>Shown after a failed check. {0} is the local time.</comment>
+  </data>
+  <data name="Updates_LastSuccessYesterday" xml:space="preserve">
+    <value>Last successful check yesterday at {0}</value>
+  </data>
+  <data name="Updates_LastSuccessOn" xml:space="preserve">
+    <value>Last successful check {0} at {1}</value>
+  </data>
+  <data name="Updates_NoSuccessYet" xml:space="preserve">
+    <value>No successful check yet</value>
+  </data>
+  <data name="Apps_DetectionFailed" xml:space="preserve">
+    <value>Couldn't read the installed apps from Windows Installer, so their state is unknown. Details are in the log.</value>
+  </data>
+  <data name="App_LatestFailedKnown" xml:space="preserve">
+    <value>{0} (couldn't check)</value>
+    <comment>{0} is the last known latest version, kept after a failed check.</comment>
+  </data>
+  <data name="App_Unknown" xml:space="preserve">
+    <value>Unknown (couldn't read installed apps)</value>
+  </data>
+  <data name="State_Unknown" xml:space="preserve">
+    <value>Unknown (couldn't read installed apps)</value>
+    <comment>Windows Installer could not be read for this app.</comment>
   </data>
   <data name="Updates_InstallComingSoon" xml:space="preserve">
     <value>Installing from RST is coming soon. For now, download the new version from its release page.</value>

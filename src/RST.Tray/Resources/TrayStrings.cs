@@ -123,7 +123,23 @@ public static class TrayStrings
 
     public static string Updates_ChecksOffLocked => Get(nameof(Updates_ChecksOffLocked));
 
-    public static string Updates_CheckFailed => Get(nameof(Updates_CheckFailed));
+    public static string Updates_CheckFailed(string reason) => Format(nameof(Updates_CheckFailed), reason);
+
+    public static string Updates_LastSuccessToday(string time) => Format(nameof(Updates_LastSuccessToday), time);
+
+    public static string Updates_LastSuccessYesterday(string time) => Format(nameof(Updates_LastSuccessYesterday), time);
+
+    public static string Updates_LastSuccessOn(string date, string time) => Format(nameof(Updates_LastSuccessOn), date, time);
+
+    public static string Updates_NoSuccessYet => Get(nameof(Updates_NoSuccessYet));
+
+    public static string Apps_DetectionFailed => Get(nameof(Apps_DetectionFailed));
+
+    public static string App_LatestFailedKnown(string version) => Format(nameof(App_LatestFailedKnown), version);
+
+    public static string App_Unknown => Get(nameof(App_Unknown));
+
+    public static string State_Unknown => Get(nameof(State_Unknown));
 
     public static string Updates_InstallComingSoon => Get(nameof(Updates_InstallComingSoon));
 

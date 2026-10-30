@@ -62,16 +62,25 @@ internal sealed class ProductRowViewModel
     {
         InstallKind.NotInstalled => TrayStrings.App_NotInstalled,
         InstallKind.Manual => TrayStrings.App_InstalledManually,
+        InstallKind.Unknown => TrayStrings.App_Unknown,
         _ => InstalledVersion(Status.Installation.Installed!),
     };
 
     /// <summary>Windows Installer has it: the one-line layouts show its version (otherwise the pill says it all).</summary>
     public bool ShowInstalledVersion => Status.Installation.Kind == InstallKind.Installer;
 
-    public string LatestText =>
-        Status.Latest is { } latest ? latest.ToString()
-        : Status.LatestFailed ? TrayStrings.App_LatestFailed
-        : TrayStrings.App_LatestNotChecked;
+    /// <summary>
+    /// The latest version; after a failed check the last known one marked "(couldn't check)", or "Couldn't check";
+    /// "No release yet" when the last good check found none; "Not checked yet" before any check.
+    /// </summary>
+    public string LatestText => Status switch
+    {
+        { LatestFailed: true, Latest: { } known } => TrayStrings.App_LatestFailedKnown(known.ToString()),
+        { LatestFailed: true } => TrayStrings.App_LatestFailed,
+        { Latest: { } latest } => latest.ToString(),
+        { NoRelease: true } => TrayStrings.App_LatestNone,
+        _ => TrayStrings.App_LatestNotChecked,
+    };
 
     public string StateText => State switch
     {
@@ -79,6 +88,7 @@ internal sealed class ProductRowViewModel
         ProductState.UpdateAvailable => TrayStrings.State_UpdateAvailable,
         ProductState.InstalledManually => TrayStrings.State_InstalledManually,
         ProductState.Installed => TrayStrings.State_Installed,
+        ProductState.Unknown => TrayStrings.State_Unknown,
         _ => TrayStrings.State_NotInstalled,
     };
 
@@ -88,8 +98,8 @@ internal sealed class ProductRowViewModel
 
     public bool IsManual => IsKnown && State == ProductState.InstalledManually;
 
-    /// <summary>Not installed, or installed with the latest not known: the neutral pill.</summary>
-    public bool IsNeutral => IsKnown && State is ProductState.NotInstalled or ProductState.Installed;
+    /// <summary>Not installed, installed with the latest not known, or unknown: the neutral pill.</summary>
+    public bool IsNeutral => IsKnown && State is ProductState.NotInstalled or ProductState.Installed or ProductState.Unknown;
 
     /// <summary>Update (an update is out) or Install (a companion that is not installed); null: no button.</summary>
     public string? ActionText => !IsKnown ? null : State switch
@@ -159,8 +169,12 @@ internal sealed class UpdatesViewModel : ObservableObject
 
     public string CheckNowText => IsChecking ? TrayStrings.Updates_Checking : TrayStrings.Updates_CheckNow;
 
-    /// <summary>"Last checked today at 09:14", "… yesterday at …", "… 28 Oct 2026 at …", or "Not checked yet".</summary>
-    public string LastCheckedText => FormatLastChecked(_snapshot.LastCheckedUtc, _host.UtcNow, _host.TimeZone);
+    /// <summary>
+    /// "Last checked today at 09:14" (… yesterday, … 28 Oct 2026) or "Not checked yet". After a failed check:
+    /// "Last successful check …" or "No successful check yet", so a failure never reads as a fresh check.
+    /// </summary>
+    public string LastCheckedText =>
+        FormatLastChecked(_snapshot.LastCheckedUtc, _host.UtcNow, _host.TimeZone, afterFailure: _snapshot.LastCheckFailed);
 
     /// <summary>The Updates page's headline about RST.</summary>
     public string RstHeadline
@@ -188,6 +202,12 @@ internal sealed class UpdatesViewModel : ObservableObject
     /// <summary>The last check failed for some product (and none is running now).</summary>
     public bool ShowCheckFailed => _snapshot.LastCheckFailed && !_snapshot.Checking;
 
+    /// <summary>"Couldn't check: &lt;reason&gt;. RST tries again at the next daily check. …"</summary>
+    public string CheckFailedText => TrayStrings.Updates_CheckFailed(_snapshot.FailureReason ?? TrayStrings.App_LatestFailed);
+
+    /// <summary>Windows Installer could not be read for some product (its state is Unknown).</summary>
+    public bool ShowDetectionFailed => _snapshot.Detected && _snapshot.DetectionFailed;
+
     /// <summary>Detection has not run yet.</summary>
     public bool IsDetecting => !_snapshot.Detected;
 
@@ -208,15 +228,18 @@ internal sealed class UpdatesViewModel : ObservableObject
         RelayCommand.Refresh();
     }
 
-    internal static string FormatLastChecked(DateTimeOffset? checkedUtc, DateTimeOffset nowUtc, TimeZoneInfo zone)
+    internal static string FormatLastChecked(DateTimeOffset? checkedUtc, DateTimeOffset nowUtc, TimeZoneInfo zone, bool afterFailure = false)
     {
-        if (checkedUtc is not { } at) return TrayStrings.Updates_NeverChecked;
+        if (checkedUtc is not { } at) return afterFailure ? TrayStrings.Updates_NoSuccessYet : TrayStrings.Updates_NeverChecked;
         var local = TimeZoneInfo.ConvertTime(at, zone);
         var today = TimeZoneInfo.ConvertTime(nowUtc, zone).Date;
         var time = local.ToString("HH:mm", CultureInfo.InvariantCulture);
-        if (local.Date == today) return TrayStrings.Updates_LastCheckedToday(time);
-        if (local.Date == today.AddDays(-1)) return TrayStrings.Updates_LastCheckedYesterday(time);
-        return TrayStrings.Updates_LastCheckedOn(local.ToString("d MMM yyyy", CultureInfo.InvariantCulture), time);
+        var date = local.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+        if (local.Date == today)
+            return afterFailure ? TrayStrings.Updates_LastSuccessToday(time) : TrayStrings.Updates_LastCheckedToday(time);
+        if (local.Date == today.AddDays(-1))
+            return afterFailure ? TrayStrings.Updates_LastSuccessYesterday(time) : TrayStrings.Updates_LastCheckedYesterday(time);
+        return afterFailure ? TrayStrings.Updates_LastSuccessOn(date, time) : TrayStrings.Updates_LastCheckedOn(date, time);
     }
 
     private IReadOnlyList<ProductRowViewModel> Build(UpdateSnapshot snapshot) =>

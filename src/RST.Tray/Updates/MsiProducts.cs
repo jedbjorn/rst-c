@@ -9,7 +9,10 @@
 //                                                    installed in, and VersionString is an installed-only property,
 //                                                    so an advertised-only product is not counted
 //
-// Another Windows user's per-user install is invisible here, as it should be. Nothing here throws.
+// Another Windows user's per-user install is invisible here, as it should be. msi.dll is loaded from System32
+// only. When Windows Installer cannot be asked (msi.dll missing, or any answer other than success, "no more items",
+// "unknown product" or "unknown property"), Related THROWS: ProductDetection then shows the product as Unknown,
+// never as "not installed" or "installed manually".
 
 using System.Runtime.InteropServices;
 using System.Text;
@@ -22,6 +25,8 @@ internal sealed class MsiProducts : IInstalledProducts
     private const uint ErrorSuccess = 0;
     private const uint ErrorMoreData = 234;
     private const uint ErrorNoMoreItems = 259;
+    private const uint ErrorUnknownProduct = 1605;
+    private const uint ErrorUnknownProperty = 1608;
 
     private const string VersionStringProperty = "VersionString"; // INSTALLPROPERTY_VERSIONSTRING
 
@@ -57,6 +62,7 @@ internal sealed class MsiProducts : IInstalledProducts
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or SEHException)
         {
             _log("detection: msi.dll unavailable: " + ex.Message);
+            throw new InvalidOperationException("msi.dll unavailable: " + ex.Message, ex);
         }
         return found;
     }
@@ -72,14 +78,14 @@ internal sealed class MsiProducts : IInstalledProducts
             if (result != ErrorSuccess)
             {
                 _log($"detection: MsiEnumRelatedProducts {upgradeCode} #{i} returned {result}");
-                break;
+                throw new InvalidOperationException($"MsiEnumRelatedProducts returned {result}");
             }
             codes.Add(buffer.ToString());
         }
         return codes;
     }
 
-    /// <summary>One product property in one context, or null when the product is not installed there (or it fails).</summary>
+    /// <summary>One product property in one context, or null when the product is not installed there. Throws on any other error.</summary>
     private static string? ProductInfo(string productCode, int context, string property)
     {
         uint length = 64;
@@ -89,16 +95,20 @@ internal sealed class MsiProducts : IInstalledProducts
             var size = length + 1;
             var result = MsiGetProductInfoExW(productCode, null, context, property, buffer, ref size);
             if (result == ErrorSuccess) return buffer.ToString();
-            if (result != ErrorMoreData) return null; // 1605 unknown product (not in this context), 1608 unknown property, …
+            if (result is ErrorUnknownProduct or ErrorUnknownProperty) return null; // not installed in this context
+            if (result != ErrorMoreData)
+                throw new InvalidOperationException($"MsiGetProductInfoEx {productCode} context {context} returned {result}");
             length = size + 1;
         }
-        return null;
+        throw new InvalidOperationException($"MsiGetProductInfoEx {productCode}: the value kept growing");
     }
 
     [DllImport("msi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint MsiEnumRelatedProductsW(string lpUpgradeCode, uint dwReserved, uint iProductIndex, StringBuilder lpProductBuf);
 
     [DllImport("msi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint MsiGetProductInfoExW(string szProductCode, string? szUserSid, int dwContext, string szProperty,
                                                     StringBuilder? szValue, ref uint pcchValue);
 }

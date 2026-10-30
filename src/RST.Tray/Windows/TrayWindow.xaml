@@ -154,7 +154,7 @@
                 <Border Style="{StaticResource WarningBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
                         Visibility="{Binding ShowCheckFailed, Converter={StaticResource BoolToVisible}}"
                         AutomationProperties.AutomationId="Tray.CheckFailed">
-                    <TextBlock Text="{x:Static res:TrayStrings.Updates_CheckFailed}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding CheckFailedText}" TextWrapping="Wrap" />
                 </Border>
                 <Border Style="{StaticResource InfoBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
                         Visibility="{Binding ShowChecksOff, Converter={StaticResource BoolToVisible}}"
@@ -209,6 +209,11 @@
                 <TextBlock Text="{x:Static res:TrayStrings.Apps_Detecting}" Style="{StaticResource MutedText}" Margin="0,0,0,10"
                            Visibility="{Binding IsDetecting, Converter={StaticResource BoolToVisible}}"
                            AutomationProperties.AutomationId="Tray.AppsDetecting" />
+                <Border Style="{StaticResource WarningBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                        Visibility="{Binding ShowDetectionFailed, Converter={StaticResource BoolToVisible}}"
+                        AutomationProperties.AutomationId="Tray.DetectionFailed">
+                    <TextBlock Text="{x:Static res:TrayStrings.Apps_DetectionFailed}" TextWrapping="Wrap" />
+                </Border>
                 <ItemsControl x:Name="AppRows" ItemsSource="{Binding Rows}" Focusable="False" AutomationProperties.AutomationId="Tray.AppsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

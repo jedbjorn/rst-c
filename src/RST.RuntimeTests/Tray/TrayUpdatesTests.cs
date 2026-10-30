@@ -78,6 +78,7 @@ internal static class Scenarios
         var install = kind switch
         {
             InstallKind.Installer => new ProductInstallation(kind, new InstalledProduct("{" + Guid.NewGuid().ToString().ToUpperInvariant() + "}", installed!, context)),
+            InstallKind.Unknown => ProductInstallation.CouldNotRead,
             InstallKind.Manual => new ProductInstallation(kind, ManifestPath: @"C:\Users\modeller\AppData\Roaming\Autodesk\Revit\Addins\2026\GanttIt.addin"),
             _ => ProductInstallation.None,
         };
@@ -108,13 +109,27 @@ internal static class Scenarios
         S("splash-it", InstallKind.NotInstalled, null, null),
     }, null, Checking: false, AutomaticChecks: false, Detected: true);
 
-    /// <summary>The last check failed: RST keeps its last known latest, the companions were never reached.</summary>
+    /// <summary>
+    /// What TrayUpdates produces when today's check fails after a good one on 28 Oct (TrayUpdateChecksTests
+    /// .A_failed_check_keeps_the_last_success_and_claims_nothing_stale proves the real code gives these states):
+    /// "last checked" stays the last success, RST's last known latest is kept but not called "up to date",
+    /// Gantt-It's known newer 1.2.0 stays "update available", Splash-It was never reached.
+    /// </summary>
     public static UpdateSnapshot Failed => new(new[]
     {
         S("rst", InstallKind.Installer, "3.1.0", "3.1.0", failed: true),
-        S("gantt-it", InstallKind.Installer, "1.1.0", null, failed: true),
+        S("gantt-it", InstallKind.Installer, "1.1.0", "1.2.0", failed: true),
         S("splash-it", InstallKind.NotInstalled, null, null, failed: true),
-    }, new DateTimeOffset(2026, 10, 28, 16, 5, 0, TimeSpan.Zero), Checking: false, AutomaticChecks: true, Detected: true);
+    }, new DateTimeOffset(2026, 10, 28, 16, 5, 0, TimeSpan.Zero), Checking: false, AutomaticChecks: true, Detected: true,
+       FailureReason: "no answer in 30 s");
+
+    /// <summary>Windows Installer could not be read (msi.dll failed): every product Unknown; the latest versions are known.</summary>
+    public static UpdateSnapshot Unknown => new(new[]
+    {
+        S("rst", InstallKind.Unknown, null, "3.1.1"),
+        S("gantt-it", InstallKind.Unknown, null, "1.2.0"),
+        S("splash-it", InstallKind.Unknown, null, "1.1.0"),
+    }, Today0914, Checking: false, AutomaticChecks: true, Detected: true);
 }
 
 [Collection(WpfThemeCollection.Name)]
@@ -152,7 +167,7 @@ public class TrayUpdatesScreenshotTests
     public static TheoryData<string, UiTheme> AppsScenarios()
     {
         var data = new TheoryData<string, UiTheme>();
-        foreach (var s in new[] { "mixed", "current" })
+        foreach (var s in new[] { "mixed", "current", "unknown" })
             foreach (var t in new[] { UiTheme.Light, UiTheme.Dark })
                 data.Add(s, t);
         return data;
@@ -163,6 +178,7 @@ public class TrayUpdatesScreenshotTests
         "available" or "mixed" => Scenarios.Mixed,
         "current" => Scenarios.Current,
         "off" => Scenarios.Off,
+        "unknown" => Scenarios.Unknown,
         _ => Scenarios.Failed,
     };
 
@@ -227,9 +243,15 @@ public class TrayUpdatesScreenshotTests
                     Assert.Contains("Installed", texts);
                     break;
                 default:
+                    // A failed check: the last SUCCESSFUL check, the reason, and nothing stale ("up to date", "today").
                     Assert.True(failed.IsVisible);
-                    Assert.Equal("Last checked 28 Oct 2026 at 16:05", window.LastChecked.Text);
-                    Assert.Contains(texts, t => t.Contains("Couldn't check"));
+                    Assert.Equal("Last successful check 28 Oct 2026 at 16:05", window.LastChecked.Text);
+                    Assert.Contains(texts, t => t.StartsWith("Couldn't check: no answer in 30 s.", StringComparison.Ordinal));
+                    Assert.Equal("RST 3.1.0", window.RstHeadline.Text);
+                    Assert.Contains("3.1.0 (couldn't check)", texts);
+                    Assert.DoesNotContain("Up to date", texts);
+                    Assert.DoesNotContain(texts, t => t.Contains("today"));
+                    Assert.Contains("Update available", texts); // Gantt-It's known 1.2.0 is still newer
                     break;
             }
             Assert.Equal(scenario == "failed", failed.IsVisible);
@@ -277,6 +299,17 @@ public class TrayUpdatesScreenshotTests
                 Assert.False(rows[1].ShowInstalledVersion);
                 Assert.True(rows[0].ShowInstalledVersion);
             }
+            else if (scenario == "unknown")
+            {
+                // msi.dll failed: Unknown everywhere, never "Not installed" or "Installed manually", no button.
+                Assert.All(rows, r => Assert.Equal(ProductState.Unknown, r.State));
+                Assert.All(rows, r => Assert.Null(r.ActionText));
+                Assert.True(ById(window, "Tray.DetectionFailed").IsVisible);
+                Assert.Contains(TrayStrings.State_Unknown, texts);
+                Assert.DoesNotContain("Not installed", texts);
+                Assert.DoesNotContain("Installed manually", texts);
+                Assert.DoesNotContain(TrayStrings.App_ManualNote, texts);
+            }
             else
             {
                 Assert.Equal(new[] { ProductState.UpToDate, ProductState.UpdateAvailable, ProductState.UpToDate },
@@ -284,6 +317,7 @@ public class TrayUpdatesScreenshotTests
                 Assert.DoesNotContain(TrayStrings.App_ManualNote, texts);
                 Assert.Contains(texts, t => t.Contains("1.1.0, for everyone on this PC"));
             }
+            Assert.Equal(scenario == "unknown", ById(window, "Tray.DetectionFailed").IsVisible);
         }
         finally
         {
@@ -328,9 +362,15 @@ public class UpdatesViewModelTests
         Assert.Equal("Installed", off.Rows[0].StateText);
         Assert.Null(off.Rows[0].ActionText);
         var failed = new UpdatesViewModel(new FakeUpdatesHost { Current = Scenarios.Failed }, () => new UpdateChecksState(true, false));
-        Assert.Equal("3.1.0", failed.Rows[0].LatestText); // the last known latest is kept
-        Assert.Equal("Couldn't check", failed.Rows[1].LatestText);
+        Assert.Equal("3.1.0 (couldn't check)", failed.Rows[0].LatestText); // the last known latest, marked as such
+        Assert.Equal("1.2.0 (couldn't check)", failed.Rows[1].LatestText);
+        Assert.Equal("Couldn't check", failed.Rows[2].LatestText);
+        Assert.Equal(ProductState.Installed, failed.Rows[0].State); // not "up to date": that would be stale
+        Assert.Equal("RST 3.1.0", failed.RstHeadline);
         Assert.True(failed.ShowCheckFailed);
+        Assert.Equal("Couldn't check: no answer in 30 s. RST tries again at the next daily check. Details are in the log.",
+                     failed.CheckFailedText);
+        Assert.Equal("Last successful check 28 Oct 2026 at 16:05", failed.LastCheckedText);
     }
 
     [Fact]
@@ -441,30 +481,179 @@ public sealed class TrayUpdateChecksTests : IDisposable
         public void Dispose() => Updates.Dispose();
     }
 
-    private Harness Make(CountingHandler? handler = null, FakeInstalledProducts? installed = null, Func<bool>? policy = null)
+    /// <param name="notificationShown">What the tray's notification does: shown (the tray then calls MarkAnnounced) or not.</param>
+    private Harness Make(CountingHandler? handler = null, FakeInstalledProducts? installed = null, Func<bool>? policy = null,
+                         bool notificationShown = true, IReadOnlyDictionary<string, string>? manifests = null)
     {
         handler ??= new CountingHandler(CountingHandler.Redirect(new Dictionary<string, string>
         {
             ["jedbjorn/rst-c"] = "v3.1.1", ["jedbjorn/gantt-it"] = "v1.1.0", ["jedbjorn/splash-it"] = "v1.1.0",
         }));
         installed ??= new FakeInstalledProducts().With(ProductCatalog.RstUpgradeCode, "3.1.0");
+        policy ??= TrayUpdates.SettingsAndPresetPolicy(SettingsPath, WindowsState.UpdateChecksPresets);
         var time = new ManualTimeProvider(Start);
         var log = new List<string>();
         var announced = new List<IReadOnlyList<ProductStatus>>();
-        var updates = new TrayUpdates(
+        TrayUpdates? updates = null;
+        updates = new TrayUpdates(
             ProductCatalog.Default,
             TrayHttp.CreateClient(handler),
             installed,
-            () => new Dictionary<string, string>(),
-            policy ?? TrayUpdates.SettingsAndPresetPolicy(SettingsPath, WindowsState.UpdateChecksPresets),
+            () => manifests ?? new Dictionary<string, string>(),
+            policy,
+            policy(), // the tray passes the value it read at start
             time,
             StatePath,
             action => action(),
             m => { lock (log) log.Add(m); },
             () => TimeSpan.FromMinutes(5));
-        updates.NewVersionsFound += (_, found) => announced.Add(found);
+        updates.NewVersionsFound += (_, found) =>
+        {
+            announced.Add(found);
+            if (notificationShown) updates!.MarkAnnounced(found); // as TrayHost does once ShowNotification succeeds
+        };
         updates.Start();
         return new Harness(updates, time, handler, log, announced);
+    }
+
+    private static Func<HttpRequestMessage, HttpResponseMessage> Answer(Func<string, string?> tagFor, Func<bool>? fail = null) => request =>
+    {
+        if (fail?.Invoke() == true) throw new HttpRequestException("No such host is known. (github.com:443)");
+        var path = request.RequestUri!.AbsolutePath;
+        var repo = path.Substring(1, path.Length - 1 - "/releases/latest".Length);
+        var response = new HttpResponseMessage(HttpStatusCode.Found);
+        response.Headers.Location = tagFor(repo) is { } tag
+            ? new Uri($"https://github.com/{repo}/releases/tag/{tag}")
+            : new Uri($"https://github.com/{repo}/releases");
+        return response;
+    };
+
+    [Fact]
+    public void A_failed_check_keeps_the_last_success_and_claims_nothing_stale()
+    {
+        WriteSettings(checks: true);
+        var offline = false;
+        var handler = new CountingHandler(Answer(repo => repo == "jedbjorn/gantt-it" ? "v1.2.0" : repo == "jedbjorn/rst-c" ? "v3.1.0" : null,
+                                                 () => offline));
+        var installed = new FakeInstalledProducts()
+            .With(ProductCatalog.RstUpgradeCode, "3.1.0")
+            .With(ProductCatalog.Default.Find("gantt-it")!.UpgradeCodes[0], "1.1.0");
+        using var h = Make(handler, installed);
+        h.Advance(TimeSpan.FromMinutes(5));
+        var good = h.Updates.Current;
+        Assert.Null(good.FailureReason);
+        Assert.Equal(Start.AddMinutes(5), good.LastCheckedUtc);
+        Assert.Equal(ProductState.UpToDate, good.Rst!.State);
+
+        offline = true;
+        h.Advance(TimeSpan.FromHours(24));
+        var failed = h.Updates.Current;
+        Assert.Equal(Start.AddMinutes(5), failed.LastCheckedUtc); // the last SUCCESS, not the failed attempt
+        Assert.StartsWith("HttpRequestException: No such host", failed.FailureReason);
+        Assert.True(failed.LastCheckFailed);
+        Assert.Equal(ProductState.Installed, failed.Rst!.State); // never "up to date" after a failure
+        Assert.Equal("3.1.0", failed.Rst.Latest.ToString());
+        Assert.Equal(new[] { ProductState.UpdateAvailable, ProductState.NotInstalled }, failed.Companions.Select(c => c.State));
+
+        // Exactly what the screenshot fixture shows: "RST 3.1.0", "3.1.0 (couldn't check)", "Last successful check …".
+        var vm = new UpdatesViewModel(new FakeUpdatesHost { Current = failed, UtcNow = Start.AddHours(24).AddMinutes(5) },
+                                      () => new UpdateChecksState(true, false));
+        Assert.Equal("RST 3.1.0", vm.RstHeadline);
+        Assert.Equal("3.1.0 (couldn't check)", vm.Rst.LatestText);
+        Assert.Equal("Last successful check yesterday at 08:05", vm.LastCheckedText);
+        Assert.StartsWith("Couldn't check: HttpRequestException: No such host", vm.CheckFailedText);
+
+        offline = false;
+        h.Advance(TimeSpan.FromHours(24));
+        Assert.Null(h.Updates.Current.FailureReason);
+        Assert.Equal(Start.AddMinutes(5).AddHours(48), h.Updates.Current.LastCheckedUtc);
+    }
+
+    [Fact]
+    public void An_unreadable_Windows_Installer_shows_Unknown_never_manual_and_announces_nothing()
+    {
+        WriteSettings(checks: true);
+        var gantt = ProductCatalog.Default.Find("gantt-it")!;
+        var installed = new FakeInstalledProducts { Unreadable = true };
+        using var h = Make(installed: installed, manifests: new Dictionary<string, string> { [gantt.AddinClientId!] = @"C:\x\GanttIt.addin" });
+        h.Advance(TimeSpan.FromMinutes(5));
+        var snapshot = h.Updates.Current;
+        Assert.All(snapshot.Products, p => Assert.Equal(ProductState.Unknown, p.State));
+        Assert.True(snapshot.DetectionFailed);
+        Assert.Empty(h.Announced);
+        var vm = new UpdatesViewModel(new FakeUpdatesHost { Current = snapshot }, () => new UpdateChecksState(true, false));
+        Assert.True(vm.ShowDetectionFailed);
+        Assert.All(vm.Rows, r => Assert.Equal(TrayStrings.State_Unknown, r.StateText));
+        Assert.All(vm.Rows, r => Assert.Null(r.ActionText));
+    }
+
+    [Fact]
+    public void A_version_is_announced_again_until_its_notification_is_shown()
+    {
+        WriteSettings(checks: true);
+        using (var h = Make(notificationShown: false))
+        {
+            h.Advance(TimeSpan.FromMinutes(5));
+            h.Advance(TimeSpan.FromHours(24));
+            Assert.Equal(2, h.Announced.Count); // not shown: offered again at the next check
+        }
+        using (var h = Make(notificationShown: true))
+        {
+            h.Advance(TimeSpan.FromMinutes(5));
+            h.Advance(TimeSpan.FromHours(24));
+            Assert.Single(h.Announced); // shown and recorded: once
+        }
+        using var restarted = Make(notificationShown: true);
+        restarted.Advance(TimeSpan.FromHours(48));
+        Assert.Empty(restarted.Announced);
+    }
+
+    [Fact]
+    public void A_repo_with_no_full_release_says_No_release_yet()
+    {
+        WriteSettings(checks: true);
+        var handler = new CountingHandler(Answer(repo => repo == "jedbjorn/rst-c" ? "v3.1.1" : null));
+        using var h = Make(handler);
+        h.Advance(TimeSpan.FromMinutes(5));
+        var vm = new UpdatesViewModel(new FakeUpdatesHost { Current = h.Updates.Current }, () => new UpdateChecksState(true, false));
+        Assert.Equal("3.1.1", vm.Rows[0].LatestText);
+        Assert.Equal("No release yet", vm.Rows[1].LatestText);
+        Assert.Equal("No release yet", vm.Rows[2].LatestText);
+        Assert.False(h.Updates.Current.LastCheckFailed);
+        using var restarted = Make(handler);
+        Assert.True(restarted.Updates.Current.Companions.All(c => c.NoRelease), "remembered across a restart");
+    }
+
+    [Fact]
+    public async Task Check_now_within_30_seconds_shows_the_last_result_without_asking_again()
+    {
+        WriteSettings(checks: false);
+        using var h = Make();
+        await h.Updates.CheckNowAsync();
+        Assert.Equal(3, h.Handler.Count);
+        h.Time.Advance(TimeSpan.FromSeconds(10));
+        await h.Updates.CheckNowAsync();
+        await h.Updates.CheckNowAsync();
+        Assert.Equal(3, h.Handler.Count);
+        Assert.Contains(h.Log, l => l.Contains("showing its result, no request made"));
+        h.Time.Advance(TimeSpan.FromSeconds(25));
+        await h.Updates.CheckNowAsync();
+        Assert.Equal(6, h.Handler.Count);
+    }
+
+    [Fact]
+    public void The_pages_snapshot_reads_no_settings_file_or_registry()
+    {
+        WriteSettings(checks: true);
+        var reads = 0;
+        using var h = Make(policy: () => { Interlocked.Increment(ref reads); return true; });
+        var before = reads;
+        for (var i = 0; i < 20; i++) _ = h.Updates.Current;
+        Assert.Equal(before, reads);
+        Assert.True(h.Updates.Current.AutomaticChecks);
+        h.Updates.AutomaticChecksChanged(false);
+        Assert.False(h.Updates.Current.AutomaticChecks);
+        Assert.Equal(before, reads);
     }
 
     private static async Task WithPreset(RegistryKey hive, Func<Task> body)
@@ -589,8 +778,12 @@ public sealed class TrayUpdateChecksTests : IDisposable
         Assert.Equal("RST-Tray", client.DefaultRequestHeaders.UserAgent.ToString());
     }
 
+    /// <summary>
+    /// msi.dll answers (from System32) for an unknown code and the real ones. The CI runner is elevated, so this
+    /// does not show that no admin is needed; that is AC5's VM half (an unelevated user).
+    /// </summary>
     [Fact]
-    public void Windows_Installer_answers_without_admin_for_unknown_and_real_codes()
+    public void Windows_Installer_answers_for_unknown_and_real_codes()
     {
         var msi = new MsiProducts(m => _output.WriteLine(m));
         Assert.Empty(msi.Related("00000000-0000-0000-0000-000000000001"));
@@ -598,7 +791,8 @@ public sealed class TrayUpdateChecksTests : IDisposable
         foreach (var product in ProductCatalog.Default.Products)
         {
             var found = ProductDetection.Query(msi, product);
-            _output.WriteLine($"{product.Name}: {(found.Count == 0 ? "none" : string.Join(", ", found))}");
+            Assert.NotNull(found); // readable on a healthy Windows: never Unknown here
+            _output.WriteLine($"{product.Name}: {(found!.Count == 0 ? "none" : string.Join(", ", found))}");
         }
     }
 }

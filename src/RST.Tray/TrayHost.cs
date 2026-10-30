@@ -34,6 +34,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private TrayIcon? _icon;
     private HttpClient? _http;
     private TrayUpdates? _updates;
+    private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
     private TrayPage _page = TrayPage.Updates;
     private bool _quitting;
@@ -131,6 +132,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             new MsiProducts(m => Log.Warning("{Message}", m)),
             () => ProductDetection.ManifestClientIds(ProductDetection.ManifestRoots(), m => Log.Warning("{Message}", m)),
             TrayUpdates.SettingsAndPresetPolicy(settingsPath: null, WindowsState.UpdateChecksPresets),
+            _checks.Enabled, // already read above: the pages never read files or the registry on the UI thread
             TimeProvider.System,
             TrayPaths.UpdatesFile,
             action => _dispatcher.BeginInvoke(action),
@@ -161,6 +163,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         {
             Log.Information(_iconFailures == 0 ? "tray icon shown" : "tray icon shown after {Retries} retries", _iconFailures);
             _iconFailures = 0;
+            if (_pendingAnnounce is { } pending) Announce(pending); // a notification that waited for the icon
             return;
         }
         _iconFailures++;
@@ -269,10 +272,21 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _http = null;
     }
 
-    /// <summary>One notification for the versions a check found for the first time ("RST 3.1.1 is available").</summary>
+    /// <summary>
+    /// One notification for the versions a check found for the first time ("RST 3.1.1 is available"). They are
+    /// recorded as announced only once the notification is shown; while the icon is not in the notification area
+    /// (Explorer still starting) they wait in <see cref="_pendingAnnounce"/> and go out when the icon is added.
+    /// </summary>
     private void Announce(IReadOnlyList<ProductStatus> found)
     {
-        if (_quitting || _icon is null || found.Count == 0) return;
+        if (_quitting || _icon is null || _updates is null || found.Count == 0) return;
+        if (!_icon.IsShown)
+        {
+            _pendingAnnounce = found;
+            Log.Information("notification waits for the tray icon: {Versions}", string.Join(", ", found.Select(s => s.Product.Name + " " + s.Latest)));
+            return;
+        }
+        _pendingAnnounce = null;
         string title, text;
         if (found.Count == 1)
         {
@@ -285,7 +299,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             text = TrayStrings.Notify_ManyText(string.Join(", ", found.Select(s => s.Product.Name + " " + s.Latest!.Value)));
         }
         var shown = _icon.ShowNotification(title, text);
-        Log.Information("notification {Shown}: {Title}: {Text}", shown ? "shown" : "not shown (no icon)", title, text);
+        Log.Information("notification {Shown}: {Title}: {Text}", shown ? "shown" : "refused by the shell (offered again at the next check)", title, text);
+        if (shown) _updates.MarkAnnounced(found);
     }
 
     /// <summary>
