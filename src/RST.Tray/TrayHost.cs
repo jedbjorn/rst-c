@@ -31,6 +31,8 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
     private TrayWindow? _window;
     private TrayPage _page = TrayPage.Updates;
     private bool _quitting;
+    private int _iconFailures;
+    private DispatcherTimer? _iconRetry;
 
     public TrayHost(TrayArguments args, SingleInstance instance)
     {
@@ -73,7 +75,8 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
         _icon.CloseRequested += (_, _) => Quit("WM_CLOSE");
         _icon.SessionEnding += (_, _) => QuitNow("sign-out", insideWindowMessage: true);
         _icon.ThemeChanged += (_, _) => OnWindowsThemeChanged();
-        if (_icon.Show()) Log.Information("tray icon shown");
+        ShowIcon();
+        AppRestart.Register(m => Log.Warning("{Message}", m));
 
         _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
         {
@@ -83,6 +86,35 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
 
         if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
         _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowNoticeIfDue);
+    }
+
+    /// <summary>
+    /// Adds the icon; when the shell refuses (Explorer busy at sign-in), retries on one-shot timers per
+    /// <see cref="TrayIconRetry"/> (about two minutes), then leaves it to TaskbarCreated.
+    /// </summary>
+    private void ShowIcon()
+    {
+        if (_quitting || _icon is null) return;
+        if (_icon.Show())
+        {
+            Log.Information(_iconFailures == 0 ? "tray icon shown" : "tray icon shown after {Retries} retries", _iconFailures);
+            _iconFailures = 0;
+            return;
+        }
+        _iconFailures++;
+        if (TrayIconRetry.NextDelay(_iconFailures) is not { } delay)
+        {
+            Log.Warning("tray icon: not added after {Attempts} attempts; it is added when Explorer next starts", _iconFailures);
+            return;
+        }
+        Log.Information("tray icon: retrying in {Seconds} s", delay.TotalSeconds);
+        _iconRetry?.Stop();
+        _iconRetry = new DispatcherTimer(delay, DispatcherPriority.Background, (_, _) =>
+        {
+            _iconRetry?.Stop();
+            _iconRetry = null;
+            ShowIcon();
+        }, _dispatcher);
     }
 
     /// <summary>Shows the window (building it the first time), on <paramref name="page"/> or the last page, and brings it forward.</summary>
@@ -165,6 +197,7 @@ internal sealed class TrayHost : ITraySettingsHost, IDisposable
     {
         if (_quitting) return;
         _quitting = true;
+        _iconRetry?.Stop();
         ExitReason = reason;
         Log.Information("quitting ({Reason})", reason);
         try

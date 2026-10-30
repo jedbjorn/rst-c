@@ -154,6 +154,19 @@ public sealed class TrayRulesTests
     }
 
     [Fact]
+    public void Icon_retry_backs_off_for_about_two_minutes_then_stops()
+    {
+        TrayIconRetry.NextDelay(0).Should().BeNull("there is nothing to retry before a failure");
+        var delays = Enumerable.Range(1, 10).Select(TrayIconRetry.NextDelay).TakeWhile(d => d is not null).Select(d => d!.Value).ToList();
+        delays.Should().HaveCount(TrayIconRetry.Delays.Count).And.HaveCountGreaterThanOrEqualTo(3);
+        delays.Should().BeInAscendingOrder();
+        delays[0].Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(1));
+        var total = delays.Aggregate(TimeSpan.Zero, (a, b) => a + b);
+        total.Should().BeGreaterThan(TimeSpan.FromSeconds(90)).And.BeLessThanOrEqualTo(TimeSpan.FromMinutes(2.5));
+        TrayIconRetry.NextDelay(TrayIconRetry.Delays.Count + 1).Should().BeNull("then only TaskbarCreated re-adds the icon");
+    }
+
+    [Fact]
     public void Arguments_startup_is_case_insensitive_and_unknowns_are_kept_for_the_log()
     {
         TrayArguments.Parse(Array.Empty<string>()).StartHidden.Should().BeFalse();

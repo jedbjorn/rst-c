@@ -68,6 +68,29 @@ public static class TrayUpdateNotice
         TraySettings.Update(s => s.UpdateNoticeShownUtc = shownUtc, path, log) is not null;
 }
 
+/// <summary>
+/// When to try adding the notification-area icon again after Shell_NotifyIcon(NIM_ADD) fails (spec #20 §1; review
+/// N4). At sign-in Explorer is often up but busy: the add times out and no TaskbarCreated follows, so the tray
+/// retries a few times, one-shot timers with a growing gap, about two minutes in all, then waits for TaskbarCreated
+/// only. Not a polling loop: each retry is scheduled only after a failure.
+/// </summary>
+public static class TrayIconRetry
+{
+    /// <summary>The gaps before each retry: 2, 4, 8, 16, 30 and 60 seconds (2 min in all).</summary>
+    public static readonly IReadOnlyList<TimeSpan> Delays = new[]
+    {
+        TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8),
+        TimeSpan.FromSeconds(16), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60),
+    };
+
+    /// <summary>
+    /// The wait before retry number <paramref name="failedAttempts"/> (1 after the first failed add), or null when
+    /// the retries are used up.
+    /// </summary>
+    public static TimeSpan? NextDelay(int failedAttempts) =>
+        failedAttempts >= 1 && failedAttempts <= Delays.Count ? Delays[failedAttempts - 1] : null;
+}
+
 /// <summary>The tray's command line.</summary>
 /// <param name="StartHidden"><c>--startup</c> (the Run value at sign-in): start in the notification area, no window.</param>
 /// <param name="Unknown">Arguments the tray does not know (logged and ignored).</param>

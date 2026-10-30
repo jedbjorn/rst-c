@@ -323,6 +323,37 @@ public class TrayShellTests
         Assert.False(shown.Wait(TimeSpan.FromMilliseconds(500)), "a --startup launch must not open the window");
     }
 
+    [Fact]
+    public void Restart_registration_asks_for_a_quiet_restart_after_updates_only()
+    {
+        Assert.Equal("--startup", AppRestart.CommandLine);
+        Assert.Equal(0x1 | 0x2 | 0x8, AppRestart.Flags); // no crash, no hang, no reboot restarts; patch restarts allowed
+        var log = new List<string>();
+        try
+        {
+            AppRestart.Register(log.Add);
+            Assert.Empty(log);
+            var buffer = new char[260];
+            var size = (uint)buffer.Length;
+            Assert.Equal(0, GetApplicationRestartSettings(GetCurrentProcess(), buffer, ref size, out var flags));
+            Assert.Equal("--startup", new string(buffer, 0, (int)size).TrimEnd('\0'));
+            Assert.Equal((uint)AppRestart.Flags, flags);
+        }
+        finally
+        {
+            UnregisterApplicationRestart();
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetApplicationRestartSettings(IntPtr process, char[] commandLine, ref uint size, out uint flags);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern int UnregisterApplicationRestart();
+
     private static T OnOtherThread<T>(Func<T> work)
     {
         T result = default!;
