@@ -602,8 +602,6 @@ public static class UiStrings
 
     public static string Builder_SaveFailed(object? arg0) => Format(nameof(Builder_SaveFailed), arg0);
 
-    public static string Builder_SavedAsCopy(object? arg0) => Format(nameof(Builder_SavedAsCopy), arg0);
-
     public static string Builder_SavedAs(object? arg0) => Format(nameof(Builder_SavedAs), arg0);
 
     public static string Builder_SavedReloaded => Get(nameof(Builder_SavedReloaded));

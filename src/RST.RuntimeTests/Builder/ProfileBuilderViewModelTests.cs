@@ -3,9 +3,9 @@
 // "(loaded)" suffix, the unsaved-changes prompt on a switch), branding (pick, clear, URL), the
 // catalogue (count, filter, the native group, expansion, empty states, double-click), panels and
 // slots (add, select, rename, move, delete with its confirm), the Properties pane (Min Revit,
-// opacity, color, the URL button editor, the summaries), Save (validation, rename-as-copy,
-// collision, required add-ins, the auto-reload), Export ZIP, Exit and the title-bar ✕. Every toast
-// text is checked against profile_builder.html's.
+// opacity, color, the URL button editor, the summaries), Save (validation, a rename under the same
+// id, collision, required add-ins, the auto-reload), Export ZIP, Exit and the title-bar ✕. Every
+// toast text is checked against profile_builder.html's.
 
 using FluentAssertions;
 using RST.Core.Builder;
@@ -613,22 +613,23 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public async Task Renaming_in_edit_mode_saves_a_copy_and_keeps_the_original()
+    public async Task Renaming_in_edit_mode_saves_under_the_same_id()
     {
+        // Spec #19: rename-as-copy is retired; a changed name is a rename of the same profile.
         var h = BuilderHarness.Create();
         h.Model.SelectedProfileOption = h.Option("Structure");
         h.Model.ProfileName = "Structure v2";
         (await h.Model.SaveAsync()).Should().BeTrue();
-        var copy = h.Backend.Saved.Single();
-        copy.Id.Should().Be("new-1");
-        copy.ExportDate.Should().Be("2026-10-30", "the export date was cleared and set anew");
-        h.Backend.Library.Select(e => e.Profile.ProfileName).Should().Contain(["Structure", "Structure v2"]);
-        AssertToast(h, "Saved as new profile \"Structure v2\" — original kept.", BannerKind.Success);
+        var renamed = h.Backend.Saved.Single();
+        renamed.Id.Should().Be(BuilderFixtures.StructId);
+        renamed.ExportDate.Should().Be("2026-08-02", "the export date is kept");
+        h.Backend.Library.Select(e => e.Profile.ProfileName).Should().Contain("Structure v2").And.NotContain("Structure");
+        AssertToast(h, "Saved as Structure_v2_" + BuilderFixtures.StructId + ".json", BannerKind.Success);
 
-        // The saved name is the new baseline: saving again updates the copy in place.
+        // The saved name is the new baseline: saving again stays on the same id.
         h.Model.MinVersion = "3.0.0";
         (await h.Model.SaveAsync()).Should().BeTrue();
-        h.Backend.Saved[1].Id.Should().Be("new-1");
+        h.Backend.Saved[1].Id.Should().Be(BuilderFixtures.StructId);
     }
 
     [Fact]
