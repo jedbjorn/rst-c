@@ -27,7 +27,7 @@
   </data>
   <data name="Menu_CheckForUpdates" xml:space="preserve">
     <value>Check for _updates</value>
-    <comment>Tray menu. Disabled until update checks arrive (F17 WU3).</comment>
+    <comment>Tray menu: checks now and opens the Updates page.</comment>
   </data>
   <data name="Menu_Settings" xml:space="preserve">
     <value>_Settings</value>
@@ -61,13 +61,13 @@
     <value>Updates</value>
   </data>
   <data name="Updates_Description" xml:space="preserve">
-    <value>RST will check GitHub once a day for new versions of RST, Gantt-It and Splash-It, and install one when you click Install.</value>
+    <value>Once a day, RST asks GitHub whether a newer RST, Gantt-It or Splash-It is out, and tells you when one is.</value>
   </data>
   <data name="Apps_Heading" xml:space="preserve">
     <value>Apps</value>
   </data>
   <data name="Apps_Description" xml:space="preserve">
-    <value>RST, Gantt-It and Splash-It: which are installed, their versions, and a one-click install for the ones you don't have.</value>
+    <value>RST, Gantt-It and Splash-It: which are installed for you on this PC, and the latest version of each.</value>
   </data>
   <data name="AddIns_Heading" xml:space="preserve">
     <value>Add-ins</value>
@@ -142,5 +142,149 @@
 
 To turn this off, open RST from the notification area and go to Settings.</value>
     <comment>The one-time first-run notice (the telemetry ConsentNotice precedent).</comment>
+  </data>
+  <data name="Updates_CheckNow" xml:space="preserve">
+    <value>Check now</value>
+  </data>
+  <data name="Updates_Checking" xml:space="preserve">
+    <value>Checking…</value>
+  </data>
+  <data name="Updates_LastCheckedToday" xml:space="preserve">
+    <value>Last checked today at {0}</value>
+    <comment>{0} is the local time, e.g. 09:14.</comment>
+  </data>
+  <data name="Updates_LastCheckedYesterday" xml:space="preserve">
+    <value>Last checked yesterday at {0}</value>
+    <comment>{0} is the local time, e.g. 09:14.</comment>
+  </data>
+  <data name="Updates_LastCheckedOn" xml:space="preserve">
+    <value>Last checked {0} at {1}</value>
+    <comment>{0} is the local date (28 Oct 2026), {1} the local time.</comment>
+  </data>
+  <data name="Updates_NeverChecked" xml:space="preserve">
+    <value>Not checked yet</value>
+  </data>
+  <data name="Updates_RstAvailable" xml:space="preserve">
+    <value>RST {0} is available</value>
+    <comment>{0} is the latest version, e.g. 3.1.1.</comment>
+  </data>
+  <data name="Updates_RstUpToDate" xml:space="preserve">
+    <value>RST is up to date</value>
+  </data>
+  <data name="Updates_RstInstalled" xml:space="preserve">
+    <value>RST {0}</value>
+    <comment>The headline when the latest version is not known yet. {0} is the installed version.</comment>
+  </data>
+  <data name="Updates_RstUnknown" xml:space="preserve">
+    <value>RST</value>
+    <comment>The headline when RST's installed version is not known (not installed by RST.msi, e.g. a developer build).</comment>
+  </data>
+  <data name="Updates_ChecksOff" xml:space="preserve">
+    <value>Automatic checks are off. Check now asks GitHub once, only when you click it.</value>
+  </data>
+  <data name="Updates_ChecksOffLocked" xml:space="preserve">
+    <value>Automatic checks were turned off on this computer by whoever manages its software. Check now still asks GitHub when you click it.</value>
+  </data>
+  <data name="Updates_CheckFailed" xml:space="preserve">
+    <value>Couldn't check for updates. RST tries again at the next daily check. Details are in the log.</value>
+  </data>
+  <data name="Updates_InstallComingSoon" xml:space="preserve">
+    <value>Installing from RST is coming soon. For now, download the new version from its release page.</value>
+  </data>
+  <data name="Updates_OtherApps" xml:space="preserve">
+    <value>Gantt-It and Splash-It</value>
+  </data>
+  <data name="Updates_OtherAppsHint" xml:space="preserve">
+    <value>More on the Apps page.</value>
+  </data>
+  <data name="Apps_InstallsComingSoon" xml:space="preserve">
+    <value>Install and Update are coming soon. For now, get each app from its release page.</value>
+  </data>
+  <data name="Apps_Detecting" xml:space="preserve">
+    <value>Looking for installed apps…</value>
+  </data>
+  <data name="App_InstalledLabel" xml:space="preserve">
+    <value>Installed</value>
+  </data>
+  <data name="App_LatestLabel" xml:space="preserve">
+    <value>Latest</value>
+  </data>
+  <data name="App_InstalledForYou" xml:space="preserve">
+    <value>{0}, for you</value>
+    <comment>{0} is the installed version. A per-user install.</comment>
+  </data>
+  <data name="App_InstalledForYouManaged" xml:space="preserve">
+    <value>{0}, for you (by policy)</value>
+    <comment>{0} is the installed version. A per-user install made by Group Policy.</comment>
+  </data>
+  <data name="App_InstalledForEveryone" xml:space="preserve">
+    <value>{0}, for everyone on this PC</value>
+    <comment>{0} is the installed version. A per-machine install.</comment>
+  </data>
+  <data name="App_VersionUnknown" xml:space="preserve">
+    <value>version unknown</value>
+  </data>
+  <data name="App_NotInstalled" xml:space="preserve">
+    <value>Not installed</value>
+  </data>
+  <data name="App_InstalledManually" xml:space="preserve">
+    <value>Installed manually</value>
+  </data>
+  <data name="App_ManualNote" xml:space="preserve">
+    <value>Installed manually: updates not managed by RST.</value>
+    <comment>Shown when the add-in's .addin is present but Windows Installer has no product for it.</comment>
+  </data>
+  <data name="App_LatestNotChecked" xml:space="preserve">
+    <value>Not checked yet</value>
+  </data>
+  <data name="App_LatestFailed" xml:space="preserve">
+    <value>Couldn't check</value>
+  </data>
+  <data name="App_LatestNone" xml:space="preserve">
+    <value>No release yet</value>
+  </data>
+  <data name="App_Install" xml:space="preserve">
+    <value>Install</value>
+  </data>
+  <data name="App_Update" xml:space="preserve">
+    <value>Update</value>
+  </data>
+  <data name="App_ComingSoon" xml:space="preserve">
+    <value>Coming soon</value>
+    <comment>Beside the disabled Install and Update buttons (installs arrive in F17 WU4).</comment>
+  </data>
+  <data name="App_ReleasePage" xml:space="preserve">
+    <value>Release page</value>
+  </data>
+  <data name="State_UpToDate" xml:space="preserve">
+    <value>Up to date</value>
+  </data>
+  <data name="State_UpdateAvailable" xml:space="preserve">
+    <value>Update available</value>
+  </data>
+  <data name="State_NotInstalled" xml:space="preserve">
+    <value>Not installed</value>
+  </data>
+  <data name="State_InstalledManually" xml:space="preserve">
+    <value>Installed manually</value>
+  </data>
+  <data name="State_Installed" xml:space="preserve">
+    <value>Installed</value>
+    <comment>Installed, the latest version not known yet.</comment>
+  </data>
+  <data name="Notify_OneTitle" xml:space="preserve">
+    <value>{0} {1} is available</value>
+    <comment>The tray notification. {0} the product (RST), {1} the version (3.1.1).</comment>
+  </data>
+  <data name="Notify_OneText" xml:space="preserve">
+    <value>Click to see it in RST.</value>
+  </data>
+  <data name="Notify_ManyTitle" xml:space="preserve">
+    <value>Updates are available</value>
+    <comment>The tray notification when one check finds several new versions.</comment>
+  </data>
+  <data name="Notify_ManyText" xml:space="preserve">
+    <value>{0}. Click to see them in RST.</value>
+    <comment>{0} lists them: "RST 3.1.1, Gantt-It 1.2.0".</comment>
   </data>
 </root>

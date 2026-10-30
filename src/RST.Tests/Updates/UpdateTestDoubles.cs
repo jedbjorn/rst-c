@@ -127,6 +127,29 @@ internal sealed class ManualTimeProvider : TimeProvider
     }
 }
 
+/// <summary>A scripted Windows Installer: UpgradeCode to the instances it reports.</summary>
+internal sealed class FakeInstalledProducts : RST.Core.Updates.IInstalledProducts
+{
+    public Dictionary<string, List<RST.Core.Updates.InstalledProduct>> ByUpgradeCode { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public int Queries { get; private set; }
+
+    public FakeInstalledProducts With(string upgradeCode, string version,
+                                      RST.Core.Updates.InstallContext context = RST.Core.Updates.InstallContext.User)
+    {
+        if (!ByUpgradeCode.TryGetValue(upgradeCode, out var list))
+            ByUpgradeCode[upgradeCode] = list = new List<RST.Core.Updates.InstalledProduct>();
+        list.Add(new RST.Core.Updates.InstalledProduct("{" + Guid.NewGuid().ToString().ToUpperInvariant() + "}", version, context));
+        return this;
+    }
+
+    public IReadOnlyList<RST.Core.Updates.InstalledProduct> Related(string upgradeCode)
+    {
+        Queries++;
+        return ByUpgradeCode.TryGetValue(upgradeCode, out var list) ? list : new List<RST.Core.Updates.InstalledProduct>();
+    }
+}
+
 /// <summary>An HttpMessageHandler that counts what it is sent and answers each request from a script.</summary>
 internal sealed class CountingHandler : System.Net.Http.HttpMessageHandler
 {

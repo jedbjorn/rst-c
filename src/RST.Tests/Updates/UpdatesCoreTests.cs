@@ -321,27 +321,6 @@ public class ProductCatalogTests
         ProductCatalog.Parse(json).Products.Should().ContainSingle().Which.IsRst.Should().BeTrue();
 }
 
-/// <summary>A scripted Windows Installer: UpgradeCode to the instances it reports.</summary>
-internal sealed class FakeInstalledProducts : IInstalledProducts
-{
-    public Dictionary<string, List<InstalledProduct>> ByUpgradeCode { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-    public int Queries { get; private set; }
-
-    public FakeInstalledProducts With(string upgradeCode, string version, InstallContext context = InstallContext.User)
-    {
-        if (!ByUpgradeCode.TryGetValue(upgradeCode, out var list)) ByUpgradeCode[upgradeCode] = list = new List<InstalledProduct>();
-        list.Add(new InstalledProduct("{" + Guid.NewGuid().ToString().ToUpperInvariant() + "}", version, context));
-        return this;
-    }
-
-    public IReadOnlyList<InstalledProduct> Related(string upgradeCode)
-    {
-        Queries++;
-        return ByUpgradeCode.TryGetValue(upgradeCode, out var list) ? list : new List<InstalledProduct>();
-    }
-}
-
 public sealed class ProductDetectionTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "RST-Detect-" + Guid.NewGuid().ToString("N"));
