@@ -4,9 +4,11 @@
 // code here is view plumbing: the title-bar ✕ and Escape ask the view-model first, as Exit does
 // (Planner default 3; SC-010), the header's ⚙ and profile menus open under their toggles (feature
 // #18: the profile menu lists ProfileOptions each time it opens), and drag and drop (WU5):
-// DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel headers
-// and the slot rows; the cards and rows report the cursor's half to the view-model, which owns the
-// markers and the index arithmetic (RST.Core PanelDrops).
+// DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel headers,
+// the tiles, the stack rows and the stack headers (feature #18, WU3). Each card handles every drag
+// over it in the Preview phase: it reports the tile, stack or stack row under the pointer and where
+// on it (TileHit) to the view-model, which owns the markers and the rules (RST.Core TileDrops and
+// PanelStacks; PanelDrops for the panel reorder). "on tab [name]" opens General on the tab field.
 
 using System.ComponentModel;
 using System.Windows;
@@ -129,12 +131,16 @@ public partial class ProfileBuilderWindow : Window
     private Point _dragStart;
     private BuilderDrag? _pendingDrag;
 
-    /// <summary>The drag a source element would start, from its row's view-model.</summary>
+    /// <summary>
+    /// The drag a source element would start, from its view-model: a catalogue command, a panel (its
+    /// header), a tile or a stack's row, or a whole stack (its header).
+    /// </summary>
     internal static BuilderDrag? DragFor(object? dataContext) => dataContext switch
     {
         CatalogNodeViewModel { Command: { } command } => BuilderDrag.FromCatalog(command),
         PanelCardViewModel card => BuilderDrag.FromPanel(card.Index),
-        SlotRowViewModel slot => BuilderDrag.FromSlot(slot.Panel.Index, slot.Index),
+        ToolTileViewModel tile => BuilderDrag.FromSlot(tile.Panel.Index, tile.Index, tile.Row),
+        StackGroupViewModel stack => BuilderDrag.FromSlot(stack.Panel.Index, stack.Index),
         _ => null,
     };
 
@@ -174,88 +180,100 @@ public partial class ProfileBuilderWindow : Window
         return false;
     }
 
-    private static bool UpperHalf(DragEventArgs e, FrameworkElement target) => e.GetPosition(target).Y < target.ActualHeight / 2;
-
     private DragDropEffects DropEffect(bool accepted) =>
         !accepted ? DragDropEffects.None : Model.CurrentDrag?.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
 
-    private void OnPanelDragOver(object sender, DragEventArgs e)
+    // The card's handlers run in the Preview phase, before anything inside the card sees the drag.
+    // A TextBox takes every drag that passes over it (TextEditor marks DragOver handled, with no
+    // effect, for a non-text payload), and the tiles' name boxes cover much of each tile (the
+    // TextBox lesson, WU5 review B1). So the card handles any BuilderDrag itself: it finds the tile,
+    // the stack or the stack row under the pointer and reports where (TileHit) to the view-model;
+    // anything else over the card is the card (a panel reorder, or a tool to the panel's end). A text
+    // drag is left alone, so it still reaches a name box.
+    private void OnCardDragOver(object sender, DragEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: PanelCardViewModel card } target)
-            e.Effects = DropEffect(Model.DragOverPanel(card.Index, UpperHalf(e, target)));
+        if (!e.Data.GetDataPresent(typeof(BuilderDrag)) || sender is not FrameworkElement { DataContext: PanelCardViewModel card } cardRoot) return;
+        bool accepted;
+        if (Model.CurrentDrag?.Kind != DragKind.Panel && HitAt(e.OriginalSource as DependencyObject, cardRoot, e) is { } hit)
+            accepted = Model.DragOverTile(hit);
+        else
+            accepted = Model.DragOverPanel(card.Index, UpperHalf(e, cardRoot));
+        e.Effects = DropEffect(accepted);
         e.Handled = true;
     }
 
-    private void OnPanelDrop(object sender, DragEventArgs e)
+    private void OnCardDrop(object sender, DragEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: PanelCardViewModel card } target)
-            Model.DropOnPanel(card.Index, UpperHalf(e, target));
-        e.Handled = true;
-    }
-
-    // The slot handlers mark their events handled, so the card under them does not act too
-    // (the page's stopPropagation).
-    private void OnSlotDragOver(object sender, DragEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: SlotRowViewModel slot } target)
-        {
-            var accepted = Model.DragOverSlot(slot.Panel.Index, slot.Index, UpperHalf(e, target));
-            if (!accepted) return; // a panel drag falls through to the card
-            e.Effects = DropEffect(true);
-        }
-        e.Handled = true;
-    }
-
-    private void OnSlotDrop(object sender, DragEventArgs e)
-    {
-        if (sender is not FrameworkElement { DataContext: SlotRowViewModel slot } target) return;
-        if (Model.CurrentDrag?.Kind == DragKind.Panel) return; // falls through to the card
-        Model.DropOnSlot(slot.Panel.Index, slot.Index, UpperHalf(e, target));
+        if (!e.Data.GetDataPresent(typeof(BuilderDrag)) || sender is not FrameworkElement { DataContext: PanelCardViewModel card } cardRoot) return;
+        if (Model.CurrentDrag?.Kind != DragKind.Panel && HitAt(e.OriginalSource as DependencyObject, cardRoot, e) is { } hit)
+            Model.DropOnTile(hit);
+        else
+            Model.DropOnPanel(card.Index, UpperHalf(e, cardRoot));
         e.Handled = true;
     }
 
     private void OnDragLeave(object sender, DragEventArgs e) => Model.ClearDropMarkers();
 
-    // The slot and panel name boxes fill most of each row and header. A TextBox takes every drag
-    // that passes over it (TextEditor marks DragOver handled, with no effect, for a non-text
-    // payload), so the row and card handlers above would never run there. The boxes hand a
-    // BuilderDrag to their row or card in the Preview phase instead, before the TextBox sees it;
-    // a text drag still reaches the TextBox. (WU5 review B1.)
-    private void OnNameBoxDragOver(object sender, DragEventArgs e)
-    {
-        if (sender is not DependencyObject box || !e.Data.GetDataPresent(typeof(BuilderDrag))) return;
-        if (Ancestor(box, "SlotRow") is { DataContext: SlotRowViewModel slot } row
-            && Model.DragOverSlot(slot.Panel.Index, slot.Index, UpperHalf(e, row)))
-        {
-            e.Effects = DropEffect(true);
-        }
-        else if (Ancestor(box, "CardRoot") is { DataContext: PanelCardViewModel card } cardRoot)
-        {
-            // A panel drag over a slot's name falls through to the card, as over the rest of the row.
-            e.Effects = DropEffect(Model.DragOverPanel(card.Index, UpperHalf(e, cardRoot)));
-        }
-        else
-        {
-            e.Effects = DragDropEffects.None;
-        }
-        e.Handled = true;
-    }
+    private static bool UpperHalf(DragEventArgs e, FrameworkElement target) => e.GetPosition(target).Y < target.ActualHeight / 2;
 
-    private void OnNameBoxDrop(object sender, DragEventArgs e)
-    {
-        if (sender is not DependencyObject box || !e.Data.GetDataPresent(typeof(BuilderDrag))) return;
-        if (Model.CurrentDrag?.Kind != DragKind.Panel && Ancestor(box, "SlotRow") is { DataContext: SlotRowViewModel slot } row)
-            Model.DropOnSlot(slot.Panel.Index, slot.Index, UpperHalf(e, row));
-        else if (Ancestor(box, "CardRoot") is { DataContext: PanelCardViewModel card } cardRoot)
-            Model.DropOnPanel(card.Index, UpperHalf(e, cardRoot));
-        e.Handled = true;
-    }
+    /// <summary>
+    /// The tile, stack or stack row under the pointer (from the drag's original source up to the
+    /// card): a row's position is across its whole stack (its edges insert beside the stack) and down
+    /// the row (before or after it); a tile's or a stack's is across it. Null outside every tile.
+    /// </summary>
+    internal static TileHit? HitAt(DependencyObject? source, DependencyObject card, DragEventArgs e) =>
+        HitAt(source, card, (element) => e.GetPosition(element));
 
-    /// <summary>The nearest visual ancestor named <paramref name="name"/> (a slot row or a card).</summary>
-    private static FrameworkElement? Ancestor(DependencyObject from, string name)
+    /// <summary><see cref="HitAt(DependencyObject?, DependencyObject, DragEventArgs)"/> with the pointer's position relative to an element.</summary>
+    internal static TileHit? HitAt(DependencyObject? source, DependencyObject card, Func<IInputElement, Point> positionIn)
     {
-        for (var d = VisualTreeHelper.GetParent(from); d is not null; d = VisualTreeHelper.GetParent(d))
-            if (d is FrameworkElement { Name: var n } element && n == name) return element;
+        FrameworkElement? row = null;
+        for (var d = source; d is not null && !ReferenceEquals(d, card); d = ParentOf(d))
+        {
+            if (d is not FrameworkElement element) continue;
+            switch (element.Name)
+            {
+                case "StackRow" when element.DataContext is ToolTileViewModel:
+                    row ??= element;
+                    break;
+                case "Tile" when element.DataContext is ToolTileViewModel tile:
+                {
+                    var p = positionIn(element);
+                    return TileHit.On(tile.Panel.Index, tile.Index, p.X, element.ActualWidth);
+                }
+                case "StackGroup" when element.DataContext is StackGroupViewModel stack:
+                {
+                    var p = positionIn(element);
+                    if (row is { DataContext: ToolTileViewModel r })
+                    {
+                        var y = positionIn(row).Y;
+                        return TileHit.OnRow(stack.Panel.Index, stack.Index, r.Row, p.X, element.ActualWidth, y, row.ActualHeight);
+                    }
+                    return TileHit.On(stack.Panel.Index, stack.Index, p.X, element.ActualWidth);
+                }
+            }
+        }
         return null;
+    }
+
+    private static DependencyObject? ParentOf(DependencyObject d) =>
+        d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+
+    // ---- the Panels pane header ---------------------------------------------------------------
+
+    /// <summary>"on tab [name]": the General tab opens with its Ribbon tab name field focused.</summary>
+    private void OnTabNameClick(object sender, RoutedEventArgs e) => FocusTabName();
+
+    /// <summary>Opens the Profile pane's General tab and focuses the Ribbon tab name field.</summary>
+    internal void FocusTabName()
+    {
+        ProfileTabs.SelectedItem = GeneralTab;
+        // The tab's content is realized on selection: focus it once layout has run.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+        {
+            FocusManager.SetFocusedElement(this, TabBox);
+            TabBox.Focus();
+            TabBox.SelectAll();
+        }));
     }
 }

@@ -795,22 +795,22 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>No panels yet. Click "+ Add Panel" to start.</value>
   </data>
   <data name="Builder_PanelEmpty" xml:space="preserve">
-    <value>Drop a command here, or click one in the Commands pane.</value>
+    <value>Drag commands or custom tools here, or double-click one in Commands.</value>
   </data>
   <data name="Builder_MoveUp" xml:space="preserve">
-    <value>Move up</value>
+    <value>Move left on the ribbon</value>
   </data>
   <data name="Builder_MoveDown" xml:space="preserve">
-    <value>Move down</value>
+    <value>Move right on the ribbon</value>
   </data>
   <data name="Builder_DeletePanelTip" xml:space="preserve">
     <value>Delete panel</value>
   </data>
   <data name="Builder_RemoveSlotTip" xml:space="preserve">
-    <value>Remove</value>
+    <value>Remove from this panel</value>
   </data>
   <data name="Builder_PickIconTip" xml:space="preserve">
-    <value>Pick icon</value>
+    <value>Change icon</value>
   </data>
   <data name="Builder_DeletePanelTitle" xml:space="preserve">
     <value>Delete panel "{0}"?</value>
@@ -951,9 +951,6 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>{0} — {1}</value>
     <comment>{0} the design, {1} the color (underscores as spaces).</comment>
   </data>
-  <data name="Builder_StackSlotNameTip" xml:space="preserve">
-    <value>A stack's name links this row to the stack, so it can't be changed here.</value>
-  </data>
   <data name="Builder_SettingsTip" xml:space="preserve">
     <value>Settings for this machine</value>
   </data>
@@ -1066,5 +1063,89 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_SavedReloadFailedOldKept" xml:space="preserve">
     <value>Saved as {0}, but the ribbon could not be reloaded, so the old file {1} was kept: the loaded profile may still point at it. Load the profile again in the Loader, then delete the old file.</value>
     <comment>{0} the saved file; {1} the file the loaded profile (with no id) was read from.</comment>
+  </data>
+  <data name="Builder_PanelsOnTab" xml:space="preserve">
+    <value>on tab</value>
+  </data>
+  <data name="Builder_TabNameTip" xml:space="preserve">
+    <value>Edit the tab name on the Profile pane's General tab</value>
+  </data>
+  <data name="Builder_NoTabName" xml:space="preserve">
+    <value>(no tab name)</value>
+  </data>
+  <data name="Builder_DragPanelTip" xml:space="preserve">
+    <value>Drag to reorder panels</value>
+  </data>
+  <data name="Builder_PanelColorTip" xml:space="preserve">
+    <value>Panel colour</value>
+  </data>
+  <data name="Builder_PanelName" xml:space="preserve">
+    <value>Panel name</value>
+  </data>
+  <data name="Builder_ToolName" xml:space="preserve">
+    <value>Tool name on this panel</value>
+  </data>
+  <data name="Builder_NewStack" xml:space="preserve">
+    <value>+ New Stack</value>
+  </data>
+  <data name="Builder_NewStackTip" xml:space="preserve">
+    <value>Group 2–3 of this panel's tools into a stack</value>
+  </data>
+  <data name="Builder_EditCustomToolTip" xml:space="preserve">
+    <value>Edit this custom tool (everywhere it is used)</value>
+  </data>
+  <data name="Builder_StackHeader" xml:space="preserve">
+    <value>STACK · {0}/3</value>
+    <comment>{0} how many tools the stack holds.</comment>
+  </data>
+  <data name="Builder_EditStackTip" xml:space="preserve">
+    <value>Edit stack</value>
+  </data>
+  <data name="Builder_UnstackTip" xml:space="preserve">
+    <value>Remove stack (its tools stay on the panel)</value>
+  </data>
+  <data name="Builder_StackFull" xml:space="preserve">
+    <value>A stack holds 2–3 tools. This one is full.</value>
+  </data>
+  <data name="Builder_StacksRepaired" xml:space="preserve">
+    <value>This profile's stacks were repaired when it opened ({0}). Save to keep the repair.</value>
+    <comment>{0} how many repairs.</comment>
+  </data>
+  <data name="Builder_NewStackTitle" xml:space="preserve">
+    <value>New stack on “{0}”</value>
+    <comment>{0} the panel name.</comment>
+  </data>
+  <data name="Builder_EditStackTitle" xml:space="preserve">
+    <value>Edit stack on “{0}”</value>
+    <comment>{0} the panel name.</comment>
+  </data>
+  <data name="Builder_NewStackHelp" xml:space="preserve">
+    <value>Pick 2 or 3 of this panel’s tools. (Or drop one tool onto another on the panel.)</value>
+  </data>
+  <data name="Builder_EditStackHelp" xml:space="preserve">
+    <value>Tick 2 or 3 tools in stack order. Untick one to put it back on the panel; tick a loose tool to add it.</value>
+  </data>
+  <data name="Builder_StackPicked" xml:space="preserve">
+    <value>{0} selected · a stack holds 2–3 tools</value>
+    <comment>{0} how many tools are ticked.</comment>
+  </data>
+  <data name="Builder_StackWillDissolve" xml:space="preserve">
+    <value>{0} selected · saving with fewer than 2 removes the stack; its tools stay on the panel</value>
+    <comment>{0} how many tools are ticked (0 or 1).</comment>
+  </data>
+  <data name="Builder_CreateStack" xml:space="preserve">
+    <value>Create stack</value>
+  </data>
+  <data name="Builder_SaveStack" xml:space="preserve">
+    <value>Save stack</value>
+  </data>
+  <data name="Builder_StackEarlierTip" xml:space="preserve">
+    <value>Earlier in the stack</value>
+  </data>
+  <data name="Builder_StackLaterTip" xml:space="preserve">
+    <value>Later in the stack</value>
+  </data>
+  <data name="Builder_StackPickInStack" xml:space="preserve">
+    <value>in this stack</value>
   </data>
 </root>

@@ -616,10 +616,6 @@ public static class UiStrings
 
     public static string Builder_IconVariantTip(object? arg0, object? arg1) => Format(nameof(Builder_IconVariantTip), arg0, arg1);
 
-    // Stacks (feature #15, spec #17): kept and drawn, not authored in the Builder yet (feature #18).
-
-    public static string Builder_StackSlotNameTip => Get(nameof(Builder_StackSlotNameTip));
-
     // The window shell (feature #18, spec #19, WU2): the header's ⚙ and profile menus, Rename and
     // Duplicate, the Branding dialog and the Profile pane's tabs.
 
@@ -692,4 +688,59 @@ public static class UiStrings
     public static string Builder_SavedReloadFailedOldKept(object? arg0, object? arg1) => Format(nameof(Builder_SavedReloadFailedOldKept), arg0, arg1);
 
     public static string Builder_SavedOldFileKept(object? arg0, object? arg1, object? arg2) => Format(nameof(Builder_SavedOldFileKept), arg0, arg1, arg2);
+
+    // The panel cards as tiles, stacks and the New / Edit Stack dialog (feature #18, spec #19, WU3).
+
+    public static string Builder_PanelsOnTab => Get(nameof(Builder_PanelsOnTab));
+
+    public static string Builder_TabNameTip => Get(nameof(Builder_TabNameTip));
+
+    public static string Builder_NoTabName => Get(nameof(Builder_NoTabName));
+
+    public static string Builder_DragPanelTip => Get(nameof(Builder_DragPanelTip));
+
+    public static string Builder_PanelColorTip => Get(nameof(Builder_PanelColorTip));
+
+    public static string Builder_PanelName => Get(nameof(Builder_PanelName));
+
+    public static string Builder_ToolName => Get(nameof(Builder_ToolName));
+
+    public static string Builder_NewStack => Get(nameof(Builder_NewStack));
+
+    public static string Builder_NewStackTip => Get(nameof(Builder_NewStackTip));
+
+    public static string Builder_EditCustomToolTip => Get(nameof(Builder_EditCustomToolTip));
+
+    public static string Builder_StackHeader(object? arg0) => Format(nameof(Builder_StackHeader), arg0);
+
+    public static string Builder_EditStackTip => Get(nameof(Builder_EditStackTip));
+
+    public static string Builder_UnstackTip => Get(nameof(Builder_UnstackTip));
+
+    /// <summary>The fourth tool's refusal; the same text as RST.Core's PanelStacks.FullMessage.</summary>
+    public static string Builder_StackFull => Get(nameof(Builder_StackFull));
+
+    public static string Builder_StacksRepaired(object? arg0) => Format(nameof(Builder_StacksRepaired), arg0);
+
+    public static string Builder_NewStackTitle(object? arg0) => Format(nameof(Builder_NewStackTitle), arg0);
+
+    public static string Builder_EditStackTitle(object? arg0) => Format(nameof(Builder_EditStackTitle), arg0);
+
+    public static string Builder_NewStackHelp => Get(nameof(Builder_NewStackHelp));
+
+    public static string Builder_EditStackHelp => Get(nameof(Builder_EditStackHelp));
+
+    public static string Builder_StackPicked(object? arg0) => Format(nameof(Builder_StackPicked), arg0);
+
+    public static string Builder_StackWillDissolve(object? arg0) => Format(nameof(Builder_StackWillDissolve), arg0);
+
+    public static string Builder_CreateStack => Get(nameof(Builder_CreateStack));
+
+    public static string Builder_SaveStack => Get(nameof(Builder_SaveStack));
+
+    public static string Builder_StackEarlierTip => Get(nameof(Builder_StackEarlierTip));
+
+    public static string Builder_StackLaterTip => Get(nameof(Builder_StackLaterTip));
+
+    public static string Builder_StackPickInStack => Get(nameof(Builder_StackPickInStack));
 }
