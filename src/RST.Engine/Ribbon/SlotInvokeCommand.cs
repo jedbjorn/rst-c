@@ -1,9 +1,12 @@
 // SlotInvokeCommand.cs — System.Windows.Input.ICommand wired to
 // AdWindows-built RibbonButtons.
 //
-// Mirrors SlotCommandBase semantics:
+// Dispatch (SlotKind and SlotTarget live in RST.Core.Ribbon, beside the
+// layout planner that makes them):
 //   SlotKind.Url     → Process.Start (UrlNormalizer-canonicalised)
 //   SlotKind.Command → UIApplication.PostCommand(RevitCommandId)
+// Large and stacked buttons (spec #17) both use it, one instance per
+// button. Each click is logged, so a run can be checked from the log.
 //
 // AdWindows.RibbonButton.CommandHandler is an ICommand (WPF), not an
 // IExternalCommand — so the dispatch runs WPF-side. For URL slots that
@@ -39,6 +42,8 @@ internal sealed class SlotInvokeCommand : ICommand
 
     public void Execute(object? parameter)
     {
+        Log.Information("SlotInvokeCommand: {Kind} {Payload} (display={DisplayName})",
+                        _target.Kind, _target.Payload, _target.DisplayName);
         try
         {
             switch (_target.Kind)

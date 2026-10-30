@@ -16,6 +16,12 @@
 // Resolved icons are cached so a profile rebuild doesn't re-decode the
 // same PNG on every button.
 //
+// Stacked (small) buttons (feature #15, spec #17) take a 16 px Image:
+// ResolveSlotIcon16 decodes the same 32 px pack PNG at 16 px
+// (DecodePixelWidth=16; the pack ships no 16_ files), cached apart from
+// the 32 px one, and ResolveNativeToolIcon16 maps RST's own tools to
+// their shipped *_16.png icons. Fallback: Default16.
+//
 // Slots pointing at the RST native tools (Builder/Loader/RSTify/Health,
 // placeable on profile toolbars since PR #112) carry no iconFile by
 // default — ResolveNativeToolIcon(commandId) maps them back to their
@@ -266,7 +272,40 @@ internal static class IconAssets
         return null;
     }
 
-    private static ImageSource? LoadBundled(string relativePath)
+    private static readonly ConcurrentDictionary<string, ImageSource?> _pack16Cache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The 16 px form of a slot's <c>iconFile</c>, for a stacked (small)
+    /// button: the same pack PNG as <see cref="ResolveSlotIcon"/>, decoded at
+    /// 16 x 16 (<c>DecodePixelWidth=16</c>) rather than handed to the ribbon
+    /// at 32 px, which draws it oversized or clipped in a small slot. Null for
+    /// the same values <see cref="ResolveSlotIcon"/> rejects; the caller falls
+    /// back to <see cref="Default16"/>. Process-cached by pack key, apart from
+    /// the 32 px cache.
+    /// </summary>
+    public static ImageSource? ResolveSlotIcon16(string? iconFile)
+    {
+        if (!IconPack.TryParseValue(iconFile, out var pack)) return null;
+        return _pack16Cache.GetOrAdd(pack.NormalizedKey, _ => LoadBundled(pack.RelativePath, decodePixelWidth: 16));
+    }
+
+    /// <summary>
+    /// The 16 px branded icon of an RST native tool placed in a stack: the
+    /// shipped <c>icon_*_16.png</c> files, matched as
+    /// <see cref="ResolveNativeToolIcon"/> matches. Null for other commands.
+    /// </summary>
+    public static ImageSource? ResolveNativeToolIcon16(string? commandId)
+    {
+        if (string.IsNullOrEmpty(commandId)) return null;
+        if (commandId.Contains("RST_Health",  StringComparison.Ordinal)) return HealthIcon16;
+        if (commandId.Contains("RST_Loader",  StringComparison.Ordinal)) return LoaderIcon16;
+        if (commandId.Contains("RST_Builder", StringComparison.Ordinal)) return BuilderIcon16;
+        if (commandId.Contains(RstifyToggle.RstifyButtonCookie, StringComparison.Ordinal)) return RstifyIconOff16;
+        return null;
+    }
+
+    private static ImageSource? LoadBundled(string relativePath, int? decodePixelWidth = null)
     {
         var loc = typeof(IconAssets).Assembly.Location;
         if (string.IsNullOrEmpty(loc))
@@ -288,6 +327,7 @@ internal static class IconAssets
             bmp.BeginInit();
             bmp.UriSource = new Uri(path, UriKind.Absolute);
             bmp.CacheOption = BitmapCacheOption.OnLoad;
+            if (decodePixelWidth is { } w) bmp.DecodePixelWidth = w;
             bmp.EndInit();
             if (bmp.CanFreeze) bmp.Freeze();
             Log.Debug("IconAssets: loaded {Rel} ({W}x{H})", relativePath, bmp.PixelWidth, bmp.PixelHeight);

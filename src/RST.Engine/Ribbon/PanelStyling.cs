@@ -18,8 +18,8 @@
 // pyRevit's startup.py wraps a SizeChanged subscription in try/except
 // — IronPython's late binding swallows the AttributeError silently,
 // which means pyRevit's runtime radii are also just the initial relative
-// ratios. We do better here: estimate panel dimensions from item count
-// (each Large item ≈ 96px wide) and emit two brushes (body + title bar)
+// ratios. We do better here: estimate panel dimensions from the layout
+// (each Large item ≈ 96px wide, a stack as wide as its labels) and emit two brushes (body + title bar)
 // with absolute-pixel-targeted relative radii. Result: ~5px corners on
 // every panel regardless of item count, matching pyRevit's intended
 // PANEL_CORNER_RADIUS_PX = 5 — which pyRevit silently fails to apply.
@@ -60,17 +60,25 @@ internal static class PanelStyling
     /// with ~5px corners regardless of item count or title-bar height
     /// (a single shared brush would give the title bar squashed Y-radii).
     /// </summary>
-    public static void ApplyColor(AwRibbonPanel panel, string hexColor, double alpha)
+    /// <param name="estimatedWidth">
+    /// The panel's estimated width in px, when the caller knows its layout
+    /// (a profile panel: RibbonLayoutPlanner.EstimatePanelWidth counts a
+    /// stack by its labels, spec #17). Null estimates it from the item count
+    /// (each Large item ~96 px).
+    /// </param>
+    public static void ApplyColor(AwRibbonPanel panel, string hexColor, double alpha, double? estimatedWidth = null)
     {
         if (panel is null) return;
         var clamped = Math.Max(0.0, Math.Min(1.0, alpha));
         try
         {
-            // Estimate rendered panel width from item count — each Large
-            // item is ~96px wide. AdWindows doesn't expose ActualWidth,
-            // so this is the closest we can get without a visual-tree walk.
+            // Estimate rendered panel width — AdWindows doesn't expose
+            // ActualWidth, so this is the closest we can get without a
+            // visual-tree walk.
             int itemCount = panel.Source?.Items.Count ?? 1;
-            double estW = Math.Max(96.0, itemCount * 96.0 + 8.0);
+            double estW = estimatedWidth is { } w && w > 0
+                ? Math.Max(96.0, w)
+                : Math.Max(96.0, itemCount * 96.0 + 8.0);
             const double bodyH = 96.0;
             const double titleH = 18.0;
 
