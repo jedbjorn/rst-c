@@ -14,6 +14,8 @@ name: release
 #      Its bundle version is the same numeric a.b.c; a same-version bundle
 #      (rc -> final) replaces the installed one (Burn treats an equal
 #      version as an upgrade).
+#   4b. Also attaches RST-Machine.msi (feature #17): RST for everyone on
+#      the PC, per machine, built from the same sources at the same version.
 #   5. Also attaches SHA256SUMS.txt (feature #17, spec #20 §8), one line
 #      per asset. The release is created as a DRAFT, verified against
 #      GitHub's digests of the uploads, and only then published.
@@ -68,14 +70,19 @@ jobs:
     needs: build
     env:
       # The release's assets, in ONE place: SHA256SUMS.txt lists them and release-draft.sh attaches them
-      # (with SHA256SUMS.txt). Adding RST-Machine.msi (WU5) is this one line.
-      RELEASE_ASSETS: RST.msi RST-Setup.exe
+      # (with SHA256SUMS.txt). RST-Machine.msi: feature #17 WU5, spec #20 §7.
+      RELEASE_ASSETS: RST.msi RST-Machine.msi RST-Setup.exe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: RST.msi
+          path: ./artifacts/
+      # RST for everyone on the PC (feature #17, spec #20 §7): per machine.
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Machine.msi
           path: ./artifacts/
       # The setup bundle (feature #13): RST.msi + opt-in companion add-ins.
       - uses: actions/download-artifact@v4

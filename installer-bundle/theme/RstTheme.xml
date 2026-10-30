@@ -6,6 +6,7 @@
   Reciprocal License (MS-RL), https://github.com/wixtoolset/wix/blob/v6.0.2/LICENSE.TXT.
   Changes: logo 48x48 and version label in the header; Options button and
   Options page removed (nothing to choose); the Install page gains the
+  install-scope radio buttons above the license (feature #17) and the
   companion checkboxes (@COMPANIONS@, generated from the registry by
   gen-companions.ps1, with the window and license box resized around them);
   the Success page gains the "companions stay installed" note
@@ -44,7 +45,21 @@
             <Label X="11" Y="80" Width="-11" Height="30" FontId="2" DisablePrefix="yes" Visible="no" Name="CheckingForUpdatesLabel" />
         </Page>
         <Page Name="Install">
-            <Richedit Name="EulaRichedit" X="11" Y="80" Width="-11" Height="@EULA_HEIGHT@" TabStop="yes" FontId="0" HexStyle="800000" />
+            <!-- Install scope (feature #17, spec #20 §7): the two radio
+                 buttons set the Burn variable InstallScope (thmutil
+                 RadioButtons/@Name), which picks RST.msi or RST-Machine.msi
+                 (Bundle.wxs). The wording is the spec's. While RST-Machine.msi
+                 is installed, "Just for me" is disabled and its text says why. -->
+            <RadioButtons Name="InstallScope">
+                <RadioButton Value="user" X="11" Y="80" Width="-11" Height="17" TabStop="yes" FontId="3" EnableCondition="NOT (RstMachineState = 5)">#(loc.ScopeUserRadio)</RadioButton>
+                <RadioButton Value="machine" X="11" Y="146" Width="-11" Height="17" TabStop="yes" FontId="3">#(loc.ScopeMachineRadio)</RadioButton>
+            </RadioButtons>
+            <Label X="29" Y="98" Width="-11" Height="45" FontId="4" DisablePrefix="yes">
+                <Text>#(loc.ScopeUserText)</Text>
+                <Text Condition="RstMachineState = 5">#(loc.ScopeUserLockedText)</Text>
+            </Label>
+            <Label X="29" Y="164" Width="-11" Height="60" FontId="4" DisablePrefix="yes">#(loc.ScopeMachineText)</Label>
+            <Richedit Name="EulaRichedit" X="11" Y="232" Width="-11" Height="@EULA_HEIGHT@" TabStop="yes" FontId="0" HexStyle="800000" />
 <!--@COMPANIONS@-->
             <Checkbox Name="EulaAcceptCheckbox" X="11" Y="-41" Width="-11" Height="17" TabStop="yes" FontId="3" HideWhenDisabled="yes">#(loc.InstallAcceptCheckbox)</Checkbox>
             <Button Name="InstallUpdateButton" X="11" Y="-11" Width="200" Height="23" TabStop="yes" FontId="0" EnableCondition="WixStdBAUpdateAvailable" HideWhenDisabled="yes">#(loc.UpdateButton)</Button>

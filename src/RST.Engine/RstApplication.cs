@@ -72,6 +72,7 @@ public sealed class RstApplication : IExternalApplication
                             AppDataPaths.Root, AppDataPaths.ProfilesDir,
                             AppDataPaths.ActiveProfileFile, BanList.DefaultPath,
                             typeof(RstApplication).Assembly.Location);
+            LogInstallScope(rev);
 
             // Activity telemetry (doc #5). Handlers are cheap capture +
             // enqueue; all file IO lives on the collector's writer thread.
@@ -296,6 +297,29 @@ public sealed class RstApplication : IExternalApplication
     /// prune ever fails.
     /// </summary>
     private const int MaxSessionLogs = 10;
+
+    /// <summary>
+    /// Once per startup (feature #17, spec #20 §7): which installer's copy is running, and, when RST is installed
+    /// both for this user (RST.msi) and for everyone (RST-Machine.msi), that Revit loads the user's own copy and
+    /// how to use the shared one. Information only; never fails OnStartup.
+    /// </summary>
+    private static void LogInstallScope(string revitVersion)
+    {
+        try
+        {
+            var engine = typeof(RstApplication).Assembly.Location;
+            var scope = InstallLayout.ScopeOf(engine, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
+            Log.Information("Install scope: {Scope}",
+                scope == RstInstallScope.Machine ? "for everyone on this PC (RST-Machine.msi)" : "for this user (RST.msi)");
+            if (int.TryParse(revitVersion, out var year))
+                foreach (var shadow in InstallLayout.FindShadows(new[] { year }))
+                    Log.Warning("{Shadow}", InstallLayout.Describe(shadow));
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Install scope check failed");
+        }
+    }
 
     private static void ConfigureLogging()
     {

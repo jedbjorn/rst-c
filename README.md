@@ -28,7 +28,7 @@ purpose: Native Revit add-in for curated ribbon profiles
 
 rst-c (Revit Standardization Tool) is a native Revit add-in that gives admins a way to build curated ribbon toolbar profiles, and gives end users a one-click way to load them. Architects, modellers, BIM coordinators, and trainees rarely need the same ribbon — rst-c lets each role get the ribbon that fits the work, without hunting through tabs or relearning where commands live.
 
-It ships as a single managed add-in for Revit 2025 through 2027, installs into the standard per-user add-in directory, and runs without pyRevit, Python, or any other external runtime. Its windows are native WPF: they open over Revit, belong to it, and follow Revit's light or dark theme.
+It ships as a single managed add-in for Revit 2025 through 2027, installs into the standard per-user add-in directory (or once for everyone on the PC, from v3.1), and runs without pyRevit, Python, or any other external runtime. Its windows are native WPF: they open over Revit, belong to it, and follow Revit's light or dark theme.
 
 **Runtime model:** the add-in runs inside Revit, plus one small tray app (`RST.Tray.exe`, from v3.1) in the notification area for updates and add-in switching outside Revit. There is no second runtime: both use the .NET that Revit already installs. **[Tray docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/tray.md)**
 
@@ -36,10 +36,11 @@ It ships as a single managed add-in for Revit 2025 through 2027, installs into t
 
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
-- `RST.msi` — Revit 2025, 2026 and 2027
+- `RST.msi` — Revit 2025, 2026 and 2027, for your Windows account
 - `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://github.com/jedbjorn/gantt-it), [Splash-It](https://github.com/jedbjorn/splash-it)) as checkboxes
+- `RST-Machine.msi` — rst-c once for everyone on the PC, for IT (from v3.1; needs an administrator)
 
-Per-user install; no admin rights required. Run either one, then launch Revit — the RST tools appear on the Add-Ins tab.
+Per-user install; no admin rights required. Run `RST.msi` or `RST-Setup.exe`, then launch Revit — the RST tools appear on the Add-Ins tab. See [Install modes](#install-modes) for the per-machine option.
 
 ### Why rst-c
 
@@ -109,7 +110,7 @@ rst-c writes a Serilog session log under `%AppData%\RST\logs\` for every Revit l
 **Or use `RST-Setup.exe`**, the same release's setup, which installs rst-c and offers the Designs/OS companion add-ins:
 
 1. Close Revit.
-2. Run `RST-Setup.exe`, accept the license, and tick any companion add-ins you want. They are unticked by default.
+2. Run `RST-Setup.exe`. Choose **Just for me (recommended)** (the default) or **Everyone on this PC** ([Install modes](#install-modes)), accept the license, and tick any companion add-ins you want. They are unticked by default.
 3. Launch Revit.
 
 | Checkbox | Add-in | Silent variable |
@@ -130,6 +131,34 @@ RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1
 Use either `RST.msi` or `RST-Setup.exe` on a computer, not both. If the **same version** of `RST.msi` is already installed, the setup adopts it: Settings → Apps shows two "RST" entries, and removing either one removes rst-c. An older `RST.msi` (for example v2.2.0) is upgraded in place, leaving one entry. Details: [`installer-bundle/README.md`](installer-bundle/README.md).
 
 The installer is per-user — no admin elevation required. User data (profiles, logs, branding, active-profile state) lives at `%AppData%\RST\` and is preserved across reinstalls.
+
+### Install modes
+
+From v3.1 rst-c installs one of two ways. Both are the same RST, with the same tray and the same per-user add-in switching. Choose one per PC.
+
+| | Just for me (recommended) | Everyone on this PC |
+|---|---|---|
+| Installer | `RST.msi`, or `RST-Setup.exe` "Just for me" | `RST-Machine.msi`, or `RST-Setup.exe` "Everyone on this PC" |
+| Administrator | never | once, at install |
+| Program files | `%AppData%\RST\`, `%LocalAppData%\Programs\RST\` | `C:\Program Files\RST\` |
+| Settings → Apps | "RST" | "RST (all users)" |
+| Updates | each user, from the tray | an administrator deploys the new `RST-Machine.msi` |
+
+Each user still has their own profiles, settings, tray and add-in choices. A per-machine install shares only the program files and grants nothing extra: no permission changes and no service. Gantt-It and Splash-It always install per user; on a per-machine PC, each user adds them from the RST tray.
+
+```powershell
+# IT, from a deployment tool (SCCM, Intune: runs as SYSTEM) or an elevated prompt
+msiexec /i RST-Machine.msi /qn /norestart
+
+# an administrator at the PC, also installing Gantt-It for their own account
+RST-Setup.exe /quiet /norestart InstallScope=machine InstallGanttIt=1
+```
+
+Deploy `RST-Machine.msi` on its own as SYSTEM. `RST-Setup.exe` is for an administrator signed in at the PC: as SYSTEM it would register itself, and install companions, for no real user.
+
+**Both installed:** if a user also has their own `RST.msi`, Revit loads their own copy. "Everyone on this PC" in `RST-Setup.exe` installs RST for everyone, then removes the installing user's own copies (including the retired Revit 2027 preview). If Revit is open or a copy can't be removed, it rolls back: the user keeps their own RST. A bare `RST-Machine.msi` refuses to install until that copy is removed. Any other user is told once by their tray how to remove theirs.
+
+**Switching back** to just for me is uninstall, then install: remove "RST (all users)", then install `RST.msi`. Details: [`installer/README.md`](installer/README.md#per-machine-install-rst-machinemsi) and [docs/tray.md](docs/tray.md#installed-for-everyone-on-this-pc-it).
 
 | Revit version | Installer | TFM |
 |---|---|---|
@@ -182,7 +211,7 @@ build/stage.sh R25              # Release config by default → build/R25/{addin
 build/stage.sh R26 Debug        # Debug build for VM diagnostics
 ```
 
-For an MSI build, stage all three majors (`build/stage.sh R25`, `R26`, `R27`), then run `dotnet build installer\RST.Installer.wixproj` on Windows. It produces one `RST.msi` covering Revit 2025–2027.
+For an MSI build, stage all three majors (`build/stage.sh R25`, `R26`, `R27`), then run `dotnet build installer\RST.Installer.wixproj` on Windows. It produces one `RST.msi` covering Revit 2025–2027. Add `-p:RstScope=machine` for `RST-Machine.msi`.
 
 See [docs/DEVELOPING.md](docs/DEVELOPING.md) for the WPF architecture, the vendored family UI kit, and the screenshot tests.
 

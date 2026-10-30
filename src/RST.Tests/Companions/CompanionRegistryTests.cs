@@ -252,6 +252,7 @@ public class CompanionRegistryTests
     // silently drop one: the unified RST.msi, the R27 preview RST-R27.msi
     // (folded by feature #11, but its code stays rst-c's), and RST.addin.
     private static readonly Guid RstMsiUpgradeCode = Guid.Parse("AF0331FC-5280-492A-94BD-95EDF108BE74");
+    private static readonly Guid RstMachineMsiUpgradeCode = Guid.Parse("79C25959-C28A-4ED8-8984-85ED525476C3"); // RST-Machine.msi (F17 WU5)
     private static readonly Guid RstR27UpgradeCode = Guid.Parse("02BE4399-A563-4B15-BD12-ECF5D8486FB3");
     private static readonly Guid RstAddinClientId = Guid.Parse("4f8ef7a0-0001-4000-8000-525354000001");
 
@@ -280,11 +281,40 @@ public class CompanionRegistryTests
     /// companion) name someone else's product and are ignored.
     /// </summary>
     private static IEnumerable<Guid> DeclaredUpgradeCodes(string wxsPath) =>
-        XDocument.Load(wxsPath).Descendants()
-            .Where(e => e.Name.LocalName is "Package" or "Bundle")
-            .Select(e => (string?)e.Attribute("UpgradeCode"))
-            .Where(v => v is not null && Guid.TryParse(v, out _))
-            .Select(v => Guid.Parse(v!));
+        DeclaredUpgradeCodeValues(wxsPath)
+            .Where(v => Guid.TryParse(v, out _))
+            .Select(v => Guid.Parse(v));
+
+    private static readonly Regex PreprocessorVariable = new(@"^\$\(var\.([A-Za-z_][A-Za-z0-9_.]*)\)$");
+    private static readonly Regex DefineData = new(@"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*""([^""]*)""\s*$");
+
+    /// <summary>
+    /// Each &lt;Package&gt;/&lt;Bundle&gt; UpgradeCode value in one .wxs, as written. A
+    /// <c>$(var.X)</c> reference is expanded to every literal <c>&lt;?define X = "…" ?&gt;</c> in the
+    /// same file, one per branch of an <c>&lt;?if?&gt;</c>: installer/Product.wxs builds RST.msi and
+    /// RST-Machine.msi from one source (feature #17, spec #20 §7), so it declares both codes that way.
+    /// A reference with no literal define stays as written, and so is not a GUID.
+    /// </summary>
+    private static IEnumerable<string> DeclaredUpgradeCodeValues(string wxsPath)
+    {
+        var doc = XDocument.Load(wxsPath);
+        var defines = doc.DescendantNodes().OfType<XProcessingInstruction>()
+            .Where(pi => pi.Target == "define")
+            .Select(pi => DefineData.Match(pi.Data))
+            .Where(m => m.Success)
+            .ToLookup(m => m.Groups[1].Value, m => m.Groups[2].Value);
+        foreach (var value in doc.Descendants()
+                     .Where(e => e.Name.LocalName is "Package" or "Bundle")
+                     .Select(e => (string?)e.Attribute("UpgradeCode"))
+                     .Where(v => v is not null))
+        {
+            var reference = PreprocessorVariable.Match(value!);
+            if (reference.Success && defines[reference.Groups[1].Value].Any())
+                foreach (var defined in defines[reference.Groups[1].Value]) yield return defined;
+            else
+                yield return value!;
+        }
+    }
 
     /// <summary>
     /// The checked-in .wxs sources of rst-c's installers: every installer*/
@@ -307,7 +337,7 @@ public class CompanionRegistryTests
     private static RstIdentities Rst()
     {
         var root = RepoRoot();
-        var upgradeCodes = new HashSet<Guid> { RstMsiUpgradeCode, RstR27UpgradeCode };
+        var upgradeCodes = new HashSet<Guid> { RstMsiUpgradeCode, RstMachineMsiUpgradeCode, RstR27UpgradeCode };
         foreach (var wxs in InstallerSources(root))
             upgradeCodes.UnionWith(DeclaredUpgradeCodes(wxs));
 
@@ -355,7 +385,8 @@ public class CompanionRegistryTests
         var product = Path.Combine(root, "installer", "Product.wxs");
         InstallerSources(root).Should().Contain(product);
         DeclaredUpgradeCodes(product)
-            .Should().Equal(new[] { RstMsiUpgradeCode }, "installer/Product.wxs declares RST.msi's UpgradeCode on <Package>");
+            .Should().Equal(new[] { RstMsiUpgradeCode, RstMachineMsiUpgradeCode },
+                "installer/Product.wxs declares RST.msi's and RST-Machine.msi's UpgradeCodes on <Package>, one per Scope branch");
 
         var addin = File.ReadAllText(Path.Combine(root, "src", "RST.Bootstrap", "RST.addin"));
         AddinClientId.Matches(addin).Select(m => Guid.Parse(m.Groups[1].Value))
@@ -370,12 +401,13 @@ public class CompanionRegistryTests
         // identities unnoticed. Every <Package>/<Bundle> UpgradeCode under
         // installer*/ must therefore be a literal GUID, and the bundle's
         // never-change code (installer-bundle/README.md) and the test-only
-        // fixture's are pinned here.
+        // fixture's are pinned here. A `$(var.X)` whose every <?define X?> in
+        // the same file is a literal GUID counts as literal (installer/
+        // Product.wxs, one per Scope; DeclaredUpgradeCodeValues).
         var root = RepoRoot();
         var declared = InstallerSources(root)
-            .SelectMany(wxs => XDocument.Load(wxs).Descendants()
-                .Where(e => e.Name.LocalName is "Package" or "Bundle")
-                .Select(e => (File: Path.GetRelativePath(root, wxs), Code: (string?)e.Attribute("UpgradeCode"))))
+            .SelectMany(wxs => DeclaredUpgradeCodeValues(wxs)
+                .Select(code => (File: Path.GetRelativePath(root, wxs), Code: (string?)code)))
             .ToList();
         declared.Where(d => !Guid.TryParseExact(d.Code, "D", out _))
             .Should().BeEmpty("every installer UpgradeCode is a literal GUID");

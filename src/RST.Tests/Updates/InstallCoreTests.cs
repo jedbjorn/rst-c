@@ -620,6 +620,32 @@ public sealed class InstallCoordinatorTests : IDisposable
         _quits.Should().Be(0);
     }
 
+    // F17 WU5 (WU4 review DN5): RST-Machine.msi under its own UpgradeCode is found through RstProduct, and the tray
+    // shows the administrator message; self-update still accepts only the per-user UpgradeCode.
+    [Fact]
+    public async Task RST_Machine_found_by_its_own_UpgradeCode_is_never_updated_from_the_tray()
+    {
+        _rst.UpgradeCodes.Should().Contain(ProductCatalog.RstMachineUpgradeCode, "RST-Machine.msi is detected as RST");
+        ProductCatalog.RstPerUserUpdate.UpgradeCodes.Should().Equal(ProductCatalog.RstUpgradeCode);
+
+        _installed.With(ProductCatalog.RstMachineUpgradeCode, "3.1.0", InstallContext.Machine);
+        using (var c = Make())
+        {
+            await c.InstallAsync(_rst, new ReleaseVersion(3, 1, 1));
+            c.For("rst").Problem.Should().Be(InstallProblem.PerMachine);
+        }
+        // Both installed (the user's own RST.msi shadows RST-Machine): still the administrator's to update.
+        _installed.With(ProductCatalog.RstUpgradeCode, "3.0.0");
+        using (var c = Make())
+        {
+            await c.InstallAsync(_rst, new ReleaseVersion(3, 1, 1));
+            c.For("rst").Problem.Should().Be(InstallProblem.PerMachine);
+        }
+        _github.Count.Should().Be(0);
+        _self.Started.Should().BeEmpty();
+        _msiexec.Calls.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task An_updater_that_cannot_start_leaves_the_tray_running()
     {

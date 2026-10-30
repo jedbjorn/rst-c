@@ -31,6 +31,12 @@ name: _build (reusable)
 #                    stub Revit.exe files (installer/ci-smoke.ps1 -Mode
 #                    Install): Component-table check, detected years only,
 #                    no-Revit refusal, Repair adds/drops a year, uninstall.
+#                    Also builds RST-Machine.msi (feature #17: the same
+#                    sources, -p:RstScope=machine) and a 1.0.0 build of
+#                    each for the upgrade smokes (artifact msi-test).
+#   • msi-machine  — Windows runner (administrator): RST-Machine.msi
+#                    installs, repairs, upgrades and uninstalls per machine
+#                    and grants nothing (installer/ci-machine-smoke.ps1, AC9).
 #   • msi-migrate  — Windows runner, matrix v2.2.0 Preview/Unified and
 #                    v3.0.0 Unified. Installs the public v2.2.0 RST-R27.msi
 #                    or RST.msi, or the v3.0.0 RST.msi, then the new
@@ -40,11 +46,11 @@ name: _build (reusable)
 #                    companion MSIs (companions/companions.json), builds
 #                    installer-bundle/RST.Setup.wixproj → RST-Setup.exe
 #                    (feature #13), plus the smoke's fixture test bundle.
-#   • bundle-smoke — Windows runner, matrix Chain/BareMsiFirst/Companions:
+#   • bundle-smoke — Windows runner, matrix Chain/BareMsiFirst/Companions/UI/Scope:
 #                    installer-bundle/ci-bundle-smoke.ps1 (install order,
-#                    bare RST.msi first, the real companions).
+#                    bare RST.msi first, the real companions, the UI, both install scopes).
 #   • release-sums — build/sha256sums.sh self-test over this build's
-#                    RST.msi and RST-Setup.exe (feature #17, spec #20 §8).
+#                    RST.msi, RST-Machine.msi and RST-Setup.exe (feature #17, spec #20 §8).
 #   • tray-detect  — Windows runner: the tray's companion detection against
 #                    the fixture companion MSI, built in the job from the
 #                    bundle's fixture project (installer/ci-tray-detect.ps1,
@@ -279,6 +285,21 @@ jobs:
           dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstMsiVersion=1.0.0
           Copy-Item installer/bin/Release/RST.msi "$env:RUNNER_TEMP/RST-older.msi"
           Copy-Item "$env:RUNNER_TEMP/RST-final.msi" installer/bin/Release/RST.msi -Force
+      # RST-Machine.msi (feature #17, spec #20 §7): the same sources built per
+      # machine (RstScope=machine, its own obj\machine\ and UpgradeCode), at
+      # this build's version, plus the same commit at 1.0.0 for msi-machine's
+      # upgrade step. The release one is set aside and put back, as above.
+      - name: RST-Machine.msi (per machine) and its older build
+        shell: pwsh
+        run: |
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstScope=machine -p:RstMsiVersion=1.0.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item installer/bin/Release/RST-Machine.msi "$env:RUNNER_TEMP/RST-Machine-older.msi"
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo --no-restore -t:Rebuild -p:RstScope=machine -p:RstMsiVersion=${{ inputs.product_version }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force msi-test | Out-Null
+          Copy-Item "$env:RUNNER_TEMP/RST-older.msi", "$env:RUNNER_TEMP/RST-Machine-older.msi" msi-test/
+          Get-ChildItem installer/bin/Release/*.msi, msi-test | Format-Table Name, Length
       # Permanent install/uninstall smoke (feature #11, D6 / AC3, decision
       # #10). Stub Revit.exe files under C:\Program Files\Autodesk\Revit
       # <year>\ drive the detection: no Revit is refused, only detected
@@ -293,6 +314,74 @@ jobs:
           name: RST.msi
           path: installer/bin/Release/RST.msi
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST-Machine.msi
+          path: installer/bin/Release/RST-Machine.msi
+          if-no-files-found: error
+      # Test-only builds (never released): this commit at 1.0.0, per user and
+      # per machine, for the upgrade and "remove the user's copy" smokes.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi-test
+          path: msi-test/
+          if-no-files-found: error
+
+  # RST-Machine.msi (feature #17, spec #20 §7, AC9) on an administrator
+  # runner (GitHub's Windows runners run as an administrator):
+  # installer/ci-machine-smoke.ps1. Identity and component checks (no
+  # ComponentId shared with RST.msi), "grants nothing" (no service,
+  # permission, user or group table, only WiX's own custom actions; folder
+  # and Run-key ACLs compared before and after install, repair and
+  # uninstall; everything created only inherits; no service or scheduled
+  # task added), the per-user-copy refusal, detected years only, Repair adds
+  # a year, the installer never starts a tray, an upgrade from a 1.0.0 build
+  # of this commit with a tray running (closed by WM_CLOSE, never restarted
+  # elevated), and a clean uninstall.
+  msi-machine:
+    name: MSI per machine (RST-Machine.msi)
+    needs: msi-unified
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Machine.msi
+          path: new/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: new/
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-test
+          path: msi-test/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R25
+          path: build/R25/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R26
+          path: build/R26/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R27
+          path: build/R27/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-Tray
+          path: build/Tray/
+      - name: Per-machine install smoke
+        shell: pwsh
+        run: installer/ci-machine-smoke.ps1 -Msi new/RST-Machine.msi -UserMsi new/RST.msi -OlderMsi msi-test/RST-Machine-older.msi -StagedRoot build
+      - name: Upload msiexec logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-machine-logs
+          path: ${{ runner.temp }}/machine-*.log
+          if-no-files-found: ignore
 
   # Upgrade paths from released MSIs (feature #11, AC4/AC5).
   # v2.2.0 is pinned: it is the final release that shipped RST-R27.msi.
@@ -354,6 +443,10 @@ jobs:
         with:
           name: RST.msi
           path: installer/bin/Release/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Machine.msi
+          path: installer/bin/Release/
       - name: Download and verify companion pins
         shell: pwsh
         env:
@@ -361,7 +454,7 @@ jobs:
         run: installer-bundle/fetch-companions.ps1
       - name: Build bundles and check what they embed
         shell: pwsh
-        run: installer-bundle/ci-bundle-build.ps1 -Version "${{ inputs.product_version }}" -RstMsi installer/bin/Release/RST.msi
+        run: installer-bundle/ci-bundle-build.ps1 -Version "${{ inputs.product_version }}" -RstMsi installer/bin/Release/RST.msi -RstMachineMsi installer/bin/Release/RST-Machine.msi
       - uses: actions/upload-artifact@v4
         with:
           name: RST-Setup.exe
@@ -384,8 +477,18 @@ jobs:
   #                bundle's uninstall, install alone without RST. Revit is a
   #                stub here; loading in Revit is the VM's check (AC6).
   #   UI           the real RST-Setup.exe driven through its own UI (UI
-  #                Automation): the companion checkboxes, the finish page's
-  #                "companions stay installed" note; screenshots uploaded.
+  #                Automation): the install-scope radio buttons and their
+  #                wording (feature #17), the companion checkboxes, the finish
+  #                page's "companions stay installed" note; screenshots uploaded.
+  #   Scope        the test bundle on both install-scope paths (feature #17,
+  #                AC10): "Just for me" (the default) launches no elevated
+  #                engine; "Everyone on this PC" launches exactly one, installs
+  #                RST-Machine.msi, then removes the user's own RST.msi (an older
+  #                build, the same version, v2.2.0 with the retired R27 preview),
+  #                keeps the scope on re-runs,
+  #                installs over a hand-copied manifest, rolls back while
+  #                Revit runs (the user keeps RST), uninstalls cleanly. UI checks the
+  #                locked "Just for me" while RST-Machine.msi is installed.
   bundle-smoke:
     name: Bundle smoke (${{ matrix.mode }})
     needs: bundle
@@ -393,12 +496,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [Chain, BareMsiFirst, Companions, UI]
+        mode: [Chain, BareMsiFirst, Companions, UI, Scope]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: RST.msi
+          path: rst/
+      - uses: actions/download-artifact@v4
+        if: matrix.mode == 'Scope'
+        with:
+          name: msi-test
+          path: msi-test/
+      # Scope S6 (review B2): a v2.2.0 user with RST.msi and the retired
+      # RST-R27.msi preview, the pinned public assets msi-migrate also uses.
+      - name: Download v2.2.0 RST.msi and RST-R27.msi
+        if: matrix.mode == 'Scope'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2.2.0 -R "${{ github.repository }}" -p RST.msi -D v220
+          gh release download v2.2.0 -R "${{ github.repository }}" -p RST-R27.msi -D v220
+      # UI: the locked "Just for me" state needs RST-Machine.msi installed bare.
+      - uses: actions/download-artifact@v4
+        if: matrix.mode == 'UI'
+        with:
+          name: RST-Machine.msi
           path: rst/
       - uses: actions/download-artifact@v4
         with:
@@ -418,9 +541,9 @@ jobs:
         shell: pwsh
         run: |
           $mode = '${{ matrix.mode }}'
-          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe; exit $LASTEXITCODE }
+          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe -RstMachineMsi rst/RST-Machine.msi; exit $LASTEXITCODE }
           $bundle = if ($mode -eq 'Companions') { 'setup/RST-Setup.exe' } else { 'bundle-test/test/RST-Setup-Fixture.exe' }
-          installer-bundle/ci-bundle-smoke.ps1 -Mode $mode -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test
+          installer-bundle/ci-bundle-smoke.ps1 -Mode $mode -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test -OlderRstMsi msi-test/RST-older.msi -V220RstMsi v220/RST.msi -V220PreviewMsi v220/RST-R27.msi
       - name: Upload Burn and msiexec logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -434,8 +557,8 @@ jobs:
 
   # SHA256SUMS.txt (feature #17, spec #20 §8): release.yml writes it with
   # build/sha256sums.sh and checks the DRAFT release against it before it
-  # publishes. This runs the same script on every PR over this build's RST.msi and
-  # RST-Setup.exe: the lines name exactly the assets and verify, and the release
+  # publishes. This runs the same script on every PR over this build's RST.msi,
+  # RST-Machine.msi and RST-Setup.exe: the lines name exactly the assets and verify, and the release
   # check refuses a wrong or missing digest, a missing or extra line, and a sums asset that differs.
   release-sums:
     name: Release SHA256SUMS.txt
@@ -449,9 +572,13 @@ jobs:
           path: artifacts/
       - uses: actions/download-artifact@v4
         with:
+          name: RST-Machine.msi
+          path: artifacts/
+      - uses: actions/download-artifact@v4
+        with:
           name: RST-Setup.exe
           path: artifacts/
-      - run: build/sha256sums.sh self-test artifacts RST.msi RST-Setup.exe
+      - run: build/sha256sums.sh self-test artifacts RST.msi RST-Machine.msi RST-Setup.exe
       # WU3 review D1: release.yml's gh calls (one draft per tag, by id; a
       # re-run deletes its own stale draft, never a published release), run
       # against a fake gh. Nothing is sent to GitHub.
@@ -582,8 +709,14 @@ jobs:
           foreach ($c in $reg.companions) { $c.status = 'in_development'; $c.release = $null }
           $none = Join-Path $env:RUNNER_TEMP 'companions-none.json'
           $reg | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $none
+          # The bundle also chains RST-Machine.msi ("Everyone on this PC", F17 WU5). These legs take the default
+          # "Just for me" path, so it is never installed here; one build of this commit serves both bundles.
+          dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstScope=machine -p:RstMsiVersion=3.1.91
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $machine = Join-Path $env:RUNNER_TEMP 'RST-Machine.msi'
+          Copy-Item installer/bin/Release/RST-Machine.msi $machine
           foreach ($v in '3.1.90', '3.1.91') {
-            dotnet build installer-bundle/RST.Setup.wixproj -c Release --nologo "-p:RstMsi=$env:RUNNER_TEMP/RST-$v.msi" "-p:RstBundleVersion=$v" "-p:CompanionRegistry=$none" "-p:OutputName=RST-Setup" "-p:IntermediateOutputPath=obj\b$v\"
+            dotnet build installer-bundle/RST.Setup.wixproj -c Release --nologo "-p:RstMsi=$env:RUNNER_TEMP/RST-$v.msi" "-p:RstMachineMsi=$machine" "-p:RstBundleVersion=$v" "-p:CompanionRegistry=$none" "-p:OutputName=RST-Setup" "-p:IntermediateOutputPath=obj\b$v\"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Copy-Item installer-bundle/bin/Release/RST-Setup.exe "$env:RUNNER_TEMP/RST-Setup-$v.exe"
           }

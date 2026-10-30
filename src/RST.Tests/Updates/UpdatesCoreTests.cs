@@ -269,7 +269,8 @@ public class ProductCatalogTests
 
         catalog.Rst.Name.Should().Be("RST");
         catalog.Rst.Repo.Should().Be("jedbjorn/rst-c");
-        catalog.Rst.UpgradeCodes.Should().Equal("AF0331FC-5280-492A-94BD-95EDF108BE74");
+        // RST.msi (per user) and RST-Machine.msi (per machine, F17 WU5): one product, two packages.
+        catalog.Rst.UpgradeCodes.Should().Equal("AF0331FC-5280-492A-94BD-95EDF108BE74", "79C25959-C28A-4ED8-8984-85ED525476C3");
         catalog.Rst.AddinClientId.Should().BeNull();
 
         var gantt = catalog.Find("gantt-it")!;

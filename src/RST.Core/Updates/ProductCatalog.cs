@@ -6,8 +6,9 @@
 // pins themselves (tag, sha256, version) stay build-time only: the bundle is the offline baseline, and the tray
 // follows each repo's latest full release.
 //
-// RST's own identity is fixed here: UpgradeCode AF0331FC-5280-492A-94BD-95EDF108BE74 (RST.msi, installer/Product.wxs).
-// WU5 adds RST-Machine.msi's code to the same entry.
+// RST's own identity is fixed here: UpgradeCode AF0331FC-5280-492A-94BD-95EDF108BE74 (RST.msi, per user) and
+// 79C25959-C28A-4ED8-8984-85ED525476C3 (RST-Machine.msi, per machine; F17 WU5), both in installer/Product.wxs. One
+// entry with both codes: Windows Installer reports the context, so the tray tells the two apart.
 //
 // A companion that is not shippable, or whose identity fields are missing or malformed, is left out (logged): the
 // tray must never look up, or later install, something it cannot identify. Nothing here throws.
@@ -57,6 +58,9 @@ public sealed class ProductCatalog
 
     /// <summary>RST.msi's UpgradeCode (installer/Product.wxs).</summary>
     public const string RstUpgradeCode = "AF0331FC-5280-492A-94BD-95EDF108BE74";
+
+    /// <summary>RST-Machine.msi's UpgradeCode (installer/Product.wxs, Scope=machine; spec #20 §7).</summary>
+    public const string RstMachineUpgradeCode = "79C25959-C28A-4ED8-8984-85ED525476C3";
 
     public const string RstRepo = "jedbjorn/rst-c";
 
@@ -121,7 +125,7 @@ public sealed class ProductCatalog
 
     /// <summary>RST's own entry.</summary>
     public static ProductInfo RstProduct { get; } = new(
-        RstId, "RST", "Ribbon profiles for Revit", RstRepo, new[] { RstUpgradeCode }, AddinClientId: null,
+        RstId, "RST", "Ribbon profiles for Revit", RstRepo, new[] { RstUpgradeCode, RstMachineUpgradeCode }, AddinClientId: null,
         AssetTemplate: RstAsset, AssetPattern: AssetPatterns[RstId]);
 
     /// <summary>
@@ -225,7 +229,7 @@ public sealed class ProductCatalog
             Log(log, $"product catalog: {id} lacks a name, repo, UpgradeCode or ClientId; left out");
             return null;
         }
-        if (upgradeCode == RstUpgradeCode)
+        if (upgradeCode is RstUpgradeCode or RstMachineUpgradeCode)
         {
             Log(log, $"product catalog: {id} claims RST's UpgradeCode; left out");
             return null;

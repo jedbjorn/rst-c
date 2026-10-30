@@ -69,6 +69,26 @@ public static class TrayUpdateNotice
 }
 
 /// <summary>
+/// The one-time "your own copy is used" notice (spec #20 §7; F17 WU5): RST is installed both for this user (RST.msi)
+/// and for everyone (RST-Machine.msi), so Revit loads the user's own copy. Shown once, on the first tray start that
+/// finds a shadow (<see cref="RST.Core.Configuration.InstallLayout.FindShadows(System.Collections.Generic.IEnumerable{int}?)"/>);
+/// recorded however it is dismissed. Information only: nothing is removed.
+/// </summary>
+public static class TrayShadowNotice
+{
+    /// <summary>A shadow exists and this user was never told.</summary>
+    public static bool ShouldShow(TraySettings settings, int shadowCount)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return shadowCount > 0 && settings.ShadowNoticeShownUtc is null;
+    }
+
+    /// <summary>Records the notice as shown, merging into the freshest settings. False if nothing was written.</summary>
+    public static bool MarkShown(DateTimeOffset shownUtc, string? path = null, Action<string>? log = null) =>
+        TraySettings.Update(s => s.ShadowNoticeShownUtc = shownUtc, path, log) is not null;
+}
+
+/// <summary>
 /// When to try adding the notification-area icon again after Shell_NotifyIcon(NIM_ADD) fails (spec #20 §1; review
 /// N4). At sign-in Explorer is often up but busy: the add times out and no TaskbarCreated follows, so the tray
 /// retries a few times, one-shot timers with a growing gap, about two minutes in all, then waits for TaskbarCreated

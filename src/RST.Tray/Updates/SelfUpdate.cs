@@ -36,7 +36,11 @@ internal sealed class SelfUpdater : ISelfUpdater
         _log = log ?? (_ => { });
     }
 
-    /// <summary>The tray runs from Program Files: a per-machine RST, which this per-user tray never updates.</summary>
+    /// <summary>
+    /// The tray runs from Program Files: a per-machine RST (RST-Machine.msi puts it in
+    /// <see cref="TrayPaths.PerMachineInstallDir"/>), which this per-user tray never updates. Anywhere under Program Files
+    /// counts, the broader and safer rule.
+    /// </summary>
     public bool PerMachineTray => IsUnder(_sourceDir, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles))
                                   || IsUnder(_sourceDir, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86));
 

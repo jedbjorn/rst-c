@@ -1,5 +1,7 @@
-// RstBootstrap.cs — IExternalApplication thunk that loads the engine from
-// %AppData%\RST\app\ and forwards lifecycle calls. See RST-033.
+// RstBootstrap.cs — IExternalApplication thunk that loads the engine and
+// forwards lifecycle calls. See RST-033. The engine is in <bootstrap dir>\app\
+// when that folder exists (RST-Machine.msi, feature #17 spec #20 §7), otherwise
+// in %AppData%\RST\R<NN>\app\ (RST.msi, per user): see EngineLocation below.
 
 using System;
 using System.IO;
@@ -23,20 +25,25 @@ public sealed class RstBootstrap : IExternalApplication
             // Derive the per-major app dir from Revit's reported version
             // (RST-037). Each Revit major pins different Nice3point.Revit.Api
             // versions and 2027 targets a different TFM, so engine binaries
-            // are not interchangeable between majors. Layout:
-            //   %AppData%\RST\R25\app\RST.Engine.dll
-            //   %AppData%\RST\R26\app\RST.Engine.dll
-            //   %AppData%\RST\R27\app\RST.Engine.dll
+            // are not interchangeable between majors. The two layouts
+            // (EngineLocation):
+            //   per machine: C:\Program Files\RST\R<NN>\RST.Bootstrap.dll
+            //                C:\Program Files\RST\R<NN>\app\RST.Engine.dll
+            //   per user:    %AppData%\Autodesk\Revit\Addins\<year>\RST.Bootstrap.dll
+            //                %AppData%\RST\R<NN>\app\RST.Engine.dll
             var revitVersion = application.ControlledApplication.VersionNumber;
             var major = "R" + (revitVersion.Length >= 2 ? revitVersion.Substring(revitVersion.Length - 2) : revitVersion);
-            var appDir = Path.Combine(
+            var bootstrapDll = typeof(RstBootstrap).Assembly.Location;
+            var (appDir, layout) = EngineLocation.Resolve(
+                string.IsNullOrEmpty(bootstrapDll) ? null : Path.GetDirectoryName(bootstrapDll),
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "RST", major, "app");
+                major,
+                File.Exists);
 
             BootLog.Info("RST.Bootstrap loading");
-            BootLog.Info($"  bootstrapDll={typeof(RstBootstrap).Assembly.Location}");
+            BootLog.Info($"  bootstrapDll={bootstrapDll}");
             BootLog.Info($"  revitVersion={revitVersion} major={major}");
-            BootLog.Info($"  appDir={appDir} (exists={Directory.Exists(appDir)})");
+            BootLog.Info($"  appDir={appDir} (exists={Directory.Exists(appDir)}, layout: {layout})");
 
             if (!Directory.Exists(appDir))
             {
@@ -54,7 +61,8 @@ public sealed class RstBootstrap : IExternalApplication
             }
 
             // AssemblyDependencyResolver reads RST.Engine.deps.json next to
-            // the engine DLL and resolves both managed deps and native libs
+            // the engine DLL (so it probes the engine dir chosen above, in
+            // either layout) and resolves both managed deps and native libs
             // (runtimes/<rid>/native/*) for every transitive — Serilog,
             // System.Management (its runtime variant), etc.
             //
@@ -160,6 +168,34 @@ public sealed class RstBootstrap : IExternalApplication
             BootLog.Error("OnShutdown threw", ex);
             return Result.Failed;
         }
+    }
+}
+
+/// <summary>
+/// Where the engine is (feature #17, spec #20 §7). RST-Machine.msi puts the bootstrap in
+/// <c>C:\Program Files\RST\R&lt;NN&gt;\</c> and the engine in its <c>app\</c> subfolder. RST.msi puts the
+/// bootstrap beside its manifest in the per-user Add-Ins folder and the engine in
+/// <c>%AppData%\RST\R&lt;NN&gt;\app\</c>. So: <c>&lt;bootstrap dir&gt;\app\</c> when it holds
+/// <c>RST.Engine.dll</c>, otherwise the per-user folder, which is every per-user install before and after
+/// v3.1. The probe is for our engine, not for any folder named <c>app</c>: the per-user Add-Ins folder is
+/// shared with every other vendor, and a foreign <c>app\</c> there must not stop RST loading (review B1).
+/// Pure, with the file check as a seam, so RST.RuntimeTests covers both layouts without Revit.
+/// </summary>
+internal static class EngineLocation
+{
+    public const string EngineFileName = "RST.Engine.dll";
+    public const string BesideBootstrap = "beside the bootstrap (per machine)";
+    public const string PerUser = "per user (%AppData%)";
+
+    public static (string AppDir, string Layout) Resolve(
+        string? bootstrapDir, string appData, string major, Func<string, bool> fileExists)
+    {
+        if (!string.IsNullOrEmpty(bootstrapDir))
+        {
+            var beside = Path.Combine(bootstrapDir, "app");
+            if (fileExists(Path.Combine(beside, EngineFileName))) return (beside, BesideBootstrap);
+        }
+        return (Path.Combine(appData, "RST", major, "app"), PerUser);
     }
 }
 

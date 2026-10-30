@@ -143,6 +143,15 @@
 To turn this off, open RST from the notification area and go to Settings.</value>
     <comment>The one-time first-run notice (the telemetry ConsentNotice precedent).</comment>
   </data>
+  <data name="Shadow_Heading" xml:space="preserve">
+    <value>RST is installed twice</value>
+  </data>
+  <data name="Shadow_Message" xml:space="preserve">
+    <value>RST is installed both for you and for everyone on this PC. Revit uses your own copy, not the shared one.
+
+To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all users)". Your profiles and settings stay.</value>
+    <comment>F17 WU5: shown once when the user's own RST.msi hides RST-Machine.msi (spec #20 §7). Information only.</comment>
+  </data>
   <data name="Updates_CheckNow" xml:space="preserve">
     <value>Check now</value>
   </data>
