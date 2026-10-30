@@ -51,8 +51,11 @@ input[type=text]:focus { outline:none; border-color:var(--accent); box-shadow:0 
 
 /* Window */
 #app { flex:1; display:flex; flex-direction:column; min-height:0; }
-header.top { height:54px; background:var(--alt); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 16px; gap:10px; flex:none; }
+header.top { height:54px; background:var(--hdr, var(--alt)); border-bottom:1px solid var(--hdrLine, var(--border)); display:flex; align-items:center; padding:0 16px; gap:10px; flex:none; }
 .gear { width:30px; min-width:30px; padding:0; font-size:16px; line-height:1; }
+/* Header colour options: existing palette entries only (UiPalette AccentSoft / Pressed / SurfaceAlt). */
+.hdr-tint { --hdr:var(--accentSoft); --hdrLine:var(--infoBorder); }
+.hdr-neutral { --hdr:var(--pressed); --hdrLine:var(--strong); }
 .vsep { width:1px; height:20px; background:var(--div); margin:0 6px; }
 .dirty { color:var(--warnText); font-size:11px; display:flex; align-items:center; gap:5px; }
 .dirty::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--warnText); }
@@ -221,11 +224,12 @@ input.tname:hover { border-color:var(--border); } input.tname:focus { background
 <script>
 // ───────────────────────── option state (URL hash) ─────────────────────────
 // v2: the FnB's picks come first, so they are the defaults (B · Tabs, Tiles, In profile menu).
-const OPTS = { pane:['B','A'], layout:['tiles','rows'], actions:['header','pane'], theme:['light','dark'] };
+const OPTS = { pane:['B','A'], layout:['tiles','rows'], actions:['header','pane'], header:['tint','neutral','plain'], theme:['light','dark'] };
 const OPT_LABELS = {
   pane:['Profile pane', { A:'A · Sections', B:'B · Tabs' }],
   layout:['Panel layout', { rows:'Rows', tiles:'Tiles (ribbon-like)' }],
   actions:['Rename / Duplicate', { header:'In profile menu', pane:'In Profile pane' }],
+  header:['Header colour', { tint:'Tint (AccentSoft)', neutral:'Neutral (Pressed)', plain:'v1 (SurfaceAlt)' }],
   theme:['Theme', { light:'Light', dark:'Dark' }],
 };
 const opt = {};
@@ -513,7 +517,7 @@ function placeItem(item, t) {
 // ───────────────────────── render: mockup strip ─────────────────────────
 function renderMock() {
   const m = $('#mock'); m.innerHTML = '';
-  m.append(h('b', {}, 'MOCKUP v2.1 · F18 Builder UX'));
+  m.append(h('b', {}, 'MOCKUP v2.2 · F18 Builder UX'));
   for (const k in OPTS) {
     const [title, labels] = OPT_LABELS[k];
     m.append(h('span', { class:'grp' }, title + ':', h('span', { class:'seg' },
@@ -919,7 +923,7 @@ function renderPreview() {
 }
 
 function renderAll() {
-  document.body.className = opt.theme;
+  document.body.className = opt.theme + ' hdr-' + opt.header;
   renderMock(); renderHeader(); renderLeft(); renderCanvas(); renderRight(); renderPreview();
 }
 readHash(); openProfile(0); renderAll();

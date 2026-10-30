@@ -14,6 +14,7 @@ The FnB's picks are now the defaults: **B · Tabs**, **Tiles**, **In profile men
 | Profile pane | **A · Sections** (one scroll; Loader defaults and Junk cleanup open in dialogs) or **B · Tabs** (General, Loader defaults, Junk cleanup, all inline) |
 | Panel layout | **Rows** (a list, like today) or **Tiles** (laid out like the ribbon) |
 | Rename / Duplicate | **In profile menu** (header dropdown) or **In Profile pane** (edit the name in place; a Duplicate button) |
+| Header colour | **Tint** (the theme's AccentSoft) or **Neutral** (the theme's Pressed grey), so the header reads as a header; **v1** is the old SurfaceAlt for comparison |
 | Theme | Light or Dark (Revit follows either) |
 
 **Reset data** puts the sample profiles back.
