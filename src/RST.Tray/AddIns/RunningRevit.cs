@@ -11,7 +11,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using RST.Core.Activation;
 using RST.Core.Tray;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Tray.AddIns;
 

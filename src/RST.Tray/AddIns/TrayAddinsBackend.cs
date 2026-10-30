@@ -8,7 +8,7 @@ using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Tray;
 using RST.UI.Loader;
-using Serilog;
+using RST.Core.Logging;
 
 namespace RST.Tray.AddIns;
 
