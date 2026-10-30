@@ -25,6 +25,13 @@ name: _build (reusable)
 #                    public v2.2.0 RST-R27.msi or RST.msi, then the new
 #                    RST.msi, and asserts the preview is removed / the
 #                    unified product upgrades in place.
+#   • bundle       — Windows runner. Downloads + sha256-verifies the pinned
+#                    companion MSIs (companions/companions.json), builds
+#                    installer-bundle/RST.Setup.wixproj → RST-Setup.exe
+#                    (feature #13), plus the smoke's fixture test bundle.
+#   • bundle-smoke — Windows runner, matrix Chain/BareMsiFirst/Companions:
+#                    installer-bundle/ci-bundle-smoke.ps1 (install order,
+#                    bare RST.msi first, the real companions).
 #
 # WiX MSI emission is officially Windows-only (installer/README.md). The
 # WiX SDK MSBuild path on Linux emits WIX0000 ("behavior is undefined")
@@ -205,3 +212,94 @@ jobs:
       - name: Upgrade from v2.2.0 ${{ matrix.asset }}
         shell: pwsh
         run: installer/ci-smoke.ps1 -Mode Migrate -From ${{ matrix.from }} -Msi new/RST.msi -OldMsi "old/${{ matrix.asset }}" -StagedR27 build/R27
+
+  # Setup bundle (feature #13 Phase 2, spec #15, AC3). Downloads each
+  # shippable companion's pinned release asset and fails on a missing asset
+  # or a sha256 / UpgradeCode / version mismatch; then builds RST-Setup.exe
+  # (RST.msi + the shippable companions, from companions/companions.json),
+  # a zero-shippable variant, the fixture companion and the smoke's test
+  # bundle, and checks by /layout that each embeds exactly what it should.
+  bundle:
+    name: Bundle (RST-Setup.exe)
+    needs: msi-unified
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: installer/bin/Release/
+      - name: Download and verify companion pins
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: installer-bundle/fetch-companions.ps1
+      - name: Build bundles and check what they embed
+        shell: pwsh
+        run: installer-bundle/ci-bundle-build.ps1 -Version "${{ inputs.product_version }}" -RstMsi installer/bin/Release/RST.msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: installer-bundle/bin/Release/RST-Setup.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-test
+          path: installer-bundle/bin/ci/
+          if-no-files-found: error
+
+  # Bundle smoke (feature #13 Phase 2, AC4/AC5), permanent. Stub Revit.exe
+  # files let RST.msi's launch condition pass.
+  #   Chain        the test bundle with the fixture companion: the spec's
+  #                install-order table (ticked, re-run, uninstall, unticked,
+  #                older / newer / same fixture installed first).
+  #   BareMsiFirst bare RST.msi, then the bundle, then its uninstall (AC5).
+  #   Companions   the real RST-Setup.exe with Gantt-It and Splash-It ticked:
+  #                silent install, own ARP entries, .addin files, survive the
+  #                bundle's uninstall, install alone without RST. Revit is a
+  #                stub here; loading in Revit is the VM's check (AC6).
+  bundle-smoke:
+    name: Bundle smoke (${{ matrix.mode }})
+    needs: bundle
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [Chain, BareMsiFirst, Companions]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: rst/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: setup/
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle-test
+          path: bundle-test/
+      - name: Download and verify companion pins
+        if: matrix.mode == 'Companions'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: installer-bundle/fetch-companions.ps1
+      - name: Smoke (${{ matrix.mode }})
+        shell: pwsh
+        run: |
+          $bundle = if ('${{ matrix.mode }}' -eq 'Companions') { 'setup/RST-Setup.exe' } else { 'bundle-test/test/RST-Setup-Fixture.exe' }
+          installer-bundle/ci-bundle-smoke.ps1 -Mode ${{ matrix.mode }} -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test
+      - name: Upload Burn and msiexec logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-smoke-logs-${{ matrix.mode }}
+          path: |
+            ${{ runner.temp }}/bundle-*.log
+            ${{ runner.temp }}/*.log
+          if-no-files-found: ignore
