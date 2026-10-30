@@ -13,7 +13,7 @@ This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a run
 
 ## The registry
 
-`companions.json` is strict JSON (no comments), edited by hand in a PR.
+`companions.json` is strict JSON (no comments), edited by hand in a PR. This example is the Gantt-It entry as Phase 2 will pin it:
 
 ```json
 {
@@ -103,7 +103,7 @@ Do this when a companion publishes a new release, or to make an `in_development`
 
 2. **Asset.** Record the exact name of the release's single `.msi` asset (`GanttIt-1.1.0.msi`). The per-year `.zip` files are manual-install packages and are never pinned.
 
-3. **sha256.** Download the MSI and hash it yourself. It must equal both GitHub's `digest` from step 1 and the line in the release's `SHA256SUMS.txt`. Record it in lowercase.
+3. **sha256.** Download the MSI and hash it yourself. It must equal both GitHub's `digest` from step 1 and the line in the release's `SHA256SUMS.txt` (both companions publish one). Record it in lowercase.
 
    ```sh
    gh release download v1.1.0 -R jedbjorn/gantt-it -p GanttIt-1.1.0.msi -p SHA256SUMS.txt -D pin/
