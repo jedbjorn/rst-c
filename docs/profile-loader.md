@@ -34,7 +34,7 @@ Click **Loader** on the **RST** panel of the **Add-Ins** tab. The window, titled
 - **Details (right):** the selected profile's name (with **● Loaded** when it is the loaded one), its Tab, Min Revit and Updated date, and three sections:
   - **Tab Preview:** a read-only picture of the ribbon tab the profile builds: its panels, their colours and the tools' icons and names.
   - **RSTify: Hide These Tabs:** one switch per ribbon tab the profile can hide. See [Ribbon Tools](ribbon-tools.md).
-  - **Required Add-ins for this profile:** each add-in the profile depends on, with its file name, an **info ↗** link where the profile has one, and a status pill: **Native** (built into Revit), **Loaded** or **Not Found**. A required add-in that rst-c has disabled (renamed to `.addin.RSTdisabled`) shows **Not Found** here; when you load the profile, the Add-in Check re-enables it.
+  - **Required Add-ins for this profile:** each add-in the profile depends on, with its file name, an **info ↗** link where the profile has one, and a status pill for the running Revit year: **Native** (built into Revit), **Loaded** (installed and on), **Disabled** (switched off, by you in Autodesk's Add-Ins Manager or by rst-c; it does not load until switched back on), **Locked** (switched off by your administrator) or **Not Found**. A switched-off add-in never shows **Loaded**.
 - **Footer:** **Unload Profile** and **Delete Profile** on the left; **Restore All Add-ins** and the **Disable unused add-ins** switch in the middle; **Load Profile →** and **Close** on the right.
 
 ### Browsing and previewing
@@ -51,11 +51,10 @@ A profile can carry defaults set by its admin: tabs to hide and whether to disab
 
 Click **Load Profile →**. The Loader then:
 
-1. If **Disable unused add-ins** is on, shows **Confirm Add-in Changes**: what stays active, what will be disabled, and what it will try to disable, plus a note that Revit must restart for the changes to take effect. **Cancel** is the default button, so pressing Enter cancels. **Confirm & Load** goes ahead.
-2. Shows **Loading <profile>** while it works. Add-in files are renamed in the background, so the window stays responsive.
-3. Shows the **Add-in Check**: either "All required add-ins are installed and active", or the add-ins it re-enabled (**Auto-Restored (Was Disabled)**) and the ones still missing (**Missing — Not Installed**), each with a **download ↗** link or "(no link)". Click **Continue**.
-4. If some add-ins could not be disabled (for example, add-ins installed for all users need admin rights), lists them under **Some Add-ins Were Not Disabled**.
-5. Shows a short summary for about 3 seconds, then closes: "Tab "<tab>" will be built.", a restart note when add-ins were changed, and a line for each required add-in that is not installed for this Revit version. A missing add-in never stops the load.
+1. Works out which add-ins to switch, in **every Revit year installed** on the computer (see [Ribbon Tools](ribbon-tools.md#how-add-ins-are-switched-on-and-off)). If **Disable unused add-ins** is on, or anything would change, shows **Confirm Add-in Changes** for **your Windows user, in Revit 2026 and 2027** (the years it covers): **Will Be Switched Off**, **Will Be Switched Back On**, **Staying On (Required)**, and **Can't Be Changed** when something is locked by your administrator, one line per add-in with its years, for example "DiRoots.One (2026, 2027)". **Cancel** is the default button, so pressing Enter cancels. **Confirm & Load** goes ahead and runs exactly what the dialog showed.
+2. Shows **Loading <profile>** while it works. The add-in changes run in the background, so the window stays responsive.
+3. Shows the **Add-in Check**: what was **Switched Off** and **Switched Back On**, what it **Could Not Change** and why (for example "Revizto (2027): locked on by your administrator"), the required add-ins that are **Missing — Not Installed** (each with a **download ↗** link or "(no link)") or **Required but Switched Off**, or "All required add-ins are installed and on." It always ends with "Add-in changes apply the next time Revit starts." Click **Continue**.
+4. Shows a short summary for about 3 seconds, then closes: "Tab "<tab>" will be built.", a restart note when add-ins were changed, and a line for each required add-in that is not installed for this Revit version. A missing add-in never stops the load.
 
 rst-c rebuilds the profile tab when Revit is next idle; no restart is needed. Your RSTify switches and the **Disable unused add-ins** setting are remembered for this profile in `%AppData%\RST\user_profile_prefs.json`. The loaded profile is recorded in `%AppData%\RST\active_profile.json` and loaded again automatically when Revit starts.
 
@@ -77,7 +76,9 @@ Click **+ Import from File** and choose a profile package (`.zip`) exported from
 
 ### Restoring add-ins
 
-**Restore All Add-ins** re-enables every add-in rst-c has disabled (any `.addin.RSTdisabled` file is renamed back to `.addin`). It reports which add-ins will load after Revit restarts, or "No disabled add-ins found to restore."
+**Restore All Add-ins** switches back on every add-in rst-c switched off, in every installed Revit year, and shows the same report as a load: what was switched back on, what could not be and why, or "No add-in needed changing." Add-ins you switched off yourself in Autodesk's Add-Ins Manager (**Manage › Add-Ins Manager**) stay off: rst-c only undoes its own changes. The **Required Add-ins** pills update straight away. **Unload Profile** also switches back on what rst-c switched off, and shows the report when it did.
+
+The first time the Loader opens after upgrading from RST 3.0, it moves the add-ins RST 3.0 switched off (by renaming their `.addin` files) into Revit's Add-Ins Manager settings and shows **Add-ins Switched Off by RST 3.0** once. Those add-ins stay off.
 
 ## How it works
 
@@ -86,7 +87,7 @@ graph LR
   A["Open Loader"]:::class1 --> B["Select a profile"]:::class2 --> C["Load Profile →"]:::class1 --> D["Add-in Check"]:::class2 --> E["Ribbon rebuilds on idle"]:::class3
 ```
 
-The Loader is a WPF window inside Revit's own process. The **Loader** button reads what the window needs from Revit first (the ribbon's tabs, the add-ins that are loaded, the running version), then opens it owned by Revit's main window. Loading a profile hands the switch to Revit's next idle event, because Revit's ribbon can only be changed from Revit's own UI thread at a safe moment.
+The Loader is a WPF window inside Revit's own process. The **Loader** button reads what the window needs from Revit first (the ribbon's tabs and the running version) and reads the add-ins of every installed Revit year, then opens it owned by Revit's main window. Loading a profile hands the switch to Revit's next idle event, because Revit's ribbon can only be changed from Revit's own UI thread at a safe moment.
 
 Profiles are read from `%AppData%\RST\profiles\`; the loaded profile and your per-profile choices are written under `%AppData%\RST\`. Everything is per-user, and no admin rights are needed.
 
@@ -95,6 +96,7 @@ Profiles are read from `%AppData%\RST\profiles\`; the loaded profile and your pe
 - Profiles are per-user. Each Windows user has their own `%AppData%\RST\` folder and sees only their own profiles.
 - Only one profile tab is active at a time. Loading a profile replaces the previous one.
 - **info ↗** and **download ↗** open only `http://` and `https://` links, in your default browser. A profile shared with you is not trusted to open anything else, so other links are hidden (the Add-in Check shows "(no link)").
-- Disabling and re-enabling add-ins takes effect the next time Revit starts. Add-ins installed for all users (under `%ProgramData%`) usually need admin rights to rename, so rst-c may not be able to disable them.
+- Switching add-ins off and on takes effect the next time Revit starts. It goes through Revit's own Add-Ins Manager settings, per user, so it works for add-ins installed for all users too, without admin rights. Only add-ins your administrator locks, and Revit 2025.0–2025.2 (which have no Add-Ins Manager, so rst-c renames manifests and needs admin rights for add-ins installed for all users), can stop a change; the report always says which.
+- rst-c never switches off RST itself, Revit's own add-ins, or add-ins published by Autodesk.
 - Upgrading from v2.x: earlier versions kept a browser cache in `%LocalAppData%\RST\WebView2`. rst-c no longer uses it, and the installer and the add-in leave it in place; you can delete the folder.
 - Profiles shared from another machine (via the Builder's **Export ZIP**) are imported here. See [Profile Builder](profile-builder.md).

@@ -1,9 +1,9 @@
 ---
 title: Ribbon Tools
-tags: [rst-c, rstify, required-addins, ribbon, stacks]
+tags: [rst-c, rstify, required-addins, addins-manager, ribbon, stacks]
 date: 2026-10-30
 project: rst-c
-purpose: Guide to RSTify tab-hiding, required add-in enforcement and how stacks render on the ribbon
+purpose: Guide to RSTify tab-hiding, required add-ins and add-in switching, and how stacks render on the ribbon
 ---
 
 # Ribbon Tools
@@ -56,35 +56,79 @@ RSTify sets `IsVisible` on `Autodesk.Windows.RibbonTab` objects — the same pro
 
 ### What it does
 
-A profile can declare the add-ins it depends on; the Builder works this list out from the commands used when the profile is saved. The Loader shows each one's status (Native, Loaded or Not Found) as soon as you select the profile. A required add-in that rst-c has disabled (renamed to `.addin.RSTdisabled`) shows **Not Found** here; when you load the profile, the Add-in Check re-enables it. When the profile is loaded, rst-c checks the machine against that list and takes one of three actions per entry, then shows the result in the **Add-in Check** dialog:
+A profile can declare the add-ins it depends on; the Builder works this list out from the commands used when the profile is saved. A command whose origin is unknown on one of Revit's own tabs (Architecture, Modify, …) is never recorded as an add-in, so built-in panel names such as "Build" or "Select" no longer appear in the list.
 
-| Status | What happened | rst-c action |
+The Loader shows each required add-in's status for the running Revit year as soon as you select the profile:
+
+| Pill | Meaning |
+|---|---|
+| **Native** | A built-in Revit tab: always available |
+| **Loaded** | Installed and switched on (or, when no installed add-in matches, its tab is on the ribbon) |
+| **Disabled** | Installed but switched off: in Autodesk's Add-Ins Manager, or by rst-c. It does not load until it is switched back on and Revit restarts |
+| **Locked** | Your administrator has switched it off for this computer |
+| **Not Found** | Not installed for this Revit year; the pill links to its download page when the profile has one |
+
+A switched-off add-in never shows **Loaded**, even while its tab is still on the ribbon of the session you are in.
+
+### How add-ins are switched on and off
+
+rst-c switches add-ins through **Revit's own Add-Ins Manager** (Revit 2025.3 and later, 2026, 2027). Every Revit year keeps a per-user settings file, `%AppData%\Autodesk\Revit\Autodesk Revit <year>\AddinsData\AddInsSettings.json`, with an on/off entry per add-in. rst-c edits that entry, exactly as ticking or unticking the add-in in **Manage › Add-Ins Manager** would, and leaves every other entry and setting as it was.
+
+- **For your Windows user only.** It works for add-ins installed for all users too, without admin rights, and other people on the same computer are not affected.
+- **Every installed Revit year.** A switch applies to each Revit year installed on the computer, each with its own settings file.
+- **At the next start.** Revit reads the file when it starts, so every change applies the next time that Revit year starts. rst-c can write it while Revit is running.
+- **Revit 2025.0–2025.2** have no Add-Ins Manager. For those builds only, rst-c still renames the manifest (`X.addin` to `X.addin.RSTdisabled`), which works for add-ins installed for you; add-ins installed for all users need admin rights there.
+
+rst-c keeps its own record of the add-ins **it** switched off, in `%AppData%\RST\addin_switches.json`. Switching back on only ever touches what is in that record: an add-in you switched off yourself in Autodesk's Add-Ins Manager stays off. An entry is cleared once the add-in is back on, or once it is no longer installed.
+
+### When a profile is loaded
+
+```linear
+Plan :::class1 -> Confirm Add-in Changes :::class2 -> Switch (each installed year) :::class1 -> Add-in Check :::class3
+```
+
+The **Disable unused add-ins** switch decides the target:
+
+| Disable unused add-ins | Required by the profile | Not required |
 |---|---|---|
-| Installed and active | `.addin` manifest present, not disabled | No action needed |
-| Installed but disabled | `.addin.RSTdisabled` found on disk | Auto-enables for next Revit launch |
-| Not installed | No matching manifest | Surfaces a download link to the user |
+| On | On (switched back on if rst-c had switched it off) | Switched off |
+| Off | On (switched back on if rst-c had switched it off) | Switched back on if rst-c had switched it off; otherwise unchanged |
 
-### Auto-enabling disabled add-ins
+Unloading a profile and **Restore All Add-ins** switch back on everything rst-c switched off, in every year.
 
-When rst-c finds a required add-in that is disabled (its `.addin` manifest has been renamed to `.addin.RSTdisabled`), it renames it back to `.addin` and lists it under **Auto-Restored (Was Disabled)**. This takes effect on the next Revit launch: add-in DLLs already loaded in the current session do not hot-reload, so a restart is required, and the Add-in Check says so.
+Some add-ins are never switched off as "unused": RST itself, the add-ins inside Revit's own install folder, and add-ins published by Autodesk (Batch Print, eTransmit, …). You can still switch those yourself in Autodesk's Add-Ins Manager.
 
-### Surfacing missing add-ins
+Before a load changes anything, **Confirm Add-in Changes** shows the plan per Revit year, one line per add-in with the years it applies to (for example "DiRoots.One (2026, 2027)"): what will be switched off, what will be switched back on, the required add-ins that stay on, and what is already known not to change (for example "Revizto (2027): locked on by your administrator"). **Cancel** is its default button. The load then runs exactly that plan.
 
-When a required add-in is not found on the machine, the Add-in Check lists it under **Missing — Not Installed** with its name and, if the profile includes one, a **download ↗** link. The link is baked into the profile when it is saved, from a curated registry of add-ins in rst-c: if the registry knows the add-in's download page, the user gets a link; if not, the row reads "(no link)". Only `http://` and `https://` links open (in the default browser); anything else in a shared profile is treated as no link.
+### The Add-in Check
 
-### Disabling unused add-ins
+After every load, the **Add-in Check** reports what changed and what could not, with the year and the reason in plain words:
 
-The Loader's **Disable unused add-ins** switch goes further: on load, every add-in the profile does not require is disabled by renaming its manifest to `.addin.RSTdisabled`, so it does not load next time Revit starts. Before anything is renamed, **Confirm Add-in Changes** lists what stays active, what will be disabled and what rst-c will try to disable; **Cancel** is its default button. **Restore All Add-ins** in the Loader renames every `.addin.RSTdisabled` back. See [Profile Loader](profile-loader.md#loading-a-profile).
+| Reason | What it means |
+|---|---|
+| locked on / locked off by your administrator | IT's `AdminSettings.json` decides this add-in; rst-c cannot change it |
+| installed for all users; changing it needs administrator rights | Revit 2025.0–2025.2 only (the rename fallback) |
+| a file was in use by another program; try again | Another program had the file open |
+| no longer installed | The add-in was removed between the plan and the change |
+| Revit's add-in settings file could not be read or written | rst-c never overwrites a file it cannot read; Revit rebuilds an unreadable file itself at its next start |
+
+It also lists the required add-ins that are **Missing — Not Installed**, with a **download ↗** link where the profile has one (baked in from rst-c's curated registry when the profile is saved; only `http://` and `https://` links open), and those that are **Required but Switched Off**: switched off by you in Autodesk's Add-Ins Manager (turn them on there) or by your administrator. Every report ends with "Add-in changes apply the next time Revit starts." Unload and **Restore All Add-ins** show the same report. See [Profile Loader](profile-loader.md#loading-a-profile).
 
 ### How matching works
 
-rst-c matches required add-ins against the `.addin` manifests on disk using a three-tier policy:
+The status pills, Confirm Add-in Changes, the load and the Add-in Check all use one matcher, per Revit year:
 
 ```linear
-Tier 1: match by addin filename (case-insensitive) :::class1 -> Tier 2: match by AddInId GUID :::class2 -> Tier 3: fuzzy match by ribbon tab title or display name :::class3
+Tier 1: the add-in's file name :::class1 -> Tier 2: its ClientId (AddInId) :::class2 -> Tier 3: fuzzy match of the tab name with the file name or the add-in's name :::class3
 ```
 
-Tier 3 handles the common case where the installed `.addin` filename differs from what the builder's registry recorded (for example, the registry says `Lumion.addin` but the install ships `LumionLiveSync.addin`). The fuzzy match checks whether the live ribbon has a tab whose title contains the required add-in's tab name (or vice versa), and whether any manifest's display name or file stem is a substring match. This mirrors the logic the Loader's picker uses to decide whether an add-in shows as "Loaded", so the two views agree.
+A tier that finds anything ends the search, and every add-in it matches counts. Tier 3 handles the common case where the installed file name differs from what the registry recorded (the registry says `Lumion.addin` but the install ships `LumionLiveSync.addin`).
+
+rst-c finds add-ins where each Revit year loads them: your `%AppData%\Autodesk\Revit\Addins\<year>`, the machine-wide folder (`%ProgramData%\Autodesk\Revit\Addins\<year>` up to 2026; `C:\Program Files\Autodesk\Revit\Addins\<year>` from 2027), and the `ApplicationPlugins` bundles (yours, and `%ProgramData%` up to 2026 or `C:\Program Files\Autodesk\ApplicationPlugins` from 2027). A bundle's add-in counts only in the Revit years its `PackageContents.xml` names.
+
+### Upgrading from v3.0
+
+RST 3.0 switched add-ins off by renaming their manifests to `.addin.RSTdisabled`. The first time the Loader opens after the upgrade, rst-c moves each of those into Revit's settings file instead (the add-in stays off) and gives the file its own name back, and shows **Add-ins Switched Off by RST 3.0** once. A rename it cannot undo (an add-in installed for all users) is reported once and stays off. Revit 2025.0–2025.2 keep their renames.
 
 ## Stacks on the ribbon
 
@@ -102,6 +146,7 @@ Stacks are built through the same AdWindows interface as the rest of the profile
 
 - Changing Revit's UI theme makes Revit rebuild its ribbon, and the hidden tabs come back until the next profile load.
 - RSTify uses tab titles to identify tabs. Tabs with identical titles (rare but possible with some add-ins) will both be affected by a hide rule targeting that title.
-- Enabling or disabling an add-in requires write access to its add-in folder. Add-ins installed for all users (under `%ProgramData%`) usually need admin rights; where a rename fails, rst-c logs it and lists the add-in as not changed (for disables, under **Some Add-ins Were Not Disabled**).
-- The Add-in Check and its auto-enable run when a profile is loaded. The status pills the Loader shows on selection only read the running session; they change nothing. A profile's requirements are always evaluated against the machine it is loaded on, not the machine it was built on.
-- Profiles built before the required add-in feature (pre-RST-022) have an empty `requiredAddins` list; the check is a no-op for them.
+- If Autodesk's Add-Ins Manager dialog is open and you press **Apply** after rst-c switched something, Revit's own choice wins; the next profile load applies the plan again.
+- IT's admin locks (`AdminSettings.json`) are read, reported and respected, never changed.
+- Saving the active profile in the Builder reloads its ribbon only; it never changes add-ins. Add-ins change through **Load Profile**, with its confirmation and its report.
+- A profile's requirements are always evaluated against the computer it is loaded on, not the one it was built on. Profiles built before the required add-in feature (pre-RST-022) have an empty `requiredAddins` list; the check is a no-op for them.
