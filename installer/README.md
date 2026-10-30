@@ -168,7 +168,7 @@ HKLM\Software\Microsoft\Windows\CurrentVersion\Run   RST = "C:\Program Files\RST
 - **No download cache clean-up:** the tray's cache is per user (`%LocalAppData%\RST\Tray\cache\`), so one administrator's uninstall cannot reach every user's. It is user data, like `%AppData%\RST\`.
 
 **Both installed:** Revit lets a per-user manifest of the same name win, so a user who still has `RST.msi` runs their own copy, not the shared one.
-- **The installing user:** a first install of `RST-Machine.msi` is refused while that user has `RST.msi` installed. The message is: "RST is already installed just for you, in your Windows account (…). That copy would be used instead of this one. Remove "RST" in Settings > Apps (or delete that file, if RST was copied there by hand), then run RST-Machine.msi again. Or run RST-Setup.exe and choose "Everyone on this PC", which removes it for you." Repair and uninstall are never blocked.
+- **The installing user:** a first install of `RST-Machine.msi` is refused while that user has `RST.msi` installed. The message is: "RST is already installed just for you (<path of the per-user RST.addin>) and would be used instead of this copy. Remove "RST" in Settings > Apps (or delete that file), then try again. RST-Setup.exe does this for you: choose "Everyone on this PC"." Repair and uninstall are never blocked.
 - **Other users:** an administrator's install cannot remove their per-user copies. For them, RST logs it once at every Revit start, and the tray tells them once: "RST is installed twice … To use the shared one, remove "RST" in Settings > Apps, and keep "RST (all users)"." Their profiles and settings stay.
 
 **Silent and IT use** (from an elevated prompt, or SCCM/Intune as SYSTEM):
