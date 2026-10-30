@@ -166,7 +166,7 @@ $oldTray = Start-Tray
 Show-State '(1)'
 
 # ---- (2) self-update, the tray quits after the hand-off
-$before = (Get-TrayLog).Count
+$before = @(Get-TrayLog).Count
 $h = Invoke-HandOff $NewMsi $NewVersion 'close' $oldTray
 Assert ($h.closed) '(2) the old tray was asked to quit after the hand-off'
 Wait-Until { -not (Get-Process -Id $oldTray -ErrorAction SilentlyContinue) } 60 '(2) the old tray exits'
@@ -191,7 +191,7 @@ Assert-OneRst $NewVersion '(2) after the self-update'
 Show-State '(2)'
 
 # ---- (3) the race: the tray still runs when msiexec does
-$before = (Get-TrayLog).Count
+$before = @(Get-TrayLog).Count
 $h = Invoke-HandOff $NewerMsi $NewerVersion 'race' $newTray.ProcessId
 $lines = Wait-Updater $before 'race'
 Assert (@($lines | Where-Object { $_ -match 'updater: msiexec exited 0 ' }).Count -eq 1) '(3) msiexec exited 0 with the tray running (no reboot needed)'
