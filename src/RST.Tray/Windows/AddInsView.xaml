@@ -1,0 +1,172 @@
+<!--
+    rst-c's own (not vendored). The RST tray's Add-ins page (spec #20 §3; F17 WU2), on RST.UI's family kit
+    (Theme.xaml; the tray window's Panel cards, banners and pills). Top to bottom: the active profile; Apply a
+    profile (the picker, the Loader's "Disable unused add-ins" switch, Apply profile…); Restore All Add-ins; then one
+    card per installed Revit year: "Open now" while it runs, what RST switched off, what it can't switch back on
+    (the reports' wording) and the year's notes. The Loader's own Confirm Add-in Changes and report dialogs show the
+    plan and the result. The view-model is AddInsViewModel; TrayWindow hosts it in its AddInsPage.
+-->
+<UserControl x:Class="RST.Tray.Windows.AddInsView" x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:RST.Tray.Resources"
+             xmlns:ui="clr-namespace:RST.UI.Resources;assembly=RST.UI"
+             AutomationProperties.AutomationId="Tray.AddIns">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="PageDescription" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,6,0,14" />
+            </Style>
+            <Style x:Key="Hint" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,6,0,0" />
+            </Style>
+            <Style x:Key="ListHeading" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Margin" Value="0,8,0,2" />
+            </Style>
+            <DataTemplate x:Key="Line">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="10,1,0,1" AutomationProperties.Name="{Binding}" />
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel MaxWidth="640">
+        <TextBlock Text="{x:Static res:AddInsStrings.Heading}" Style="{StaticResource HeadingText}" />
+        <TextBlock Text="{x:Static res:AddInsStrings.Description}" Style="{StaticResource PageDescription}" />
+
+        <TextBlock Text="{x:Static res:AddInsStrings.Loading}" Style="{StaticResource MutedText}" Margin="0,0,0,10"
+                   Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisible}}"
+                   AutomationProperties.AutomationId="Tray.AddIns.Loading" />
+        <Border Style="{StaticResource WarningBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                Visibility="{Binding HasError, Converter={StaticResource BoolToVisible}}"
+                AutomationProperties.AutomationId="Tray.AddIns.Error">
+            <TextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" />
+        </Border>
+        <Border Style="{StaticResource InfoBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                Visibility="{Binding HasResult, Converter={StaticResource BoolToVisible}}"
+                AutomationProperties.AutomationId="Tray.AddIns.Result">
+            <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" />
+        </Border>
+
+        <!-- The active profile, and Apply a profile. -->
+        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.ProfilePanel">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{x:Static res:AddInsStrings.ActiveProfileLabel}" Style="{StaticResource MutedText}"
+                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBlock x:Name="ActiveProfile" Text="{Binding ActiveProfileText}" FontSize="15" FontWeight="SemiBold"
+                               VerticalAlignment="Center" AutomationProperties.AutomationId="Tray.AddIns.ActiveProfile" />
+                </StackPanel>
+
+                <TextBlock Text="{x:Static res:AddInsStrings.ApplyHeading}" Style="{StaticResource SectionText}" FontSize="13" Margin="0,14,0,0" />
+                <Grid Margin="0,6,0,0" Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisible}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:AddInsStrings.ProfileLabel}" Style="{StaticResource LabelText}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <ComboBox x:Name="ProfilePicker" Grid.Column="1" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
+                              DisplayMemberPath="Name" IsEnabled="{Binding IsIdle}" MinWidth="200"
+                              AutomationProperties.AutomationId="Tray.AddIns.Profile" />
+                    <Button x:Name="ApplyButton" Grid.Column="2" Content="{x:Static res:AddInsStrings.ApplyButton}" Command="{Binding ApplyCommand}"
+                            Style="{StaticResource PrimaryButton}" MinWidth="120" Margin="12,0,0,0"
+                            AutomationProperties.AutomationId="Tray.AddIns.Apply" />
+                </Grid>
+                <CheckBox x:Name="DisableUnusedToggle" Style="{StaticResource ToggleSwitch}" Margin="0,10,0,0"
+                          Content="{x:Static ui:UiStrings.Loader_DisableUnused}" IsChecked="{Binding DisableUnused, Mode=TwoWay}"
+                          IsEnabled="{Binding IsIdle}" Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisible}}"
+                          AutomationProperties.AutomationId="Tray.AddIns.DisableUnused" />
+                <TextBlock Text="{x:Static res:AddInsStrings.ApplyHint}" Style="{StaticResource Hint}"
+                           Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisible}}" />
+                <TextBlock Text="{x:Static res:AddInsStrings.NoProfiles}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Visibility="{Binding ShowNoProfiles, Converter={StaticResource BoolToVisible}}"
+                           AutomationProperties.AutomationId="Tray.AddIns.NoProfiles" />
+            </StackPanel>
+        </Border>
+
+        <!-- Restore All Add-ins: only RST's own switches. -->
+        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.RestorePanel">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{x:Static res:AddInsStrings.RestoreHeading}" Style="{StaticResource SectionText}" FontSize="13" />
+                    <TextBlock Text="{x:Static ui:UiStrings.Loader_RestoreReportSubtitle}" Style="{StaticResource Hint}" Margin="0,2,0,0" />
+                </StackPanel>
+                <Button x:Name="RestoreAllButton" Grid.Column="1" Content="{x:Static ui:UiStrings.Loader_RestoreAll}" Command="{Binding RestoreAllCommand}"
+                        MinWidth="140" Margin="16,0,0,0" VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Tray.AddIns.RestoreAll" />
+            </Grid>
+        </Border>
+
+        <!-- Per installed Revit year. -->
+        <DockPanel Margin="0,4,0,4" LastChildFill="False">
+            <TextBlock Text="{x:Static res:AddInsStrings.YearsHeading}" Style="{StaticResource SectionText}" FontSize="13" DockPanel.Dock="Left" />
+            <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center">
+                <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="Tray.AddIns.Refresh">
+                    <Run Text="{x:Static res:AddInsStrings.Refresh}" />
+                </Hyperlink>
+            </TextBlock>
+        </DockPanel>
+        <TextBlock Text="{x:Static res:AddInsStrings.NoRevit}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Visibility="{Binding ShowNoRevit, Converter={StaticResource BoolToVisible}}"
+                   AutomationProperties.AutomationId="Tray.AddIns.NoRevit" />
+        <ItemsControl x:Name="YearCards" ItemsSource="{Binding Years}" Focusable="False" AutomationProperties.AutomationId="Tray.AddIns.Years">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource Panel}" Padding="14,10" Margin="0,0,0,8" AutomationProperties.AutomationId="{Binding AutomationId}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource InfoPill}" Content="{x:Static res:AddInsStrings.YearRunning}" Margin="10,0,0,0"
+                                                Focusable="False" IsTabStop="False"
+                                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisible}}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Static res:AddInsStrings.YearClear}" Style="{StaticResource MutedText}" Margin="0,4,0,0"
+                                       Visibility="{Binding IsClear, Converter={StaticResource BoolToVisible}}" />
+                            <StackPanel Visibility="{Binding HasSwitchedOff, Converter={StaticResource BoolToVisible}}">
+                                <TextBlock Text="{x:Static res:AddInsStrings.YearSwitchedOff}" Style="{StaticResource ListHeading}"
+                                           Foreground="{StaticResource WarningTextBrush}" />
+                                <ItemsControl ItemsSource="{Binding SwitchedOff}" ItemTemplate="{StaticResource Line}" Focusable="False" />
+                            </StackPanel>
+                            <StackPanel Visibility="{Binding HasCouldNotChange, Converter={StaticResource BoolToVisible}}">
+                                <TextBlock Text="{x:Static res:AddInsStrings.YearCouldNotChange}" Style="{StaticResource ListHeading}"
+                                           Foreground="{StaticResource ErrorBrush}" />
+                                <ItemsControl ItemsSource="{Binding CouldNotChange}" ItemTemplate="{StaticResource Line}" Focusable="False" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding Notes}" Focusable="False" Margin="0,8,0,0"
+                                          Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisible}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource InfoBanner}" Margin="0,0,0,4" HorizontalAlignment="Stretch">
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{Binding NextStartNote}" Style="{StaticResource Hint}" Margin="0,2,0,0"
+                   Visibility="{Binding HasYears, Converter={StaticResource BoolToVisible}}"
+                   AutomationProperties.AutomationId="Tray.AddIns.NextStart" />
+
+        <!-- While an action runs: what it is doing. -->
+        <TextBlock Text="{Binding BusyText}" Style="{StaticResource MutedText}" Margin="0,8,0,0" HorizontalAlignment="Left"
+                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisible}}"
+                   AutomationProperties.AutomationId="Tray.AddIns.Busy" />
+    </StackPanel>
+</UserControl>

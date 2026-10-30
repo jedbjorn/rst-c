@@ -15,11 +15,13 @@ using System.Windows.Threading;
 using RST.Core.Configuration;
 using RST.Core.Tray;
 using RST.Core.Updates;
+using RST.Tray.AddIns;
 using RST.Tray.Resources;
 using RST.Tray.Shell;
 using RST.Tray.Updates;
 using RST.Tray.Windows;
 using RST.UI.Dialogs;
+using RST.UI.Loader;
 using RST.UI.Theming;
 using Serilog;
 
@@ -49,6 +51,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private bool _quitting;
     private int _iconFailures;
     private DispatcherTimer? _iconRetry;
+    private readonly ITrayAddinsBackend _addins = new TrayAddinsBackend();
 
     public TrayHost(TrayArguments args, SingleInstance instance)
     {
@@ -280,7 +283,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         if (page is { } p) _page = p;
         if (_window is null)
         {
-            var built = new TrayWindow(new TrayViewModel(this, _page, this));
+            // The Add-ins page (F17 WU2) shows the Loader's own Confirm and report dialogs, owned by this window.
+            var dialogs = new LoaderDialogs();
+            var built = new TrayWindow(new TrayViewModel(this, _page, this, new AddInsViewModel(_addins, dialogs)));
+            dialogs.Owner = built;
             _window = built;
             _ = _updates?.RefreshInstalledAsync(); // what is installed now (local only, no network)
             built.ViewModel.PropertyChanged += (_, e) =>

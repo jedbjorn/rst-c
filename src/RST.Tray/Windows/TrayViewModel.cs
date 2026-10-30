@@ -1,13 +1,15 @@
 // rst-c's own (not vendored): the RST tray window's view-model (spec #20 §1; F17 WU1). Four pages: Updates and
-// Apps (F17 WU3) are UpdatesViewModel, over the update checker; Add-ins is a placeholder until WU2; Settings /
-// About is real: the theme, "Check for
-// updates automatically" (locked off by the UpdateChecks preset), the version and the log folder. Persistence
+// Apps (F17 WU3) are UpdatesViewModel, over the update checker; Add-ins (F17 WU2) is AddInsViewModel, over the
+// Profile Loader's own add-in switching, read when the page is first shown; Settings / About is real: the theme,
+// "Check for updates automatically" (locked off by the UpdateChecks preset), the version and the log folder. Persistence
 // and re-theming go through ITraySettingsHost (TrayHost in the app, a fake in RuntimeTests).
 
 using System.Windows.Input;
 using RST.Core.Tray;
 using RST.Core.Updates;
+using RST.Tray.AddIns;
 using RST.Tray.Resources;
+using RST.UI.Loader;
 using RST.UI.Mvvm;
 
 namespace RST.Tray.Windows;
@@ -51,7 +53,8 @@ internal sealed class TrayViewModel : ObservableObject
     private string? _saveError;
 
     /// <param name="updates">The update checker (F17 WU3); null shows the pages with nothing detected or checked yet.</param>
-    public TrayViewModel(ITraySettingsHost host, TrayPage page, ITrayUpdatesHost? updates = null)
+    /// <param name="addIns">The Add-ins page (F17 WU2); null shows it with no Revit and no profiles.</param>
+    public TrayViewModel(ITraySettingsHost host, TrayPage page, ITrayUpdatesHost? updates = null, AddInsViewModel? addIns = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _page = page;
@@ -59,7 +62,12 @@ internal sealed class TrayViewModel : ObservableObject
         OpenLogFolderCommand = new RelayCommand(host.OpenLogFolder);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
         Updates = new UpdatesViewModel(updates ?? new NoUpdatesHost(host), () => _host.UpdateChecks);
+        AddIns = addIns ?? new AddInsViewModel(NoTrayAddinsBackend.Instance, NoLoaderDialogs.Instance, runInline: true);
+        if (page == TrayPage.AddIns) _ = AddIns.EnsureLoadedAsync();
     }
+
+    /// <summary>The Add-ins page (F17 WU2).</summary>
+    public AddInsViewModel AddIns { get; }
 
     /// <summary>The Updates and Apps pages (F17 WU3).</summary>
     public UpdatesViewModel Updates { get; }
@@ -78,6 +86,8 @@ internal sealed class TrayViewModel : ObservableObject
             OnPropertyChanged(nameof(IsAppsPage));
             OnPropertyChanged(nameof(IsAddInsPage));
             OnPropertyChanged(nameof(IsSettingsPage));
+            // Built lazily: the Add-ins page reads the disk the first time it is shown.
+            if (value == TrayPage.AddIns) _ = AddIns.EnsureLoadedAsync();
         }
     }
 
@@ -168,6 +178,16 @@ internal sealed class TrayViewModel : ObservableObject
         OnPropertyChanged(nameof(ThemeSystem));
         OnPropertyChanged(nameof(ThemeLight));
         OnPropertyChanged(nameof(ThemeDark));
+    }
+
+    /// <summary>No dialogs (the page with no backend never opens one).</summary>
+    private sealed class NoLoaderDialogs : ILoaderDialogs
+    {
+        public static readonly NoLoaderDialogs Instance = new();
+
+        public bool ConfirmAddinChanges(ConfirmAddinChangesModel model) => false;
+
+        public void ShowAddinReport(AddinReportModel model) { }
     }
 
     /// <summary>No checker: every product not installed, never checked.</summary>

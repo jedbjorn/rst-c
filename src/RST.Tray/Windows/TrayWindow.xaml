@@ -1,13 +1,14 @@
 <!--
     rst-c's own (not vendored). The RST tray's one window (spec #20 §1; F17 WU1), on RST.UI's family kit
     (Theme.xaml, the Health window's header-tabs layout): Updates, Apps, Add-ins and Settings / About. Updates and
-    Apps are F17 WU3's (UpdatesViewModel), with WU4's installs; Add-ins is a placeholder until WU2. The view-model
-    is TrayViewModel.
+    Apps are F17 WU3's (UpdatesViewModel), with WU4's installs; Add-ins is F17 WU2's (AddInsView, AddInsViewModel).
+    The view-model is TrayViewModel.
 -->
 <Window x:Class="RST.Tray.Windows.TrayWindow" x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:res="clr-namespace:RST.Tray.Resources"
+        xmlns:local="clr-namespace:RST.Tray.Windows"
         Title="{x:Static res:TrayStrings.Window_Title}"
         Width="720" Height="540" MinWidth="560" MinHeight="420"
         WindowStartupLocation="CenterScreen" ResizeMode="CanResize" ShowInTaskbar="True"
@@ -310,16 +311,10 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Add-ins (WU2 fills it). -->
+        <!-- Add-ins (F17 WU2): the active profile, Apply profile, Restore All and each Revit year (AddInsView). -->
         <ScrollViewer x:Name="AddInsPage" Grid.Row="1" Style="{StaticResource Page}"
                       Visibility="{Binding IsAddInsPage, Converter={StaticResource BoolToVisible}}">
-            <StackPanel MaxWidth="640">
-                <TextBlock Text="{x:Static res:TrayStrings.AddIns_Heading}" Style="{StaticResource HeadingText}" />
-                <TextBlock Text="{x:Static res:TrayStrings.AddIns_Description}" Style="{StaticResource PageDescription}" />
-                <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Left" AutomationProperties.AutomationId="Tray.AddInsLater">
-                    <TextBlock Text="{x:Static res:TrayStrings.Page_ComingLater}" TextWrapping="Wrap" />
-                </Border>
-            </StackPanel>
+            <local:AddInsView x:Name="AddInsView" DataContext="{Binding AddIns}" />
         </ScrollViewer>
 
         <!-- Settings / About. -->
