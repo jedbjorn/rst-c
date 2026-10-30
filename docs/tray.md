@@ -62,6 +62,24 @@ New-ItemProperty -Path 'HKLM:\Software\Designs-OS\RST\Tray' -Name UpdateChecks -
 
 The tray reads both keys when it starts, and a `0` in either one wins. Any other value, or no value, leaves the choice to each user. With checks off, the tray makes no network calls of its own.
 
+## Silent installs and scripts (IT)
+
+If the tray is running when `RST.msi` repairs or upgrades RST, Windows closes it and starts it again when the install finishes. The restarted tray is a child process of `msiexec`.
+
+Script waits that follow the whole process tree, such as PowerShell's `Start-Process -Wait`, therefore do not return until the user quits the tray or signs out. Wait on msiexec's own exit instead:
+
+```powershell
+$p = Start-Process msiexec.exe -ArgumentList '/i RST.msi /qn /norestart' -PassThru
+$p.WaitForExit()
+$p.ExitCode
+```
+
+From `cmd`, use `start /wait msiexec /i RST.msi /qn /norestart`.
+
+A deployment tool that runs the install inside a job object that ends its processes when the job closes will end the restarted tray too. The tray then comes back at the user's next sign-in.
+
+Run per-user `RST.msi` as the user, not from an elevated prompt, so that the restarted tray runs with the user's normal rights.
+
 ## Uninstalling
 
 Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app, the `RST` Run value and the download cache. The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
