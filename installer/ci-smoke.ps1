@@ -166,7 +166,8 @@ function Assert-Years([string[]]$Present, [string]$Label) {
           Assert (Test-Path (Join-Path $dir $f) -PathType Leaf) "[$Label] $t\$f present"
         }
       } else {
-        $left = if (Test-Path $dir) { @(Get-ChildItem $dir -Recurse -File | Where-Object { $_.Name -like 'RST*' -or $t -like 'RST\*' }) } else { @() }
+        # @(...) around the whole if: an if expression yielding @() unrolls to $null.
+        $left = @(if (Test-Path $dir) { Get-ChildItem $dir -Recurse -File | Where-Object { $_.Name -like 'RST*' -or $t -like 'RST\*' } })
         Assert ($left.Count -eq 0) "[$Label] $t has no RST files (Revit $y not detected)"
       }
     }
