@@ -98,7 +98,7 @@ public class RstifyRulesTests
         RstifyRules.AdoptPresetsTitle.Should().Be("Adopt RSTify Presets?");
         RstifyRules.AdoptPresetsMessage(profile).Should().Be(
             "RSTify hides selected ribbon tabs to declutter Revit while this profile is active. "
-            + "Disable Unused Add-ins additionally renames non-required .addin files so they don’t load on the next launch.\n\n"
+            + "Disable Unused Add-ins additionally switches off the add-ins this profile does not need, for your Windows user, from the next time Revit starts.\n\n"
             + summary + "\n\n"
             + "Adopt these defaults for \"Structure\"? You can change them anytime.");
     }

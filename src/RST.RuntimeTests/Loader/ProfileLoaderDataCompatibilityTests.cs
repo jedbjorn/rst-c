@@ -44,7 +44,7 @@ public sealed class ProfileLoaderDataCompatibilityTests : IDisposable
         var dialogs = new LoaderTestDialogs();
         dialogs.ConfirmAnswers.Enqueue(true); // adopt Structure's presets
         var backend = new ProfileLoaderBackend("2026", new FakeScheduler(), Ribbon, LoaderPaths.Under(_ported),
-            new FakeAddinPasses(), LoaderAssets.LookupPath, () => V220BridgeReference.LoadedAt);
+            new FakeAddinSwitching(), LoaderAssets.LookupPath, () => V220BridgeReference.LoadedAt);
         var clock = new ManualClock();
         var vm = new ProfileLoaderViewModel(backend, dialogs, dialogs, clock.Schedule, _ => { });
 
@@ -73,7 +73,8 @@ public sealed class ProfileLoaderDataCompatibilityTests : IDisposable
         vm.CommitOpacityOverride();
         vm.TabToggles.Single(t => t.Tab == "Collaborate").IsHidden = true;
         await vm.LoadAsync();
-        dialogs.AddinChecks.Should().ContainSingle().Which.AllClear.Should().BeTrue();
+        dialogs.AddinReports.Should().ContainSingle().Which.Title.Should().Be("Add-in Check");
+        dialogs.AddinChanges.Should().BeEmpty("no add-in to change: no confirm");
 
         // The v2.2.0 bridge, the same steps.
         var r = LoaderPaths.Under(_reference);

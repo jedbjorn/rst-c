@@ -139,7 +139,7 @@ falls back to light.
 ### Behavior
 
 - **Modal**, as in v2.x: one rst-c window at a time; Revit waits.
-- **Long work off the UI thread** (Scan System, Clean Junk Files, the load's add-in renames), with
+- **Long work off the UI thread** (Scan System, Clean Junk Files, the load's add-in changes), with
   the busy overlay or spinner shown and the commands disabled until it finishes.
 - **Destructive confirms default to Cancel** (`IDialogService.Confirm(..., danger: true)`); so does
   Confirm Add-in Changes.
@@ -307,8 +307,8 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   auto-reload and the add-in lookup. The services log through `ILoaderLog` (Serilog in RST.UI).
 - **The window (`RST.UI/Loader`):** `ProfileLoaderLauncher.Show(owner, …)` →
   `ProfileLoaderWindow` → `ProfileLoaderViewModel`, which talks to `IProfileLoaderBackend` (the
-  services) and `ILoaderDialogs` (`ConfirmAddinChangesWindow`, `AddinCheckWindow`). The load's
-  add-in renames run on the thread pool (`ProfileLoadService.Begin` / `RunAddinPasses` / `Finish`).
+  services) and `ILoaderDialogs` (`ConfirmAddinChangesWindow`, `AddinReportWindow`). The load's
+  add-in changes run on the thread pool (`ProfileLoadService.Begin` / `RunAddinPasses` / `Finish`); the switching itself is `RST.Core.Activation` (inventory, planner, executor; spec #18), which the v3.1 tray will host too.
 - **`RibbonPreview` (`RST.UI/Controls`):** the shared preview. Set `Profile`, optionally
   `OverrideOpacity`, `Mode` (`Loader` or `Builder`: tool labels by name, "(empty)" stacks,
   "No panels configured.") and `TopBarContent`; bump `Revision` or call `Refresh()` after editing

@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using FluentAssertions;
-using RST.Core.AddIns;
+using RST.Core.Activation;
 using RST.Core.Scanning;
 using Xunit;
 using Xunit.Abstractions;
@@ -9,9 +10,10 @@ using Xunit.Abstractions;
 namespace RST.IntegrationTests;
 
 /// <summary>
-/// Integration tests for AddinDirectoryScanner and AddinManifestParser against
-/// real Revit installations. Designed to run on the self-hosted Windows runner
-/// (W10C_DOS-ARCH_Testing) where Revit and third-party add-ins are present.
+/// Integration tests for the add-in inventory (spec #18, feature #16) and AddinManifestParser
+/// against real Revit installations. Designed to run on the self-hosted Windows runner
+/// (W10C_DOS-ARCH_Testing) where Revit and third-party add-ins are present. Read only: nothing is
+/// switched.
 ///
 /// All tests assert that at least one Revit version is installed — a failed
 /// assertion here means the runner is misconfigured, not that the code is wrong.
@@ -31,107 +33,42 @@ public sealed class AddinScannerTests
     }
 
     [Fact]
-    public void GetSearchPaths_returns_only_directories_that_exist()
+    public void Detection_finds_the_installed_supported_years()
     {
-        foreach (var ver in RevitEnvironment.InstalledVersions())
-        {
-            var paths = AddinDirectoryScanner.GetSearchPaths(ver);
-            _output.WriteLine($"Revit {ver}: {paths.Count} search path(s)");
-            foreach (var sp in paths)
-            {
-                _output.WriteLine($"  [{sp.Kind}, readonly={sp.ReadOnly}] {sp.Path}");
-                Directory.Exists(sp.Path).Should().BeTrue($"search path {sp.Path} must exist");
-            }
-            paths.Should().NotBeEmpty($"Revit {ver} is installed so at least one addin path must be found");
-        }
+        var years = RevitInstallations.Detect(AddinRoots.FromEnvironment());
+        foreach (var y in years)
+            _output.WriteLine($"Revit {y.Year}: dir={y.InstallDir}");
+        years.Should().NotBeEmpty();
+        years.Select(y => y.Year.ToString()).Should().BeSubsetOf(
+            RevitEnvironment.InstalledVersions().Where(v => RevitInstallations.SupportedYears.Contains(int.Parse(v))));
     }
 
     [Fact]
-    public void Scan_parses_real_manifests_without_unhandled_exceptions()
+    public void The_inventory_parses_real_manifests_with_one_row_per_add_in_per_year()
     {
-        foreach (var ver in RevitEnvironment.InstalledVersions())
-        {
-            var skipped = new List<string>();
-            var manifests = AddinDirectoryScanner.Scan(ver,
-                onSkip: (path, ex) => skipped.Add($"{path}: {ex.GetType().Name} — {ex.Message}"));
+        var skipped = new List<string>();
+        var inventory = AddinInventory.ScanMachine((path, ex) => skipped.Add($"{path}: {ex.GetType().Name} — {ex.Message}"));
+        foreach (var y in inventory.Years)
+            _output.WriteLine($"Revit {y.Year}: settings={y.Settings} ({y.SettingsPath}) admin={y.AdminPath}");
+        foreach (var i in inventory.Items)
+            _output.WriteLine($"  {i.Year} [{i.Scope}] {i.Name} off={i.IsOff} lock={i.Lock} bundle={i.Bundle?.Range} {i.CurrentPath}");
+        foreach (var s in skipped)
+            _output.WriteLine($"  SKIP {s}");
 
-            _output.WriteLine($"Revit {ver}: {manifests.Count} manifest(s) parsed, {skipped.Count} skipped");
-            foreach (var s in skipped)
-                _output.WriteLine($"  SKIP {s}");
-
-            // We expect at least some manifests — Revit itself ships with add-ins.
-            manifests.Should().NotBeEmpty($"Revit {ver} should have at least its own built-in add-ins");
-        }
-    }
-
-    [Fact]
-    public void Scanned_manifests_have_valid_non_empty_file_paths()
-    {
-        foreach (var ver in RevitEnvironment.InstalledVersions())
-        {
-            var manifests = AddinDirectoryScanner.Scan(ver);
-            foreach (var m in manifests)
-            {
-                m.FilePath.Should().NotBeNullOrEmpty();
-                m.FileName.Should().NotBeNullOrEmpty();
-                File.Exists(m.FilePath).Should().BeTrue($"manifest file {m.FilePath} must exist on disk");
-            }
-        }
-    }
-
-    [Fact]
-    public void Scan_deduplicates_when_same_manifest_appears_in_multiple_paths()
-    {
-        foreach (var ver in RevitEnvironment.InstalledVersions())
-        {
-            var withSource = AddinDirectoryScanner.ScanWithSource(ver);
-            var plain      = AddinDirectoryScanner.Scan(ver);
-
-            // ScanWithSource and Scan must agree on count (same dedup logic).
-            withSource.Count.Should().Be(plain.Count,
-                "ScanWithSource and Scan must apply the same deduplication");
-
-            // No two entries in the tagged result should share the same FilePath.
-            var paths = new System.Collections.Generic.HashSet<string>(
-                System.StringComparer.OrdinalIgnoreCase);
-            foreach (var (manifest, _) in withSource)
-                paths.Add(manifest.FilePath).Should().BeTrue(
-                    $"duplicate path {manifest.FilePath} found — dedup is broken");
-        }
+        inventory.Items.Should().NotBeEmpty("Revit itself ships with add-ins");
+        inventory.Items.GroupBy(i => (i.Year, i.ManifestPath.ToLowerInvariant())).Should().OnlyContain(g => g.Count() == 1, "no duplicates");
+        inventory.Items.Should().OnlyContain(i => File.Exists(i.CurrentPath), "every manifest exists on disk");
     }
 
     [Fact]
     public void OriginClassifier_handles_all_scanned_manifests_without_throwing()
     {
-        foreach (var ver in RevitEnvironment.InstalledVersions())
+        foreach (var item in AddinInventory.ScanMachine().Items)
+        foreach (var entry in item.Entries)
         {
-            var manifests = AddinDirectoryScanner.Scan(ver);
-            foreach (var m in manifests)
-            foreach (var entry in m.Entries)
-            {
-                // Classifier must not throw regardless of assembly path content.
-                var origin = OriginClassifier.Classify(
-                    tabName: entry.Name,
-                    assemblyPath: entry.AssemblyPath);
-                _output.WriteLine($"  {m.FileName} / {entry.Name} → {origin}");
-            }
-        }
-    }
-
-    [Fact]
-    public void ScanWithSource_tags_every_manifest_with_an_existing_source_path()
-    {
-        foreach (var ver in RevitEnvironment.InstalledVersions())
-        {
-            var results = AddinDirectoryScanner.ScanWithSource(ver);
-            foreach (var (manifest, source) in results)
-            {
-                source.Path.Should().NotBeNullOrEmpty();
-                Directory.Exists(source.Path).Should().BeTrue(
-                    $"source path {source.Path} for {manifest.FileName} must exist");
-                manifest.FilePath.Should().StartWithEquivalentOf(source.Path,
-                    $"{manifest.FileName} must be under its tagged source {source.Path}");
-            }
+            // Classifier must not throw regardless of assembly path content.
+            var origin = OriginClassifier.Classify(tabName: entry.Name, assemblyPath: entry.AssemblyPath);
+            _output.WriteLine($"  {item.FileName} / {entry.Name} → {origin}");
         }
     }
 }

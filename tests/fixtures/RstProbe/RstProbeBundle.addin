@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST-Probe, bundle variant: RstProbe.bundle\Contents\<year>\RstProbeBundle.addin, with
+  RstProbe.dll beside it. Its own ClientId and its own class (tab RSTProbeBundle), so it can be
+  installed next to the per-user variant.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>RST-Probe Bundle</Name>
+    <Assembly>RstProbe.dll</Assembly>
+    <FullClassName>RstProbe.BundleProbeApp</FullClassName>
+    <ClientId>d4c6e3e0-0000-4000-8000-525354500002</ClientId>
+    <VendorId>RSTPROBE</VendorId>
+    <VendorDescription>rst-c test add-in (not shipped)</VendorDescription>
+  </AddIn>
+</RevitAddIns>

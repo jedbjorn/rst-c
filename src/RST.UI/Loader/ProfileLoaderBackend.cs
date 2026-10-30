@@ -1,7 +1,10 @@
 // rst-c's own (not vendored): the Profile Loader view-model's port to the RST.Core Loader
 // services (spec #16, WU3). The real backend only composes those RST.Core services (the ones the
 // Builder's backend also calls), so the WPF Loader and the WPF Builder share one copy of the logic.
+// Spec #18 (feature #16): the add-in calls go through RST.Core.Activation (inventory, plan,
+// executor), the same code the v3.1 tray service will host.
 
+using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -26,9 +29,8 @@ public interface IProfileLoaderBackend
 
     IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup();
 
-    IReadOnlyList<LoadedAddin> GetLoadedAddins();
-
-    UserAddinConfig GetUserConfig();
+    /// <summary>The add-ins of every installed Revit year (the status pills read the running year's).</summary>
+    AddinInventory GetAddinInventory();
 
     OpResult RecordPrefs(string profileId, IReadOnlyList<string> hiddenTabs, bool disableUnused, bool presetsAdopted);
 
@@ -36,19 +38,24 @@ public interface IProfileLoaderBackend
 
     ImportOutcome Import(string zipPath);
 
-    DisablePreviewOutcome GetDisablePreview(string name, string? id);
+    /// <summary>What Load Profile would change for the profile (Confirm Add-in Changes shows it; the load runs it).</summary>
+    LoadPlanOutcome PlanLoad(string name, string? id, bool disableUnused);
 
-    /// <summary>Load Profile. The add-in renames run off the calling (UI) thread.</summary>
+    /// <summary>Load Profile: runs <see cref="LoadRequest.Plan"/>. The add-in changes run off the calling (UI) thread.</summary>
     Task<LoadResult> LoadAsync(LoadRequest request);
 
-    OpResult Unload();
+    /// <summary>Unload, which switches back on what rst-c switched off.</summary>
+    UnloadOutcome Unload();
 
     DeleteOutcome Delete(string name, string? id);
 
     RestoreOutcome RestoreAll();
+
+    /// <summary>The one-time move of RST 3.0's renamed manifests; null when there was nothing to move.</summary>
+    ActivationReport? MigrateLegacy();
 }
 
-/// <summary>The real backend: the RST.Core Loader services over %AppData%\RST and the running Revit's add-in folders.</summary>
+/// <summary>The real backend: the RST.Core Loader services over %AppData%\RST and every installed Revit year's add-ins.</summary>
 public sealed class ProfileLoaderBackend : IProfileLoaderBackend
 {
     private readonly ProfileLibraryService _library;
@@ -61,7 +68,7 @@ public sealed class ProfileLoaderBackend : IProfileLoaderBackend
     /// <param name="switchScheduler">The live ribbon switch; null means "restart Revit".</param>
     /// <param name="allTabs">The ribbon's tab titles.</param>
     /// <param name="paths">The per-user files; null is %AppData%\RST.</param>
-    /// <param name="passes">The add-in file operations; null is the running Revit's search paths.</param>
+    /// <param name="switching">The add-in switching; null is every installed Revit year on this machine.</param>
     /// <param name="lookupPath">addin_lookup.json; null is the shipped Assets\lookup copy.</param>
     /// <param name="clock">active_profile.json's loaded_at; null is now.</param>
     public ProfileLoaderBackend(
@@ -69,7 +76,7 @@ public sealed class ProfileLoaderBackend : IProfileLoaderBackend
         IProfileSwitchScheduler? switchScheduler,
         IReadOnlyList<string>? allTabs,
         LoaderPaths? paths = null,
-        IAddinPasses? passes = null,
+        IAddinSwitching? switching = null,
         string? lookupPath = null,
         Func<DateTime>? clock = null)
     {
@@ -77,11 +84,13 @@ public sealed class ProfileLoaderBackend : IProfileLoaderBackend
         AllTabs = allTabs ?? [];
         var p = paths ?? LoaderPaths.Default;
         var log = SerilogLoaderLog.Instance;
-        var addinPasses = passes ?? new FileSystemAddinPasses(RevitVersion);
+        var addins = switching ?? new AddinSwitching(
+            ledgerPath: System.IO.Path.Combine(p.Root, ActivationLedger.FileName),
+            onSkip: (path, ex) => log.Debug(ex, "AddinInventory: skipped {Path}", path));
         _library = new ProfileLibraryService(p, log);
-        _load = new ProfileLoadService(p, AllTabs, switchScheduler, addinPasses, log, clock);
+        _load = new ProfileLoadService(p, switchScheduler, addins, log, clock);
         _prefs = new LoaderPrefsService(p, log);
-        _addins = new AddinMaintenanceService(p, addinPasses, log);
+        _addins = new AddinMaintenanceService(p, addins, log);
         _lookup = new AddinLookupService(lookupPath ?? LoaderAssets.LookupPath, log);
     }
 
@@ -97,9 +106,7 @@ public sealed class ProfileLoaderBackend : IProfileLoaderBackend
 
     public IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup() => _lookup.Read();
 
-    public IReadOnlyList<LoadedAddin> GetLoadedAddins() => _addins.ScanLoaded();
-
-    public UserAddinConfig GetUserConfig() => _addins.GetUserConfig();
+    public AddinInventory GetAddinInventory() => _addins.Inventory();
 
     public OpResult RecordPrefs(string profileId, IReadOnlyList<string> hiddenTabs, bool disableUnused, bool presetsAdopted) =>
         _prefs.Record(profileId, hiddenTabs, disableUnused, presetsAdopted);
@@ -108,21 +115,23 @@ public sealed class ProfileLoaderBackend : IProfileLoaderBackend
 
     public ImportOutcome Import(string zipPath) => _library.Import(zipPath);
 
-    public DisablePreviewOutcome GetDisablePreview(string name, string? id) => _addins.Preview(name, id);
+    public LoadPlanOutcome PlanLoad(string name, string? id, bool disableUnused) => _addins.PlanLoad(name, id, disableUnused);
 
     public async Task<LoadResult> LoadAsync(LoadRequest request)
     {
-        // Spec #16, Planner default 8: the files are written here (UI thread), the .addin
-        // renames run on the thread pool, and the Revit scheduler is called back on the UI thread.
+        // Spec #16, Planner default 8: the files are written here (UI thread), the add-in changes
+        // run on the thread pool, and the Revit scheduler is called back on the UI thread.
         var start = _load.Begin(request);
         if (start.Failure is not null) return start.Failure;
         var passes = await Task.Run(() => _load.RunAddinPasses(start));
         return _load.Finish(start, passes);
     }
 
-    public OpResult Unload() => _load.Unload();
+    public UnloadOutcome Unload() => _load.Unload();
 
     public DeleteOutcome Delete(string name, string? id) => _library.Delete(name, id);
 
     public RestoreOutcome RestoreAll() => _addins.RestoreAll();
+
+    public ActivationReport? MigrateLegacy() => _addins.MigrateLegacy();
 }

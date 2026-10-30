@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RST-Probe, per-user variant: copied to %AppData%\Autodesk\Revit\Addins\<year>\RstProbe.addin,
+  with the assembly in the RstProbe\ folder next to it. rst-c's test add-in (feature #16); never shipped.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>RST-Probe</Name>
+    <Assembly>RstProbe\RstProbe.dll</Assembly>
+    <FullClassName>RstProbe.ProbeApp</FullClassName>
+    <ClientId>d4c6e3e0-0000-4000-8000-525354500001</ClientId>
+    <VendorId>RSTPROBE</VendorId>
+    <VendorDescription>rst-c test add-in (not shipped)</VendorDescription>
+  </AddIn>
+</RevitAddIns>

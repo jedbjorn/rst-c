@@ -1,86 +1,103 @@
-// rst-c's own (not vendored): fakes for the Loader services' seams (spec #16, WU3).
-// RST.RuntimeTests compiles this file too.
+// rst-c's own (not vendored): fakes for the Loader services' seams (spec #16, WU3; the add-in
+// switching seam of spec #18). RST.RuntimeTests compiles this file too.
 
 using System.IO;
-using RST.Core.AddIns;
+using RST.Core.Activation;
 using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Scanning;
 
 namespace RST.Tests.Loader;
 
-/// <summary>Scripted add-in passes: no folder is scanned and nothing is renamed.</summary>
-public sealed class FakeAddinPasses : IAddinPasses
+/// <summary>
+/// Scripted add-in switching: a fixed inventory, the real planner over an in-memory ledger, and an
+/// executor that reports every change Done unless told otherwise. Nothing on disk is touched.
+/// </summary>
+public sealed class FakeAddinSwitching : IAddinSwitching
 {
-    public Func<IReadOnlyList<RequiredAddin>, IReadOnlyList<RequiredAddinQaResult>> OnClassify { get; set; } =
-        required => required.Select(r => new RequiredAddinQaResult(r, RequiredAddinStatus.InstalledActive, null)).ToList();
+    public AddinInventory InventoryResult { get; set; } = AddinInventory.Empty;
 
-    public RestoreResult RestoreRequiredResult { get; set; } = new(0, 0, [], []);
+    public ActivationLedger Ledger { get; set; } = new();
 
-    public DisableResult DisableResult { get; set; } = new(0, 0, 0, 0, [], []);
+    /// <summary>The report for an executed plan; null reports every change Done.</summary>
+    public Func<ActivationPlan, ActivationReport>? OnExecute { get; set; }
 
-    public Exception? DisableThrows { get; set; }
+    public Exception? InventoryThrows { get; set; }
 
-    public Exception? ClassifyThrows { get; set; }
-
-    public DisablePreview PreviewResult { get; set; } = new([], [], [], []);
-
-    public RestoreResult RestoreAllResult { get; set; } = new(0, 0, [], []);
-
-    public Exception? RestoreAllThrows { get; set; }
-
-    public IReadOnlyList<AddinManifest> ScanResult { get; set; } = [];
+    public Exception? ExecuteThrows { get; set; }
 
     public List<string> Calls { get; } = [];
 
-    public List<IReadOnlyList<RequiredAddin>> RestoredRequired { get; } = [];
+    public List<ActivationPolicy> Policies { get; } = [];
 
-    public int? ClassifyThreadId { get; private set; }
+    public List<ActivationPlan> Executed { get; } = [];
 
-    public IReadOnlyList<RequiredAddinQaResult> Classify(IReadOnlyList<RequiredAddin> required, IReadOnlyList<string> ribbonTabs)
+    public int? ExecuteThreadId { get; private set; }
+
+    public AddinInventory Inventory()
     {
-        Calls.Add("Classify");
-        ClassifyThreadId = Environment.CurrentManagedThreadId;
-        if (ClassifyThrows is not null) throw ClassifyThrows;
-        return OnClassify(required);
+        Calls.Add("Inventory");
+        if (InventoryThrows is not null) throw InventoryThrows;
+        return InventoryResult;
     }
 
-    public RestoreResult RestoreRequired(IReadOnlyList<RequiredAddin> disabledRequired, Action<string, Exception> onError)
+    public ActivationPlan Plan(AddinInventory inventory, ActivationPolicy policy)
     {
-        Calls.Add("RestoreRequired");
-        RestoredRequired.Add(disabledRequired);
-        return RestoreRequiredResult;
+        Calls.Add("Plan:" + policy.Intent);
+        Policies.Add(policy);
+        return ActivationPlanner.Plan(inventory, policy, Ledger);
     }
 
-    public DisableResult DisableNonRequired(IReadOnlyList<RequiredAddin> required, Action<string, Exception> onError)
+    public ActivationReport Execute(ActivationPlan plan)
     {
-        Calls.Add("DisableNonRequired");
-        if (DisableThrows is not null) throw DisableThrows;
-        return DisableResult;
+        Calls.Add("Execute:" + plan.Intent);
+        ExecuteThreadId = Environment.CurrentManagedThreadId;
+        Executed.Add(plan);
+        if (ExecuteThrows is not null) throw ExecuteThrows;
+        return OnExecute?.Invoke(plan) ?? AllDone(plan);
     }
 
-    public DisablePreview Preview(IReadOnlyList<RequiredAddin> required)
+    /// <summary>Every change Done, except those the plan already knows are blocked (an admin lock, an unreadable file).</summary>
+    public static ActivationReport AllDone(ActivationPlan plan) =>
+        new(plan.Intent,
+            plan.Changes.Select(e => e.ExpectedBlock is { } block
+                ? ActivationOutcome.For(e, OutcomeResult.NotChanged, block)
+                : ActivationOutcome.For(e, OutcomeResult.Done)).ToList(),
+            plan.Notes.Select(n => n.Text).ToList());
+
+    /// <summary>An inventory of <paramref name="items"/>, every year on the settings file.</summary>
+    public static AddinInventory InventoryOf(params InventoryItem[] items) =>
+        new(items.Select(i => i.Year).Distinct().Order()
+                .Select(y => new InventoryYear(new RevitYear(y, null), "settings-" + y, SettingsFileState.Ok, null, false, "admin-" + y, false))
+                .ToList(),
+            items);
+
+    /// <summary>One add-in: <paramref name="off"/> switches it off in the settings file.</summary>
+    public static InventoryItem Item(
+        int year,
+        string name,
+        AddinScope scope = AddinScope.User,
+        string? id = null,
+        bool off = false,
+        string? vendor = "ACME",
+        string? fileName = null,
+        bool renamed = false,
+        AdminLock adminLock = AdminLock.None)
     {
-        Calls.Add("Preview");
-        return PreviewResult;
+        var addinId = AddinIds.Normalize(id) ?? DeterministicId(name);
+        var file = fileName ?? name.Replace(" ", "") + ".addin";
+        var path = Path.Combine("C:", scope.ToString(), year.ToString(System.Globalization.CultureInfo.InvariantCulture), file);
+        return new InventoryItem(year, name, vendor, scope, path, file, [addinId], renamed, false, null, null,
+            off ? [addinId] : [], adminLock,
+            [new AddinEntry("Application", name + ".dll", addinId, name, vendor, null)]);
     }
 
-    public RestoreResult RestoreAll(Action<string, Exception> onError)
+    /// <summary>A stable GUID per name, so the same add-in has the same id in every year (as on a real machine).</summary>
+    public static string DeterministicId(string name)
     {
-        Calls.Add("RestoreAll");
-        if (RestoreAllThrows is not null) throw RestoreAllThrows;
-        return RestoreAllResult;
+        var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(name));
+        return new Guid(bytes).ToString("D");
     }
-
-    public IReadOnlyList<AddinManifest> Scan(Action<string, Exception> onSkip)
-    {
-        Calls.Add("Scan");
-        return ScanResult;
-    }
-
-    public static AddinManifest Manifest(string fileName, bool disabled = false, string? name = null, string? id = null) =>
-        new(Path.Combine("C:", "Addins", fileName), fileName, disabled,
-            [new AddinEntry("Application", "x.dll", id, name, null, null)]);
 }
 
 /// <summary>Records every Schedule call; can be told to throw.</summary>

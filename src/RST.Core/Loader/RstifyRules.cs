@@ -77,38 +77,8 @@ public static class RstifyRules
                       + (n == 0 ? "no tabs hidden" : n + " tab" + (n == 1 ? "" : "s") + " to hide")
                       + (presets.DisableUnusedAddins ? ", disable unused add-ins on." : ".");
         return "RSTify hides selected ribbon tabs to declutter Revit while this profile is active. "
-               + "Disable Unused Add-ins additionally renames non-required .addin files so they don’t load on the next launch.\n\n"
+               + "Disable Unused Add-ins additionally switches off the add-ins this profile does not need, for your Windows user, from the next time Revit starts.\n\n"
                + summary + "\n\n"
                + "Adopt these defaults for \"" + profile.ProfileName + "\"? You can change them anytime.";
-    }
-}
-
-/// <summary>
-/// An add-in the disable pass could not rename. <see cref="ProfileLoadService"/> reports its file
-/// name (or, when the whole pass threw, <c>"(disable subsystem failure)"</c> with the error); the
-/// v2.x bridge's older shape used <c>{ name }</c>.
-/// </summary>
-public sealed record FailedDisable(string? FileName, string? Name = null, string? Error = null);
-
-public static class FailedDisableMessages
-{
-    public const string Title = "Some Add-ins Were Not Disabled";
-
-    /// <summary>
-    /// <c>failedDisableMessage</c>: the acknowledgement text for add-ins the disable pass could not
-    /// rename, or null when there is nothing to report (flag #15: the bridge's <c>fileName</c> is read).
-    /// </summary>
-    public static string? Message(IReadOnlyList<FailedDisable>? failed)
-    {
-        if (failed is null || failed.Count == 0) return null;
-        var names = failed
-            .Select(f => f is null ? "" : !string.IsNullOrEmpty(f.FileName) ? f.FileName! : f.Name ?? "")
-            .Where(n => n.Length > 0)
-            .ToList();
-        if (names.Count == 0)
-            return "Some add-ins could not be disabled. Administrator permissions are required to disable add-ins installed for all users.";
-        return names.Count == 1
-            ? names[0] + " was not disabled. Administrator permissions are required to disable add-ins installed for all users."
-            : "The following add-ins were not disabled (administrator permissions required): " + string.Join(", ", names);
     }
 }

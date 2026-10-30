@@ -58,7 +58,7 @@ public interface IProfileBuilderBackend
 
     OpResult ClearLogo();
 
-    /// <summary>The auto-reload after saving the active profile. The add-in renames run off the calling (UI) thread.</summary>
+    /// <summary>The auto-reload after saving the active profile: the ribbon only, never an add-in change (spec #18).</summary>
     Task<LoadResult> LoadAsync(LoadRequest request);
 
     /// <summary>The icon pack catalogue (one entry per design with a complete color set); empty when the pack is missing.</summary>
@@ -78,7 +78,6 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     /// <param name="switchScheduler">The live ribbon switch; null means "restart Revit".</param>
     /// <param name="allTabs">The ribbon's tab titles.</param>
     /// <param name="paths">The per-user files; null is %AppData%\RST.</param>
-    /// <param name="passes">The add-in file operations; null is the running Revit's search paths.</param>
     /// <param name="lookupPath">addin_lookup.json; null is the shipped Assets\lookup copy.</param>
     public ProfileBuilderBackend(
         string revitVersion,
@@ -86,7 +85,6 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
         IProfileSwitchScheduler? switchScheduler,
         IReadOnlyList<string>? allTabs,
         LoaderPaths? paths = null,
-        IAddinPasses? passes = null,
         string? lookupPath = null)
     {
         RevitVersion = revitVersion ?? "";
@@ -95,7 +93,8 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
         var p = paths ?? LoaderPaths.Default;
         var log = SerilogLoaderLog.Instance;
         _library = new ProfileLibraryService(p, log);
-        _load = new ProfileLoadService(p, AllTabs, switchScheduler, passes ?? new FileSystemAddinPasses(RevitVersion), log);
+        // No add-in switching: the Builder's auto-reload never changes add-ins (spec #18, decision #16.4).
+        _load = new ProfileLoadService(p, switchScheduler, switching: null, log);
         _save = new ProfileSaveService(p.ProfilesDir, log);
         _lookup = new AddinLookupService(lookupPath ?? LoaderAssets.LookupPath, log);
         Log.Information("Builder catalog: {Count} commands ({Promoted} host-tab promoted)", Catalog.Count, promoted);
@@ -167,15 +166,12 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     /// </summary>
     public IReadOnlyList<IconPackEntry> GetIconPack() => IconPackSource.Read(LoaderAssets.IconPackDirectory);
 
-    public async Task<LoadResult> LoadAsync(LoadRequest request)
-    {
-        // As the Loader (spec #16, Planner default 8): files on the UI thread, the .addin renames
-        // on the thread pool, the Revit scheduler back on the UI thread.
-        var start = _load.Begin(request);
-        if (start.Failure is not null) return start.Failure;
-        var passes = await Task.Run(() => _load.RunAddinPasses(start));
-        return _load.Finish(start, passes);
-    }
+    /// <summary>
+    /// The ribbon-only auto-reload (spec #18, In Scope 6; decision #16.4): the active profile's
+    /// files and the live ribbon switch, and no add-in change. v3.0 re-ran the disable pass here
+    /// with no confirm and ignored its result (D8); add-ins change only through Load Profile.
+    /// </summary>
+    public Task<LoadResult> LoadAsync(LoadRequest request) => Task.FromResult(_load.Reload(request));
 }
 
 /// <summary>The icon pack catalogue as the picker reads it (LoaderBridge.ListIconpackCore without the JSON).</summary>

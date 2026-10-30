@@ -1,10 +1,18 @@
-// rst-c's own (not vendored): the Profile Loader's two own dialogs (spec #16, WU3), the HTML
-// overlays "Confirm Add-in Changes" (profile_loader.html 884-908, 1698-1731) and the "Add-in
-// Check" QA modal (869-881, 1476-1543), as family-styled windows behind a seam the view-model
-// tests fake.
+// rst-c's own (not vendored): the Profile Loader's two own dialogs (spec #16, WU3), behind a seam
+// the view-model tests fake. Spec #18 (feature #16, In Scope 5) rebuilt both on the add-in plan and
+// report:
+//   - "Confirm Add-in Changes" shows the plan the Load will run, per Revit year and de-duplicated
+//     ("RST-Probe (2026, 2027)"): switched off, switched back on, staying on (required), and what is
+//     already known not to change (an admin lock, an unreadable settings file). NotManaged rows are
+//     left out and "Try Disable" is gone.
+//   - One report window for Load Profile, Unload, Restore All Add-ins and the one-time move of
+//     v3.0's renamed manifests: what changed, what could not (with the reason, per year), the
+//     required add-ins that are missing or switched off, and always "Add-in changes apply the next
+//     time Revit starts". Nothing is silent.
 
 using System.Diagnostics;
 using System.Windows;
+using RST.Core.Activation;
 using RST.Core.Loader;
 using RST.UI.Mvvm;
 using RST.UI.Resources;
@@ -18,8 +26,8 @@ public interface ILoaderDialogs
     /// <summary>"Confirm Add-in Changes": true for Confirm &amp; Load, false for Cancel.</summary>
     bool ConfirmAddinChanges(ConfirmAddinChangesModel model);
 
-    /// <summary>The "Add-in Check" QA dialog; returns when the user clicks Continue.</summary>
-    void ShowAddinCheck(AddinCheckModel model);
+    /// <summary>The add-in report; returns when the user clicks Continue.</summary>
+    void ShowAddinReport(AddinReportModel model);
 }
 
 /// <summary>Opens the Loader's dialogs, owned by the Loader window.</summary>
@@ -33,84 +41,159 @@ public sealed class LoaderDialogs : ILoaderDialogs
         return dialog.ShowDialog() == true;
     }
 
-    public void ShowAddinCheck(AddinCheckModel model)
+    public void ShowAddinReport(AddinReportModel model)
     {
-        var dialog = new AddinCheckWindow(model) { Owner = Owner };
+        var dialog = new AddinReportWindow(model) { Owner = Owner };
         dialog.ShowDialog();
     }
 }
 
-/// <summary>What "Confirm Add-in Changes" lists: Staying Active, Will Be Disabled, and Try Disable when any.</summary>
+/// <summary>What "Confirm Add-in Changes" lists, from the plan the load will run.</summary>
 public sealed class ConfirmAddinChangesModel
 {
-    public ConfirmAddinChangesModel(IEnumerable<string> staying, IEnumerable<string> disabling, IEnumerable<string> tryDisable)
+    public ConfirmAddinChangesModel(
+        IEnumerable<string> switchingOff,
+        IEnumerable<string> switchingOn,
+        IEnumerable<string> staying,
+        IEnumerable<string> cannotChange,
+        IReadOnlyList<int>? years = null)
     {
+        SwitchingOff = switchingOff.ToList();
+        SwitchingOn = switchingOn.ToList();
         Staying = staying.ToList();
-        Disabling = disabling.ToList();
-        TryDisable = tryDisable.ToList();
+        CannotChange = cannotChange.ToList();
+        Subtitle = UiStrings.Loader_ConfirmSubtitle(ActivationWording.Years(years ?? []));
     }
 
-    /// <summary>The rows from the disable preview (display name, else "Unknown").</summary>
-    public static ConfirmAddinChangesModel From(DisablePreviewOutcome preview) => new(
-        preview.Staying.Select(Label), preview.Disabling.Select(Label), preview.TryDisable.Select(Label));
+    /// <summary>The plan, per year and de-duplicated by add-in name, without its NotManaged rows.</summary>
+    public static ConfirmAddinChangesModel From(ActivationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var changes = plan.Changes;
+        // "RST-Probe (2026, 2027)": one line per add-in, with the years it applies to.
+        IReadOnlyList<string> Grouped(PlanAction action) =>
+            ActivationWording.GroupByName(changes.Where(e => e.Action == action && e.ExpectedBlock is null), e => e.Name, e => e.Year);
+        var staying = ActivationWording.GroupByName(
+            plan.Entries.Where(e => e.Required && e.Action == PlanAction.NoChange), e => e.Name, e => e.Year);
+        var blocked = changes.Where(e => e.ExpectedBlock is not null).Select(ActivationWording.BlockedLine).Distinct();
+        return new ConfirmAddinChangesModel(Grouped(PlanAction.Disable), Grouped(PlanAction.Enable), staying, blocked, plan.Years);
+    }
+
+    public string Subtitle { get; }
+
+    public IReadOnlyList<string> SwitchingOff { get; }
+
+    public IReadOnlyList<string> SwitchingOn { get; }
 
     public IReadOnlyList<string> Staying { get; }
 
-    public IReadOnlyList<string> Disabling { get; }
+    public IReadOnlyList<string> CannotChange { get; }
 
-    public IReadOnlyList<string> TryDisable { get; }
+    public bool HasSwitchingOff => SwitchingOff.Count > 0;
+
+    public bool HasSwitchingOn => SwitchingOn.Count > 0;
 
     public bool HasStaying => Staying.Count > 0;
 
-    public bool HasDisabling => Disabling.Count > 0;
+    /// <summary>The "Can't Be Changed" panel shows only when it has entries.</summary>
+    public bool HasCannotChange => CannotChange.Count > 0;
 
-    /// <summary>The Try Disable column shows only when it has entries.</summary>
-    public bool HasTryDisable => TryDisable.Count > 0;
-
-    private static string Label(DisablePreviewItem item) =>
-        string.IsNullOrEmpty(item.DisplayName) ? UiStrings.Loader_Unknown : item.DisplayName;
+    public string NextStartNote => UiStrings.Loader_ConfirmRestart;
 }
 
-/// <summary>One "Auto-Restored" or "Missing" line of the Add-in Check.</summary>
+/// <summary>One "Missing — Not Installed" line of the report.</summary>
 public sealed record AddinCheckLine(string Text, string? Url)
 {
     /// <summary>"download ↗" shows only for a link that opens (http/https); otherwise "(no link)".</summary>
     public bool HasUrl => ExternalLinks.IsOpenable(Url);
 }
 
-/// <summary>The "Add-in Check" shown after every successful load (QA result).</summary>
-public sealed class AddinCheckModel
+/// <summary>The add-in report after Load Profile, Unload, Restore All Add-ins or the v3.0 move.</summary>
+public sealed class AddinReportModel
 {
-    public AddinCheckModel(string profileName, QaCheck qa, Action<string>? openUrl = null)
+    public AddinReportModel(string title, string subtitle, ActivationReport report, QaCheck? qa = null, Action<string>? openUrl = null)
     {
-        AllClear = qa.AllClear;
-        Subtitle = AllClear ? UiStrings.Loader_QaAllClear : UiStrings.Loader_QaReview(profileName);
-        Restored = qa.Restored.Select(r =>
-        {
-            var label = FirstNonEmpty(r.TabName, r.AddinFile) ?? UiStrings.Loader_QaUnknown;
-            var sub = !string.IsNullOrEmpty(r.AddinFile) && r.AddinFile != r.TabName ? " — " + r.AddinFile : "";
-            return new AddinCheckLine(label + sub, null);
-        }).ToList();
-        Missing = qa.NotInstalled.Select(n =>
+        ArgumentNullException.ThrowIfNull(report);
+        Title = title;
+        Subtitle = subtitle;
+        var done = report.Done;
+        SwitchedOff = ActivationWording.GroupByName(done.Where(o => o.Action == PlanAction.Disable && !o.Migrated), o => o.Name, o => o.Year);
+        var on = done.Where(o => o.Action == PlanAction.Enable).ToList();
+        SwitchedOn =
+        [
+            .. ActivationWording.GroupByName(on.Where(o => !o.Required), o => o.Name, o => o.Year),
+            .. ActivationWording.GroupByName(on.Where(o => o.Required), o => o.Name, o => o.Year).Select(UiStrings.Loader_ReportRequired),
+        ];
+        Moved = ActivationWording.GroupByName(done.Where(o => o.Migrated), o => o.Name, o => o.Year);
+        NotChanged = report.NotChanged.Select(ActivationWording.NotChangedLine).ToList();
+        Notes = report.Notes;
+        var check = qa ?? QaCheck.Clear;
+        Missing = check.NotInstalled.Select(n =>
             new AddinCheckLine(FirstNonEmpty(n.TabName, n.AddinFile) ?? UiStrings.Loader_QaUnknown, string.IsNullOrEmpty(n.Url) ? null : n.Url)).ToList();
+        RequiredOff = check.RequiredOff;
         var open = openUrl ?? ExternalLinks.Open;
         OpenUrlCommand = new RelayCommand<string>(url => open(url));
     }
 
+    /// <summary>The report after Load Profile: the "Add-in Check" with the required-add-in status.</summary>
+    public static AddinReportModel ForLoad(string profileName, ActivationReport report, QaCheck qa, Action<string>? openUrl = null)
+    {
+        var clear = qa.AllClear && report.Outcomes.Count == 0 && report.Notes.Count == 0;
+        return new AddinReportModel(UiStrings.Loader_QaTitle, clear ? UiStrings.Loader_QaAllClear : UiStrings.Loader_QaReview(profileName), report, qa, openUrl)
+        {
+            NothingText = UiStrings.Loader_QaNothing,
+        };
+    }
+
+    public static AddinReportModel ForUnload(ActivationReport report) =>
+        new(UiStrings.Loader_UnloadReportTitle, UiStrings.Loader_UnloadReportSubtitle, report);
+
+    public static AddinReportModel ForRestoreAll(ActivationReport report) =>
+        new(UiStrings.Loader_RestoreReportTitle, UiStrings.Loader_RestoreReportSubtitle, report);
+
+    public static AddinReportModel ForMigration(ActivationReport report) =>
+        new(UiStrings.Loader_MigrateReportTitle, UiStrings.Loader_MigrateReportSubtitle, report);
+
+    public string Title { get; }
+
     public string Subtitle { get; }
 
-    public bool AllClear { get; }
+    public IReadOnlyList<string> SwitchedOff { get; }
 
-    public IReadOnlyList<AddinCheckLine> Restored { get; }
+    public IReadOnlyList<string> SwitchedOn { get; }
+
+    public IReadOnlyList<string> Moved { get; }
+
+    /// <summary>"DiRoots.One (2027): locked on by your administrator".</summary>
+    public IReadOnlyList<string> NotChanged { get; }
+
+    public IReadOnlyList<string> Notes { get; }
 
     public IReadOnlyList<AddinCheckLine> Missing { get; }
 
-    public bool HasRestored => Restored.Count > 0;
+    public IReadOnlyList<string> RequiredOff { get; }
+
+    public bool HasSwitchedOff => SwitchedOff.Count > 0;
+
+    public bool HasSwitchedOn => SwitchedOn.Count > 0;
+
+    public bool HasMoved => Moved.Count > 0;
+
+    public bool HasNotChanged => NotChanged.Count > 0;
+
+    public bool HasNotes => Notes.Count > 0;
 
     public bool HasMissing => Missing.Count > 0;
 
-    /// <summary>The restart note appears only when something was auto-restored.</summary>
-    public bool ShowRestartNote => HasRestored;
+    public bool HasRequiredOff => RequiredOff.Count > 0;
+
+    /// <summary>Nothing changed and nothing needs attention.</summary>
+    public bool IsEmpty => !(HasSwitchedOff || HasSwitchedOn || HasMoved || HasNotChanged || HasNotes || HasMissing || HasRequiredOff);
+
+    public string NothingText { get; init; } = UiStrings.Loader_ReportNothing;
+
+    /// <summary>Every report says when the changes apply (spec #18, In Scope 5).</summary>
+    public string NextStartNote => UiStrings.Loader_ConfirmRestart;
 
     public System.Windows.Input.ICommand OpenUrlCommand { get; }
 

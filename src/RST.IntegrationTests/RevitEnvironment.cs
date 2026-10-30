@@ -8,7 +8,7 @@ namespace RST.IntegrationTests;
 /// <summary>
 /// Helpers for detecting the Revit installations present on the test host.
 /// Uses %PROGRAMFILES%\Autodesk\Revit {year} as the authoritative signal —
-/// the same root AddinDirectoryScanner uses for the RevitInstall search path.
+/// the same folder the add-in inventory reads Revit's own add-ins from.
 /// </summary>
 internal static class RevitEnvironment
 {

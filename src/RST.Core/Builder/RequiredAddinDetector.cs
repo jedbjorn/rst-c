@@ -33,6 +33,8 @@ public static class RequiredAddinDetector
 
     private const string AutodeskOrigin = "Autodesk";
 
+    private const string UnknownOrigin = nameof(RST.Core.Scanning.CommandOrigin.Unknown);
+
     /// <summary>
     /// The profile's required add-ins, in the shape save writes:
     /// <c>{ tabName, addinFile (null when unknown), url ("" when unknown) }</c>.
@@ -55,6 +57,10 @@ public static class RequiredAddinDetector
         {
             if (origin is CatalogCommand.NativeOrigin or AutodeskOrigin) return;
             if (string.IsNullOrEmpty(srcTab)) return;
+            // SC-007 (spec #18): a command of unknown origin on one of Revit's own tabs is never an
+            // add-in. Host tabs (Add-Ins, FormIt, eTransmit) are where add-ins live, so they are not
+            // covered; an add-in's CustomCtrl_ button is classified Custom by the ribbon scan anyway.
+            if (origin == UnknownOrigin && BuiltinTabs.Contains(srcTab) && !RST.Core.Scanning.HostTabs.Contains(srcTab)) return;
             if (srcTab == "Custom" || srcTab.StartsWith("CustomCtrl_", StringComparison.Ordinal)) return;
             if (BuiltinTabs.Contains(srcTab))
             {

@@ -3,8 +3,8 @@
 //
 //   1. Windows Installer, by UpgradeCode (RST.Tray's MsiProducts: MsiEnumRelatedProducts, then
 //      MsiGetProductInfoEx for the version and the context). This is the real signal.
-//   2. Secondary: the companion's ClientId in any .addin RST.Core's own scanner finds (AddinDirectoryScanner's
-//      search paths and AddinManifestParser, as the Loader uses them, for every Revit year 2025+ present).
+//   2. Secondary: the companion's ClientId in any .addin found in the Addins and ApplicationPlugins roots (the
+//      roots v3.0's scanner used, read with AddinManifestParser, for every Revit year 2025+ present).
 //      A ClientId with no Windows Installer product means a copy put there by hand: "installed manually:
 //      updates not managed by RST".
 //
@@ -16,7 +16,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using RST.Core.AddIns;
 using RST.Core.Scanning;
 
 namespace RST.Core.Updates;
@@ -189,22 +188,29 @@ public static class ProductDetection
     }
 
     /// <summary>
-    /// The .addin roots to scan for ClientIds: RST.Core's scanner's own search paths
-    /// (<see cref="AddinDirectoryScanner"/>: the user and machine Addins folders and both ApplicationPlugins
-    /// folders) for every Revit year from <see cref="FirstRevitYear"/> that has an Addins folder. Two differences
-    /// from a Loader scan: the Revit install folder is left out (a companion is never put there, and it is large),
-    /// and there is no write probe (the tray only reads). Duplicates (ApplicationPlugins, once per year) are dropped.
+    /// The .addin roots to scan for ClientIds, for every Revit year from <see cref="FirstRevitYear"/> that has an
+    /// Addins folder, in this order and only when they exist: the user's Addins\&lt;year&gt;, the user's
+    /// ApplicationPlugins, %ProgramData%'s Addins\&lt;year&gt; and %ProgramData%'s ApplicationPlugins. The Revit
+    /// install folder is left out (a companion is never put there, and it is large). Duplicates (ApplicationPlugins,
+    /// once per year) are dropped. These are the roots v3.0's AddinDirectoryScanner used; that scanner was retired by
+    /// feature #16, whose RST.Core.Activation.AddinInventory now serves the Loader.
     /// </summary>
     public static IReadOnlyList<string> ManifestRoots(string? appData, string? programData)
     {
         var roots = new List<string>();
+        void Add(string? baseDir, params string[] parts)
+        {
+            if (string.IsNullOrEmpty(baseDir)) return;
+            var path = Path.Combine([baseDir, .. parts]);
+            if (Directory.Exists(path) && !roots.Contains(path, StringComparer.OrdinalIgnoreCase)) roots.Add(path);
+        }
         foreach (var year in RevitYears(appData, programData))
         {
-            var paths = AddinDirectoryScanner.BuildSearchPaths(
-                appData, programData, programFiles: null, year.ToString(CultureInfo.InvariantCulture), canWrite: _ => true);
-            foreach (var path in paths)
-                if (path.Kind != AddinPathKind.RevitInstall && !roots.Contains(path.Path, StringComparer.OrdinalIgnoreCase))
-                    roots.Add(path.Path);
+            var y = year.ToString(CultureInfo.InvariantCulture);
+            Add(appData, "Autodesk", "Revit", "Addins", y);
+            Add(appData, "Autodesk", "ApplicationPlugins");
+            Add(programData, "Autodesk", "Revit", "Addins", y);
+            Add(programData, "Autodesk", "ApplicationPlugins");
         }
         return roots;
     }

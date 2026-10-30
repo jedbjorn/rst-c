@@ -1,0 +1,14 @@
+{
+  "DisableAllAddIns": false,
+  "AddInManifestAdminSettings": [
+    {
+      "Path": "C:\\ProgramData\\Autodesk\\Revit\\Addins\\2026\\DiRoots.One.addin",
+      "AddInItemAdminSettings": [
+        {
+          "AddInId": "b4ad7489-2899-46b3-aca6-c0def7135528",
+          "LoadOption": 2
+        }
+      ]
+    }
+  ]
+}

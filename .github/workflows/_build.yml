@@ -15,6 +15,8 @@ name: _build (reusable)
 #   • serilog-probe — builds the AAA/ZZZ Serilog probe add-ins (VM step V3,
 #                    decision #27) and uploads the SerilogProbe artifact.
 #                    Never shipped.
+#   • probe        — builds the RST-Probe test add-in (feature #16 VM checks)
+#                    and uploads it as the RST-Probe artifact. Never shipped.
 #   • stage        — matrix R25/R26/R27, runs build/stage.sh per major,
 #                    uploads the bundle as a per-major artifact. Every
 #                    major is a hard gate: an R27 failure fails the
@@ -120,6 +122,29 @@ jobs:
           path: |
             TestResults/screenshots/*.png
             TestResults/screenshots/*.txt
+          if-no-files-found: error
+
+  # Feature #16 (spec #18, AC5): RST-Probe, the test add-in the VM checks stage
+  # (tests/fixtures/RstProbe: per-user and bundle variants, 2026 net8 and 2027
+  # net10, plus the guest helper rst-probe.ps1). Never shipped: release.yml
+  # takes RST.msi only.
+  probe:
+    name: RST-Probe (test add-in)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet build tests/fixtures/RstProbe/RstProbe.csproj -c "Release R26" --nologo
+      - run: dotnet build tests/fixtures/RstProbe/RstProbe.csproj -c "Release R27" --nologo
+      - run: bash tests/fixtures/RstProbe/package.sh out/RST-Probe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST-Probe
+          path: out/RST-Probe/
           if-no-files-found: error
 
   # Decision #27 (research V3): the two Serilog probe add-ins the VM run

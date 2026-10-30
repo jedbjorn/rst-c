@@ -1,94 +1,119 @@
-// rst-c's own (not vendored): LoaderBridge's GetDisablePreview, RestoreAddins, GetLoadedAddins
-// and GetUserConfig, moved out of the bridge (spec #16, WU3). The disable preview now resolves the
-// profile by id first, then name (spec #16, Planner default 5: the bridge looked up by name only).
+// rst-c's own (not vendored): the Loader's add-in operations outside Load and Unload (spec #16,
+// WU3; rebuilt for spec #18, feature #16): the inventory for the status pills, the plan the Confirm
+// Add-in Changes dialog shows (by profile id first, then name), Restore All Add-ins, and the
+// one-time move of v3.0's renamed manifests. Every add-in outcome is logged, one line per change,
+// so the log, the report dialog and the disk can be compared.
 
-using RST.Core.AddIns;
+using RST.Core.Activation;
 using RST.Core.Profiles;
 
 namespace RST.Core.Loader;
 
-/// <summary>One "Confirm Add-in Changes" row: the manifest file and its display name (the file stem).</summary>
-public sealed record DisablePreviewItem(string DisplayName, string FileName, string FilePath, string? AddinId, string? Assembly, string SourceKind)
+/// <summary>The plan for Load Profile, or why there is none.</summary>
+public sealed record LoadPlanOutcome(string? Error, ActivationPlan? Plan);
+
+/// <summary>Restore All Add-ins' outcome: the report of what was switched back on and what could not be.</summary>
+public sealed record RestoreOutcome(bool Ok, string? Error, ActivationReport? Addins)
 {
-    public static DisablePreviewItem From(AddinPreviewEntry e) => new(
-        Path.GetFileNameWithoutExtension(e.FileName), e.FileName, e.FilePath, e.FirstAddinId, e.FirstAssemblyPath, e.SourceKind.ToString());
+    public bool RestartNeeded => Addins?.AnyDone == true;
 }
 
-/// <summary>The disable preview: staying, will be disabled, try disable (read-only path), skipped (already disabled).</summary>
-public sealed record DisablePreviewOutcome(
-    string? Error,
-    IReadOnlyList<DisablePreviewItem> Staying,
-    IReadOnlyList<DisablePreviewItem> Disabling,
-    IReadOnlyList<DisablePreviewItem> TryDisable,
-    IReadOnlyList<DisablePreviewItem> Skipped);
-
-/// <summary>Restore All Add-ins' outcome; the restored file names feed the "Please Restart Revit" toast.</summary>
-public sealed record RestoreOutcome(bool Ok, string? Error, bool RestartNeeded, IReadOnlyList<string> Restored, IReadOnlyList<string> Failed);
-
-/// <summary>The disable preview, Restore All, the manifest scan and the user add-in config.</summary>
 public sealed class AddinMaintenanceService
 {
     private readonly LoaderPaths _paths;
-    private readonly IAddinPasses _passes;
+    private readonly IAddinSwitching _switching;
     private readonly ILoaderLog _log;
 
-    public AddinMaintenanceService(LoaderPaths paths, IAddinPasses passes, ILoaderLog? log = null)
+    public AddinMaintenanceService(LoaderPaths paths, IAddinSwitching switching, ILoaderLog? log = null)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
-        _passes = passes ?? throw new ArgumentNullException(nameof(passes));
+        _switching = switching ?? throw new ArgumentNullException(nameof(switching));
         _log = log ?? NullLoaderLog.Instance;
     }
 
+    /// <summary>The add-ins of every installed Revit year (empty, logged, when the scan fails).</summary>
+    public AddinInventory Inventory()
+    {
+        try
+        {
+            var inventory = _switching.Inventory();
+            _log.Information("Loader.addins: inventory years={Years} items={Items}",
+                string.Join(",", inventory.Years.Select(y => y.Year + ":" + y.Settings)), inventory.Items.Count);
+            return inventory;
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Loader.addins: inventory scan threw");
+            return AddinInventory.Empty;
+        }
+    }
+
     /// <summary>
-    /// What a disable pass would do for the profile (by id, else name). Pure: nothing is renamed.
-    /// A profile that cannot be found gives an <see cref="DisablePreviewOutcome.Error"/>.
+    /// What Load Profile would change for the profile (by id, else name), with "Disable unused"
+    /// set as given. Pure: nothing is written. A profile that cannot be found gives an error.
     /// </summary>
-    public DisablePreviewOutcome Preview(string? name, string? id)
+    public LoadPlanOutcome PlanLoad(string? name, string? id, bool disableUnused)
     {
         var entry = ProfileStore.Resolve(name, id, _paths.ProfilesDir);
         if (entry is null)
         {
-            _log.Warning(null, "Loader.get_disable_preview: profile not found {Name} id={Id}", name, id);
-            return new DisablePreviewOutcome("Profile not found: " + name, [], [], [], []);
+            _log.Warning(null, "Loader.addins.plan: profile not found {Name} id={Id}", name, id);
+            return new LoadPlanOutcome("Profile not found: " + name, null);
         }
-
-        var preview = _passes.Preview(entry.Profile.RequiredAddins);
-        _log.Information("Loader.get_disable_preview: name={Name} staying={S} disabling={D} tryDisable={T} skipped={Sk}",
-            name, preview.Staying.Count, preview.Disabling.Count, preview.TryDisable.Count, preview.Skipped.Count);
-        return new DisablePreviewOutcome(null,
-            preview.Staying.Select(DisablePreviewItem.From).ToList(),
-            preview.Disabling.Select(DisablePreviewItem.From).ToList(),
-            preview.TryDisable.Select(DisablePreviewItem.From).ToList(),
-            preview.Skipped.Select(DisablePreviewItem.From).ToList());
+        var plan = _switching.Plan(_switching.Inventory(), ActivationPolicy.Load(entry.Profile.RequiredAddins, disableUnused));
+        LogPlan(_log, plan, name);
+        return new LoadPlanOutcome(null, plan);
     }
 
-    /// <summary>
-    /// Renames every .addin.RSTdisabled back to .addin (effective on the next launch, so a
-    /// restart is needed when anything was restored).
-    /// </summary>
+    /// <summary>Switches back on everything rst-c switched off, in every installed year (effective at the next start).</summary>
     public RestoreOutcome RestoreAll()
     {
         try
         {
-            var result = _passes.RestoreAll((path, ex) => _log.Warning(ex, "AddinDisabler.Restore: rename failed for {Path}", path));
-            _log.Information("Loader.restore_addins → restored={Restored}, failed={Failed}", result.RestoredCount, result.Failed);
-            return new RestoreOutcome(true, null, result.RestoredCount > 0, result.RestoredFiles, result.FailedFiles);
+            var plan = _switching.Plan(_switching.Inventory(), ActivationPolicy.RestoreAll);
+            LogPlan(_log, plan, "Restore All");
+            var report = _switching.Execute(plan);
+            LogReport(_log, report);
+            return new RestoreOutcome(true, null, report);
         }
         catch (Exception ex)
         {
-            _log.Error(ex, "Loader.restore_addins: AddinDisabler.RestoreAll threw");
-            return new RestoreOutcome(false, ex.Message, false, [], []);
+            _log.Error(ex, "Loader.addins.restore_all threw");
+            return new RestoreOutcome(false, ex.Message, null);
         }
     }
 
-    /// <summary>Every .addin and .addin.RSTdisabled on the search paths (the "Loaded" matcher's manifest list).</summary>
-    public IReadOnlyList<LoadedAddin> ScanLoaded()
+    /// <summary>The one-time move of v3.0's renamed manifests; null when there was nothing to move.</summary>
+    public ActivationReport? MigrateLegacy()
     {
-        var manifests = _passes.Scan((p, ex) => _log.Debug(ex, "AddinDirectoryScanner: skipped {Path}", p));
-        _log.Information("Loader.get_loaded_addins → {Count} manifests scanned", manifests.Count);
-        return manifests.Select(LoadedAddin.FromManifest).ToList();
+        try
+        {
+            var report = _switching.MigrateLegacy();
+            if (report is not null) LogReport(_log, report);
+            return report;
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Loader.addins.migrate threw");
+            return null;
+        }
     }
 
-    /// <summary>The user add-in config: a stub, always empty (spec #16, Out of Scope).</summary>
-    public UserAddinConfig GetUserConfig() => UserAddinConfig.Empty;
+    public static void LogPlan(ILoaderLog log, ActivationPlan plan, string? what)
+    {
+        log.Information("Loader.addins.plan {What}: intent={Intent} disableUnused={Disable} entries={Entries} changes={Changes} years={Years}",
+            what, plan.Intent, plan.DisableUnused, plan.Entries.Count, plan.Changes.Count, string.Join(",", plan.Years));
+        foreach (var e in plan.Changes)
+            log.Information("Loader.addins.plan: {Action} {Name} ({Year}) scope={Scope} renamed={Renamed} ids={Ids} blocked={Blocked} path={Path}",
+                e.Action, e.Name, e.Year, e.Scope, e.Renamed, string.Join(",", e.TargetIds), e.ExpectedBlock, e.ManifestPath);
+    }
+
+    public static void LogReport(ILoaderLog log, ActivationReport report)
+    {
+        log.Information("Loader.addins.report {Intent}: done={Done} notChanged={NotChanged}", report.Intent, report.Done.Count, report.NotChanged.Count);
+        foreach (var o in report.Outcomes)
+            log.Information("Loader.addins.report: {Action}{Migrated} {Name} ({Year}) scope={Scope} → {Result} {Reason} {Detail}",
+                o.Action, o.Migrated ? " (v3.0 move)" : "", o.Name, o.Year, o.Scope, o.Result, o.Reason, o.Detail);
+        foreach (var n in report.Notes) log.Information("Loader.addins.report note: {Note}", n);
+    }
 }
