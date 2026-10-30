@@ -9,7 +9,7 @@ using RST.UI.Resources;
 
 namespace RST.UI.Loader;
 
-/// <summary>A profile card: name, "● Loaded" when active, and Tab / Min Revit / Panels.</summary>
+/// <summary>A profile card: name, "● Loaded" when active, and Tab / Min RST / Panels.</summary>
 public sealed class ProfileCardViewModel : ObservableObject
 {
     private Profile _profile;

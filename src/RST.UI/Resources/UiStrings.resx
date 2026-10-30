@@ -448,7 +448,7 @@
     <value>Tab</value>
   </data>
   <data name="Loader_MinRevit" xml:space="preserve">
-    <value>Min Revit</value>
+    <value>Min RST</value>
   </data>
   <data name="Loader_MinRevitValue" xml:space="preserve">
     <value>{0}+</value>
@@ -823,7 +823,7 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>Profile</value>
   </data>
   <data name="Builder_MinRevitVersion" xml:space="preserve">
-    <value>Min Revit version</value>
+    <value>Min RST version</value>
   </data>
   <data name="Builder_PanelOpacity" xml:space="preserve">
     <value>Panel colour strength</value>
@@ -1015,7 +1015,7 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>One value for every panel. Users can override it in the Loader.</value>
   </data>
   <data name="Builder_MinRevitHelp" xml:space="preserve">
-    <value>Informational</value>
+    <value>Informational: the minimum RST version this profile expects. rst-c does not enforce it.</value>
   </data>
   <data name="Builder_RenameTitle" xml:space="preserve">
     <value>Rename profile</value>

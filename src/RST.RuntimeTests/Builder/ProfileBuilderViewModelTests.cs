@@ -2,7 +2,7 @@
 // fake backend, a manual clock and scripted dialogs: boot, the profile menu (new / existing, the
 // loaded mark, the unsaved-changes prompt on a switch), branding (pick, clear, URL), the catalogue
 // (count, filter, the native group, expansion, empty states, double-click), panels and slots (add,
-// select, rename, move, delete with its confirm), General (Min Revit, colour strength, the tab),
+// select, rename, move, delete with its confirm), General (Min RST version, colour strength, the tab),
 // the panel colour picker, Save (validation, a rename under the same id, collision, required
 // add-ins, the auto-reload), Export ZIP, Exit and the title-bar ✕. Every toast text is checked
 // against profile_builder.html's. Feature #18's Rename, Duplicate and Profile pane tabs are in
