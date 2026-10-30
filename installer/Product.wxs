@@ -48,15 +48,53 @@
   UpgradeCode is the stable identity of the RST product family. NEVER
   change it once shipped — it's how the MSI engine knows to upgrade
   prior installs in place rather than installing side-by-side.
+
+  Two packages from this one source (feature #17, spec #20 §7, decision
+  #15). RST.Installer.wixproj passes the preprocessor variable Scope:
+    Scope=user     RST.msi          per user, no admin. Everything above.
+    Scope=machine  RST-Machine.msi  per machine ("RST (all users)"),
+                   needs an administrator. Its own UpgradeCode, so the two
+                   are different products (Windows Installer never
+                   upgrades across install contexts). Layout:
+      C:\Program Files\RST\R<NN>\RST.Bootstrap.dll (+ .pdb)
+      C:\Program Files\RST\R<NN>\app\              the engine, as above
+      %ProgramData%\Autodesk\Revit\Addins\2025|2026\RST.addin
+      C:\Program Files\Autodesk\Revit\Addins\2027\RST.addin
+          each manifest's <Assembly> is set at install time to the
+          absolute path of its year's bootstrap (util:XmlFile, generated
+          by gen-revit-years.ps1)
+      C:\Program Files\RST\Tray\                   the tray, HKLM Run
+    The same Revit detection, launch condition and MajorUpgrade rules
+    apply. It grants nothing: no permission changes, no service, no
+    elevated helper; add-in switching stays per user. A first install is
+    refused while the installing user still has RST installed just for
+    them (that copy would shadow this one; RST-Setup.exe removes it
+    first). Restart Manager only detects files in use here
+    (MSIRESTARTMANAGERCONTROL=DisableShutdown): it never closes and
+    restarts a tray, because a tray restarted by this elevated installer
+    would run elevated (WU1 review N8).
 -->
+<?if $(var.Scope) = "user" ?>
+  <?define RstPackageName = "RST" ?>
+  <?define RstUpgradeCode = "AF0331FC-5280-492A-94BD-95EDF108BE74" ?>
+  <?define RstPackageScope = "perUser" ?>
+<?elseif $(var.Scope) = "machine" ?>
+  <!-- RST-Machine.msi's identity. NEVER change it once shipped. Recorded
+       in installer/README.md and RST.Core's ProductCatalog. -->
+  <?define RstPackageName = "RST (all users)" ?>
+  <?define RstUpgradeCode = "79C25959-C28A-4ED8-8984-85ED525476C3" ?>
+  <?define RstPackageScope = "perMachine" ?>
+<?else?>
+  <?error Scope must be user or machine (RST.Installer.wixproj RstScope) ?>
+<?endif?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
-  <Package Name="RST"
+  <Package Name="$(var.RstPackageName)"
            Manufacturer="Designs/OS"
            Version="$(var.RstMsiVersion)"
-           UpgradeCode="AF0331FC-5280-492A-94BD-95EDF108BE74"
-           Scope="perUser"
+           UpgradeCode="$(var.RstUpgradeCode)"
+           Scope="$(var.RstPackageScope)"
            Compressed="yes">
 
     <SummaryInformation Description="Curated Revit ribbon — load &amp; build profiles (Revit 2025–2027)" />
@@ -90,12 +128,16 @@
          products never co-own Addins\2027 or RST\R27\app. Per-user
          scope: only the installing user's preview is found. The row
          stays indefinitely, so a late install of an old RST-R27.msi is
-         migrated again by the next RST.msi install. -->
+         migrated again by the next RST.msi install.
+         RST.msi only: the preview was per user, and a per-machine package
+         cannot find or remove a per-user product. -->
+    <?if $(var.Scope) = "user" ?>
     <Upgrade Id="02BE4399-A563-4B15-BD12-ECF5D8486FB3">
       <UpgradeVersion Minimum="0.0.0" IncludeMinimum="yes"
                       OnlyDetect="no"
                       Property="R27PREVIEWFOUND" />
     </Upgrade>
+    <?endif?>
 
     <MediaTemplate EmbedCab="yes" />
 
@@ -158,6 +200,35 @@
     <Launch Condition="Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND"
             Message="RST needs Revit 2025, 2026 or 2027, and none was found on this computer." />
 
+    <?if $(var.Scope) = "machine" ?>
+    <!-- RST-Machine.msi: the installing user's own RST (RST.msi, any
+         version) would shadow this install for them, because Revit lets a
+         per-user manifest of the same name win. AppDataFolder is the
+         installing user's roaming profile here too. RSTUSERCOPY is the path
+         of the first per-user RST.addin found (2025, 2026 or 2027); each
+         search that finds nothing leaves it alone, so they act as an OR. A
+         first install is then refused with a clear message (spec #20 §7);
+         RST-Setup.exe's "Everyone on this PC" removes that copy first, as
+         the user, so the check passes there. Repair and uninstall are never
+         blocked. -->
+    <Property Id="RSTUSERCOPY" Secure="yes">
+      <?foreach Yy in 25;26;27 ?>
+      <DirectorySearch Id="RstUserAddins20$(var.Yy)" Path="[AppDataFolder]Autodesk\Revit\Addins\20$(var.Yy)" Depth="0">
+        <FileSearch Id="RstUserAddin20$(var.Yy)" Name="RST.addin" />
+      </DirectorySearch>
+      <?endforeach?>
+    </Property>
+    <Launch Condition="Installed OR NOT RSTUSERCOPY"
+            Message="RST is already installed just for you, in your Windows account ([RSTUSERCOPY]). That copy would be used instead of this one. Remove &quot;RST&quot; in Settings &gt; Apps, then run RST-Machine.msi again. Or run RST-Setup.exe and choose &quot;Everyone on this PC&quot;, which removes it for you." />
+
+    <!-- Detect files in use, never close or restart applications: a tray
+         Restart Manager restarted from this elevated install would run
+         elevated (WU1 review N8). util:CloseApplication (Tray.wxs) still
+         asks a running tray on the installer's desktop to exit; it starts
+         again at the user's next sign-in, or when Revit starts it. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" />
+    <?endif?>
+
     <!-- An administrative install (msiexec /a) only unpacks the files to a
          folder; it installs nothing and does not run AppSearch, so the
          launch condition does not apply to it. -->
@@ -168,6 +239,7 @@
       <LaunchConditions Suppress="yes" />
     </AdminExecuteSequence>
 
+    <?if $(var.Scope) = "user" ?>
     <!-- Directory layout under %AppData% (Roaming). All paths are
          per-user; no admin elevation required for install. The R27 Ids
          and names match the retired preview MSI's, so both products
@@ -194,6 +266,44 @@
         </Directory>
       </Directory>
     </StandardDirectory>
+    <?else?>
+    <!-- RST-Machine.msi: the same Ids, per-machine places. Revit 2025 and
+         2026 read all-users manifests from %ProgramData%; Revit 2027 reads
+         them from Program Files only. The bootstrap sits in R<NN>Dir, beside
+         the engine's app\ folder, which is how it finds the engine
+         (RstBootstrap.cs, EngineLocation). Tray.wxs puts TrayDir under
+         RstFolder. -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="AutodeskFolder" Name="Autodesk">
+        <Directory Id="RevitFolder" Name="Revit">
+          <Directory Id="RevitAddinsFolder" Name="Addins">
+            <Directory Id="Addins2025Dir" Name="2025" />
+            <Directory Id="Addins2026Dir" Name="2026" />
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="PfAutodeskFolder" Name="Autodesk">
+        <Directory Id="PfRevitFolder" Name="Revit">
+          <Directory Id="PfRevitAddinsFolder" Name="Addins">
+            <Directory Id="Addins2027Dir" Name="2027" />
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="RstFolder" Name="RST">
+        <Directory Id="R25Dir" Name="R25">
+          <Directory Id="R25AppDir" Name="app" />
+        </Directory>
+        <Directory Id="R26Dir" Name="R26">
+          <Directory Id="R26AppDir" Name="app" />
+        </Directory>
+        <Directory Id="R27Dir" Name="R27">
+          <Directory Id="R27AppDir" Name="app" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <?endif?>
 
     <!-- One feature, always selected. What is installed is decided per
          Revit year by the component conditions.

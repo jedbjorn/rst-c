@@ -36,11 +36,27 @@
 
   The per-Revit-year components, the Revit detection (decision #10) and the
   MajorUpgrade settings in Product.wxs are unchanged by this file.
+
+  RST-Machine.msi (Scope=machine, F17 WU5) uses the same file with these
+  differences:
+    - TrayDir is C:\Program Files\RST\Tray\ (under Product.wxs's RstFolder);
+      HKMU is HKLM there, so the Run value starts the tray for every user at
+      sign-in. The generated file components get new auto GUIDs because their
+      paths differ.
+    - TrayStartup has its own fixed GUID (WU1 review N6): the per-user GUID
+      with a key path that resolves to HKLM would break the component rules.
+    - No RemoveFolderEx: the download cache is per user, and an uninstall by
+      one administrator cannot reach every user's.
+    - The tray is never started by the installer, and Restart Manager does not
+      restart it (Product.wxs, MSIRESTARTMANAGERCONTROL=DisableShutdown), so it
+      never runs elevated (WU1 review N8). It starts at each user's next
+      sign-in, or when Revit starts it.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Fragment>
+    <?if $(var.Scope) = "user" ?>
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="LocalProgramsFolder" Name="Programs">
         <Directory Id="ProgramsRstFolder" Name="RST">
@@ -57,9 +73,15 @@
     <!-- BEGIN per-user only (F17 WU4; review N8): the rest of the tray's non-roaming folder, the updater
          copy (updater\), msiexec's install logs (logs\) and the self-update result. Removed with the cache on a
          real uninstall only, so an RST upgrade run BY the updater copy never removes the folder it runs from. In a
-         per-machine package this must not exist: an administrator's uninstall would delete THEIR own folder. -->
+         per-machine package this must not exist: an administrator's uninstall would delete THEIR own folder
+         (inside Scope=user, with RemoveTrayLocal below; WU4 review DN5). -->
     <SetProperty Id="RSTTRAYLOCALDIR" Value="[LocalAppDataFolder]RST\Tray\" After="AppSearch" Sequence="execute" />
     <!-- END per-user only -->
+    <?else?>
+    <DirectoryRef Id="RstFolder">
+      <Directory Id="TrayDir" Name="Tray" />
+    </DirectoryRef>
+    <?endif?>
 
     <!-- Only when files can change: a first install or upgrade, a repair,
          an uninstall, or the old version's removal in an upgrade. A no-op
@@ -73,6 +95,7 @@
 
     <ComponentGroup Id="Tray">
       <ComponentGroupRef Id="TrayFiles" />
+      <?if $(var.Scope) = "user" ?>
       <Component Id="TrayStartup" Directory="TrayDir" Guid="25F3A510-0393-43BC-9462-5E60E225F27B">
         <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="RST"
                        Type="string" Value="&quot;[TrayDir]RST.Tray.exe&quot; --startup" KeyPath="yes" />
@@ -83,6 +106,12 @@
                              Condition="NOT UPGRADINGPRODUCTCODE" />
         <!-- END per-user only -->
       </Component>
+      <?else?>
+      <Component Id="TrayStartup" Directory="TrayDir" Guid="A8082E2F-7DD4-4101-88F4-69C0BB6FBC43">
+        <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="RST"
+                       Type="string" Value="&quot;[TrayDir]RST.Tray.exe&quot; --startup" KeyPath="yes" />
+      </Component>
+      <?endif?>
     </ComponentGroup>
   </Fragment>
 
