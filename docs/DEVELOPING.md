@@ -257,6 +257,8 @@ in CI only. Locally, build them with `-p:EnableWindowsTargeting=true`.
     states.
   - `ScreenshotPipelineTests`: `smoke-palette`.
   - `UiProjectTests` and `UiStringsTests`.
+  - `Bootstrap/EngineDependencyResolverTests`: every branch of the bootstrap's assembly
+    resolver (see [The bootstrap's assembly resolver](#the-bootstraps-assembly-resolver)).
 
 To get the screenshots from CI, open the PR's run. The `Test (runtime, Windows)` job uploads
 the artifact **`RST-screenshots`**, which holds every PNG and `capture-environment.txt`. It
@@ -352,6 +354,78 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
   - **Modals:** `PresetsWindow` and `CleanupWindow` (family dialogs, `ShowInTaskbar="False"`) over
     `PresetsViewModel` / `CleanupViewModel`, behind `IBuilderDialogs`. The Cleanup modal edits a copy.
   - **Branding popover:** see [Popups](#popups).
+
+## Revit API floor
+
+rst-c supports every update of Revit 2025, 2026 and 2027 (decision #26). Revit 2025 is
+partially supported: it is assumed to behave like 2026, takes the same code paths, and is
+verified by hand after a public release because the test machine has no 2025 (decision #21).
+
+Every project compiles against each year's **earliest** update, so the compiler refuses any
+API that a later update added. A user on that first update would otherwise get a
+`TypeLoadException` or `MissingMethodException` the first time the code ran.
+
+| Revit year | Nice3point.Revit.Api pin | RevitAPI assembly |
+|---|---|---|
+| 2025 | `2025.0.2` | 25.0.0.0 |
+| 2026 | `2026.0.4` | 26.0.4.0 |
+| 2027 | `2027.0.0` | 27.0.0.0 |
+
+The pins are inline in `src/RST.Engine/RST.Engine.csproj` and `src/RST.Bootstrap/RST.Bootstrap.csproj`
+(RevitAPI, RevitAPIUI and, in the engine, AdWindows), and in the test add-ins under
+`tests/fixtures/`. Each item sets both `Version` and `VersionOverride`. The `Test (xunit)` CI job
+runs `build/check-revit-api-floor.py` first. It reads every tracked `.csproj`, `.props` and
+`.targets` file and fails on any `Nice3point.Revit.Api.*` version above the floor, on an item
+with no version, and on a Revit year that has no floor.
+
+**Raising the floor on purpose.** Do it only when a feature needs API from a later update, and
+accept that users on the older updates of that year lose support.
+
+1. Pick the earliest update that has the API, and check that its Nice3point package exists.
+2. Change `Version` and `VersionOverride` for that year in every project that pins it
+   (`grep -rn "Nice3point.Revit.Api" --include=*.csproj --include=*.props .`).
+3. Change that year's entry in `FLOOR` in `build/check-revit-api-floor.py`.
+4. Build Debug and Release for that year, and update the table above and the README's
+   Compatibility section.
+5. Record the change as a decision and in the release notes ("drops Revit 2026.0 to 2026.2").
+
+A new Revit year needs a `FLOOR` entry too. Until it has one, the check fails.
+
+### The journal's version-conflict notice
+
+Revit writes `API_ERROR { : Assembly version conflict in some references in RST.Bootstrap.dll
+assembly` to its journal at every start. The lines that follow name RevitAPI and RevitAPIUI, for
+example `Addin's module RevitAPI of version 26.0.4.0 conflicts with same preloaded module of
+version 26.4.10.0`. Revit logs this for every add-in, Autodesk's own included, whenever the
+add-in's reference differs from the assembly Revit has loaded, and then loads the add-in
+normally. Because of the floor, our reference is always lower than or equal to the loaded
+version, which is harmless. Treat the notice as a problem only when the **add-in's version is
+higher than the preloaded one**: then the add-in uses API or a dependency newer than the
+running Revit has, and it fails at run time. When you read a journal in evidence, extract the
+whole block, not its first line:
+`[regex]::Matches((Get-Content $j -Raw), "API_ERROR \{ : Assembly version conflict[^}]*\}")`.
+
+## The bootstrap's assembly resolver
+
+`RST.Bootstrap` loads the engine into Revit's shared default load context and registers a
+process-wide `AssemblyLoadContext.Default.Resolving` handler over `RST.Engine.deps.json`. Any
+add-in's request for Serilog, Serilog.Sinks.File, System.Management, RST.Core or RST.UI can reach
+it. `EngineDependencyResolver` (in `RstBootstrap.cs`, decision #27):
+
+- returns `null` when the requested version is above the copy RST ships, so it never hands
+  another add-in an older copy than it asked for;
+- returns an already-loaded assembly of the same name when its version is at or above the request,
+  instead of loading ours by path;
+- otherwise, when an older copy is already loaded, writes a `WRN` line to the boot log naming
+  both versions and the loaded path, and returns `null`;
+- never throws from inside the event: a failure becomes a `WRN` line and `null`.
+
+After the engine's `OnStartup`, the boot log records the Serilog the engine bound to:
+`Serilog bound: 4.0.0.0 at <path> (engine compiled against 4.0.0.0)`. That line is a `WRN` when
+Serilog is older than compiled, which means another add-in's resolver supplied its copy first.
+The handler cannot prevent that. Only one Serilog can load into the shared context, so when
+another add-in loads a different version first, one of the two add-ins loses. RST still shares
+Serilog's global `Log.Logger`; moving to a private logger is planned for v3.1.
 
 ## History (v2.x to v3.0)
 
