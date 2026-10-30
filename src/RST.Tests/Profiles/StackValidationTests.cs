@@ -124,6 +124,55 @@ public class StackValidationTests
     }
 
     [Fact]
+    public void Export_leaves_out_orphan_stacks_so_the_package_imports()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rst-stack-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var p = WithStack("Placed", Tool("Line"), Tool("Arc"));
+            p.Stacks["Loose"] = new Stack { Tools = [Tool("Wall")] };
+            var log = new RecordingLog();
+            var zip = Path.Combine(dir, "p.zip");
+
+            new ProfileSaveService(dir, log).Export(p, zip).Ok.Should().BeTrue();
+
+            using var fs = File.OpenRead(zip);
+            ProfileZip.Unpack(fs).Profile.Stacks.Keys.Should().Equal("Placed");
+            p.Stacks.Keys.Should().Equal(["Placed", "Loose"], "the export packs a copy");
+            log.Warnings.Should().ContainSingle(w => w.Contains("left out of"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Listing_the_profiles_logs_an_orphan_stack_warning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "rst-stack-list-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var paths = LoaderPaths.Under(root);
+            Directory.CreateDirectory(paths.ProfilesDir);
+            var p = WithStack("Placed", Tool("Line"), Tool("Arc"));
+            p.Id = "orphan-test";
+            p.Stacks["Loose"] = new Stack { Tools = [Tool("Wall"), Tool("Door")] };
+            var file = ProfileStore.Save(p, paths.ProfilesDir);
+            var log = new RecordingLog();
+
+            new ProfileLibraryService(paths, log).List().Should().ContainSingle();
+
+            log.Lines.Should().ContainSingle(l => l == $"Loader.get_profiles: {{File}}: {{Warning}}|{file}|profile.stacks[\"Loose\"]: not referenced by any panel slot");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void A_profile_with_two_and_three_item_stacks_round_trips_byte_stable_keeping_the_stack_tool_fields()
     {
         using var stream = File.OpenRead(FixturePath("stacks.json"));
@@ -174,7 +223,13 @@ public class StackValidationTests
 
         public void Information(string template, params object?[] args) { }
 
-        public void Warning(Exception? error, string template, params object?[] args) => Warnings.Add(template);
+        public List<string> Lines { get; } = [];
+
+        public void Warning(Exception? error, string template, params object?[] args)
+        {
+            Warnings.Add(template);
+            Lines.Add(string.Join("|", new[] { template }.Concat(args.Select(a => a?.ToString() ?? ""))));
+        }
 
         public void Error(Exception? error, string template, params object?[] args) { }
     }
