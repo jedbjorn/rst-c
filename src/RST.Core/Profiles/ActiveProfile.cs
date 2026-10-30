@@ -67,14 +67,16 @@ public sealed class ActiveProfile
     /// <summary>Write the "no profile active" stub (matches pyRevit BlankRST shape).</summary>
     public static void WriteBlank(string? path = null) => MakeBlank().Write(path);
 
-    public static ActiveProfile FromProfile(Profile profile, string profileFile, string[]? hiddenTabs = null, bool disableNonRequired = false) =>
+    /// <param name="loadedAt">The <c>loaded_at</c> stamp (local time); null is now. Tests pass a fixed time.</param>
+    public static ActiveProfile FromProfile(Profile profile, string profileFile, string[]? hiddenTabs = null, bool disableNonRequired = false,
+                                            DateTime? loadedAt = null) =>
         new()
         {
             ProfileName = profile.ProfileName,
             ProfileId = profile.Id,
             ProfileFile = profileFile,
             Tab = profile.Tab,
-            LoadedAt = DateTime.Now.ToString("o"),
+            LoadedAt = (loadedAt ?? DateTime.Now).ToString("o"),
             HiddenTabs = hiddenTabs ?? Array.Empty<string>(),
             DisableNonRequired = disableNonRequired,
             Blank = false,

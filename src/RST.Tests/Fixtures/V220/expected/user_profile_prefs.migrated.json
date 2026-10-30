@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "1f0c6a52-6b0e-4d6f-9a3e-2c8d4b7e9a10": {
+      "hiddenTabs": [
+        "Analyze"
+      ],
+      "disableUnusedAddins": false,
+      "presetsAdopted": true
+    }
+  }
+}
