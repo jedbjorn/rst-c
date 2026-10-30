@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ZZZ-SerilogProbe: copied to %AppData%\Autodesk\Revit\Addins\<year>\ZZZ-SerilogProbe.addin, next to
+  RST.addin, with the probe and its Serilog 4.2.0 in the ZZZ-SerilogProbe\ folder beside it. The
+  file name sorts after RST.addin. rst-c's test add-in for VM step V3 (decision #27); never shipped.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>ZZZ-SerilogProbe</Name>
+    <Assembly>ZZZ-SerilogProbe\ZZZ-SerilogProbe.dll</Assembly>
+    <FullClassName>SerilogProbe.ProbeApp</FullClassName>
+    <ClientId>d4c6e3e0-0000-4000-8000-53524c470002</ClientId>
+    <VendorId>RSTPROBE</VendorId>
+    <VendorDescription>rst-c test add-in (not shipped)</VendorDescription>
+  </AddIn>
+</RevitAddIns>
