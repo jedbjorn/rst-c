@@ -39,6 +39,14 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 function Esc([string]$s) { [Security.SecurityElement]::Escape($s) }
+# .NET, not Get-FileHash: MSBuild starts this under powershell.exe 5.1, and
+# when the build itself runs from pwsh 7 the inherited PSModulePath hides
+# 5.1's Microsoft.PowerShell.Utility (Get-FileHash "not recognized").
+function Get-Sha256([string]$Path) {
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $fs = [IO.File]::OpenRead($Path)
+  try { return (-join ($sha.ComputeHash($fs) | ForEach-Object { $_.ToString('x2') })) } finally { $fs.Dispose(); $sha.Dispose() }
+}
 function PascalId([string]$id) { -join ($id -split '-' | ForEach-Object { $_.Substring(0, 1).ToUpperInvariant() + $_.Substring(1) }) }
 
 $reg = Get-Content -Raw -Encoding UTF8 -Path $Registry | ConvertFrom-Json
@@ -63,7 +71,7 @@ foreach ($c in $shippable) {
   $msi = Join-Path $PayloadDir $r.asset
   if (-not (Test-Path $msi -PathType Leaf)) { throw "gen-companions: payload missing for '$($c.id)': $msi (run fetch-companions.ps1)" }
   $msi = (Resolve-Path $msi).Path
-  $actual = (Get-FileHash -Path $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+  $actual = Get-Sha256 $msi
   if ($actual -ne $r.sha256.ToLowerInvariant()) { throw "gen-companions: sha256 mismatch for '$($c.id)' $($r.asset): pinned $($r.sha256), payload $actual" }
 
   $pid_ = PascalId $c.id

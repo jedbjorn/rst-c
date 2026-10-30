@@ -69,7 +69,9 @@
        pin and fails the build on a mismatch or a missing payload. -->
   <Target Name="RstGenerateCompanions" BeforeTargets="CoreCompile">
     <Error Condition="!Exists('$(RstMsi)')" Text="RST.msi not found at $(RstMsi). Build installer\RST.Installer.wixproj first, or pass -p:RstMsi=&lt;path&gt;." />
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-companions.ps1&quot; -Registry &quot;$(CompanionRegistry)&quot; -PayloadDir &quot;$(CompanionPayloadDir)&quot; -ThemeTemplate &quot;$(MSBuildProjectDirectory)\theme\RstTheme.xml&quot; -OutDir &quot;$(RstGenDir)&quot;" />
+    <!-- PSModulePath cleared: a build started from pwsh 7 would otherwise
+         hand Windows PowerShell 5.1 pwsh's module path. -->
+    <Exec EnvironmentVariables="PSModulePath=" Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-companions.ps1&quot; -Registry &quot;$(CompanionRegistry)&quot; -PayloadDir &quot;$(CompanionPayloadDir)&quot; -ThemeTemplate &quot;$(MSBuildProjectDirectory)\theme\RstTheme.xml&quot; -OutDir &quot;$(RstGenDir)&quot;" />
     <ItemGroup>
       <Compile Include="$(RstGenDir)\Companions.g.wxs" />
     </ItemGroup>
