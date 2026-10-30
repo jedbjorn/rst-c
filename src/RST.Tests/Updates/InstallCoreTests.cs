@@ -406,6 +406,18 @@ public sealed class InstallCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public void A_second_install_in_the_same_second_keeps_the_first_log()
+    {
+        var at = new DateTimeOffset(2026, 10, 30, 9, 15, 0, TimeSpan.Zero);
+        Directory.CreateDirectory(Paths.LogsDir);
+        var first = Paths.LogFor("gantt-it", at);
+        File.WriteAllText(first, "the failed install");
+        var second = Paths.LogFor("gantt-it", at);
+        second.Should().NotBe(first);
+        Path.GetFileName(second).Should().MatchRegex(@"^install-gantt-it-\d{8}-\d{6}-2\.log$");
+    }
+
+    [Fact]
     public async Task Exit_3010_is_installed_with_a_restart_needed_and_never_a_restart()
     {
         _msiexec.Then(3010);

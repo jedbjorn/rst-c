@@ -118,9 +118,18 @@ public interface ISelfUpdater
 /// <param name="SelfUpdateResultFile">%LocalAppData%\RST\Tray\selfupdate.json (written by the updater).</param>
 public sealed record InstallPaths(string CacheRoot, string LogsDir, string SelfUpdateResultFile)
 {
-    /// <summary><c>install-&lt;product&gt;-&lt;yyyyMMdd-HHmmss&gt;.log</c>.</summary>
-    public string LogFor(string productId, DateTimeOffset at) =>
-        Path.Combine(LogsDir, string.Create(CultureInfo.InvariantCulture, $"install-{productId}-{at.ToLocalTime():yyyyMMdd-HHmmss}.log"));
+    /// <summary>
+    /// <c>install-&lt;product&gt;-&lt;yyyyMMdd-HHmmss&gt;.log</c>; a second install in the same second (a quick reinstall
+    /// after a failure) gets <c>…-2.log</c>, so msiexec never overwrites the failed install's log.
+    /// </summary>
+    public string LogFor(string productId, DateTimeOffset at)
+    {
+        var stem = string.Create(CultureInfo.InvariantCulture, $"install-{productId}-{at.ToLocalTime():yyyyMMdd-HHmmss}");
+        var path = Path.Combine(LogsDir, stem + ".log");
+        for (var n = 2; File.Exists(path) && n < 100; n++)
+            path = Path.Combine(LogsDir, string.Create(CultureInfo.InvariantCulture, $"{stem}-{n}.log"));
+        return path;
+    }
 }
 
 /// <summary>What the updater copy did, for the new tray to show (selfupdate.json).</summary>
