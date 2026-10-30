@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  F18 Builder UX Redesign — interactive mockup v1 (Planner-02, 2026-10-30).
+  F18 Builder UX Redesign — interactive mockup v2 (Planner-02, 2026-10-30).
   Throwaway design artifact, not product code. Colours: src/RST.Core/Theming/UiPalette.cs.
   Icons: a copy of part of src/RST.Engine/Assets/icons/pack. Option state lives in the URL hash so
   a redline can name the exact variant (e.g. #pane=B&layout=tiles&actions=pane&theme=dark).
@@ -8,7 +8,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>RST — Profile Builder (F18 mockup v1)</title>
+<title>RST — Profile Builder (F18 mockup v2)</title>
 <style>
 :root, .light {
   --win:#F4F5F7; --surf:#FFFFFF; --alt:#F9FAFB; --border:#D3D7DE; --strong:#6B7380; --div:#E6E8EC;
@@ -52,6 +52,7 @@ input[type=text]:focus { outline:none; border-color:var(--accent); box-shadow:0 
 /* Window */
 #app { flex:1; display:flex; flex-direction:column; min-height:0; }
 header.top { height:54px; background:var(--alt); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 16px; gap:10px; flex:none; }
+.gear { width:30px; min-width:30px; padding:0; font-size:16px; line-height:1; }
 .vsep { width:1px; height:20px; background:var(--div); margin:0 6px; }
 .dirty { color:var(--warnText); font-size:11px; display:flex; align-items:center; gap:5px; }
 .dirty::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--warnText); }
@@ -219,7 +220,8 @@ input.tname:hover { border-color:var(--border); } input.tname:focus { background
 <div id="toast"></div>
 <script>
 // ───────────────────────── option state (URL hash) ─────────────────────────
-const OPTS = { pane:['A','B'], layout:['rows','tiles'], actions:['header','pane'], theme:['light','dark'] };
+// v2: the FnB's picks come first, so they are the defaults (B · Tabs, Tiles, In profile menu).
+const OPTS = { pane:['B','A'], layout:['tiles','rows'], actions:['header','pane'], theme:['light','dark'] };
 const OPT_LABELS = {
   pane:['Profile pane', { A:'A · Sections', B:'B · Tabs' }],
   layout:['Panel layout', { rows:'Rows', tiles:'Tiles (ribbon-like)' }],
@@ -511,7 +513,7 @@ function placeItem(item, t) {
 // ───────────────────────── render: mockup strip ─────────────────────────
 function renderMock() {
   const m = $('#mock'); m.innerHTML = '';
-  m.append(h('b', {}, 'MOCKUP v1 · F18 Builder UX'));
+  m.append(h('b', {}, 'MOCKUP v2 · F18 Builder UX'));
   for (const k in OPTS) {
     const [title, labels] = OPT_LABELS[k];
     m.append(h('span', { class:'grp' }, title + ':', h('span', { class:'seg' },
@@ -530,10 +532,10 @@ function renderHeader() {
       h('span', {}, h('b', {}, p.name || '(unnamed)'), S.saved[S.cur]?.loaded ? h('span', { class:'muted' }, '  (loaded)') : null), h('span', { class:'muted' }, '▾')),
     h('button', { title:'Export this profile as a .zip', onclick:() => toast(`Exported to Desktop\\${p.name}.zip`) }, 'Export ZIP'),
     h('div', { class:'vsep' }),
+    h('button', { class:'gear', 'data-opens':'1', title:'Settings for this machine (not saved in profiles)', 'aria-label':'Settings', onclick:e => gearMenu(e.currentTarget) }, '⚙'),
     h('span', { class:'section-title', style:'font-size:14px' }, 'Profile Builder'),
     h('div', { class:'spacer' }),
     S.dirty ? h('span', { class:'dirty' }, 'Unsaved changes') : null,
-    h('button', { 'data-opens':'1', title:'Settings for this machine (not saved in profiles)', onclick:e => gearMenu(e.currentTarget) }, '⚙ Settings'),
     h('button', { class:'primary', style:'min-width:72px', disabled:!S.dirty, onclick:save }, 'Save'),
     h('button', { style:'min-width:72px', onclick:() => S.dirty ? confirmLeave('Exit', () => toast('(the Builder would close)')) : toast('(the Builder would close)') }, 'Exit'));
 }
@@ -550,7 +552,7 @@ function profileMenu(anchor) {
 function gearMenu(anchor) {
   floatAt(anchor, h('div', { class:'menu' }, h('div', { class:'hd' }, 'This machine — not saved in profiles'),
     h('div', { class:'mi', onclick:() => { closeFloating(); brandingDialog(); } }, 'Branding…', h('span', { class:'muted small' }, 'logo + link on every tab')),
-    h('div', { class:'mi', onclick:() => { closeFloating(); toast('(room for future machine settings)'); } }, 'Builder preferences…')), true);
+    h('div', { class:'mi', onclick:() => { closeFloating(); toast('(room for future machine settings)'); } }, 'Builder preferences…')));
 }
 function switchTo(i) { const go = () => { openProfile(i); renderAll(); }; S.dirty ? confirmLeave('Switch', go) : go(); }
 function confirmLeave(verb, go) {
