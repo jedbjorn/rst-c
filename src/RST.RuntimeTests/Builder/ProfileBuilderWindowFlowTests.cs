@@ -323,6 +323,39 @@ public class ProfileBuilderWindowFlowTests
     });
 
     [Fact]
+    public void Opening_the_popover_moves_focus_inside_so_Escape_closes_it_at_once() => Sta(() =>
+    {
+        // VM finding (WU5 re-run c89b3d78): opened with a mouse click, the popover left keyboard focus
+        // outside it, so the first Escape never reached it.
+        var o = Open();
+        try
+        {
+            var w = o.Window;
+            w.Activate();
+            ToggleBranding(w);
+            Assert.True(w.BrandingPopup.IsOpen);
+            Assert.True(w.PickLogoButton.IsKeyboardFocused
+                || ReferenceEquals(System.Windows.Input.FocusManager.GetFocusedElement(w), w.PickLogoButton),
+                "opening focuses the popover's first control (Pick…)");
+
+            var args = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(w.PickLogoButton) ?? PresentationSource.FromVisual(w)!, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+            };
+            w.PickLogoButton.RaiseEvent(args);
+            Settle();
+            Assert.True(args.Handled);
+            Assert.False(w.BrandingPopup.IsOpen, "the first Escape closes the popover");
+            Assert.False(w.BrandingButton.IsChecked);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
     public void The_popover_reopens_after_the_logo_file_dialog() => Sta(() =>
     {
         var o = Open();
