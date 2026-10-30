@@ -102,17 +102,25 @@ foreach ($i in $items) {
 [void]$sb.AppendLine('</Wix>')
 
 # ---- thm.xml
-# Install page, from the bottom up: buttons (11-34 px from the bottom), the
-# license checkbox (41-58), then one 40 px row per companion (checkbox over
-# its gray description), then a two-line header, then the license box.
+# Install page, from the top down: the install-scope radio buttons and their
+# texts (RstTheme.xml, Y 80-224, feature #17), then the license box from
+# Y 232. From the bottom up: buttons (11-34 px from the bottom), the license
+# checkbox (41-58), then one 40 px row per companion (checkbox over its gray
+# description), then a three-line header (its text says, on the "Everyone on
+# this PC" path, that companions install for this user only), then the
+# license box. $ScopeHeight is the radio block's share of the window height.
+$ScopeHeight = 152
 $n = $items.Count
 $companions = New-Object System.Text.StringBuilder
 $success = ''
 if ($n -eq 0) {
-  $windowHeight = 300; $eulaHeight = -70
+  $windowHeight = 300 + $ScopeHeight; $eulaHeight = -70
 } else {
-  $windowHeight = 312 + 40 * $n; $eulaHeight = -(112 + 40 * $n)
-  [void]$companions.AppendLine("            <Label X=`"11`" Y=`"$(-(70 + 40 * $n))`" Width=`"-11`" Height=`"34`" FontId=`"3`" DisablePrefix=`"yes`">#(loc.CompanionsHeader)</Label>")
+  $windowHeight = 328 + $ScopeHeight + 40 * $n; $eulaHeight = -(128 + 40 * $n)
+  [void]$companions.AppendLine("            <Label X=`"11`" Y=`"$(-(70 + 40 * $n))`" Width=`"-11`" Height=`"50`" FontId=`"3`" DisablePrefix=`"yes`">")
+  [void]$companions.AppendLine('                <Text>#(loc.CompanionsHeader)</Text>')
+  [void]$companions.AppendLine('                <Text Condition="InstallScope = &quot;machine&quot;">#(loc.CompanionsHeaderMachine)</Text>')
+  [void]$companions.AppendLine('            </Label>')
   for ($row = 0; $row -lt $n; $row++) {
     $i = $items[$row]; $k = $n - 1 - $row
     [void]$companions.AppendLine("            <Checkbox Name=`"$($i.Var)`" X=`"11`" Y=`"$(-(85 + 40 * $k))`" Width=`"-11`" Height=`"17`" TabStop=`"yes`" FontId=`"3`">$(Esc $i.Label)</Checkbox>")

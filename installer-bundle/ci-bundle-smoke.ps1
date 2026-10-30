@@ -33,14 +33,38 @@
                        cleanly with msiexec /x, and install alone without RST
                        (C7). Revit is a stub: nothing here loads in Revit (AC6
                        is the VM's).
+  -Mode Scope (feature #17, spec #20 §7, AC10)  the test bundle on both
+                       install-scope paths. The elevation check is Burn's own:
+                       an elevated engine is launched only for a per-machine
+                       package ("Launching elevated engine process", logged even
+                       on this already-elevated runner).
+      S1  default (no InstallScope)   "Just for me": RST.msi per user, no
+                                      elevated engine, RST-Machine and the
+                                      helper not run; uninstall, no elevation
+      S2  InstallScope=machine, an older RST.msi (-OlderRstMsi, 1.0.0)
+          installed for this user, the fixture ticked
+                                      one elevated engine; the helper removes
+                                      the user's own 1.0.0 BEFORE RST-Machine
+                                      installs; RST-Machine per machine (the
+                                      layout, HKLM Run); the fixture per user;
+                                      the bundle stays registered per user
+      S3  re-run with no InstallScope, then with InstallScope=user, while
+          RST-Machine is installed    stays "machine": no per-user RST is
+                                      installed, nothing is switched
+      S4  bundle uninstalled (ARP)    RST-Machine removed (one elevation), the
+                                      fixture stays (Permanent)
+      S5  InstallScope=machine over the SAME-version RST.msi installed bare
+                                      the user's copy is gone first, then
+                                      RST-Machine; uninstall clean
 
   Product queries go through the WindowsInstaller.Installer COM object via
   InvokeMember (it has no type library PowerShell can bind to).
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('Chain', 'BareMsiFirst', 'Companions')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('Chain', 'BareMsiFirst', 'Companions', 'Scope')][string]$Mode,
   [Parameter(Mandatory)][string]$Bundle,
   [string]$RstMsi,
+  [string]$OlderRstMsi,
   [string]$FixtureDir,
   [string]$Registry = 'companions/companions.json',
   [string]$PayloadDir = 'installer-bundle/payload'
@@ -420,6 +444,141 @@ if ($Mode -eq 'BareMsiFirst') {
   $rel = Get-Related $RstCode
   foreach ($p in $rel) { Invoke-Msiexec '/x' $p.ProductCode 'bare-rst-2-cleanup' }
   Assert-Rst $false 'final cleanup'
+  exit 0
+}
+
+# ---------------------------------------------------------- Scope (AC10, F17 WU5)
+if ($Mode -eq 'Scope') {
+  if (-not $RstMsi -or -not $OlderRstMsi -or -not $FixtureDir) { throw '-Mode Scope needs -RstMsi, -OlderRstMsi and -FixtureDir' }
+  $RstMsi = (Resolve-Path $RstMsi).Path
+  $OlderRstMsi = (Resolve-Path $OlderRstMsi).Path
+  . (Join-Path $PSScriptRoot '..\installer\ci-machine-layout.ps1')
+  $codes = @($RstCode, $MachineUpgradeCode, $FixtureCode)
+
+  function Get-Elevations([string]$Log) { return @(Select-String -Path $Log -Pattern 'Launching elevated engine process' -SimpleMatch).Count }
+  function Get-PlanLine([string]$Log, [string]$Id) {
+    $l = Select-String -Path $Log -Pattern "Planned package: $Id," -SimpleMatch | Select-Object -First 1
+    if ($l) { return $l.Line } else { return '' }
+  }
+  function Assert-Plan([string]$Log, [string]$Id, [string]$Execute, [string]$Label) {
+    $l = Get-PlanLine $Log $Id
+    Assert ($l -match "execute: $Execute,") "[$Label] Burn plans ${Id}: execute $Execute ($($l.Trim()))"
+  }
+  function Get-AppliedIndex([string]$Log, [string]$Id) {
+    $l = Select-String -Path $Log -Pattern "Applied execute package: $Id," -SimpleMatch | Select-Object -First 1
+    if ($l) { return $l.LineNumber } else { return -1 }
+  }
+  # The helper's own log: Burn's [WixBundleLog_RemoveUserRst], beside the bundle log.
+  function Get-HelperLog([string]$Log) {
+    $base = [IO.Path]::GetFileNameWithoutExtension($Log)
+    $f = @(Get-ChildItem (Split-Path $Log) -Filter "${base}_*RemoveUserRst*.log" -ErrorAction SilentlyContinue |
+           Where-Object { $_.Name -notmatch '_\{?[0-9A-F]{8}-' } | Sort-Object Name)
+    if ($f.Count -eq 0) {
+      Write-Host "no helper log for $base; logs there: $((Get-ChildItem (Split-Path $Log) -Filter "$base*" | ForEach-Object { $_.Name }) -join ', ')"
+      return $null
+    }
+    Write-Host "---- helper log $($f[0].Name)"; Get-Content $f[0].FullName | ForEach-Object { Write-Host "  $_" }; Write-Host '----'
+    return $f[0].FullName
+  }
+  function Assert-MachineProduct([bool]$Present, [string]$Label) {
+    $r = Get-Related $MachineUpgradeCode
+    if ($Present) {
+      Assert ($r.Count -eq 1) "[$Label] exactly one RST-Machine product"
+      Assert ([string](Get-ComProp $Installer 'ProductInfo' @($r[0].ProductCode, 'AssignmentType')) -eq '1') "[$Label] installed per machine"
+      Assert ((Get-ArpVisible 'RST (all users)').Count -eq 1 -and (Get-ArpVisible 'RST (all users)')[0].Hive -eq 'HKLM') "[$Label] its own visible 'RST (all users)' entry, for every user (HKLM)"
+      Assert-MachineYears @('2025', '2026', '2027') $Label
+      Assert-MachineTray $true $Label
+    } else {
+      Assert ($r.Count -eq 0) "[$Label] no RST-Machine product"
+      Assert-MachineGone $Label
+    }
+  }
+  function Show-Scope([string]$Log) {
+    Select-String -Path $Log -Pattern 'Variable: InstallScope', 'Variable: RstMachineState', 'Setting string variable ''InstallScope''', 'Setting numeric variable ''RstMachineState''' -SimpleMatch |
+      ForEach-Object { Write-Host "  $($_.Line)" }
+  }
+
+  Set-RevitStubs
+  Show-State 'start' $codes
+  Assert-Rst $false 'start'
+  Assert-MachineProduct $false 'start'
+
+  # S1 - the default is "Just for me": never elevates.
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart') 'S1-default'
+  Show-State 'S1' $codes; Show-Scope $log
+  Assert-PerUser $log 'S1'
+  Assert ((Get-Elevations $log) -eq 0) '[S1] the per-user path launched no elevated engine'
+  Assert-Rst $true 'S1'
+  Assert-MachineProduct $false 'S1'
+  Assert-Plan $log 'RST' 'Install' 'S1'
+  Assert-Plan $log 'RemoveUserRst' 'None' 'S1'
+  Assert-Plan $log 'RSTMachine' 'None' 'S1'
+  $log = Uninstall-BundleViaArp 'S1-uninstall'
+  Assert ((Get-Elevations $log) -eq 0) '[S1] its uninstall launched no elevated engine either'
+  Assert-Rst $false 'S1 uninstalled'
+
+  # S2 - "Everyone on this PC" over an older RST.msi installed for this user, with the fixture companion.
+  Invoke-Msiexec '/i' $OlderRstMsi 'S2-older-user-rst'
+  $older = Get-Related $RstCode
+  Assert ($older.Count -eq 1 -and $older[0].Version -eq '1.0.0') "[S2] this user has RST.msi 1.0.0 ($($older | ForEach-Object { "$($_.ProductCode) $($_.Version)" }))"
+  Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallScope=machine', 'InstallCompanionFixture=1') 'S2-machine'
+  Show-State 'S2' $codes; Show-Scope $log
+  Assert ((Get-Elevations $log) -eq 1) "[S2] the per-machine path launched exactly one elevated engine (one UAC prompt; got $(Get-Elevations $log))"
+  Assert (Select-String -Path $log -Pattern 'scope: PerUser' -SimpleMatch -Quiet) '[S2] the bundle itself stays registered per user'
+  Assert-Plan $log 'RemoveUserRst' 'Install' 'S2'
+  Assert-Plan $log 'RSTMachine' 'Install' 'S2'
+  Observe "S2 RST plan: $((Get-PlanLine $log 'RST').Trim())"
+  $helper = Get-HelperLog $log
+  Assert ($null -ne $helper) '[S2] the helper wrote its log beside the bundle log'
+  Assert (Select-String -Path $helper -Pattern "$($older[0].ProductCode): RST 1.0.0 is installed for this user; removing it" -SimpleMatch -Quiet) '[S2] the helper found and removed the user''s own RST 1.0.0'
+  Assert (Select-String -Path $helper -Pattern "$($older[0].ProductCode): Windows Installer returned 0" -SimpleMatch -Quiet) '[S2] that removal returned 0'
+  $iHelper = Get-AppliedIndex $log 'RemoveUserRst'; $iMachine = Get-AppliedIndex $log 'RSTMachine'
+  Assert ($iHelper -gt 0 -and $iMachine -gt $iHelper) "[S2] the user's copy was removed before RST-Machine installed (log lines $iHelper < $iMachine)"
+  Assert-Rst $false 'S2 user copy removed'
+  Assert-MachineProduct $true 'S2'
+  Assert-Fixture '1.1.0' 'S2 companion for this user'
+  $fx = Get-Related $FixtureCode
+  Assert ([string](Get-ComProp $Installer 'ProductInfo' @($fx[0].ProductCode, 'AssignmentType')) -eq '0') '[S2] the companion is installed per user (contract C1)'
+  $b = Get-BundleArp
+  Assert ($b.Count -eq 1 -and $b[0].Hive -eq 'HKCU') '[S2] one per-user RST-Setup bundle entry'
+
+  # S3 - re-runs while RST-Machine is installed stay "machine": nothing installed per user, nothing switched.
+  foreach ($run in @(@{ Name = 'S3-rerun-default'; Args = @('/quiet', '/norestart') }, @{ Name = 'S3-rerun-user'; Args = @('/quiet', '/norestart', 'InstallScope=user') })) {
+    $log = Invoke-Bundle $Bundle $run.Args $run.Name
+    Show-Scope $log
+    Assert-Plan $log 'RST' 'None' $run.Name
+    Assert-Plan $log 'RSTMachine' 'None' $run.Name
+    Assert-Rst $false $run.Name
+    Assert-MachineProduct $true $run.Name
+  }
+
+  # S4 - uninstall the bundle: RST-Machine goes (one elevation), the companion stays.
+  $log = Uninstall-BundleViaArp 'S4-uninstall'
+  Show-State 'S4' $codes
+  Assert ((Get-Elevations $log) -eq 1) '[S4] the uninstall elevated once, for RST-Machine'
+  Assert-MachineProduct $false 'S4'
+  Assert-Rst $false 'S4'
+  Assert-Fixture '1.1.0' 'S4 companion stays'
+  Remove-Fixture 'S4'
+
+  # S5 - "Everyone on this PC" over the same-version RST.msi installed bare.
+  Invoke-Msiexec '/i' $RstMsi 'S5-same-user-rst'
+  Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  $log = Invoke-Bundle $Bundle @('/quiet', '/norestart', 'InstallScope=Machine') 'S5-machine-same'
+  Show-State 'S5' $codes; Show-Scope $log
+  Observe "S5 RST plan: $((Get-PlanLine $log 'RST').Trim())"
+  $null = Get-HelperLog $log
+  Assert ((Get-Elevations $log) -eq 1) '[S5] one elevated engine'
+  Assert-Rst $false 'S5 user copy removed'
+  Assert-MachineProduct $true 'S5 (InstallScope=Machine: any case)'
+  $iMachine = Get-AppliedIndex $log 'RSTMachine'
+  $iUser = @((Get-AppliedIndex $log 'RST'), (Get-AppliedIndex $log 'RemoveUserRst')) | Where-Object { $_ -gt 0 } | Sort-Object | Select-Object -First 1
+  Assert ($iUser -gt 0 -and $iMachine -gt $iUser) "[S5] the user's copy was removed before RST-Machine installed (log lines $iUser < $iMachine)"
+  Uninstall-BundleViaArp 'S5-uninstall' | Out-Null
+  Assert-MachineProduct $false 'S5 uninstalled'
+  Assert-Rst $false 'end'
+  Show-State 'end' $codes
   exit 0
 }
 

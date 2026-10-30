@@ -4,7 +4,8 @@
   contributors. All rights reserved. Licensed under the Microsoft
   Reciprocal License (MS-RL), https://github.com/wixtoolset/wix/blob/v6.0.2/LICENSE.TXT.
   Changes: Options page strings removed (RstTheme.xml has no Options page);
-  the companion strings at the end added. Used as the BA localization of
+  the install-scope and companion strings at the end added (the scope wording
+  is spec #20 §7's, exactly). Used as the BA localization of
   RST-Setup.exe (Bundle.wxs LocalizationFile), not as bundle localization.
 -->
 <WixLocalization Culture="en-us" Language="1033" xmlns="http://wixtoolset.org/schemas/v4/wxl">
@@ -62,7 +63,13 @@
   <String Id="FilesInUseRetryButton" Value="&amp;Retry" />
   <String Id="FilesInUseIgnoreButton" Value="&amp;Ignore" />
   <String Id="FilesInUseExitButton" Value="E&amp;xit" />
+  <String Id="ScopeUserRadio" Value="&amp;Just for me (recommended)" />
+  <String Id="ScopeUserText" Value="Installs for your Windows account only. No administrator needed. RST can switch off any add-in for you, including ones installed for everyone." />
+  <String Id="ScopeUserLockedText" Value="RST is installed for everyone on this PC. To install it just for you instead, first uninstall &quot;RST (all users)&quot; in Settings &gt; Apps." />
+  <String Id="ScopeMachineRadio" Value="&amp;Everyone on this PC" />
+  <String Id="ScopeMachineText" Value="Installs once for all users. Windows will ask for an administrator. Each user still chooses their own add-ins. Gantt-It and Splash-It install for your account; other users can add them from the RST tray in one click." />
   <String Id="CompanionsHeader" Value="Optional Designs/OS add-ins. Each one is a separate product with its own entry in Settings &gt; Apps, and it stays installed if you uninstall RST later." />
+  <String Id="CompanionsHeaderMachine" Value="Optional Designs/OS add-ins. They install for your Windows account only; other users can add them from the RST tray in one click. Each stays installed if you uninstall RST later." />
   <String Id="SuccessCompanionsInstallText" Value="Add-ins you ticked are separate products, each with its own entry in Settings &gt; Apps. They stay installed if you uninstall RST." />
   <String Id="SuccessCompanionsUninstallText" Value="RST was removed. Any add-ins installed with it are separate products and stay installed; remove each one from Settings &gt; Apps." />
 </WixLocalization>

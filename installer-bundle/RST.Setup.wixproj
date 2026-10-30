@@ -2,7 +2,8 @@
 
   <!--
     RST.Setup — produces RST-Setup.exe, the WiX Burn bundle (feature #13
-    Phase 2, spec #15). It always installs RST.msi and offers each
+    Phase 2, spec #15). It installs RST.msi, or RST-Machine.msi when the
+    user picks "Everyone on this PC" (feature #17, spec #20 §7), and offers each
     `shippable` companion in companions/companions.json as an opt-in
     checkbox; a ticked companion's own MSI is chained silently and
     unmodified. See README.md in this folder.
@@ -10,6 +11,9 @@
     Inputs (MSBuild properties, all optional):
       RstMsi               the RST.msi to chain. Default: the installer
                            project's output, ..\installer\bin\<Configuration>\RST.msi.
+      RstMachineMsi        the RST-Machine.msi to chain ("Everyone on this
+                           PC", feature #17). Default: ..\installer\bin\<Configuration>\RST-Machine.msi
+                           (RST.Installer.wixproj -p:RstScope=machine).
       CompanionRegistry    the registry to generate the chain from. Default:
                            ..\companions\companions.json. The bundle smoke
                            passes a test registry that marks the fixture
@@ -31,10 +35,12 @@
          latest release (v3.0.0) and the next (v3.1.0). -->
     <RstBundleVersionEffective Condition="'$(RstBundleVersionEffective)' == ''">3.0.99</RstBundleVersionEffective>
     <RstMsi Condition="'$(RstMsi)' == ''">$(MSBuildProjectDirectory)\..\installer\bin\$(Configuration)\RST.msi</RstMsi>
+    <RstMachineMsi Condition="'$(RstMachineMsi)' == ''">$(MSBuildProjectDirectory)\..\installer\bin\$(Configuration)\RST-Machine.msi</RstMachineMsi>
     <CompanionRegistry Condition="'$(CompanionRegistry)' == ''">$(MSBuildProjectDirectory)\..\companions\companions.json</CompanionRegistry>
     <CompanionPayloadDir Condition="'$(CompanionPayloadDir)' == ''">$(MSBuildProjectDirectory)\payload</CompanionPayloadDir>
     <RstGenDir>$(MSBuildProjectDirectory)\obj\gen</RstGenDir>
-    <DefineConstants>$(DefineConstants);RstBundleVersion=$(RstBundleVersionEffective);RstMsi=$(RstMsi);RstThemeXml=$(RstGenDir)\thm.xml</DefineConstants>
+    <RstRemoveUserRstExe>$(MSBuildProjectDirectory)\obj\helper\RST.RemoveUserRst.exe</RstRemoveUserRstExe>
+    <DefineConstants>$(DefineConstants);RstBundleVersion=$(RstBundleVersionEffective);RstMsi=$(RstMsi);RstMachineMsi=$(RstMachineMsi);RemoveUserRstExe=$(RstRemoveUserRstExe);RstThemeXml=$(RstGenDir)\thm.xml</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -45,6 +51,12 @@
     <!-- x64 engine, matching the x64 MSIs it chains (Revit 2025-2027 is
          64-bit only). -->
     <InstallerPlatform>x64</InstallerPlatform>
+    <!-- WIX1140: "Bundle dependencies will not be registered on per-machine
+         package RSTMachine for a per-user bundle". By design (Bundle.wxs):
+         the bundle stays per user so "Just for me" never elevates, and
+         RST-Machine.msi is an ordinary package of it, removed with it. The
+         repo-wide TreatWarningsAsErrors would otherwise fail the build. -->
+    <SuppressSpecificWarnings>1140</SuppressSpecificWarnings>
   </PropertyGroup>
 
   <!-- The fixture companion is its own project (fixture/), and theme/ holds
@@ -61,7 +73,24 @@
        Directory.Packages.props (CPM). -->
   <ItemGroup>
     <PackageReference Include="WixToolset.BootstrapperApplications.wixext" />
+    <!-- util:ProductSearch (Bundle.wxs: is RST-Machine.msi installed?). -->
+    <PackageReference Include="WixToolset.Util.wixext" />
   </ItemGroup>
+
+  <!-- The "Everyone on this PC" helper (helper\RemoveUserRst.cs, Bundle.wxs
+       ExePackage RemoveUserRst), built with the .NET Framework 4 C# compiler
+       that ships in Windows: no SDK, no package, and it runs on the .NET
+       Framework 4.8 of every supported Windows. Incremental: every bundle
+       variant of one build embeds the same exe. -->
+  <PropertyGroup>
+    <RstFrameworkCsc>$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\csc.exe</RstFrameworkCsc>
+    <RstRemoveUserRstSource>$(MSBuildProjectDirectory)\helper\RemoveUserRst.cs</RstRemoveUserRstSource>
+  </PropertyGroup>
+  <Target Name="RstBuildRemoveUserRst" BeforeTargets="CoreCompile" Inputs="$(RstRemoveUserRstSource)" Outputs="$(RstRemoveUserRstExe)">
+    <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstRemoveUserRstExe)'))" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstRemoveUserRstExe)&quot; &quot;$(RstRemoveUserRstSource)&quot;" />
+  </Target>
 
   <!-- The companion chain, its variables and the BA theme (one checkbox per
        shippable companion) are generated from the registry before every
@@ -70,6 +99,7 @@
        pin and fails the build on a mismatch or a missing payload. -->
   <Target Name="RstGenerateCompanions" BeforeTargets="CoreCompile">
     <Error Condition="!Exists('$(RstMsi)')" Text="RST.msi not found at $(RstMsi). Build installer\RST.Installer.wixproj first, or pass -p:RstMsi=&lt;path&gt;." />
+    <Error Condition="!Exists('$(RstMachineMsi)')" Text="RST-Machine.msi not found at $(RstMachineMsi). Build installer\RST.Installer.wixproj -p:RstScope=machine first, or pass -p:RstMachineMsi=&lt;path&gt;." />
     <!-- PSModulePath cleared: a build started from pwsh 7 would otherwise
          hand Windows PowerShell 5.1 pwsh's module path. -->
     <Exec EnvironmentVariables="PSModulePath=" Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-companions.ps1&quot; -Registry &quot;$(CompanionRegistry)&quot; -PayloadDir &quot;$(CompanionPayloadDir)&quot; -ThemeTemplate &quot;$(MSBuildProjectDirectory)\theme\RstTheme.xml&quot; -OutDir &quot;$(RstGenDir)&quot;" />

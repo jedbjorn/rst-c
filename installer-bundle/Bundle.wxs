@@ -1,19 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  RST-Setup.exe: the setup bundle (feature #13 Phase 2, spec #15).
+  RST-Setup.exe: the setup bundle (feature #13 Phase 2, spec #15; install
+  scope: feature #17, spec #20 §7).
 
-  Chain: RST.msi (always), then each shippable companion in
+  Chain: RST for the chosen scope, then each shippable companion in
   companions/companions.json (generated into obj\gen\Companions.g.wxs by
   gen-companions.ps1: one opt-in Install<Id> variable, one theme checkbox
   and one MsiPackage per companion). After setup every product is a stock
-  install: RST.msi sits behind this bundle's Add/Remove Programs entry,
-  and each companion keeps its own entry, its own upgrades, and stays
+  install: RST sits behind this bundle's Add/Remove Programs entry, and
+  each companion keeps its own entry, its own upgrades, and stays
   installed when the bundle is uninstalled.
 
-  Per-user: every chained package is a per-user MSI, so Burn registers the
-  bundle per-user (HKCU) and never launches an elevated engine. Adding a
-  per-machine package would change that; the bundle smoke asserts
-  "scope: PerUser" in the Burn log.
+  Install scope (decision #15): the Install page's two radio buttons set
+  the variable InstallScope; silent use passes it on the command line:
+      RST-Setup.exe /quiet /norestart InstallScope=machine InstallGanttIt=1
+    user     "Just for me (recommended)", the default. RST.msi, per user.
+             Every package on this path is per user, so Burn never
+             launches an elevated engine (the bundle smoke asserts it).
+    machine  "Everyone on this PC". In chain order:
+               1. RST (RST.msi): its InstallCondition is false, so Burn
+                  removes it if exactly this version is installed for the
+                  user;
+               2. RemoveUserRst (helper\RemoveUserRst.cs): removes any
+                  other version of the user's own RST.msi;
+               3. RSTMachine (RST-Machine.msi), per machine: the one step
+                  Burn elevates for (one UAC prompt, at the start of the
+                  install);
+               4. the ticked companions, per user, for the installing user
+                  (contract C1: companions stay per user; every other user
+                  adds them from the RST tray).
+             1, 2 and 4 run in the bundle's unelevated process, as the
+             installing user, so they see and change only that user's
+             products.
+  The scope is not remembered by Burn. It is found again on every run:
+  when RST-Machine.msi is installed it is "machine" (the "Just for me"
+  button is then disabled: going back to per user is uninstall, then
+  install, never a silent switch that would also need an administrator);
+  otherwise the command line's value, and "user" for anything but
+  "machine".
+
+  Scope: the bundle stays registered per user (one per-user package is
+  enough, WiX's ResolveBundleInstallScope), so its own Add/Remove Programs
+  entry is the installing user's. RST-Machine.msi is Visible: it keeps its
+  own "RST (all users)" entry, which every administrator of the PC sees.
+  Burn does not ref-count a per-machine package from a per-user bundle
+  (warning WIX1140, suppressed in RST.Setup.wixproj): uninstalling this
+  bundle removes RST-Machine.msi too.
 
   UpgradeCode is this bundle's stable identity. NEVER change it once
   shipped: it is how a newer RST-Setup.exe recognizes and replaces an
@@ -22,7 +54,8 @@
   installer-bundle/README.md.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Bundle Name="RST"
           Manufacturer="Designs/OS"
@@ -37,11 +70,11 @@
 
     <!-- The standard BA with the RTF license page (the same License.rtf as
          RST.msi). ThemeFile is generated from theme\RstTheme.xml: it adds
-         the companion checkboxes to the Install page and the "companions
-         stay installed" note to the finish page. The logo is the RST mark
-         (the same 48x48 image embedded in installer\branding\rst.ico).
-         SuppressOptionsUI: there is no install folder to choose; every
-         package decides its own per-user paths. -->
+         the scope radio buttons and the companion checkboxes to the Install
+         page and the "companions stay installed" note to the finish page.
+         The logo is the RST mark (the same 48x48 image embedded in
+         installer\branding\rst.ico). SuppressOptionsUI: there is no install
+         folder to choose; every package decides its own paths. -->
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication
           Theme="rtfLicense"
@@ -53,13 +86,50 @@
           ShowVersion="yes" />
     </BootstrapperApplication>
 
+    <!-- InstallScope: "user" or "machine" once the searches below have run.
+         No Value, so a command-line InstallScope=... is the only input
+         besides the radio buttons. -->
+    <Variable Name="InstallScope" bal:Overridable="yes" />
+    <!-- RST-Machine.msi's UpgradeCode (installer/Product.wxs). 5 =
+         INSTALLSTATE_DEFAULT: installed; 2 (absent) otherwise. -->
+    <util:ProductSearch Id="RstMachineSearch" UpgradeCode="79C25959-C28A-4ED8-8984-85ED525476C3"
+                        Result="state" Variable="RstMachineState" />
+    <SetVariable Id="ScopeMachine" Variable="InstallScope" Value="machine" After="RstMachineSearch"
+                 Condition="RstMachineState = 5 OR InstallScope ~= &quot;machine&quot;" />
+    <SetVariable Id="ScopeUser" Variable="InstallScope" Value="user" After="ScopeMachine"
+                 Condition="NOT (InstallScope = &quot;machine&quot;)" />
+
     <Chain>
-      <!-- rst-c itself. Vital (the default): if it fails, the bundle fails
-           and rolls back. Not Visible (the default): Burn hides its own
-           Add/Remove Programs entry behind the bundle's, so Settings > Apps
-           shows one "RST". RST.msi's launch condition still applies: a
-           first install fails when no Revit 2025/2026/2027 is found. -->
-      <MsiPackage Id="RST" SourceFile="$(var.RstMsi)" />
+      <!-- rst-c for one user (the default scope). Vital (the default): if it
+           fails, the bundle fails and rolls back. Not Visible (the default):
+           Burn hides its own Add/Remove Programs entry behind the bundle's,
+           so Settings > Apps shows one "RST". RST.msi's launch condition
+           still applies: a first install fails when no Revit 2025/2026/2027
+           is found. On the machine path its condition is false: Burn removes
+           it if it is installed at this version. -->
+      <MsiPackage Id="RST" SourceFile="$(var.RstMsi)"
+                  InstallCondition="NOT (InstallScope = &quot;machine&quot;)" />
+
+      <!-- Machine path only: removes the installing user's own RST.msi of
+           any other version (helper\RemoveUserRst.cs). Unelevated, as that
+           user. Permanent with no detection: it runs on every machine-path
+           install and is never uninstalled; when there is nothing to
+           remove it exits 0. Vital: if the user's copy cannot be removed,
+           RST-Machine.msi is not installed (it would be shadowed). -->
+      <ExePackage Id="RemoveUserRst" Name="RST.RemoveUserRst.exe" SourceFile="$(var.RemoveUserRstExe)"
+                  PerMachine="no" Permanent="yes" Vital="yes" Cache="remove" DetectCondition=""
+                  InstallArguments="&quot;[WixBundleLog_RemoveUserRst]&quot;"
+                  InstallCondition="InstallScope = &quot;machine&quot;">
+        <ExitCode Value="0" Behavior="success" />
+        <ExitCode Value="3010" Behavior="scheduleReboot" />
+      </ExePackage>
+
+      <!-- rst-c for everyone on this PC (RST-Machine.msi). Visible: it keeps
+           its own "RST (all users)" entry in Settings > Apps. Its launch
+           condition refuses a first install while the installing user still
+           has RST.msi; the two packages above have removed it by then. -->
+      <MsiPackage Id="RSTMachine" SourceFile="$(var.RstMachineMsi)" Visible="yes"
+                  InstallCondition="InstallScope = &quot;machine&quot;" />
 
       <!-- Companions: Permanent, Visible, Vital="no", InstallCondition
            bound to the checkbox. Generated from the registry. -->

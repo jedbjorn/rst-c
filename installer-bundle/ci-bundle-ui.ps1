@@ -9,6 +9,11 @@
   Steps (stub Revit.exe files, as in ci-bundle-smoke.ps1):
     1. RST-Setup.exe            Install page -> screenshot; assert every
                                 companion checkbox exists and is unticked
+       1a. the install-scope radio buttons (feature #17, AC10): spec #20
+           §7's wording, "Just for me" selected by default; "Everyone on
+           this PC" selected -> screenshot, the companions header says they
+           install for this user; back to "Just for me" (this run installs
+           per user, and its Burn log shows no elevated engine)
     2. tick the license and every companion checkbox, Install -> Success
        page -> screenshot; assert the companions were installed
     3. RST-Setup.exe /uninstall -> Success page -> screenshot; assert RST
@@ -119,7 +124,43 @@ function Show-Texts($Window, [string]$Label) {
 $p = Start-Process $Bundle -ArgumentList @('/log', "`"$LogDir\bundle-ui-install.log`"") -PassThru
 $w = Find-Window
 $eula = Wait-Control $w '*license terms*' 60
-Show-Texts $w 'install page' | Out-Null
+$texts = Show-Texts $w 'install page'
+
+# 1a. The install-scope radio buttons (feature #17, spec #20 §7, AC10): the spec's wording exactly, "Just for me"
+# selected by default; picking "Everyone on this PC" changes the companions' header to say they install for this
+# user only. The Reviewer reads the screenshots for clarity.
+$ScopeWording = [ordered]@{
+  'Just for me (recommended)' = 'Installs for your Windows account only. No administrator needed. RST can switch off any add-in for you, including ones installed for everyone.'
+  'Everyone on this PC'       = 'Installs once for all users. Windows will ask for an administrator. Each user still chooses their own add-ins. Gantt-It and Splash-It install for your account; other users can add them from the RST tray in one click.'
+}
+$CompanionsUser = 'Optional Designs/OS add-ins. Each one is a separate product with its own entry in Settings > Apps, and it stays installed if you uninstall RST later.'
+$CompanionsMachine = 'Optional Designs/OS add-ins. They install for your Windows account only; other users can add them from the RST tray in one click. Each stays installed if you uninstall RST later.'
+$radios = @{}
+foreach ($label in $ScopeWording.Keys) {
+  $r = Find-Control $w $label
+  Assert ($null -ne $r) "Install page has the '$label' radio button (exact wording)"
+  $radios[$label] = $r
+  Assert (@($texts | Where-Object { $_ -like "*] $($ScopeWording[$label])" }).Count -eq 1) "'$label' is explained in the spec's words: $($ScopeWording[$label])"
+}
+Assert (Test-Ticked $radios['Just for me (recommended)']) "'Just for me (recommended)' is selected by default"
+Assert (-not (Test-Ticked $radios['Everyone on this PC'])) "'Everyone on this PC' is not selected by default"
+if ($companions.Count -gt 0) {
+  Assert (@($texts | Where-Object { $_ -like "*] $CompanionsUser" }).Count -eq 1) 'the companions header (just for me) says each one is a separate product'
+}
+Save-Shot $w '0-scope-page'
+Invoke-Button $radios['Everyone on this PC']
+Start-Sleep -Milliseconds 600
+Assert (Test-Ticked $radios['Everyone on this PC']) "'Everyone on this PC' can be selected"
+Assert (-not (Test-Ticked $radios['Just for me (recommended)'])) "and then 'Just for me' is not"
+$textsMachine = Show-Texts $w 'install page, everyone on this PC'
+if ($companions.Count -gt 0) {
+  Assert (@($textsMachine | Where-Object { $_ -like "*] $CompanionsMachine" }).Count -eq 1) 'on the per-machine path the companions header says they install for this user, and that others add them from the tray'
+}
+Save-Shot $w '0b-scope-everyone'
+Invoke-Button $radios['Just for me (recommended)']
+Start-Sleep -Milliseconds 600
+Assert (Test-Ticked $radios['Just for me (recommended)']) "'Just for me' selected again (this run installs per user)"
+Show-Texts $w 'install page, back to just for me' | Out-Null
 $boxes = @{}
 foreach ($c in $companions) {
   $b = Find-Control $w "$($c.name) $($c.release.version)*"
@@ -141,6 +182,8 @@ Save-Shot $w '3-success-install'
 Invoke-Button $close
 $p.WaitForExit(30000) | Out-Null
 Assert ((Get-RelatedCount '{AF0331FC-5280-492A-94BD-95EDF108BE74}') -eq 1) 'RST installed through the UI'
+Assert ((Get-RelatedCount '{79C25959-C28A-4ED8-8984-85ED525476C3}') -eq 0) '"Just for me" installed no RST-Machine'
+Assert (-not (Select-String -Path "$LogDir\bundle-ui-install.log" -Pattern 'Launching elevated engine process' -SimpleMatch -Quiet)) '"Just for me" through the UI launched no elevated engine'
 foreach ($c in $companions) { Assert ((Get-RelatedCount "{$($c.release.upgradeCode)}") -eq 1) "$($c.name) installed through its checkbox" }
 
 # 3. Uninstall through the UI, Success page.
