@@ -8,12 +8,14 @@ This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a run
 
 | Companion | Repo | Status | Pin |
 |---|---|---|---|
-| Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `in_development` | none yet (Phase 2: `v1.1.0`, `GanttIt-1.1.0.msi`) |
-| Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `in_development` | none yet (Phase 2: `v1.1.0`, `SplashIt-1.1.0.msi`) |
+| Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `shippable` | `v1.1.0`, `GanttIt-1.1.0.msi` |
+| Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `shippable` | `v1.1.0`, `SplashIt-1.1.0.msi` |
+
+How the bundle is built and tested: [`installer-bundle/README.md`](../installer-bundle/README.md).
 
 ## The registry
 
-`companions.json` is strict JSON (no comments), edited by hand in a PR. This example is the Gantt-It entry as Phase 2 will pin it:
+`companions.json` is strict JSON (no comments), edited by hand in a PR. This example is the Gantt-It entry as it is pinned:
 
 ```json
 {
@@ -71,7 +73,7 @@ Run it locally:
 dotnet test src/RST.Tests/RST.Tests.csproj --filter FullyQualifiedName~Companions
 ```
 
-The test checks the file's shape. It cannot check that a pin matches the real release; the Phase 2 bundle job does that (it downloads each pinned asset and fails on a sha256 mismatch or a missing asset), and the pin-bump procedure below does it before the PR is opened.
+The test checks the file's shape. It cannot check that a pin matches the real release; the CI `bundle` job does that (`installer-bundle/fetch-companions.ps1` downloads each pinned asset and fails on a missing asset or a sha256, UpgradeCode or version mismatch), and the pin-bump procedure below does it before the PR is opened.
 
 ## The companion contract
 
@@ -87,7 +89,7 @@ A companion repo must meet all seven before rst-c marks it `shippable`. Gantt-It
 | C6 | Installs its own `.addin` per Revit year under `%AppData%\Autodesk\Revit\Addins\<year>\`, with its own ClientId and VendorId `DSOS`; no files under `%AppData%\RST\`. | No overlap with rst-c's files. |
 | C7 | No dependency on rst-c being installed, and rst-c has none on it. | Everything stays stock after setup. |
 
-Known behavior of the current companions, relevant to C4: both MSIs carry a launch condition that needs Revit 2025, 2026 or 2027 to be installed (`Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND`). On a machine with none of them, the silent install fails with that message instead of installing nothing. The bundle marks companions non-vital, so this never rolls back rst-c, but a CI runner without Revit cannot install a real companion. That is why the bundle smoke test uses a fixture MSI.
+Known behavior of the current companions, relevant to C4: both MSIs carry a launch condition that needs Revit 2025, 2026 or 2027 to be installed (`Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND`). On a machine with none of them, the silent install fails with that message instead of installing nothing. The bundle marks companions non-vital, so this never rolls back rst-c. CI runners have no Revit, so the bundle smoke creates stub `Revit.exe` files in `C:\Program Files\Autodesk\Revit <year>\` (the companions' default-folder detection, as for `RST.msi`); the install-order mechanics run against a test-only fixture MSI.
 
 ## Bumping a pin
 
@@ -143,4 +145,4 @@ Each check runs against the **downloaded asset** from step 3, not a local build 
 | C6 | After the C4 install: the companion's manifest (`GanttIt.addin`, `SplashIt.addin`) exists in `%AppData%\Autodesk\Revit\Addins\<year>\` for each detected year, its `<ClientId>` equals `addinClientId` and its `<VendorId>` is `DSOS`; nothing was written under `%AppData%\RST\`. The validation test separately ensures the ClientId is not rst-c's. |
 | C7 | The C4 install succeeds with rst-c **not** installed. Open Revit: the companion loads with no RST tab present. Then install rst-c and uninstall it through Add/Remove Programs: the companion still loads. |
 
-**These checks are the bump author's job, every time.** Nothing in rst-c's CI re-checks a real companion MSI against C1–C7. The bundle job checks only that the pinned asset exists and matches its sha256. The bundle smoke test chains a test-only fixture MSI, never a real companion, so it proves Burn's chaining mechanics and nothing about Gantt-It or Splash-It. Acceptance check AC6 (both companions installed through `RST-Setup.exe` on the VM, then loaded in Revit) runs only on the Phase 2 PR and the v3.0.0 release candidate, not on every pin bump or release. Put the C1–C7 results for the new pin in the bump PR.
+**These checks are the bump author's job, every time.** rst-c's CI re-checks only part of it on the real MSIs. The `bundle` job checks that the pinned asset exists and that its sha256, UpgradeCode and ProductVersion match the pin. The `bundle-smoke (Companions)` leg installs the real companions through `RST-Setup.exe` with stub Revit folders: silent install and uninstall with exit 0 (C4), the `.addin` ClientId and VendorId per year and nothing under `%AppData%\RST\` (C6), and a standalone install with no rst-c (the install half of C7). Nothing there starts Revit, so a companion that installs cleanly but fails to load is not caught. The install-order mechanics (upgrade, newer installed, re-run) are proven on a test-only fixture MSI, not on the real companions. Acceptance check AC6 (both companions installed through `RST-Setup.exe` on the VM, then loaded in Revit) runs only on the Phase 2 PR and the v3.0.0 release candidate, not on every pin bump or release. Put the C1–C7 results for the new pin in the bump PR.

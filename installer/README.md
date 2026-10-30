@@ -8,6 +8,8 @@ One MSI project lives in this repo:
 |---|---|---|
 | `installer/RST.Installer.wixproj` | `RST.msi` | Revit 2025, 2026 and 2027 |
 
+`RST-Setup.exe`, the setup bundle that chains this `RST.msi` with the opt-in companion add-ins, is built from [`installer-bundle/`](../installer-bundle/README.md) and published beside it.
+
 Releases v1.0.0 to v2.2.0 also shipped a standalone Revit 2027 preview MSI ("RST (Revit 2027 preview)"). From v3.0.0 Revit 2027 is folded into `RST.msi` and that project is retired; see [Migrating from the Revit 2027 preview](#migrating-from-the-revit-2027-preview).
 
 ## Dependencies

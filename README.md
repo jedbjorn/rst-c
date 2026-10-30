@@ -35,10 +35,9 @@ It ships as a single managed add-in for Revit 2025 through 2027, installs into t
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
 - `RST.msi` — Revit 2025, 2026 and 2027
+- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://github.com/jedbjorn/gantt-it), [Splash-It](https://github.com/jedbjorn/splash-it)) as checkboxes
 
-<!-- PLACEHOLDER (feature #13, Phase 2): the RST-Setup.exe setup bundle goes here. Left for that PR to fill in; do not describe the bundle in this PR. -->
-
-Per-user install; no admin rights required. Run the MSI, then launch Revit — the RST tools appear on the Add-Ins tab.
+Per-user install; no admin rights required. Run either one, then launch Revit — the RST tools appear on the Add-Ins tab.
 
 ### Why rst-c
 
@@ -105,7 +104,28 @@ rst-c writes a Serilog session log under `%AppData%\RST\logs\` for every Revit l
 3. Run the MSI — double-click or `msiexec /i RST.msi`.
 4. Launch Revit. The RST tools (Builder, Loader, RSTify and Health) appear on the Add-Ins tab.
 
-<!-- PLACEHOLDER (feature #13, Phase 2): RST-Setup.exe install steps go here. Left for that PR to fill in. -->
+**Or use `RST-Setup.exe`**, the same release's setup, which installs rst-c and offers the Designs/OS companion add-ins:
+
+1. Close Revit.
+2. Run `RST-Setup.exe`, accept the license, and tick any companion add-ins you want. They are unticked by default.
+3. Launch Revit.
+
+| Checkbox | Add-in | Silent variable |
+|---|---|---|
+| Gantt-It 1.1.0 | [Gantt-It](https://github.com/jedbjorn/gantt-it): Gantt charts as native Revit legend views | `InstallGanttIt=1` |
+| Splash-It 1.1.0 | [Splash-It](https://github.com/jedbjorn/splash-it): colors Revit view tabs by file | `InstallSplashIt=1` |
+
+A ticked add-in is installed from its own released MSI, unchanged. It is a separate product: it gets its own entry in Settings → Apps and upgrades through its own installer. An add-in that is already installed at the same or a newer version is left as it is; an older one is upgraded.
+
+**Companions are permanent.** Uninstalling RST (the "RST" entry in Settings → Apps, or `RST-Setup.exe /uninstall /quiet`) leaves them installed; remove each one from Settings → Apps.
+
+Silent install for IT, rst-c plus both add-ins (leave a variable out for an add-in you do not want):
+
+```powershell
+RST-Setup.exe /quiet InstallGanttIt=1 InstallSplashIt=1
+```
+
+Use either `RST.msi` or `RST-Setup.exe` on a computer, not both. If `RST.msi` is already installed, the setup adopts it, Settings → Apps shows two "RST" entries, and removing either one removes rst-c. Details: [`installer-bundle/README.md`](installer-bundle/README.md).
 
 The installer is per-user — no admin elevation required. User data (profiles, logs, branding, active-profile state) lives at `%AppData%\RST\` and is preserved across reinstalls.
 
