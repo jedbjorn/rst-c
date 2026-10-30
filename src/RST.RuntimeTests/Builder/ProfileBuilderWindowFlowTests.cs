@@ -14,7 +14,6 @@ using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using RST.Core.Theming;
@@ -374,15 +373,33 @@ public class ProfileBuilderWindowFlowTests
         WindowCapture.ShowOffScreen(window);
         BrandingDialog? seen = null;
         Window? ownerDuring = null;
+        var gaveUp = false;
+        // While the modal dialog runs its loop, look for it among the Builder's owned windows (it is
+        // owned by the Builder), every 100 ms for at most 5 s. Found: note what it shows, close it.
+        // Never found: close whatever the Builder owns, so ShowDialog returns and the asserts fail
+        // instead of the test hanging (review N4).
+        var attempts = 0;
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
+        timer.Tick += (_, _) =>
+        {
+            seen = window.OwnedWindows.OfType<BrandingDialog>().FirstOrDefault();
+            if (seen is null && ++attempts < 50) return;
+            timer.Stop();
+            ownerDuring = service.Owner;
+            if (seen is not null)
+            {
+                seen.Close();
+                return;
+            }
+            gaveUp = true;
+            foreach (var owned in window.OwnedWindows.OfType<Window>().ToList()) owned.Close();
+        };
         try
         {
-            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, () =>
-            {
-                seen = PresentationSource.CurrentSources.OfType<HwndSource>().Select(s => s.RootVisual).OfType<BrandingDialog>().FirstOrDefault();
-                ownerDuring = service.Owner;
-                seen?.Close();
-            });
+            timer.Start();
             model.BrandingCommand.Execute(null); // returns when the dialog closes
+            timer.Stop();
+            Assert.False(gaveUp, "the Branding dialog was not among the Builder's owned windows within 5 s");
             Assert.NotNull(seen);
             Assert.Same(window, seen!.Owner);
             Assert.False(seen.ShowInTaskbar);
