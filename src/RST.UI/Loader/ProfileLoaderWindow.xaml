@@ -247,7 +247,7 @@
                                                 <DataTemplate>
                                                     <Border Style="{StaticResource LoaderRow}" AutomationProperties.Name="{Binding TabName}">
                                                         <DockPanel>
-                                                            <ContentControl x:Name="StatusPill" DockPanel.Dock="Right" Style="{StaticResource ErrorPill}"
+                                                            <ContentControl x:Name="StatusPill" DockPanel.Dock="Right" Style="{StaticResource WarningPill}"
                                                                             Content="{Binding StatusLabel}" ToolTip="{Binding StatusTooltip}"
                                                                             ToolTipService.ShowOnDisabled="True" Margin="10,0,0,0"
                                                                             AutomationProperties.AutomationId="Loader.AddinStatus" />
@@ -268,17 +268,16 @@
                                                         </DockPanel>
                                                     </Border>
                                                     <DataTemplate.Triggers>
+                                                        <!-- The HTML's pill classes: Native, Loaded and Installed were "present" (green);
+                                                             Disabled and Not Found were amber (the WarningPill default above). -->
                                                         <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Native}">
-                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource Pill}" />
+                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource SuccessPill}" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Loaded}">
                                                             <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource SuccessPill}" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Installed}">
-                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource InfoPill}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:AddinRowStatus.Disabled}">
-                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource WarningPill}" />
+                                                            <Setter TargetName="StatusPill" Property="Style" Value="{StaticResource SuccessPill}" />
                                                         </DataTrigger>
                                                     </DataTemplate.Triggers>
                                                 </DataTemplate>

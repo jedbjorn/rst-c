@@ -146,6 +146,14 @@ public class ProfileLoaderScreenshotTests
             Assert.Contains(opened.Model.TabToggles, t => t.IsHidden);
             Assert.Contains(opened.Model.TabToggles, t => !t.IsHidden);
             Assert.Equal(new[] { "Native", "Loaded", "Loaded", "Not Found", "Not Found" }, opened.Model.RequiredAddins.Select(r => r.StatusLabel));
+
+            // Review N2: the HTML's pill colors: Native and Loaded green ("present"), Not Found amber.
+            var pills = WindowCapture.Descendants<ContentControl>(opened.Window.Root)
+                .Where(c => System.Windows.Automation.AutomationProperties.GetAutomationId(c) == "Loader.AddinStatus").ToList();
+            Assert.Equal(5, pills.Count);
+            var expected = new[] { UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.WarningSoft, UiPalette.WarningSoft };
+            for (var i = 0; i < pills.Count; i++)
+                AssertColor(Palette(theme, expected[i]), At(bitmap, pills[i], root, 4, pills[i].ActualHeight / 2), $"status pill {i} fill");
         }
         finally
         {
@@ -232,7 +240,9 @@ public class ProfileLoaderScreenshotTests
             ["FormIt Converter", "eTransmit"]);
         var dialog = new ConfirmAddinChangesWindow(model);
         Assert.Equal("Confirm Add-in Changes", dialog.Title);
-        Assert.True(((Button)dialog.FindName("ConfirmButton")).IsDefault);
+        // Review N1: renaming add-in files is destructive, so Enter means Cancel.
+        Assert.False(((Button)dialog.FindName("ConfirmButton")).IsDefault);
+        Assert.True(((Button)dialog.FindName("CancelButton")).IsDefault);
         Assert.Equal(Visibility.Visible, ((FrameworkElement)dialog.FindName("TryPanel")).Visibility);
         CaptureDialog(dialog, theme, "loader-confirm-addin-changes");
 

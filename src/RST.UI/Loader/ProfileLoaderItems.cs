@@ -90,7 +90,8 @@ public sealed class RequiredAddinRowViewModel
 
     public string? InfoUrl => Row.InfoUrl;
 
-    public bool HasInfoUrl => !string.IsNullOrEmpty(Row.InfoUrl);
+    /// <summary>"info ↗" shows only for a link that opens (http/https); no dead links.</summary>
+    public bool HasInfoUrl => ExternalLinks.IsOpenable(Row.InfoUrl);
 
     public string? Origin => Row.Origin;
 

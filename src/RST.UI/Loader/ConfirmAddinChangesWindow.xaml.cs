@@ -13,6 +13,8 @@ public partial class ConfirmAddinChangesWindow : Window
         InitializeComponent();
         DarkTitleBar.Attach(this);
         DataContext = model;
+        // Enter cancels; renaming add-in files takes a deliberate click (family rule for destructive confirms).
+        Loaded += (_, _) => CancelButton.Focus();
         if (!model.HasTryDisable)
         {
             // No Try Disable column: the other two share the width.

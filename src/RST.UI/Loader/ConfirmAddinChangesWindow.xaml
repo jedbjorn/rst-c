@@ -3,7 +3,8 @@
     src/SplashIt.UI/Dialogs/MessageDialog.xaml, splash-it commit ba86a71, MIT, same owner).
     The Loader's "Confirm Add-in Changes" overlay (profile_loader.html 884-908) as a family dialog
     (spec #16, WU3): the same title, subtitle, three columns, "None" placeholders, restart note and
-    buttons. The Try Disable column shows only when it has entries.
+    buttons. The Try Disable column shows only when it has entries. Confirm & Load renames add-in
+    files, so Cancel is the default (Enter) and has the focus, as in the kit's destructive MessageDialog.
 -->
 <Window x:Class="RST.UI.Loader.ConfirmAddinChangesWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -42,10 +43,11 @@
     <Grid Background="{StaticResource WindowBrush}">
         <DockPanel Margin="16">
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                <Button x:Name="ConfirmButton" Content="{x:Static res:UiStrings.Loader_ConfirmAndLoad}" IsDefault="True"
-                        Style="{StaticResource PrimaryButton}" Click="OnConfirm" MinWidth="88"
+                <!-- Destructive (it renames add-in files): Enter means Cancel, as the family's destructive confirms. -->
+                <Button x:Name="ConfirmButton" Content="{x:Static res:UiStrings.Loader_ConfirmAndLoad}"
+                        Style="{StaticResource DangerFilledButton}" Click="OnConfirm" MinWidth="88"
                         AutomationProperties.AutomationId="ConfirmAddinChanges.Confirm" />
-                <Button x:Name="CancelButton" Content="{x:Static res:UiStrings.Common_Cancel}" IsCancel="True" Margin="8,0,0,0" MinWidth="88"
+                <Button x:Name="CancelButton" Content="{x:Static res:UiStrings.Common_Cancel}" IsCancel="True" IsDefault="True" Margin="8,0,0,0" MinWidth="88"
                         AutomationProperties.AutomationId="ConfirmAddinChanges.Cancel" />
             </StackPanel>
 

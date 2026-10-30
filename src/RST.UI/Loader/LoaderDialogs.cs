@@ -74,7 +74,8 @@ public sealed class ConfirmAddinChangesModel
 /// <summary>One "Auto-Restored" or "Missing" line of the Add-in Check.</summary>
 public sealed record AddinCheckLine(string Text, string? Url)
 {
-    public bool HasUrl => !string.IsNullOrEmpty(Url);
+    /// <summary>"download ↗" shows only for a link that opens (http/https); otherwise "(no link)".</summary>
+    public bool HasUrl => ExternalLinks.IsOpenable(Url);
 }
 
 /// <summary>The "Add-in Check" shown after every successful load (QA result).</summary>

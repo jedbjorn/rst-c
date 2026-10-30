@@ -744,6 +744,28 @@ public class ProfileLoaderViewModelTests
         _opened.Should().Equal("https://lumion.com");
     }
 
+    [Fact]
+    public void Links_that_would_not_open_are_hidden()
+    {
+        // Review N3: no dead "info" or "download" links.
+        var backend = LoaderFixtures.Backend();
+        var odd = LoaderFixtures.Mep();
+        odd.RequiredAddins =
+        [
+            new RequiredAddin { TabName = "Local", Url = @"C:\tools\setup.exe" },
+            new RequiredAddin { TabName = "Script", Url = "javascript:alert(1)" },
+            new RequiredAddin { TabName = "Web", Url = "https://example.com" },
+        ];
+        backend.Profiles.Clear();
+        backend.With(odd);
+        var vm = Model(backend);
+        vm.SelectedCard = vm.Profiles[0];
+        vm.RequiredAddins.Select(r => (r.TabName, r.HasInfoUrl)).Should().Equal(("Local", false), ("Script", false), ("Web", true));
+
+        var check = new AddinCheckModel("MEP", new QaCheck([], [new QaMissingItem("Local", null, "file:///C:/x.exe"), new QaMissingItem("Web", null, "https://example.com")]), _ => { });
+        check.Missing.Select(m => m.HasUrl).Should().Equal(false, true);
+    }
+
     [Theory]
     [InlineData("https://lumion.com", true)]
     [InlineData("http://example.com/x", true)]
