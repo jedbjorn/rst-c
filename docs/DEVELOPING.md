@@ -430,7 +430,10 @@ tray's `build/Tray`) hold only `RST.Bootstrap`, `RST.Engine`, `RST.Core` and `RS
 - **CI enforces it.** The Stage and Stage Tray jobs run `build/check-shipped-dlls.sh` on the staged
   folder. It fails on any DLL that is not `RST.dll` or `RST.*.dll` and is not named in
   `build/third-party-allowlist.txt`, which is empty. `installer/ci-smoke.ps1` checks the installed
-  app trees and the tray folder the same way. A new dependency is a deliberate choice: it fails CI
+  app trees and the tray folder the same way (also after each upgrade); RST-Machine.msi is built
+  from the same staged folders, and `ci-machine-layout.ps1` checks its `Program Files\RST` tree
+  (each year's bootstrap and `app\`, and the tray); `ci-tray-selfupdate.ps1` checks the tray's
+  updater copy (`RST.TrayUpdater.exe`). A new dependency is a deliberate choice: it fails CI
   until it is on the allowlist with a reason, and that needs a decision that weighs the clash risk.
 - `Directory.Packages.props` therefore has no runtime package. Test projects and the test
   fixtures keep theirs. `tests/fixtures/SerilogProbe` ships Serilog on purpose (it is the
