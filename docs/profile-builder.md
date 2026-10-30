@@ -31,7 +31,7 @@ The Builder starts on **+ New Profile**: a blank profile with one empty panel, "
 - **Header:** the profile dropdown, "Profile Builder", **Branding ▾**, the **Name** and **Tab** boxes, then **Export ZIP**, **Save** and **Exit**.
 - **Commands (left):** the command catalogue, with its size and a **Filter…** box.
 - **Panels (centre):** **+ Add Panel** and one card per panel, in ribbon order.
-- **Properties (right):** Profile, Selected Panel, Stacks, RST Presets and Junk Cleanup.
+- **Properties (right):** Profile, Selected Panel, RST Presets and Junk Cleanup.
 - **Live Preview (bottom):** a read-only picture of the ribbon tab as it stands, updated as you edit.
 
 ### Name and tab title
@@ -61,7 +61,7 @@ To add a command, **drag** it onto a panel, or **double-click** it to add it to 
 
 An empty card reads "Drop a command here, or click one in the Commands pane."
 
-A row that places a [stack](#stacks) shows a **stack** tag instead of the icon button. Its name is read-only there: it is the stack's name, and you rename a stack on its card under **Stacks**.
+A row that places a [stack](#stacks) shows a **stack** tag instead of the icon button. Its name is read-only there, because the name is what links the row to the stack.
 
 ### Drag and drop
 
@@ -72,9 +72,6 @@ A row that places a [stack](#stacks) shows a **stack** tag instead of the icon b
 | A tool row | Another tool row | Moved there, in the same panel or another |
 | A tool row | Another panel's card | Moved to the end of that panel |
 | A panel's header | Another panel card | Panels reordered, before or after by which half you drop on |
-| A command from the catalogue | A stack card | Added to that stack (up to three) |
-| A stack card's header | A panel card | The stack placed at the end of that panel |
-| A stack card's header | A tool row | The stack placed before or after it |
 
 While you drag, the source row dims, the target card is highlighted, and a green line marks where an item will land. You can drop over the name boxes too. A drag that starts inside a name box selects text instead of moving anything, and releasing outside a target changes nothing.
 
@@ -92,20 +89,34 @@ The chosen icon shows on the tool's row, in the Live Preview and on the ribbon. 
 
 ### Stacks
 
-A **stack** is two or three small buttons, one above the other, in the space of one large button: the same layout as Revit's own stacked buttons. Stacks hold tools only (Revit or add-in commands, and [URL buttons](custom-url-slots.md)). On the ribbon each stacked button has a 16 px icon and a one-line label.
+A **stack** is two or three small buttons, one above the other, in the space of one large button: the same layout as Revit's own stacked buttons. Stacks hold tools only (Revit or add-in commands, and [URL buttons](custom-url-slots.md)). On the ribbon each stacked button has a 16 px icon and a one-line label; a tool without a pack icon gets rst-c's default 16 px icon (a ≡ glyph).
 
-The **Stacks** section of the Properties pane lists the profile's stacks, one card each:
+> **The Builder keeps stacks but cannot author them yet.** You can't add, fill, rename or delete a stack in the Builder in this version; Builder stack authoring is coming in a later release. For now, add stacks by editing the profile's JSON file (see below).
 
-- **+ Add Stack** adds an empty "Stack N" and selects it (an accent ring).
-- **Add tools:** drag commands from the catalogue onto the card, or double-click them while the stack is selected. Clicking a panel card makes double-click add to that panel again.
-- **Two or three tools.** The card shows "N of 3". A fourth tool is refused ("A stack holds 2 or 3 tools; "<name>" already has 3."). A stack with fewer than two tools shows **Needs 2 or 3 tools**, and **Save** stops with "Stack "<name>" needs 2 or 3 tools before you can save." until it has two.
-- **Each tool** has a **Pick icon** button (the same icon picker as panel tools), its name and short command id, **▲ ▼** to reorder it, and **×** to remove it.
-- **Rename** a stack in its name box; the name applies when you press Enter or leave the box, and every panel that places the stack follows. A name another stack already has is refused ("Stack "<name>" already exists.").
-- **×** deletes the stack after **Delete stack "<name>"?** (Cancel is the default). The panel rows that place it are removed too.
-- **+ Panel** places the stack at the end of the selected panel, or drag the card's header onto a panel card or a tool row. A stack can be placed more than once.
-- A stack no panel places shows **Not on a panel: removed when you save.** Saving drops it.
+What the Builder does with a profile that already has stacks:
 
-The Live Preview and the Loader's preview draw each stack as rows with the tools' icons. The Builder's preview fades a stack that the ribbon would not draw yet (fewer than two tools).
+- **Opens and saves it unchanged.** Saving without edits writes the same file, stacks included.
+- **Shows each placed stack** as a row with a **stack** tag in its panel card. You can move it with **▲ ▼**, drag it, or remove it with **×**. Its name is read-only.
+- **Removing a stack's row** leaves the stack unplaced. **Save** then drops it from the file, because a stack no panel places is never drawn.
+- **Draws the stacks** in the Live Preview as rows with the tools' 16 px icons, as the Loader's preview and the ribbon do.
+
+**Adding a stack by hand.** A stack has two parts in the profile JSON: an entry under `"stacks"` with its tools, and a `{ "type": "stack", "name": … }` slot in a panel where it should appear. Each tool needs `"type": "tool"` and a `commandId` (a Revit or add-in command id, or `URL:` and an address); `sourceTab`, `sourcePanel` and `iconFile` are optional and work as on panel tools.
+
+```json
+"stacks": {
+  "Datum": {
+    "tools": [
+      { "type": "tool", "name": "Level", "commandId": "ID_OBJECTS_LEVEL", "sourceTab": "Architecture", "sourcePanel": "Datum", "iconFile": "pack:level_green" },
+      { "type": "tool", "name": "Grid", "commandId": "ID_OBJECTS_GRID", "sourceTab": "Architecture", "sourcePanel": "Datum" }
+    ]
+  }
+},
+"panels": [
+  { "name": "Model", "color": "#4f8ef7", "slots": [ { "type": "stack", "name": "Datum" } ] }
+]
+```
+
+To add one, close the Builder, open a profile's file from `%AppData%\RST\profiles\` in a text editor, add the two parts and save it. The profile shows the stack the next time the Loader or the Builder opens. A stack with fewer than two or more than three tools, or a tool without a `commandId`, fails validation and the profile is not listed (see [Notes & limits](#notes--limits)).
 
 ### Properties
 

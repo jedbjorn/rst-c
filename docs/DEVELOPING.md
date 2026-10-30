@@ -134,8 +134,7 @@ falls back to light.
 - **`ShowInTaskbar="False"`** on every `Window`, dialogs included. An owned window still gets its
   own taskbar entry (grouped under Revit) unless this is set; the VM found that on the first Health
   build. The runtime tests assert it per window: `LoaderTaskbarTests`, `HealthWindowScreenshotTests`,
-  `ProfileBuilderScreenshotTests`, `ProfileBuilderInteractionScreenshotTests` and
-  `ProfileBuilderStackWindowTests` (the delete-stack confirm).
+  `ProfileBuilderScreenshotTests` and `ProfileBuilderInteractionScreenshotTests`.
 
 ### Behavior
 
@@ -343,7 +342,7 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
 - **Dialogs:** `IDialogService.Choose` is the three-way prompt (MessageDialog's optional
   `SecondaryText` button) used for Save & Exit / Discard & Exit / Cancel. Every Builder window and
   dialog sets `ShowInTaskbar="False"`.
-- **Stacks (F15):** the Properties pane's Stacks section; see [Ribbon stacks](#ribbon-stacks-f15).
+- **Stacks (F15):** kept and previewed, not authored; see [Ribbon stacks](#ribbon-stacks-f15).
 - **Tests:** `RST.RuntimeTests/Builder`: view-model flows with fakes, screenshots `builder-*`,
   AC6 (`ProfileBuilderDataCompatibilityTests`, over the v2.2.0 fixtures and the captured v2.2.0 save
   payloads in `src/RST.Tests/Fixtures/V220/builder`), and AC7 (`ProfileBuilderPerformanceTests`: 823
@@ -439,7 +438,9 @@ Serilog's global `Log.Logger`; moving to a private logger is planned for v3.1.
 
 ## Ribbon stacks (F15)
 
-Feature #15 (spec #17, v3.1) draws profile stacks on the ribbon and brings back their authoring.
+Feature #15 (spec #17, v3.1) draws profile stacks on the ribbon. Builder stack authoring is
+feature #18 (decision #19); the authoring built for #15 is recorded for it at commit `c1e9d5cd`
+(branch `archive/f15-stack-authoring`).
 
 - **The planner (`RST.Core/Ribbon/RibbonLayoutPlanner`, tested in `RST.Tests/Ribbon`):** a pure
   function from a profile panel to an ordered list of `LargeButtonItem`, `StackItem` (2-3 small
@@ -468,18 +469,18 @@ Feature #15 (spec #17, v3.1) draws profile stacks on the ribbon and brings back 
 - **Validation:** a stack needs a name and 2-3 items, each `type: "tool"` with a `commandId`
   (`ProfileSerializer.Validate`, so a file breaking it does not load). A stack no panel refers to is
   a warning (`ProfileSerializer.Warnings`), and the save drops it (`ProfileEditing.RemoveOrphanStacks`).
-- **The Builder:** the rules are `RST.Core.Builder.StackEditing` (add, rename, delete, tools,
-  place) and the `DragKind.Stack` drops in `PanelDrops`. `StackCardViewModel` and
-  `StackToolRowViewModel` are the Stacks section's rows. A rename comes from the name box's
-  `LostFocus` binding, so the view-model posts the box's re-read to after the write (the same rule
-  as the Closing and ComboBox cases above). The stack name box forwards a `BuilderDrag` to its card
-  in the Preview phase (the TextBox lesson). A stack slot's name box in a panel card is read-only.
-  The only new dialog is the delete confirm, a `MessageDialog` (`DeleteStackDialogId`); its
-  `ShowInTaskbar` is asserted in `ProfileBuilderStackWindowTests`.
+- **The Builder (guard only):** it keeps a profile's stacks as they are and saves them byte-stable.
+  A stack slot's name box in a panel card is read-only (`SlotRowViewModel.IsStack`; the setter
+  ignores edits), because the name is the only link to `profile.stacks`. Deleting a stack slot
+  leaves an orphan, which `ProfileSaveService` drops from the file and the view-model then drops
+  from the editor. The Live Preview draws the stacks (`RibbonPreview`).
+- **The default 16 px icon:** `Assets/icons/default_16.png` (RST.Engine) is the 32 px default's
+  translucent tile with a ≡ glyph. `IconAssets.Default16` uses it on the ribbon and
+  `PackIcons.Default16` loads the same file for the previews' stack rows, so they agree.
 - **Tests:** `RST.Tests` (`RibbonLayoutPlannerTests`, `StackValidationTests` with
-  `Fixtures/Profiles/stacks.json`, `StackEditingTests`) and `RST.RuntimeTests`
-  (`RibbonItemFactoryTests`, `ProfileBuilderStackTests`, `ProfileBuilderStackWindowTests`, and the
-  `builder-stacks` and `loader-stacks` screenshots in `StackScreenshotTests`).
+  `Fixtures/Profiles/stacks.json`) and `RST.RuntimeTests` (`RibbonItemFactoryTests`,
+  `ProfileBuilderStackTests` over the real backend, `ProfileBuilderStackWindowTests`, and the
+  `builder-stacks`, `loader-stacks` and `preview-default16` captures in `StackScreenshotTests`).
 
 ## History (v2.x to v3.0)
 
