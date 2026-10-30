@@ -4,6 +4,7 @@
 // and their markers, through the view-model the window drives), and the RST Presets and Junk
 // Cleanup modals (Apply, Cancel, Cancel reverts the Cleanup edits: Planner default 4).
 
+using System.IO;
 using FluentAssertions;
 using RST.Core.Builder;
 using RST.Core.Profiles;
@@ -127,6 +128,57 @@ public class ProfileBuilderInteractionTests
         picker.Key(PickerKey.Right);
         picker.ActivateFocused();
         h.Model.Profile.Panels[0].Slots[0].IconFile.Should().Be("pack:parallel_dark_grey");
+    }
+
+    [Fact]
+    public void A_throwing_pack_read_leaves_only_None_and_is_not_retried()
+    {
+        var backend = BuilderFixtures.Backend();
+        backend.OnIconPack = () => throw new IOException("pack gone");
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+        var tiles = h.Model.IconPicker!.Rows.SelectMany(r => r.Tiles).ToList();
+        tiles.Should().ContainSingle().Which.IsNone.Should().BeTrue("only the None tile shows");
+        h.Model.IconPicker!.CancelCommand.Execute(null);
+        h.Model.Panels[0].Slots[1].PickIconCommand.Execute(null);
+        h.Backend.Calls.Count(c => c == "GetIconPack").Should().Be(1, "the empty list is cached for the window");
+    }
+
+    [Fact]
+    public void A_broken_variant_image_is_disabled_and_logged_once()
+    {
+        var events = new List<Serilog.Events.LogEvent>();
+        var previous = Serilog.Log.Logger;
+        Serilog.Log.Logger = new Serilog.LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(new ListSink(events)).CreateLogger();
+        var empty = Path.Combine(Path.GetTempPath(), "rst-pack-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(empty);
+        try
+        {
+            var design = "zz_broken_" + Guid.NewGuid().ToString("N")[..8];
+            var picker = new RST.UI.Controls.IconPickerViewModel(
+                [new RST.Core.Ribbon.IconPackEntry(design, IconPickerModel.PackColors)], null, empty, _ => { });
+            picker.TileCommand.Execute(design);
+            picker.Rows.Single(r => r.IsVariantRow).Variants.Should().OnlyContain(v => !v.IsEnabled, "no image file: every variant is disabled");
+            picker.Key(PickerKey.Right); // re-render: still logged once per variant
+            var logged = events.Where(e => e.Level == Serilog.Events.LogEventLevel.Error && e.RenderMessage().Contains(design, StringComparison.Ordinal)).ToList();
+            logged.Should().HaveCount(7, "each broken variant is logged once");
+            picker.VariantCommand.Execute("orange");
+            picker.Model.Outcome.Should().BeNull("a disabled variant never applies");
+        }
+        finally
+        {
+            Serilog.Log.Logger = previous;
+            Directory.Delete(empty, recursive: true);
+        }
+    }
+
+    private sealed class ListSink(List<Serilog.Events.LogEvent> events) : Serilog.Core.ILogEventSink
+    {
+        public void Emit(Serilog.Events.LogEvent logEvent)
+        {
+            lock (events) events.Add(logEvent);
+        }
     }
 
     [Fact]
@@ -320,6 +372,17 @@ public class ProfileBuilderInteractionTests
         };
         h.Model.ConfigureCleanupCommand.Execute(null);
         h.Model.Profile.CleanupTargets.Should().BeEquivalentTo(CleanupDefaults.Build());
+    }
+
+    [Fact]
+    public void Cleanup_on_an_emptied_list_shows_the_defaults_and_cancel_keeps_it_empty()
+    {
+        var h = Structure();
+        h.Model.Profile.CleanupTargets = [];
+        h.Modals.CleanupAnswer = false;
+        h.Modals.EditCleanupWith = m => m.Rows.Should().HaveCount(6, "the modal offers the defaults (ensureCleanupTargets)");
+        h.Model.ConfigureCleanupCommand.Execute(null);
+        h.Model.Profile.CleanupTargets.Should().BeEmpty("the page wrote the defaults here even on Cancel; now nothing changes (Planner default 4)");
     }
 
     [Fact]

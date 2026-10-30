@@ -129,6 +129,13 @@ public class ProfileBuilderInteractionScreenshotTests
             Assert.True(((IconTileViewModel)tiles[0].DataContext).IsNone);
             var selected = tiles.Single(b => ((IconTileViewModel)b.DataContext).IsSelected);
             Assert.Equal("parallel", ((IconTileViewModel)selected.DataContext).Design);
+
+            // No tile is clipped: the last tile of the first row lies inside the scroll viewport (WU5 review B2).
+            var presenter = WindowCapture.Descendants<ScrollContentPresenter>(window.IconPickerOverlay.RowsScroller).First();
+            var last = tiles[IconPickerViewModel.Columns - 1];
+            var bounds = last.TransformToAncestor(presenter).TransformBounds(new Rect(last.RenderSize));
+            Assert.True(bounds.Left >= 0 && bounds.Right <= presenter.ActualWidth + 0.5,
+                $"the 7th tile ({bounds.Left:0.#}..{bounds.Right:0.#}) fits the viewport (0..{presenter.ActualWidth:0.#})");
         }
         finally
         {
@@ -185,6 +192,10 @@ public class ProfileBuilderInteractionScreenshotTests
                 target.RaiseEvent(args);
                 WindowCapture.DoEvents();
             }
+
+            // Opening puts focus on the selected tile (WU5 review N3), so Escape works at once.
+            WindowCapture.DoEvents();
+            Assert.Equal("parallel", (Focused()?.DataContext as IconTileViewModel)?.Design);
 
             h.Model.IconPicker!.TileCommand.Execute("parallel");
             WindowCapture.DoEvents();
@@ -314,6 +325,31 @@ public class ProfileBuilderInteractionScreenshotTests
             Assert.Equal("3 tabs hidden  •  Disable Unused: on", h.Model.PresetsSummary);
             Assert.True(window.ConfigurePresets.IsEnabled);
             Assert.Equal(7, WindowCapture.Descendants<Image>(window.Preview).Count(i => i.Source is not null));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_click_inside_the_card_keeps_the_picker_and_a_click_on_the_scrim_cancels() => Sta(() =>
+    {
+        RstTheme.Apply(UiTheme.Light);
+        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        try
+        {
+            WindowCapture.DoEvents();
+            var overlay = window.IconPickerOverlay;
+            void Click(UIElement on) => on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+
+            Click(overlay.Card);
+            Click(WindowCapture.Descendants<Border>(overlay.RowsScroller).First());
+            Assert.True(h.Model.IsIconPickerOpen, "a click inside the card (Node: \"inside click does not\") keeps the picker open");
+
+            Click(overlay.Scrim);
+            Assert.False(h.Model.IsIconPickerOpen, "a click on the backdrop cancels");
+            Assert.Equal("pack:parallel_red", h.Model.Profile.Panels[0].Slots[0].IconFile);
         }
         finally
         {

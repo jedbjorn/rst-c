@@ -1,7 +1,7 @@
 <!--
     rst-c's own (not vendored). The icon picker (spec #16, WU5, Shared controls), the Builder's
     "Pick an icon" overlay (profile_builder.html 1336-1344, CSS 519-583): a scrim over the window
-    (a click on it cancels), and a 680 px card with the title, Cancel, and the grid of tiles: "∅ none"
+    (a click on it cancels), and a 700 px card with the title, Cancel, and the grid of tiles: "∅ none"
     first, then one tile per design with its blue thumbnail. A design's variant row (its seven
     colors in palette order) is a full row right under the clicked tile's row (a row-based model,
     since a WrapPanel cannot insert a row under one tile). DataContext: IconPickerViewModel.
@@ -126,7 +126,7 @@
         <!-- The backdrop: a click outside the card cancels. -->
         <Border x:Name="Scrim" Background="{StaticResource ScrimBrush}" MouseLeftButtonDown="OnScrimDown"
                 AutomationProperties.AutomationId="IconPicker.Scrim" />
-        <Border x:Name="Card" Width="680" MaxHeight="620" HorizontalAlignment="Center" VerticalAlignment="Center"
+        <Border x:Name="Card" Width="700" MaxHeight="620" HorizontalAlignment="Center" VerticalAlignment="Center"
                 Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1" CornerRadius="6"
                 AutomationProperties.AutomationId="IconPicker.Card">
             <Border.Effect>
@@ -141,7 +141,10 @@
                                    Margin="0" VerticalAlignment="Center" />
                     </DockPanel>
                 </Border>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="16,14,10,8">
+                <!-- Seven 92 px tiles (86 + 6 margin) = 644 px fit beside the scroll bar: the card is 700 px, not the page's
+                     680 (its CSS grid shrank the tiles; these are fixed). WU5 review B2. -->
+                <ScrollViewer x:Name="RowsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              Focusable="False" Padding="16,14,10,8">
                     <ItemsControl x:Name="RowsHost" ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource RowTemplate}" Focusable="False"
                                   AutomationProperties.AutomationId="IconPicker.Grid" />
                 </ScrollViewer>

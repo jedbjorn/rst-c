@@ -360,7 +360,7 @@
                                           AutomationProperties.Name="{x:Static res:UiStrings.Builder_Panels}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type builder:PanelCardViewModel}">
-                                        <Grid Margin="0,0,0,14" AutomationProperties.Name="{Binding Name}" AllowDrop="True"
+                                        <Grid x:Name="CardRoot" Margin="0,0,0,14" AutomationProperties.Name="{Binding Name}" AllowDrop="True"
                                               DragOver="OnPanelDragOver" DragLeave="OnDragLeave" Drop="OnPanelDrop">
                                             <Border x:Name="Card" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                                                     BorderThickness="1" CornerRadius="6" SnapsToDevicePixels="True">
@@ -389,6 +389,7 @@
                                                                         AutomationProperties.Name="{x:Static res:UiStrings.Builder_DeletePanelTip}" />
                                                             </StackPanel>
                                                             <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" FontWeight="SemiBold" FontSize="13"
+                                                                     PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
                                                                      AutomationProperties.AutomationId="Builder.PanelName"
                                                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
                                                         </DockPanel>
@@ -446,6 +447,7 @@
                                                                                     <TextBlock Text="{Binding TypeTag}" Style="{StaticResource MutedText}" FontSize="10" />
                                                                                 </Border>
                                                                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                                         PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
                                                                                          AutomationProperties.AutomationId="Builder.SlotName"
                                                                                          AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
                                                                             </DockPanel>

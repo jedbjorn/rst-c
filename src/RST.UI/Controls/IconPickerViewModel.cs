@@ -68,7 +68,7 @@ public sealed class IconPickerRowViewModel(IReadOnlyList<IconTileViewModel> tile
 
 public sealed class IconPickerViewModel : ObservableObject
 {
-    /// <summary>Tiles per row: the page's 680 px card fit seven 86 px tiles.</summary>
+    /// <summary>Tiles per row: the page's 680 px card fit seven 86 px tiles (the WPF card is 700 px to fit the scroll bar too).</summary>
     public const int Columns = 7;
 
     private readonly string? _packDirectory;

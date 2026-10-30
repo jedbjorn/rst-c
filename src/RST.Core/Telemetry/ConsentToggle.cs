@@ -1,8 +1,8 @@
 // ConsentToggle.cs — the decision half of the collection toggle
 // (Activity tab footer): persist the clicked value through the shared
 // merge-preserving prefs writer, then reconcile THIS process's
-// collector with that value. The dialog-side plumbing (WebView2 bridge)
-// lives UI-side; this piece is the testable rule, kept Revit-free per
+// collector with that value. The dialog-side plumbing (the WPF Health
+// window's view-model) lives UI-side; this piece is the testable rule, kept Revit-free per
 // the placement rule — same split as FirstRunNotice.
 //
 // The reconcile is unconditional on a successful persist (SC-034): the

@@ -133,9 +133,13 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
     /// <summary>The icon pack; null reads the shipped one (the real images, for the screenshots).</summary>
     public IReadOnlyList<IconPackEntry>? IconPack { get; set; }
 
+    /// <summary>Overrides the pack read (a throwing backend).</summary>
+    public Func<IReadOnlyList<IconPackEntry>>? OnIconPack { get; set; }
+
     public IReadOnlyList<IconPackEntry> GetIconPack()
     {
         Calls.Add("GetIconPack");
+        if (OnIconPack is not null) return OnIconPack();
         return IconPack ??= IconPackSource.Read(LoaderAssets.IconPackDirectory);
     }
 

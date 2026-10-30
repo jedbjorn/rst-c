@@ -195,10 +195,10 @@ The native Profile Loader replaces `profile_loader.html`.
 
 - **Logic in RST.Core (`RST.Core.Loader`, tested on Linux in `RST.Tests/Loader`):** the ported
   JS rules (`RequiredAddinRules`, `RstifyRules`, `FailedDisableMessages`, `RibbonPreviewRules`)
-  and the services moved out of `LoaderBridge` (`ProfileLibraryService`, `ProfileLoadService`,
-  `LoaderPrefsService`, `AddinMaintenanceService`, `AddinLookupService`). `LoaderBridge` calls the
-  same services for the Builder's `get_profiles`, `get_active_profile`, `load_profile` and
-  `get_addin_lookup`. The services log through `ILoaderLog` (Serilog in RST.UI).
+  and the services moved out of the retired `LoaderBridge` (`ProfileLibraryService`,
+  `ProfileLoadService`, `LoaderPrefsService`, `AddinMaintenanceService`, `AddinLookupService`). The
+  WPF Builder's backend calls the same services for its profile list, the active profile, the
+  auto-reload and the add-in lookup. The services log through `ILoaderLog` (Serilog in RST.UI).
 - **The window (`RST.UI/Loader`):** `ProfileLoaderLauncher.Show(owner, …)` →
   `ProfileLoaderWindow` → `ProfileLoaderViewModel`, which talks to `IProfileLoaderBackend` (the
   services) and `ILoaderDialogs` (`ConfirmAddinChangesWindow`, `AddinCheckWindow`). The load's

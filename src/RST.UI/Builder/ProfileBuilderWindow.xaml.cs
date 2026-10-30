@@ -171,4 +171,47 @@ public partial class ProfileBuilderWindow : Window
     }
 
     private void OnDragLeave(object sender, DragEventArgs e) => Model.ClearDropMarkers();
+
+    // The slot and panel name boxes fill most of each row and header. A TextBox takes every drag
+    // that passes over it (TextEditor marks DragOver handled, with no effect, for a non-text
+    // payload), so the row and card handlers above would never run there. The boxes hand a
+    // BuilderDrag to their row or card in the Preview phase instead, before the TextBox sees it;
+    // a text drag still reaches the TextBox. (WU5 review B1.)
+    private void OnNameBoxDragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not DependencyObject box || !e.Data.GetDataPresent(typeof(BuilderDrag))) return;
+        if (Ancestor(box, "SlotRow") is { DataContext: SlotRowViewModel slot } row
+            && Model.DragOverSlot(slot.Panel.Index, slot.Index, UpperHalf(e, row)))
+        {
+            e.Effects = DropEffect(true);
+        }
+        else if (Ancestor(box, "CardRoot") is { DataContext: PanelCardViewModel card } cardRoot)
+        {
+            // A panel drag over a slot's name falls through to the card, as over the rest of the row.
+            e.Effects = DropEffect(Model.DragOverPanel(card.Index, UpperHalf(e, cardRoot)));
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+
+    private void OnNameBoxDrop(object sender, DragEventArgs e)
+    {
+        if (sender is not DependencyObject box || !e.Data.GetDataPresent(typeof(BuilderDrag))) return;
+        if (Model.CurrentDrag?.Kind != DragKind.Panel && Ancestor(box, "SlotRow") is { DataContext: SlotRowViewModel slot } row)
+            Model.DropOnSlot(slot.Panel.Index, slot.Index, UpperHalf(e, row));
+        else if (Ancestor(box, "CardRoot") is { DataContext: PanelCardViewModel card } cardRoot)
+            Model.DropOnPanel(card.Index, UpperHalf(e, cardRoot));
+        e.Handled = true;
+    }
+
+    /// <summary>The nearest visual ancestor named <paramref name="name"/> (a slot row or a card).</summary>
+    private static FrameworkElement? Ancestor(DependencyObject from, string name)
+    {
+        for (var d = VisualTreeHelper.GetParent(from); d is not null; d = VisualTreeHelper.GetParent(d))
+            if (d is FrameworkElement { Name: var n } element && n == name) return element;
+        return null;
+    }
 }
