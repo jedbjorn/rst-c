@@ -204,18 +204,27 @@ public static class BuilderFixtures
 }
 
 /// <summary>A view-model over a backend, with the fake dialogs and clock, ready to drive.</summary>
-public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuilderBackend Raw, FakeDialogs Dialogs, ManualClock Clock)
+public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuilderBackend Raw, FakeDialogs Dialogs, ManualClock Clock, Queue<Action>? Posted)
 {
     public FakeBuilderBackend Backend => (FakeBuilderBackend)Raw;
 
-    public static BuilderHarness Create(IProfileBuilderBackend? backend = null)
+    /// <param name="backend">The backend; null is the realistic fixture set.</param>
+    /// <param name="deferPosts">Queue what the view-model posts (run with <see cref="RunPosted"/>) instead of running it at once.</param>
+    public static BuilderHarness Create(IProfileBuilderBackend? backend = null, bool deferPosts = false)
     {
         var b = backend ?? BuilderFixtures.Backend();
         var dialogs = new FakeDialogs();
         var clock = new ManualClock();
-        var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: a => a());
+        var posted = deferPosts ? new Queue<Action>() : null;
+        var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: posted is null ? a => a() : posted.Enqueue);
         model.Initialize();
-        return new BuilderHarness(model, b, dialogs, clock);
+        return new BuilderHarness(model, b, dialogs, clock, posted);
+    }
+
+    /// <summary>Runs every posted action (the dispatcher turn after the current event).</summary>
+    public void RunPosted()
+    {
+        while (Posted is { Count: > 0 }) Posted.Dequeue()();
     }
 
     public ProfileOptionViewModel Option(string name) =>

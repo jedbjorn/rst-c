@@ -79,7 +79,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <param name="backend">The Builder's data and writes (a fake in tests).</param>
     /// <param name="dialogs">The family dialogs: confirm, the three-way prompt, the color picker, the file dialogs.</param>
     /// <param name="schedule">Runs an action once after a delay (the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
-    /// <param name="post">Runs an action after the current input event (to snap the dropdown back); null uses the dispatcher.</param>
+    /// <param name="post">
+    /// Runs an action after the current input event: the dropdown's snap-back, the switch after the
+    /// unsaved prompt, and Save &amp; Exit from the title-bar ✕ (after the Closing event). Null uses the dispatcher.
+    /// </param>
     public ProfileBuilderViewModel(
         IProfileBuilderBackend backend,
         IDialogService dialogs,
@@ -206,14 +209,16 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         switch (_dialogs.Choose(UiStrings.Builder_UnsavedTitle, UiStrings.Builder_UnsavedText,
                     UiStrings.Builder_SaveAndSwitch, UiStrings.Builder_DiscardAndSwitch, UnsavedChangesDialogId))
         {
+            // Both run after the ComboBox's selection write is over: the save rebuilds the
+            // dropdown's list, which must not happen inside its own selection change.
             case DialogChoice.Secondary:
                 Log.Information("Builder: dropdown switch → discard unsaved changes");
-                ApplySwitch(target);
+                _post(() => ApplySwitch(target));
                 break;
             case DialogChoice.Primary:
                 Log.Information("Builder: dropdown switch → save first");
                 SnapDropdownBack();
-                _ = SaveThenSwitchAsync(target.Key);
+                _post(() => _ = SaveThenSwitchAsync(target.Key));
                 break;
             default:
                 SnapDropdownBack();
@@ -815,7 +820,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 _closeApproved = true;
                 return true;
             case DialogChoice.Primary:
-                _ = SaveThenCloseAsync();
+                // This close is cancelled; the save runs once the Closing event is over and then
+                // closes the window (WPF refuses Close() while a window is still closing).
+                _post(() => _ = SaveThenCloseAsync());
                 return false;
             default:
                 return false;

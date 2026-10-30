@@ -811,18 +811,50 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void Save_and_exit_from_the_title_bar_keeps_the_window_until_the_save_then_closes()
+    public void Save_and_exit_from_the_title_bar_saves_after_the_closing_event_then_closes()
     {
-        var h = BuilderHarness.Create();
+        var h = BuilderHarness.Create(deferPosts: true);
         var closed = 0;
         h.Model.CloseRequested += () => closed++;
         h.Model.ProfileName = "Draft";
         h.Model.ProfileTab = "Tab";
         h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Primary);
         h.Model.CanClose().Should().BeFalse("this close is cancelled; the save closes the window");
+        h.Backend.Saved.Should().BeEmpty("nothing runs inside the Closing event (WPF refuses Close() there)");
+        closed.Should().Be(0);
+        h.RunPosted();
         h.Backend.Saved.Should().ContainSingle();
         closed.Should().Be(1);
         h.Model.CanClose().Should().BeTrue();
+    }
+
+    [Fact]
+    public void Save_and_switch_runs_after_the_dropdown_s_selection_write()
+    {
+        var h = BuilderHarness.Create(deferPosts: true);
+        h.Model.ProfileName = "Draft";
+        h.Model.ProfileTab = "Tab";
+        var optionsBefore = h.Model.ProfileOptions.ToList();
+        h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Primary);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Backend.Saved.Should().BeEmpty("the save waits for the selection change to finish");
+        h.Model.ProfileOptions.Should().Equal(optionsBefore, "the dropdown's list is not rebuilt inside its own selection change");
+        h.RunPosted();
+        h.Backend.Saved.Should().ContainSingle();
+        h.Model.ProfileName.Should().Be("Structure");
+        h.Model.SelectedProfileOption!.Entry!.Profile.ProfileName.Should().Be("Structure");
+    }
+
+    [Fact]
+    public void Discard_and_switch_runs_after_the_dropdown_s_selection_write()
+    {
+        var h = BuilderHarness.Create(deferPosts: true);
+        h.Model.ProfileName = "Draft";
+        h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.ProfileName.Should().Be("Draft");
+        h.RunPosted();
+        h.Model.ProfileName.Should().Be("Structure");
     }
 
     [Fact]
