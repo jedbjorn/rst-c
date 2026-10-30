@@ -484,8 +484,11 @@ jobs:
   #                AC10): "Just for me" (the default) launches no elevated
   #                engine; "Everyone on this PC" launches exactly one, removes
   #                the user's own RST.msi (an older build, then the same
-  #                version) before RST-Machine.msi installs, keeps the scope
-  #                on re-runs, and uninstalls cleanly.
+  #                version, then v2.2.0 with the retired R27 preview) before
+  #                RST-Machine.msi installs, keeps the scope on re-runs,
+  #                installs over a hand-copied manifest, stops untouched while
+  #                Revit runs, and uninstalls cleanly. UI also checks the
+  #                locked "Just for me" while RST-Machine.msi is installed.
   bundle-smoke:
     name: Bundle smoke (${{ matrix.mode }})
     needs: bundle
@@ -505,6 +508,21 @@ jobs:
         with:
           name: msi-test
           path: msi-test/
+      # Scope S6 (review B2): a v2.2.0 user with RST.msi and the retired
+      # RST-R27.msi preview, the pinned public assets msi-migrate also uses.
+      - name: Download v2.2.0 RST.msi and RST-R27.msi
+        if: matrix.mode == 'Scope'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2.2.0 -R "${{ github.repository }}" -p RST.msi -D v220
+          gh release download v2.2.0 -R "${{ github.repository }}" -p RST-R27.msi -D v220
+      # UI: the locked "Just for me" state needs RST-Machine.msi installed bare.
+      - uses: actions/download-artifact@v4
+        if: matrix.mode == 'UI'
+        with:
+          name: RST-Machine.msi
+          path: rst/
       - uses: actions/download-artifact@v4
         with:
           name: RST-Setup.exe
@@ -523,9 +541,9 @@ jobs:
         shell: pwsh
         run: |
           $mode = '${{ matrix.mode }}'
-          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe; exit $LASTEXITCODE }
+          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe -RstMachineMsi rst/RST-Machine.msi; exit $LASTEXITCODE }
           $bundle = if ($mode -eq 'Companions') { 'setup/RST-Setup.exe' } else { 'bundle-test/test/RST-Setup-Fixture.exe' }
-          installer-bundle/ci-bundle-smoke.ps1 -Mode $mode -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test -OlderRstMsi msi-test/RST-older.msi
+          installer-bundle/ci-bundle-smoke.ps1 -Mode $mode -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test -OlderRstMsi msi-test/RST-older.msi -V220RstMsi v220/RST.msi -V220PreviewMsi v220/RST-R27.msi
       - name: Upload Burn and msiexec logs
         if: always()
         uses: actions/upload-artifact@v4

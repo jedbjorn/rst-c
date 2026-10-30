@@ -23,6 +23,7 @@
 #>
 param(
   [Parameter(Mandatory)][string]$Bundle,
+  [string]$RstMachineMsi,
   [string]$Registry = 'companions/companions.json',
   [string]$OutDir = $(Join-Path $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }) 'bundle-ui')
 )
@@ -210,5 +211,33 @@ foreach ($c in $companions) {
   $pc = $list.GetType().InvokeMember('Item', 'GetProperty', $null, $list, @(0))
   $x = Start-Process msiexec.exe -ArgumentList "/x $pc /qn" -Wait -PassThru
   Assert ($x.ExitCode -eq 0) "$($c.name) removed (msiexec /x exit $($x.ExitCode))"
+}
+
+# 5. The locked state (feature #17, review N4): RST-Machine.msi installed bare, then RST-Setup.exe. The scope is
+# "machine", "Just for me" is disabled, and its text says to uninstall "RST (all users)" first.
+if ($RstMachineMsi) {
+  $machineCode = '{79C25959-C28A-4ED8-8984-85ED525476C3}'
+  $RstMachineMsi = (Resolve-Path $RstMachineMsi).Path
+  $x = Start-Process msiexec.exe -ArgumentList "/i `"$RstMachineMsi`" /qn /norestart /l*v `"$LogDir\ui-machine-install.log`"" -Wait -PassThru
+  Assert ($x.ExitCode -eq 0) "RST-Machine.msi installed bare (exit $($x.ExitCode))"
+  Assert ((Get-RelatedCount $machineCode) -eq 1) 'RST-Machine is installed'
+  $p = Start-Process $Bundle -ArgumentList @('/log', "`"$LogDir\bundle-ui-locked.log`"") -PassThru
+  try {
+    $w = Find-Window
+    $null = Wait-Control $w '*license terms*' 60
+    $t = Show-Texts $w 'install page, RST-Machine installed'
+    $user = Find-Control $w 'Just for me (recommended)'
+    $everyone = Find-Control $w 'Everyone on this PC'
+    Assert ($null -ne $user -and $null -ne $everyone) 'both scope radio buttons are shown'
+    Assert (-not $user.Current.IsEnabled) '"Just for me" is disabled while RST-Machine.msi is installed'
+    Assert (Test-Ticked $everyone) '"Everyone on this PC" is selected'
+    $locked = 'RST is installed for everyone on this PC. To install it just for you instead, first uninstall "RST (all users)" in Settings > Apps.'
+    Assert (@($t | Where-Object { $_ -like "*] $locked" }).Count -ge 1) "the locked text explains why: $locked"
+    Save-Shot $w '5-scope-locked'
+  } finally {
+    $p | Stop-Process -Force -ErrorAction SilentlyContinue
+  }
+  $x = Start-Process msiexec.exe -ArgumentList "/x `"$RstMachineMsi`" /qn /norestart" -Wait -PassThru
+  Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $machineCode) -eq 0) "RST-Machine.msi removed (exit $($x.ExitCode))"
 }
 exit 0

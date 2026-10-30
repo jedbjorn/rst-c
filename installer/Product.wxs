@@ -207,9 +207,13 @@
          of the first per-user RST.addin found (2025, 2026 or 2027); each
          search that finds nothing leaves it alone, so they act as an OR. A
          first install is then refused with a clear message (spec #20 §7);
-         RST-Setup.exe's "Everyone on this PC" removes that copy first, as
-         the user, so the check passes there. Repair and uninstall are never
-         blocked. The message must stay within 255 characters (ICE03). -->
+         RST-Setup.exe's "Everyone on this PC" removes the user's installed
+         copies first, as the user, and passes RSTFROMSETUP=1: a leftover it
+         could not remove (a hand-copied RST.addin) is then the shadow the
+         engine logs and the tray reports, not a failure after the user's
+         copy is gone (review B2). Repair and uninstall are never blocked.
+         The message must stay within 255 characters (ICE03). -->
+    <Property Id="RSTFROMSETUP" Secure="yes" />
     <Property Id="RSTUSERCOPY" Secure="yes">
       <?foreach Yy in 25;26;27 ?>
       <DirectorySearch Id="RstUserAddins20$(var.Yy)" Path="[AppDataFolder]Autodesk\Revit\Addins\20$(var.Yy)" Depth="0">
@@ -217,7 +221,7 @@
       </DirectorySearch>
       <?endforeach?>
     </Property>
-    <Launch Condition="Installed OR NOT RSTUSERCOPY"
+    <Launch Condition="Installed OR RSTFROMSETUP OR NOT RSTUSERCOPY"
             Message="RST is already installed just for you ([RSTUSERCOPY]) and would be used instead of this copy. Remove &quot;RST&quot; in Settings &gt; Apps (or delete that file), then try again. RST-Setup.exe does this for you: choose &quot;Everyone on this PC&quot;." />
 
     <!-- Restart Manager off. Under /qn it would close a running tray and

@@ -18,14 +18,21 @@
              Every package on this path is per user, so Burn never
              launches an elevated engine (the bundle smoke asserts it).
     machine  "Everyone on this PC". In chain order:
-               1. RST (RST.msi): its InstallCondition is false, so Burn
-                  removes it if exactly this version is installed for the
-                  user;
-               2. RemoveUserRst (helper\RemoveUserRst.cs): removes any
-                  other version of the user's own RST.msi;
+               1. RemoveUserRst (helper\RemoveUserRst.cs): first checks,
+                  before anything is removed, that Revit is closed in this
+                  session and that every per-user RST product of this user
+                  (RST.msi of any version, and the retired RST-R27.msi
+                  preview) can be removed; stops the setup otherwise. Then
+                  removes them;
+               2. RST (RST.msi): its InstallCondition is false, so Burn
+                  plans to remove the bundled version; the helper already
+                  did, and Burn treats an absent product as removed. If a
+                  later package fails, Burn's rollback reinstalls it;
                3. RSTMachine (RST-Machine.msi), per machine: the one step
                   Burn elevates for (one UAC prompt, at the start of the
-                  install);
+                  install). RSTFROMSETUP=1 lets it install over a leftover
+                  per-user RST.addin the helper could not remove (a hand
+                  copy): that is reported as "installed twice", not a failure;
                4. the ticked companions, per user, for the installing user
                   (contract C1: companions stay per user; every other user
                   adds them from the RST tray).
@@ -100,36 +107,49 @@
                  Condition="NOT (InstallScope = &quot;machine&quot;)" />
 
     <Chain>
-      <!-- rst-c for one user (the default scope). Vital (the default): if it
-           fails, the bundle fails and rolls back. Not Visible (the default):
-           Burn hides its own Add/Remove Programs entry behind the bundle's,
-           so Settings > Apps shows one "RST". RST.msi's launch condition
-           still applies: a first install fails when no Revit 2025/2026/2027
-           is found. On the machine path its condition is false: Burn removes
-           it if it is installed at this version. -->
-      <MsiPackage Id="RST" SourceFile="$(var.RstMsi)"
-                  InstallCondition="NOT (InstallScope = &quot;machine&quot;)" />
-
-      <!-- Machine path only: removes the installing user's own RST.msi of
-           any other version (helper\RemoveUserRst.cs). Unelevated, as that
-           user. Permanent with no detection: it runs on every machine-path
-           install and is never uninstalled; when there is nothing to
-           remove it exits 0. Vital: if the user's copy cannot be removed,
-           RST-Machine.msi is not installed (it would be shadowed). -->
+      <!-- Machine path only, and first: checks Revit is closed and that the
+           user's own RST (RST.msi of any version, the retired RST-R27.msi
+           preview) can be removed, then removes it (helper\RemoveUserRst.cs).
+           Unelevated, as that user. Every check comes before any removal:
+           a stop leaves the user's RST as it was (review B2). Permanent with
+           no detection: it runs on every machine-path install and is never
+           uninstalled; with nothing to remove it exits 0. Vital: RST-Machine
+           is not installed after a stop. Arguments: its log, and the UI
+           level (4 = full UI: it may ask "Close Revit, then Retry").
+           Exit 32 = Revit is running; 1612 = a product cannot be removed;
+           1602 = cancelled at the Revit prompt. -->
       <ExePackage Id="RemoveUserRst" Name="RST.RemoveUserRst.exe" SourceFile="$(var.RemoveUserRstExe)"
                   PerMachine="no" Permanent="yes" Vital="yes" Cache="remove" DetectCondition=""
-                  InstallArguments="&quot;[WixBundleLog_RemoveUserRst]&quot;"
+                  InstallArguments="&quot;[WixBundleLog_RemoveUserRst]&quot; [WixBundleUILevel]"
                   InstallCondition="InstallScope = &quot;machine&quot;">
         <ExitCode Value="0" Behavior="success" />
         <ExitCode Value="3010" Behavior="scheduleReboot" />
       </ExePackage>
 
+      <!-- rst-c for one user (the default scope). Vital (the default): if it
+           fails, the bundle fails and rolls back. Not Visible (the default):
+           Burn hides its own Add/Remove Programs entry behind the bundle's,
+           so Settings > Apps shows one "RST". RST.msi's launch condition
+           still applies: a first install fails when no Revit 2025/2026/2027
+           is found. On the machine path its condition is false: Burn plans
+           to remove it if it is installed at this version (the helper above
+           already has; Burn logs the absent product and goes on), and a
+           later failure rolls it back in. -->
+      <MsiPackage Id="RST" SourceFile="$(var.RstMsi)"
+                  InstallCondition="NOT (InstallScope = &quot;machine&quot;)" />
+
       <!-- rst-c for everyone on this PC (RST-Machine.msi). Visible: it keeps
-           its own "RST (all users)" entry in Settings > Apps. Its launch
-           condition refuses a first install while the installing user still
-           has RST.msi; the two packages above have removed it by then. -->
+           its own "RST (all users)" entry in Settings > Apps. RSTFROMSETUP=1
+           (review B2): its "already installed just for you" launch condition
+           is for a bare RST-Machine.msi only. Through setup the user's
+           installed copies are gone by now, and a leftover per-user
+           RST.addin (a hand copy, which no installer can remove) is the
+           shadow the engine logs and the tray reports, not a failure after
+           the user's copy was removed. -->
       <MsiPackage Id="RSTMachine" SourceFile="$(var.RstMachineMsi)" Visible="yes"
-                  InstallCondition="InstallScope = &quot;machine&quot;" />
+                  InstallCondition="InstallScope = &quot;machine&quot;">
+        <MsiProperty Name="RSTFROMSETUP" Value="1" />
+      </MsiPackage>
 
       <!-- Companions: Permanent, Visible, Vital="no", InstallCondition
            bound to the checkbox. Generated from the registry. -->

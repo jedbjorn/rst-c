@@ -253,7 +253,7 @@ Assert (@($majorRows | Where-Object { $_[0] -ne $MachineUpgradeCode }).Count -eq
 $launch = Get-MsiQuery $Msi 'SELECT `Condition`, `Description` FROM `LaunchCondition`' 2
 $launch | ForEach-Object { Write-Host "  LaunchCondition: $($_[0]) => $($_[1])" }
 Assert (@($launch | Where-Object { $_[0] -eq 'Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND' }).Count -eq 1) 'the Revit launch condition is RST.msi''s'
-Assert (@($launch | Where-Object { $_[0] -eq 'Installed OR NOT RSTUSERCOPY' }).Count -eq 1) 'the per-user-copy launch condition is present'
+Assert (@($launch | Where-Object { $_[0] -eq 'Installed OR RSTFROMSETUP OR NOT RSTUSERCOPY' }).Count -eq 1) 'the per-user-copy launch condition is present (skipped through RST-Setup.exe: RSTFROMSETUP)'
 
 # Components: years, tray, and no ComponentId shared with RST.msi (N6).
 $roots = @{}
