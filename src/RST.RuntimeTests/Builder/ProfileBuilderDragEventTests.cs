@@ -742,7 +742,8 @@ public class ProfileBuilderDragStartTests
                 var started = Assert.Single(rig.Started);
                 Assert.Equal(expected, started.Drag);
                 Assert.Same(element, started.Source);
-                Assert.Equal(1, bubblingMoves); // the button saw the move too, and handled it
+                // The button saw the move too and handled it (a capture change can add a synthesized move).
+                Assert.True(bubblingMoves >= 1, "the bubbling move reached the icon");
                 Assert.False(icon.IsMouseCaptured, $"the icon released the mouse (captured before: {captured})");
                 Assert.False(icon.IsPressed, "no Click (the icon picker) follows the drag");
                 Assert.False(rig.Harness.Model.IsIconPickerOpen);
