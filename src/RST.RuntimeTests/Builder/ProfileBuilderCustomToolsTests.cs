@@ -381,6 +381,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
                 // As it opens, the edit changes nothing yet: the exact plan says so (delta review F8).
                 Assert.Equal("Nothing to change yet: edit the label, address or icon.", d.Warning);
                 Assert.False(d.CanConfirm);
+                Assert.Equal("Update", d.ConfirmText); // never "Update in 0 profiles" (#158 review F1)
                 d.Label = "BIM help";
                 d.Address = "help@studio.example";
                 Assert.Equal("Changes apply everywhere this tool is used: Architecture, Structure. Names and icons you gave it on a panel are kept.", d.Warning);
@@ -478,6 +479,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
                 // Nothing typed yet: Structure is merely unchanged so far (it can change), so not "No profile can be changed."
                 Assert.Equal("Nothing to change yet: edit the label, address or icon.", d.Warning);
                 Assert.False(d.CanConfirm);
+                Assert.Equal("Update", d.ConfirmText); // never "Update in 0 profiles" (#158 review F1)
                 Assert.Equal(2, d.Refusals.Count); // the Architecture pair, refused
                 d.Label = "Desk";
                 Assert.Equal("Update in 1 profile", d.ConfirmText);
