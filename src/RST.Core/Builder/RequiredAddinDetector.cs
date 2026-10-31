@@ -7,6 +7,12 @@
 //   - "Custom" and "CustomCtrl_…" tabs are skipped; a tool resolves its origin through the catalogue
 //     by command id and uses its own stored tab/panel; a stack's tools resolve tab, panel and origin
 //     through the catalogue only (stack tools store no tab);
+//   - SC-051: a tool slot whose command id is not in the catalogue gets the origin the ribbon scan
+//     would give it (OriginClassifier.ClassifyRibbonButton): an add-in's CustomCtrl_ id is Custom,
+//     any other id on one of Revit's own tabs is Native, so it is never an add-in. The catalogue now
+//     leaves out Revit tools that Revit won't let add-ins run (Text Types, In-Place Wall, Modify …);
+//     a profile saved earlier keeps their buttons, and without this a re-save would record their
+//     panels ("Text", "Build", "Select") as required add-ins again (SC-007's bug);
 //   - tabs come first, then panels, each in first-seen order, and each is enriched from
 //     addin_lookup.json: an exact key, else the first entry whose key or display name contains the
 //     name or is contained by it (case-insensitive), in the file's order.
@@ -83,7 +89,12 @@ public static class RequiredAddinDetector
                 if (slot.SlotType == "tool")
                 {
                     var info = !string.IsNullOrEmpty(slot.CommandId) && byId.TryGetValue(slot.CommandId, out var hit) ? hit : null;
-                    Classify(slot.SourceTab, slot.SourcePanel, info?.Origin);
+                    // SC-051: a command the catalogue doesn't list gets the origin the ribbon scan gives it.
+                    var origin = info?.Origin
+                        ?? (string.IsNullOrEmpty(slot.CommandId)
+                            ? null
+                            : RST.Core.Scanning.OriginClassifier.ClassifyRibbonButton(slot.SourceTab, slot.CommandId).ToString());
+                    Classify(slot.SourceTab, slot.SourcePanel, origin);
                 }
                 else if (slot.SlotType == "stack")
                 {
