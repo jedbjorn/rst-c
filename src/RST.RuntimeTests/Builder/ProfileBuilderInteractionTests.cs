@@ -253,10 +253,11 @@ public class ProfileBuilderInteractionTests
         var h = Structure();
         ProfileBuilderWindow.DragFor(h.Command("ID_OBJECTS_WALL")).Should().Be(BuilderDrag.FromCatalog(h.Command("ID_OBJECTS_WALL").Command!));
         ProfileBuilderWindow.DragFor(h.Model.CatalogRoots[0]).Should().BeNull("groups are not draggable");
+        var slots = h.Model.Profile.Panels[1].Slots;
         ProfileBuilderWindow.DragFor(h.Model.Panels[1]).Should().Be(BuilderDrag.FromPanel(1));
-        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Tile(2)).Should().Be(BuilderDrag.FromSlot(1, 2));
-        ProfileBuilderWindow.DragFor(h.Model.Panels[1].StackAt(1)).Should().Be(BuilderDrag.FromSlot(1, 1), "a stack by its header: the whole stack");
-        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Tile(1, row: 2)).Should().Be(BuilderDrag.FromSlot(1, 1, row: 2));
+        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Tile(2)).Should().Be(BuilderDrag.FromSlot(1, 2, -1, slots[2]), "the drag carries the slot it started from (review N1)");
+        ProfileBuilderWindow.DragFor(h.Model.Panels[1].StackAt(1)).Should().Be(BuilderDrag.FromSlot(1, 1, -1, slots[1]), "a stack by its header: the whole stack");
+        ProfileBuilderWindow.DragFor(h.Model.Panels[1].Tile(1, row: 2)).Should().Be(BuilderDrag.FromSlot(1, 1, 2, PanelStacks.ToolsOf(h.Model.Profile, slots[1])[2]));
     }
 
     // ── Loader defaults (the RST Presets, inline) ─────────────────────────────

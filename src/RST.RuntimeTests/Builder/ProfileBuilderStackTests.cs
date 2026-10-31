@@ -258,7 +258,9 @@ public sealed class ProfileBuilderStackTests : IDisposable
             m.Items.Select(i => (i.Name, i.IsChecked, i.IsMember)).Should().Equal(
                 ("Door", true, true), ("Window", true, true), ("Opening", true, true), ("Wall", false, false));
             m.Items.Single(i => i.Name == "Wall").CanCheck.Should().BeFalse("a fourth tick is refused");
+            m.Items.Select(i => i.MemberNote).Should().Equal("in this stack", "in this stack", "in this stack", "");
             FakeBuilderDialogs.Untick(m, "Window");
+            m.Items.Single(i => i.Name == "Window").MemberNote.Should().Be("goes back on the panel", "review F2");
             FakeBuilderDialogs.Tick(m, "Wall");
             m.Items.Single(i => i.Name == "Wall").LaterCommand.CanExecute(null).Should().BeFalse("already last");
             m.Items.Single(i => i.Name == "Wall").EarlierCommand.Execute(null);
@@ -339,6 +341,62 @@ public sealed class ProfileBuilderStackTests : IDisposable
         written.Panels[1].Color.Should().Be("#ec4899");
         written.Panels[0].Slots[0].Name.Should().Be("Big Wall");
         written.Stacks["Openings"].Tools[2].Name.Should().Be("Hole");
+    }
+
+    [Fact]
+    public void Deleting_a_panel_removes_its_stacks_at_once()
+    {
+        var h = Open(StackFixtures.Backend());
+        h.Dialogs.ConfirmResult = true;
+        h.Model.Panels[0].DeleteCommand.Execute(null); // Model: Openings and Datum
+        h.Model.Profile.Stacks.Keys.Should().Equal(new[] { "Help" }, "no orphan stack stays in the working copy (review N2)");
+        AssertConsistent(h.Model.Profile);
+        ProfileSerializer.OrphanStacks(h.Model.Profile).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Stack_actions_on_a_card_that_no_longer_matches_the_profile_are_refused_and_redrawn()
+    {
+        var h = Open(StackFixtures.Backend());
+        var model = h.Model.Panels[0];
+        var row = model.Tile(1, row: 1);      // Openings › Window
+        var stack = model.StackAt(2);         // Datum
+        // The working copy changes under the cards with no redraw (as WU4's edit everywhere may):
+        // Wall leaves, so every slot index on the old card is off by one.
+        h.Model.Profile.Panels[0].Slots.RemoveAt(0);
+        var before = Shape(h, 0);
+
+        row.RemoveCommand.Execute(null);
+        Shape(h, 0).Should().Be(before, "× on a row of a moved stack is refused (review N1)");
+        h.Model.Panels[0].Should().NotBeSameAs(model, "the cards are redrawn from the profile");
+
+        stack.UnstackCommand.Execute(null);
+        stack.EditCommand.Execute(null);
+        h.Modals.StackDialogs.Should().BeEmpty("✎ on a stale stack opens nothing");
+        Shape(h, 0).Should().Be(before);
+
+        // A stale tile: its slot index now holds another tool.
+        var links = h.Model.Panels[1];
+        var enscape = links.Tile(1);
+        h.Model.Profile.Panels[1].Slots.Insert(0, new Slot { Name = "New", CommandId = "ID_NEW" });
+        enscape.RemoveCommand.Execute(null);
+        Shape(h, 1).Should().Be("New,[Revit Help Studio Wiki],Enscape");
+        AssertConsistent(h.Model.Profile);
+    }
+
+    [Fact]
+    public void A_stack_dialog_refuses_when_its_panel_changed_while_it_was_open()
+    {
+        var h = Open(StackFixtures.Backend());
+        h.Modals.Stacks.Enqueue(m =>
+        {
+            FakeBuilderDialogs.Untick(m, "Grid");
+            h.Model.Profile.Panels[0].Slots.Insert(0, new Slot { Name = "Late", CommandId = "ID_LATE" }); // underneath
+            return true;
+        });
+        h.Model.Panels[0].StackAt(2).EditCommand.Execute(null);
+        Shape(h, 0).Should().Be("Late,Wall,[Door Window Opening],[Level Grid]", "nothing un-stacked at a moved index");
+        AssertConsistent(h.Model.Profile);
     }
 
     [Fact]

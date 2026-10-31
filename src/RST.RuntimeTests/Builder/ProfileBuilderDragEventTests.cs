@@ -11,7 +11,11 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using RST.Core.Builder;
 using RST.Core.Theming;
@@ -238,7 +242,9 @@ public class ProfileBuilderDragEventTests
             var row = StackRow(window, 1, 1, 1);
             h.Model.BeginDrag(BuilderDrag.FromSlot(1, 0));
             var over = DragOver(NameBox(row), Payload(BuilderDrag.FromSlot(1, 0)), On(row, Upper(row), NameBox(row)));
-            Assert.Equal(DragDropEffects.None, over.Effects);
+            // The full stack still takes the drop (a None effect would make OLE skip Drop), so the drop
+            // itself refuses it with the message (review N5).
+            Assert.Equal(DragDropEffects.Move, over.Effects);
             Assert.Equal(DropMarker.Refused, h.Model.Panels[1].StackAt(1).DropMarker);
             WindowCapture.DoEvents();
             var note = WindowCapture.Descendants<Border>(group).Single(b => Id(b) == "Builder.StackFull");
@@ -493,6 +499,297 @@ public class ProfileBuilderDragEventTests
         finally
         {
             Close(window, h);
+        }
+    });
+
+    // ── review fixes: the gutter (N4), back in place (N3), focus selects the card (F1) ──
+
+    /// <summary>The tile's or stack's cell: its 10 px gutter on the right and below.</summary>
+    private static Border Cell(FrameworkElement tile) => (Border)VisualTreeHelper.GetParent(tile);
+
+    [Fact]
+    public void A_command_dropped_in_the_gutter_between_two_tiles_goes_between_them() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var beam = Tile(window, 0, 0);
+            var cell = Cell(beam);
+            Assert.Equal("TileCell", cell.Name);
+            var gutter = new Point(beam.ActualWidth + 5, beam.ActualHeight / 2); // between Beam and Column
+            h.Model.BeginDrag(Wall(h));
+            var over = DragOver(cell, Payload(Wall(h)), On(beam, gutter, cell));
+            Assert.Equal(DragDropEffects.Copy, over.Effects);
+            Assert.Equal(DropMarker.After, h.Model.Panels[0].Tile(0).DropMarker);
+            Assert.Equal(DropMarker.None, h.Model.Panels[0].DropMarker);
+            Drop(cell, Payload(Wall(h)), On(beam, gutter, cell));
+            Assert.Equal("Beam,Wall,Column,Brace", Shape(h, 0));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void A_tile_dropped_on_its_neighbour_s_adjacent_edge_shows_no_marker_and_changes_nothing() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var column = Tile(window, 0, 1);
+            var drag = ProfileBuilderWindow.DragFor(h.Model.Panels[0].Tile(0))!; // Beam onto Column's leading edge
+            h.Model.BeginDrag(drag);
+            var over = DragOver(column, Payload(drag), LeftEdge(column));
+            Assert.Equal(DragDropEffects.None, over.Effects);
+            Assert.All(h.Model.Panels[0].Tiles, t => Assert.Equal(DropMarker.None, t.DropMarker));
+            Assert.Equal(DropMarker.None, h.Model.Panels[0].DropMarker);
+            Drop(column, Payload(drag), LeftEdge(column));
+            h.Model.EndDrag();
+            Assert.Equal("Beam,Column,Brace", Shape(h, 0));
+            Assert.False(h.Model.IsDirty);
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void Focusing_a_tile_s_name_box_selects_its_card() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            Assert.Equal(0, h.Model.SelectedPanelIndex);
+            var box = NameBox(Tile(window, 2, 1));
+            box.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, Environment.TickCount, null, box)
+            {
+                RoutedEvent = Keyboard.PreviewGotKeyboardFocusEvent,
+            });
+            Assert.Equal(2, h.Model.SelectedPanelIndex);
+            Assert.True(h.Model.Panels[2].IsSelected);
+            Assert.False(h.Model.Panels[0].IsSelected);
+
+            // A double-click in Commands now adds to Links, the panel being edited.
+            h.Model.AddCatalogCommand.Execute(h.Command("ID_OBJECTS_WALL"));
+            Assert.Equal("Wiki,Help,Wall", Shape(h, 2));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+}
+
+/// <summary>
+/// Starting a drag with the mouse (feature #18, WU3 review B1): real routed mouse events on the
+/// real tile, stack row and name box, with no BeginDrag shortcut. The CI desktop has no mouse, so the
+/// pointer position and the left button come from the window's seams, and the OS drag loop is
+/// recorded instead of run (it cannot run headless). A press on a tile's or a row's icon arms a drag
+/// that starts once the pointer moves past the drag distance; a still click opens the icon picker; a
+/// press on a name box or on × arms nothing.
+/// </summary>
+[Collection(WpfThemeCollection.Name)]
+public class ProfileBuilderDragStartTests
+{
+    private static void Sta(Action action) => Screenshots.RunSta(() =>
+    {
+        try
+        {
+            RstTheme.Apply(UiTheme.Light);
+            action();
+        }
+        finally
+        {
+            Dispatcher.CurrentDispatcher.InvokeShutdown();
+        }
+    });
+
+    private sealed class Rig
+    {
+        public required ProfileBuilderWindow Window { get; init; }
+
+        public required BuilderHarness Harness { get; init; }
+
+        public Point Pointer { get; set; } = new(200, 200);
+
+        public List<(DependencyObject Source, BuilderDrag Drag, DragDropEffects Effects, bool SourceFaded)> Started { get; } = [];
+    }
+
+    private static Rig Open()
+    {
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        var window = new ProfileBuilderWindow(h.Model);
+        WindowCapture.ShowOffScreen(window);
+        var rig = new Rig { Window = window, Harness = h };
+        window.PointerAt = (_, _) => rig.Pointer;
+        window.LeftPressed = _ => true;
+        window.RunDragDrop = (source, data, effects) =>
+        {
+            var drag = (BuilderDrag)data.GetData(typeof(BuilderDrag))!;
+            var faded = h.Model.Panels.SelectMany(p => p.Items).Any(i => i.IsDragSource)
+                        || h.Model.Panels.SelectMany(p => p.Tiles).Any(t => t.IsDragSource);
+            rig.Started.Add((source, drag, effects, faded));
+            return DragDropEffects.None;
+        };
+        return rig;
+    }
+
+    private static void Close(Rig rig)
+    {
+        rig.Harness.Model.EndDrag();
+        rig.Harness.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+        rig.Window.Close();
+    }
+
+    private static string Id(DependencyObject d) => AutomationProperties.GetAutomationId(d);
+
+    private static void Press(UIElement on)
+    {
+        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent });
+        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+    }
+
+    private static void Move(UIElement on) =>
+        on.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = UIElement.MouseMoveEvent });
+
+    private static Button IconOf(FrameworkElement tileOrRow) =>
+        WindowCapture.Descendants<Button>(tileOrRow).Single(b => b.Name == ProfileBuilderWindow.IconHandleName);
+
+    private static Grid Tile(ProfileBuilderWindow w, int panel, int slot) =>
+        WindowCapture.Descendants<Grid>(w.PanelCards).Single(g => g.Name == "Tile" && g.DataContext is ToolTileViewModel { InStack: false } t && t.Panel.Index == panel && t.Index == slot);
+
+    private static Grid StackRow(ProfileBuilderWindow w, int panel, int slot, int row) =>
+        WindowCapture.Descendants<Grid>(w.PanelCards).Single(g => g.Name == "StackRow" && g.DataContext is ToolTileViewModel { InStack: true } t && t.Panel.Index == panel && t.Index == slot && t.Row == row);
+
+    [Fact]
+    public void Pressing_a_tile_s_icon_and_moving_starts_a_drag_of_that_tile() => Sta(() =>
+    {
+        var rig = Open();
+        try
+        {
+            var tile = Tile(rig.Window, 0, 1); // Column
+            var icon = IconOf(tile);
+            Press(icon);
+            var expected = BuilderDrag.FromSlot(0, 1, -1, rig.Harness.Model.Profile.Panels[0].Slots[1]);
+            Assert.Equal(expected, rig.Window.PendingDrag);
+
+            // Within the drag distance: still a click, no drag.
+            rig.Pointer = new Point(201, 200);
+            Move(icon);
+            Assert.Empty(rig.Started);
+
+            rig.Pointer = new Point(200 + SystemParameters.MinimumHorizontalDragDistance + 4, 200);
+            Move(icon);
+            var started = Assert.Single(rig.Started);
+            Assert.Same(tile, started.Source);
+            Assert.Equal(expected, started.Drag);
+            Assert.Equal(DragDropEffects.Move, started.Effects);
+            Assert.True(started.SourceFaded, "the dragged tile is drawn faded during the drag");
+            Assert.Null(rig.Window.PendingDrag);
+            Assert.Null(rig.Harness.Model.CurrentDrag);
+            Assert.False(rig.Harness.Model.IsIconPickerOpen, "a drag from the icon is not a click on it");
+        }
+        finally
+        {
+            Close(rig);
+        }
+    });
+
+    [Fact]
+    public void Pressing_a_stack_row_s_icon_and_moving_starts_a_drag_of_that_row() => Sta(() =>
+    {
+        var rig = Open();
+        try
+        {
+            var row = StackRow(rig.Window, 1, 1, 1); // Review › Audit
+            Press(IconOf(row));
+            rig.Pointer = new Point(200, 200 + SystemParameters.MinimumVerticalDragDistance + 4);
+            Move(IconOf(row));
+            var started = Assert.Single(rig.Started);
+            var audit = PanelStacks.ToolsOf(rig.Harness.Model.Profile, rig.Harness.Model.Profile.Panels[1].Slots[1])[1];
+            Assert.Equal(BuilderDrag.FromSlot(1, 1, 1, audit), started.Drag);
+            Assert.Same(row, started.Source);
+
+            // The row's empty area right of its name box starts one too.
+            rig.Started.Clear();
+            var face = WindowCapture.Descendants<Border>(row).Single(b => b.Name == "RowFace");
+            rig.Pointer = new Point(200, 200);
+            Press(face);
+            rig.Pointer = new Point(230, 200);
+            Move(face);
+            Assert.Single(rig.Started);
+        }
+        finally
+        {
+            Close(rig);
+        }
+    });
+
+    [Fact]
+    public void A_still_click_on_the_icon_opens_the_picker_and_starts_no_drag() => Sta(() =>
+    {
+        var rig = Open();
+        try
+        {
+            var icon = IconOf(Tile(rig.Window, 0, 0));
+            Press(icon);
+            Assert.NotNull(rig.Window.PendingDrag);
+            ((IInvokeProvider)new ButtonAutomationPeer(icon).GetPattern(PatternInterface.Invoke)).Invoke();
+            WindowCapture.DoEvents();
+            Assert.True(rig.Harness.Model.IsIconPickerOpen);
+            Assert.Empty(rig.Started);
+
+            var rowIcon = IconOf(StackRow(rig.Window, 1, 1, 0));
+            rig.Harness.Model.IconPicker!.CancelCommand.Execute(null);
+            ((IInvokeProvider)new ButtonAutomationPeer(rowIcon).GetPattern(PatternInterface.Invoke)).Invoke();
+            WindowCapture.DoEvents();
+            Assert.True(rig.Harness.Model.IsIconPickerOpen, "a stack row's icon opens the picker too");
+        }
+        finally
+        {
+            Close(rig);
+        }
+    });
+
+    [Fact]
+    public void A_press_on_a_name_box_or_on_x_arms_no_drag_and_a_hidden_x_takes_no_press() => Sta(() =>
+    {
+        var rig = Open();
+        try
+        {
+            var tile = Tile(rig.Window, 0, 0);
+            var box = WindowCapture.Descendants<TextBox>(tile).Single(t => Id(t) == "Builder.ToolName");
+            Press(box);
+            Assert.Null(rig.Window.PendingDrag);
+            rig.Pointer = new Point(260, 260);
+            Move(box);
+            Assert.Empty(rig.Started);
+
+            var remove = WindowCapture.Descendants<Button>(tile).Single(b => Id(b) == "Builder.RemoveTool");
+            Press(remove);
+            Assert.Null(rig.Window.PendingDrag);
+
+            // Not hovered: the × (and WU4's ✎) are invisible and take no press.
+            var corner = WindowCapture.Descendants<StackPanel>(tile).Single(s => s.Name == "Corner");
+            Assert.Equal(0, corner.Opacity);
+            Assert.False(corner.IsHitTestVisible);
+            var rowCorner = WindowCapture.Descendants<StackPanel>(StackRow(rig.Window, 1, 1, 0)).Single(s => s.Name == "Corner");
+            Assert.False(rowCorner.IsHitTestVisible);
+
+            // The tile's source line (no button, no box) starts a drag.
+            var source = WindowCapture.Descendants<TextBlock>(tile).Single(t => Id(t) == "Builder.ToolSource");
+            rig.Pointer = new Point(200, 200);
+            Press(source);
+            rig.Pointer = new Point(230, 200);
+            Move(source);
+            Assert.Single(rig.Started);
+        }
+        finally
+        {
+            Close(rig);
         }
     });
 }

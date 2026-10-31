@@ -163,10 +163,19 @@ for tools and stacks, `PanelDrops` for the panel reorder, and `PanelStacks` for 
   trailing quarter (at most 24 px) inserts before or after it; a stack row's upper or lower half
   joins the stack before or after that row; the stack's middle joins at the end; a full stack shows
   the refusal marker ("A stack holds 2–3 tools. This one is full."); a whole stack (dragged by its
-  header) only ever goes beside, by the half it is over; the card outside the tiles appends. The
-  view-model sets `DropMarker` on the target, drawn as an overlay border (a left or right line on a
-  tile, a top or bottom line on a row, a ring for a stack forming or joining, an error ring for a
-  refusal), so the layout never shifts (gantt-it's row-border approach).
+  header) only ever goes beside, by the half it is over; the 10 px gutter after a tile or stack (its
+  `TileCell`'s padding) counts as its nearer edge; the card outside the tiles appends. A tile, row or
+  stack dropped where it already is gets no marker. The view-model sets `DropMarker` on the target,
+  drawn as an overlay border (a left or right line on a tile, a top or bottom line on a row, a ring
+  for a stack forming or joining, an error ring for a refusal), so the layout never shifts
+  (gantt-it's row-border approach).
+- **A refused drop still takes the drop.** OLE does not deliver `Drop` after a `None` effect, so a
+  full stack answers `Move` (with the refusal marker) and the drop refuses it with a toast.
+- **Identity:** a slot drag carries the slot it started from (`BuilderDrag.Source`) and each hit the
+  slot the card showed (`TileHit.Expected`); `TileDrops.Plan` answers `Stale` when either moved, and
+  ×, ✎ and un-stack check the card still matches the profile, so an edit made underneath (WU4's edit
+  or remove everywhere) never lets an index hit another slot. A stale action is logged and the cards
+  are redrawn.
 - **A `TextBox` swallows drags.** Its `TextEditor` marks `DragOver` and `Drop` handled (with no
   effect) for any non-text payload, so bubbling handlers never run over a name box, and the name
   boxes cover much of each tile and row (VM defect D1). The fix is to handle the **preview** events
@@ -175,8 +184,17 @@ for tools and stacks, `PanelDrops` for the panel reorder, and `PanelStacks` for 
   card's preview handler finds the tile or row under the pointer, reports it and marks the event
   handled; otherwise it leaves it, so a text drag still reaches the TextBox.
 - **Starting a drag:** `PreviewMouseLeftButtonDown` remembers a pending drag unless the press is
-  inside a `TextBoxBase` or `ButtonBase` (`IsInteractive`), so typing, selecting text and clicking
-  an icon, ✎, ×, ▲ or ▼ never start one.
+  inside a `TextBoxBase` or a `ButtonBase` (`IsInteractive`), so typing, selecting text and
+  clicking ✎, ×, ▲ or ▼ never start one. A tile's or a stack row's icon (`IconHandle`) is the
+  exception: a press there arms a drag that starts once the pointer moves past
+  `SystemParameters.MinimumHorizontal/VerticalDragDistance` (the button's mouse capture is released
+  first, so no Click follows), and a still click opens the icon picker. A tile's name box is only as
+  wide as its text, a row's sits left, so the rest of each tile and row can be grabbed; the hover-only
+  × takes no press while hidden (`IsHitTestVisible` follows the hover). The pointer, the button state
+  and the OS drag loop are window seams (`PointerAt`, `LeftPressed`, `RunDragDrop`) so the runtime
+  tests can drive the start gesture with real mouse events and no mouse (`ProfileBuilderDragStartTests`).
+- **Focus selects the card:** focus entering a card (a name box, a button) selects it, so a
+  double-click in Commands adds to the panel being edited.
 - **Fresh slots:** the stack operations find slots by reference, so a catalogue drop or a
   double-click always places a new slot (`BuilderRules.ToolSlot`; WU1 review F3).
 
