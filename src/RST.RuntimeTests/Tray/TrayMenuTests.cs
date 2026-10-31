@@ -223,7 +223,7 @@ public class TrayMenuTests
     {
         var found = IntPtr.Zero;
         var name = new StringBuilder(64);
-        EnumWindowsProc each = (hwnd, _) =>
+        EnumWindowsProc each = (hwnd, lParam) =>
         {
             if (GetWindowThreadProcessId(hwnd, out _) != thread || !IsWindowVisible(hwnd)) return true;
             name.Clear();
