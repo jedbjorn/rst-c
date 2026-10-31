@@ -39,6 +39,8 @@ internal sealed class SingleInstance : IDisposable
         // signal, and a signal sent before the first tray starts waiting stays set until it does.
         var show = new EventWaitHandle(false, EventResetMode.AutoReset, TrayPaths.ShowEventName(userSid));
         var mutex = new Mutex(false, TrayPaths.MutexName(userSid));
+        // WaitOne(0) is one kernel operation: of any number of launches racing here (in any state of their own start),
+        // exactly one gets the mutex. Program.Main calls this before any other work (SC-022), so the others exit at once.
         bool owned;
         try
         {
@@ -46,6 +48,8 @@ internal sealed class SingleInstance : IDisposable
         }
         catch (AbandonedMutexException)
         {
+            // A tray that was killed (or ended without releasing it): Windows hands the abandoned mutex to exactly ONE
+            // waiter, which owns it from then on, so this launch is the tray and every later one sees it held.
             log("single instance: the previous tray ended without releasing its mutex; taking over");
             owned = true;
         }
