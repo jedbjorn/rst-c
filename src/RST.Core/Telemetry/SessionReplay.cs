@@ -156,7 +156,8 @@ internal static class SessionReplay
     /// whether it matched the current file at its open (or its last
     /// re-identifying save). The matched interval under a join key
     /// occupies its matching elements, not the key's bucket (SC-043).</summary>
-    private readonly record struct OpenDoc(DocumentIdentity Id, bool Matched, DateTimeOffset? ClosingTs = null);
+    private readonly record struct OpenDoc(
+        DocumentIdentity Id, bool Matched, DateTimeOffset? ClosingTs = null, string? ClosingId = null);
 
     /// <summary>
     /// Replay one session file in seq order, appending the current file's
@@ -342,10 +343,12 @@ internal static class SessionReplay
                     // A close already under way (doc_closing seen) survives the
                     // re-identification: the doc still stops being active there.
                     DateTimeOffset? carriedClosing = null;
+                    string? carriedClosingId = null;
                     if (oldKey is not null)
                     {
                         var oldDocs = allOpenDocs[oldKey];
                         carriedClosing = oldDocs[oldIndex].ClosingTs;
+                        carriedClosingId = oldDocs[oldIndex].ClosingId;
                         if (newKey is not null && KeyEquals(oldKey, newKey))
                         {
                             // Same key = same bookkeeping doc — only the
@@ -356,7 +359,7 @@ internal static class SessionReplay
                             // interval starts at the save; one that
                             // matched and re-identified out of the view
                             // stops occupying it here (SC-043).
-                            oldDocs[oldIndex] = new OpenDoc(id, savedMatched, carriedClosing);
+                            oldDocs[oldIndex] = new OpenDoc(id, savedMatched, carriedClosing, carriedClosingId);
                             if (savedMatched && !openDocs.ContainsKey(oldKey))
                                 openDocs[oldKey] = e.Ts;
                             else if (!savedMatched)
@@ -377,7 +380,7 @@ internal static class SessionReplay
                     }
 
                     var key = newKey ?? e.EventId;
-                    var savedDoc = new OpenDoc(id, savedMatched, carriedClosing);
+                    var savedDoc = new OpenDoc(id, savedMatched, carriedClosing, carriedClosingId);
                     if (allOpenDocs.TryGetValue(key, out var newDocs)) newDocs.Add(savedDoc);
                     else allOpenDocs[key] = new List<OpenDoc> { savedDoc };
                     if (!savedMatched) break;
@@ -400,7 +403,7 @@ internal static class SessionReplay
                     if (ck is not null)
                     {
                         var cdocs = allOpenDocs[ck];
-                        cdocs[cix] = cdocs[cix] with { ClosingTs = e.Ts };
+                        cdocs[cix] = cdocs[cix] with { ClosingTs = e.Ts, ClosingId = closingId };
                     }
                     break;
                 }
@@ -414,15 +417,28 @@ internal static class SessionReplay
                     {
                         // The close didn't happen — the doc is still open, and its
                         // doc_closing no longer bounds its active time.
+                        // The doc carries its closing_id, so it is found even after a
+                        // Save As re-keyed it away from the doc_closing's identity.
                         var cancelledId = e.GetString(TelemetryFields.ClosingId);
-                        if (cancelledId is not null && closingIds.TryGetValue(cancelledId, out var cancelled))
+                        if (cancelledId is not null)
                         {
                             closingTs.Remove(cancelledId);
-                            var (xk, xi) = Locate(cancelled);
-                            if (xk is not null)
+                            var undone = false;
+                            foreach (var xdocs in allOpenDocs.Values)
+                                for (var xi = 0; xi < xdocs.Count; xi++)
+                                    if (string.Equals(xdocs[xi].ClosingId, cancelledId, StringComparison.Ordinal))
+                                    {
+                                        xdocs[xi] = xdocs[xi] with { ClosingTs = null, ClosingId = null };
+                                        undone = true;
+                                    }
+                            if (!undone && closingIds.TryGetValue(cancelledId, out var cancelled))
                             {
-                                var xdocs = allOpenDocs[xk];
-                                xdocs[xi] = xdocs[xi] with { ClosingTs = null };
+                                var (xk, xix) = Locate(cancelled);
+                                if (xk is not null)
+                                {
+                                    var xdocs = allOpenDocs[xk];
+                                    xdocs[xix] = xdocs[xix] with { ClosingTs = null, ClosingId = null };
+                                }
                             }
                         }
                         break;
