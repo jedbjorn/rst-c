@@ -81,13 +81,6 @@ public class BuilderRulesTests
             .BeEquivalentTo(new Slot { SlotType = "tool", Name = "ID_X", CommandId = "ID_X" }, "displayName || id; empty groups are null");
     }
 
-    [Fact]
-    public void A_url_button_is_a_tool_slot_with_a_URL_command()
-    {
-        var s = BuilderRules.UrlSlot("Wiki", "https://wiki.example.com");
-        s.Should().BeEquivalentTo(new Slot { SlotType = "tool", Name = "Wiki", CommandId = "URL:https://wiki.example.com" });
-    }
-
     [Theory]
     [InlineData(0, "0 tools")]
     [InlineData(1, "1 tool")]

@@ -252,7 +252,7 @@ public class RequiredAddinDetectorTests
             Panels =
             [
                 new Panel { Slots = catalog.Select(BuilderRules.ToolSlot).ToList() },
-                new Panel { Slots = [BuilderRules.UrlSlot("Wiki", "https://example.com")] },
+                new Panel { Slots = [CustomTools.NewSlot(new CustomToolEdit("Wiki", "https://example.com", null))] },
             ],
         };
         profile.Panels[1].Slots[0].IconFile = "pack:house_purple";

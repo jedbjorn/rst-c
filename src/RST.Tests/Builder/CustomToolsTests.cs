@@ -429,4 +429,108 @@ public sealed class CustomToolsTests : IDisposable
         Bytes(StructId).Should().Be(structBefore, "the failed file is as it was");
         _log.Lines.Should().Contain(l => l.StartsWith("W ") && l.Contains("Struct") && l.Contains("Write failed"));
     }
+
+    // ── the confirmation's plan (WU4) ──
+
+    [Fact]
+    public void The_plan_lists_every_profile_that_will_change_and_does_not_merge_profiles_that_share_a_name()
+    {
+        // A second profile called "Arch", with its own id, that also holds the wiki.
+        WriteAs("Arch (2).json", Make("e-arch2", "Arch", new(), Url("Wiki", Wiki)));
+        var working = ProfileEditing.ForEditing(OnDisk(StructId));
+
+        var plan = Editor().Plan(Wiki, working);
+
+        plan.Targets.Select(t => (t.ProfileName, t.ProfileId, t.State, t.IsOpen)).Should().BeEquivalentTo(new[]
+        {
+            ("Arch", (string?)ArchId, CustomToolTargetState.Write, false),
+            ("Arch", (string?)"e-arch2", CustomToolTargetState.Write, false),
+            ("Struct", (string?)StructId, CustomToolTargetState.Write, true),
+        });
+        plan.Count.Should().Be(3, "two profiles named Arch are two profiles");
+        Editor().Affected(Wiki, working).Should().Equal("Arch", "Arch", "Struct");
+
+        var result = Editor().Remove(Wiki, working, null);
+        result.Written.Should().HaveCount(plan.Count, "the count is what was written");
+    }
+
+    [Fact]
+    public void An_unsaved_working_copy_is_listed_under_its_current_name()
+    {
+        var draft = Make("", "", new(), Url("Wiki", Wiki));
+        draft.Id = null;
+        var plan = Editor().Plan(Wiki, draft);
+        plan.Changing.Select(t => (t.ProfileName, t.State, t.FileName, t.IsOpen)).Should().Equal(
+            ("Arch", CustomToolTargetState.Write, FileOf(ArchId), false),
+            ("Struct", CustomToolTargetState.Write, FileOf(StructId), false),
+            ("", CustomToolTargetState.WorkingCopy, "", true));
+
+        // The open profile's file does not hold the tool, but its working copy does (placed, not saved yet).
+        var mep = ProfileEditing.ForEditing(OnDisk(MepId));
+        mep.ProfileName = "MEP renamed";
+        mep.Panels[0].Slots.Add(Url("Wiki", Wiki));
+        Editor().Plan(Wiki, mep).Changing.Select(t => (t.ProfileName, t.State)).Should().Equal(
+            ("Arch", CustomToolTargetState.Write), ("Struct", CustomToolTargetState.Write), ("MEP renamed", CustomToolTargetState.WorkingCopy));
+
+        // Its file holds it and is written: one entry for the profile, not two.
+        var arch = ProfileEditing.ForEditing(OnDisk(ArchId));
+        Editor().Plan(Wiki, arch).Changing.Should().HaveCount(2).And.ContainSingle(t => t.IsOpen && t.State == CustomToolTargetState.Write);
+    }
+
+    [Fact]
+    public void The_plan_lists_the_files_that_will_be_refused_apart_and_does_not_count_them()
+    {
+        var legacy = Make("", "Legacy", new(), Url("Wiki", Wiki));
+        legacy.Id = null;
+        WriteAs("Legacy_2024-05-01.json", legacy);
+        var stale = Struct();
+        stale.Panels[0].Name = "Stale";
+        WriteAs("Struct_2024-05-01.json", stale);
+
+        var plan = Editor().Plan(Wiki, null);
+        plan.Changing.Select(t => t.ProfileName).Should().Equal("Arch");
+        plan.Count.Should().Be(1);
+        plan.Refused.Select(t => (t.ProfileName, t.State)).Should().BeEquivalentTo(new[]
+        {
+            ("Legacy", CustomToolTargetState.NoId),
+            ("Struct", CustomToolTargetState.SharedId),
+            ("Struct", CustomToolTargetState.SharedId),
+        });
+        plan.Refused.Should().OnlyContain(t => !string.IsNullOrEmpty(t.Reason));
+
+        var result = Editor().Edit(Editor().Derive(null).Single(t => t.Link == Wiki), new CustomToolEdit("Knowledge", Wiki, null), null, null);
+        result.Written.Should().HaveCount(plan.Count);
+        result.Failed.Select(f => (f.FileName, f.Error)).Should().BeEquivalentTo(plan.Refused.Select(t => (t.FileName, t.Reason!)),
+            "the refusals the confirmation listed are the failures reported");
+    }
+
+    [Fact]
+    public void A_working_copy_change_that_throws_is_reported_not_thrown()
+    {
+        var working = Make("w-broken", "Broken", new(), Url("Wiki", Wiki));
+        working.Stacks = null!; // the remove walks the stacks after taking the slot out
+
+        var result = Editor().Remove(Wiki, working, null);
+
+        result.Written.Select(w => w.ProfileName).Should().Equal(new[] { "Arch", "Struct" }, "the saved files are still written");
+        var failure = result.Failed.Should().ContainSingle().Subject;
+        (failure.ProfileName, failure.ProfileId, failure.FileName).Should().Be(("Broken", (string?)"w-broken", ""));
+        failure.Error.Should().StartWith("The open profile could not be changed: ");
+        result.WorkingCopyChanged.Should().BeTrue("the slot was taken out before it threw");
+        _log.Lines.Should().Contain(l => l.StartsWith("E ") && l.Contains("Broken"));
+    }
+
+    [Fact]
+    public void Short_links_and_list_slots()
+    {
+        CustomTools.ShortLink("https://wiki.example.com/").Should().Be("wiki.example.com");
+        CustomTools.ShortLink("mailto:bim@studio.example").Should().Be("bim@studio.example");
+        CustomTools.ShortLink("tel:+4412345").Should().Be("+4412345");
+        CustomTools.ShortLink(null).Should().Be("");
+        var tool = new CustomTool("mailto:bim@studio.example", "Help", "pack:question", CustomToolKind.Email, ["Arch"]);
+        var a = CustomTools.SlotFor(tool);
+        a.Should().BeEquivalentTo(new Slot { SlotType = "tool", Name = "Help", BaseName = "Help", CommandId = "URL:mailto:bim@studio.example", IconFile = "pack:question" });
+        CustomTools.LinkOf(a).Should().Be(tool.Link, "a placed copy is the same tool");
+        CustomTools.SlotFor(tool).Should().NotBeSameAs(a);
+    }
 }

@@ -51,6 +51,17 @@ public static class ProfileEditing
     public static string Snapshot(Profile profile) => JsonSerializer.Serialize(profile, CopyOptions);
 
     /// <summary>
+    /// The profile a <see cref="Snapshot"/> was taken of (feature #18, WU4: an edit or remove
+    /// everywhere that wrote the open profile's file applies the same change to the clean baseline).
+    /// </summary>
+    public static Profile FromSnapshot(string snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return JsonSerializer.Deserialize<Profile>(snapshot, CopyOptions)
+               ?? throw new ArgumentException("not a profile snapshot", nameof(snapshot));
+    }
+
+    /// <summary>
     /// <c>startFresh</c>'s blank profile (before its first panel is added): schema 1, no id, empty
     /// name and tab, Min RST version "0.1.0", opacity 100, no presets, and the default cleanup targets.
     /// </summary>
