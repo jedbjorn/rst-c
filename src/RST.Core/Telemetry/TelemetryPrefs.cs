@@ -4,8 +4,10 @@
 //                                         the user; the outbox does NOT)
 //
 // UserProfilePrefs-style single JSON file. `enabled` defaults true (on
-// by default + first-run notice + toggle — spec Scope Decision 4);
-// `noticeShownUtc` is null until the one-time TaskDialog has been shown;
+// by default + the Collection toggle on Health → Activity);
+// `noticeShownUtc` is kept, unread: it recorded the one-time first-run
+// TaskDialog, which v3.2 removed (decision #49). It still round-trips so
+// older builds sharing the roaming prefs file see their own value;
 // `retentionDays` feeds the pruner.
 //
 // Failure semantics (spec Threading & Safety: corrupt prefs degrade to
@@ -36,8 +38,9 @@ public sealed class TelemetryPrefs
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Set (UTC) once the first-run notice has been shown,
-    /// regardless of how it was dismissed. Null = not yet shown.</summary>
+    /// <summary>Unread since v3.2 (decision #49: the first-run notice is
+    /// gone). Kept and round-tripped so an older build reading the same
+    /// prefs file does not re-show its notice.</summary>
     [JsonPropertyName("noticeShownUtc")]
     public DateTimeOffset? NoticeShownUtc { get; set; }
 

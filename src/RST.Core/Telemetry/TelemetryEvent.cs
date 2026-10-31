@@ -40,6 +40,9 @@ public static class TelemetryEventTypes
     public const string SyncEnd = "sync_end";
     public const string DocChangedPulse = "doc_changed_pulse";
     public const string ViewActivated = "view_activated";
+    /// <summary>Keys-only; warnings_count + file_size_bytes (spec #24
+    /// Capture Additions). At most once per model per 5 min.</summary>
+    public const string ModelStats = "model_stats";
     public const string SessionEnd = "session_end";
     public const string CollectionDisabled = "collection_disabled";
     public const string CollectionEnabled = "collection_enabled";
@@ -74,6 +77,8 @@ public static class TelemetryFields
     public const string AutodeskUser = "autodesk_user";
     public const string RevitVersion = "revit_version";
     public const string RevitBuild = "revit_build";
+    /// <summary>Application.SubVersionNumber, e.g. "2026.4" (spec #24).</summary>
+    public const string RevitSubversion = "revit_subversion";
     public const string AddinVersion = "addin_version";
 
     // heartbeat.
@@ -88,6 +93,10 @@ public static class TelemetryFields
 
     // sync_start.
     public const string Comment = "comment";
+
+    // model_stats (spec #24 Capture Additions).
+    public const string WarningsCount = "warnings_count";
+    public const string FileSizeBytes = "file_size_bytes";
 }
 
 public sealed class TelemetryEvent

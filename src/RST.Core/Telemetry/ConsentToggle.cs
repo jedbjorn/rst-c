@@ -3,7 +3,7 @@
 // merge-preserving prefs writer, then reconcile THIS process's
 // collector with that value. The dialog-side plumbing (the WPF Health
 // window's view-model) lives UI-side; this piece is the testable rule, kept Revit-free per
-// the placement rule — same split as FirstRunNotice.
+// the placement rule.
 //
 // The reconcile is unconditional on a successful persist (SC-034): the
 // on-disk state says nothing about this process's collector. Another

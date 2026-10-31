@@ -81,7 +81,7 @@ public sealed class RstApplication : IExternalApplication
             // Activity telemetry (doc #5). Handlers are cheap capture +
             // enqueue; all file IO lives on the collector's writer thread.
             // Its own guard: telemetry failing must never fail OnStartup.
-            try { _telemetry = TelemetryCollector.Start(application, ThisVersion, m => Log.Warning("Telemetry: {Message}", m)); }
+            try { _telemetry = TelemetryCollector.Start(application, ThisVersion, m => Log.Warning("Telemetry: {Message}", m), m => Log.Information("Telemetry: {Message}", m)); }
             catch (Exception ex) { Log.Warning(ex, "Telemetry startup failed — telemetry off for this session"); }
 
             RibbonBuilder.Build(application);
@@ -148,11 +148,9 @@ public sealed class RstApplication : IExternalApplication
         BuildProfileTab(sender);
         Log.Information("ApplicationInitialized: profile tab step took {Ms} ms", tab.ElapsedMilliseconds);
 
-        // One-time consent notice (telemetry spec Consent & Config) —
-        // after the profile tab is up, so the modal never sits between
-        // Revit and the ribbon build. Runs on the paths that skip the
-        // build too (no active profile); its own guard, never throws.
-        ConsentNotice.ShowIfDue(_telemetry, m => Log.Warning("Telemetry: {Message}", m));
+        // No first-run telemetry dialog (decision #49, v3.2): the
+        // Collection switch on Health → Activity is where the user sees
+        // and controls their own data.
     }
 
     /// <summary>One line: the time from Revit.exe's start to <paramref name="point"/>.</summary>
