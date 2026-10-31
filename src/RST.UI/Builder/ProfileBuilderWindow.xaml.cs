@@ -21,6 +21,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using RST.Core.Builder;
+using RST.Core.Logging;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
 
@@ -72,11 +73,35 @@ public partial class ProfileBuilderWindow : Window
         WindowPlacement.CapToWorkArea(this);
     }
 
-    /// <summary>The title-bar ✕ goes through the unsaved-changes prompt, as Exit does.</summary>
+    /// <summary>
+    /// The title-bar ✕ goes through the unsaved-changes prompt, as Exit does. Not when the window safety net
+    /// closes the Builder after an error (SC-045): no prompt and no save from a faulted state; unsaved edits
+    /// are discarded, and the log says so.
+    /// </summary>
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (WindowGuard.IsClosingAfterFault(this))
+        {
+            if (HasUnsavedEdits()) Log.Warning("Builder: closed after an unexpected error; its unsaved changes were discarded, not saved");
+            Model.Abandon(); // a queued or in-flight save, switch or reload does nothing more
+            base.OnClosing(e);
+            return;
+        }
         if (!Model.CanClose()) e.Cancel = true;
         base.OnClosing(e);
+    }
+
+    private bool HasUnsavedEdits()
+    {
+        try
+        {
+            return Model.IsDirty;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Builder: could not tell whether there were unsaved changes after an error");
+            return true;
+        }
     }
 
     /// <summary>

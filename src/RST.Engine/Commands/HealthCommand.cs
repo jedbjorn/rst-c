@@ -23,6 +23,7 @@ using RST.Core.Health;
 using RST.Core.Telemetry;
 using RST.Engine.Theming;
 using RST.UI.Health;
+using RST.UI.Resources;
 using RST.Core.Logging;
 
 namespace RST.Engine.Commands;
@@ -47,9 +48,16 @@ public sealed class HealthCommand : IExternalCommand
             // enable emits session_start, and the clock should tick on
             // the very next refresh.
             RevitThemeDetector.ApplyToWindows();
-            HealthLauncher.Show(commandData.Application.MainWindowHandle, context,
+            var closedNormally = HealthLauncher.Show(commandData.Application.MainWindowHandle, context,
                 telemetryToggled: enabled => RstApplication.GetTelemetry()?.SetEnabled(enabled),
                 liveSessionStartUtc: () => RstApplication.GetTelemetry()?.SessionStartUtc);
+            if (!closedNormally)
+            {
+                // SC-045: the window safety net (WindowGuard) logged the error and closed the window.
+                Log.Warning("=== Health session closed after a UI error: duration={Ms}ms ===", sw.ElapsedMilliseconds);
+                message = UiStrings.Health_ClosedAfterError;
+                return Result.Failed;
+            }
             Log.Information("=== Health session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }
