@@ -192,12 +192,12 @@ rst-c records model activity on this PC so the Activity tab, and the RST tray's 
 
 - Revit starting and closing, and a heartbeat every 2 minutes while it runs: the Revit version, build and minor version, the RST version, the PC's name, your Windows and Autodesk user names, and a random id for this RST install.
 - Opening, closing, saving and Save As of a model, and how long the open took. Each carries the model's identity: its title, its local and central paths, the ids Revit keeps for it (creation, central and cloud ids), whether it is workshared, cloud, a family or detached.
-- Each synchronize with central: its start, its end and the comment you typed.
+- Each synchronize with central: its start, its end, and the text of the optional comment you typed in Revit's Synchronize with Central dialog.
 - That the model changed, at most once a minute per model, and that you switched to another open model, at most once a minute. Only the time and which model; never what changed.
 - The model's warning count and file size on disk, after it opens, saves or syncs, at most once every 5 minutes.
 - Collection being turned off and on.
 
-**What is never recorded:** the model's content (elements, views, sheets, parameters, geometry, names inside the model), what you typed or clicked, the commands you ran, or anything from other programs. Linked models are not tracked.
+**What is never recorded:** the model's content (elements, views, sheets, parameters, geometry, names inside the model), your keystrokes and clicks (the only text you type that is recorded is the sync comment above), the commands you ran, or anything from other programs. Linked models are not tracked.
 
 **Where it lives**, in your Windows profile on this PC (it does not roam to other PCs):
 
@@ -209,7 +209,7 @@ rst-c records model activity on this PC so the Activity tab, and the RST tray's 
 
 **How long it is kept.** After Revit closes, the RST tray folds each session's raw file into the model's rollup, usually within 15 minutes. Once a file's data is safely in the rollup (and in its backup copy), the raw file is deleted, except the 3 newest. The rollups keep one row of totals per model per day used, with no end date, and each individual open and sync time for 90 days (always at least the last 10). If the tray never runs, raw files are still deleted once they are 180 days old. The Health window reads files the tray has not folded yet, so its numbers are up to date either way. The file formats are documented in [Activity rollups](activity-rollups.md).
 
-**Turning it off.** The **Collection** switch in the Activity tab's footer turns recording on or off for your Windows account; it is on by default. Off, nothing new is recorded; what was already recorded stays and is still shown. To remove everything recorded, close Revit and the RST tray and delete `%LOCALAPPDATA%\RST\telemetry\`.
+**Turning it off.** The **Collection** switch in the Activity tab's footer turns recording on or off; it is on by default. The setting is saved for your Windows account. It applies to the Revit session you change it in immediately; other Revit windows already open keep their previous setting until you close and reopen them. Off, nothing new is recorded; what was already recorded stays and is still shown. To remove everything recorded, close Revit and the RST tray and delete `%LOCALAPPDATA%\RST\telemetry\`.
 
 Beside the switch, a status line reports the raw event files: on or off, how many there are and their size on disk, and since when the current model has history (for example "collection on · 8 files · 424 KB · since 10/22/2026").
 
