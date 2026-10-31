@@ -7,6 +7,9 @@
     override and Read Only badge, RSTify "Hide These Tabs", Required Add-ins) over the footer bar
     (Unload / Delete on the left, Restore All Add-ins and "Disable unused add-ins" in the middle,
     Load Profile → and Close on the right). The toast and the busy overlay sit on top.
+    Feature #18 (spec #19, WU6; decision #31) gives it the Builder's flavour, not its layout: the shared
+    header (HeaderStrip, the Tint) and pane header row (PaneHeader) from Theme.xaml. Escape closes the
+    window as Close does (SC-010; code-behind).
 -->
 <Window x:Class="RST.UI.Loader.ProfileLoaderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -50,16 +53,20 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Header -->
-            <Border Style="{StaticResource LoaderStrip}" BorderThickness="0,0,0,1" Height="54" Padding="24,0">
+            <!--
+                Header (feature #18, WU6): the Builder's shared HeaderStrip (the Tint, decision #24), HeaderTitle and
+                HeaderDivider, so the two windows read as one family (decision #31). The Loader keeps its own order:
+                the title, the divider, the Revit version, + Import from File.
+            -->
+            <Border x:Name="Header" Style="{StaticResource HeaderStrip}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="{x:Static res:UiStrings.Loader_Title}" Style="{StaticResource SectionText}" FontSize="14"
-                               Margin="0" VerticalAlignment="Center" AutomationProperties.AutomationId="Loader.Title" />
-                    <Rectangle Width="1" Height="20" Fill="{StaticResource DividerBrush}" Margin="20,0" />
+                    <TextBlock Text="{x:Static res:UiStrings.Loader_Title}" Style="{StaticResource HeaderTitle}"
+                               AutomationProperties.AutomationId="Loader.Title" />
+                    <Rectangle Style="{StaticResource HeaderDivider}" />
                     <TextBlock Text="{x:Static res:UiStrings.Loader_RevitLabel}" Style="{StaticResource LabelText}" />
                     <TextBlock Text="{Binding RevitVersionDisplay}" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
                                AutomationProperties.AutomationId="Loader.RevitVersion" />
-                    <Button Content="{x:Static res:UiStrings.Loader_ImportFromFile}" Command="{Binding ImportCommand}" Margin="20,0,0,0"
+                    <Button Content="{x:Static res:UiStrings.Loader_ImportFromFile}" Command="{Binding ImportCommand}" Margin="16,0,0,0"
                             AutomationProperties.AutomationId="Loader.Import" />
                 </StackPanel>
             </Border>
@@ -73,15 +80,18 @@
                 <!-- Profile list -->
                 <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Background="{StaticResource SurfaceAltBrush}">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="16,14,16,10">
-                            <ContentControl DockPanel.Dock="Right" Style="{StaticResource Pill}" Content="{Binding ProfileCount}"
-                                            AutomationProperties.AutomationId="Loader.ProfileCount" />
-                            <TextBlock Text="{x:Static res:UiStrings.Loader_Profiles}" Style="{StaticResource SectionText}" Margin="0"
-                                       VerticalAlignment="Center" />
-                        </DockPanel>
+                        <!-- The Builder's pane header row (PaneHeader, feature #18 WU6): the label, the count, a line under. -->
+                        <Border x:Name="ProfilesHeader" DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
+                            <DockPanel VerticalAlignment="Center">
+                                <ContentControl DockPanel.Dock="Right" Style="{StaticResource Pill}" Content="{Binding ProfileCount}"
+                                                AutomationProperties.AutomationId="Loader.ProfileCount" />
+                                <TextBlock Text="{x:Static res:UiStrings.Loader_Profiles}" Style="{StaticResource SectionText}" Margin="0"
+                                           VerticalAlignment="Center" />
+                            </DockPanel>
+                        </Border>
                         <Grid>
                             <ListBox x:Name="Cards" Style="{StaticResource LoaderCardList}" ItemsSource="{Binding Profiles}"
-                                     SelectedItem="{Binding SelectedCard, Mode=TwoWay}" Padding="12,0,12,12"
+                                     SelectedItem="{Binding SelectedCard, Mode=TwoWay}" Padding="12,12,12,12"
                                      Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisible}}"
                                      AutomationProperties.AutomationId="Loader.Profiles"
                                      AutomationProperties.Name="{x:Static res:UiStrings.Loader_Profiles}">

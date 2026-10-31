@@ -1,6 +1,6 @@
 <!--
     Adapted from splash-it src/SplashIt.UI/Theme.xaml (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Theme.xaml, gantt-it commit a96d0a1), MIT, same owner.
-    Changes: namespaces (SplashIt.* to RST.*); comments say RST for Splash-It; rst-c's styles are added after splash-it's Slider, in the section marked "rst-c additions": SuccessText, SuccessBanner, the pills, ToggleSwitch, TabControl/TabItem, TreeView/TreeViewItem, plain ListBoxItem rows, CardListBox/CardListBoxItem (selected and active), Vertical/HorizontalGridSplitter, BusyIndicator/BusySpinner/BusyOverlay and TransientBanner, plus the Success/Scrim brushes they use; and, at the end, the window header styles (HeaderStrip, HeaderTitle, HeaderDivider; feature #18).
+    Changes: namespaces (SplashIt.* to RST.*); comments say RST for Splash-It; rst-c's styles are added after splash-it's Slider, in the section marked "rst-c additions": SuccessText, SuccessBanner, the pills, ToggleSwitch, TabControl/TabItem, TreeView/TreeViewItem, plain ListBoxItem rows, CardListBox/CardListBoxItem (selected and active), Vertical/HorizontalGridSplitter, BusyIndicator/BusySpinner/BusyOverlay and TransientBanner, plus the Success/Scrim brushes they use; and, at the end, the window header styles (HeaderStrip, HeaderTitle, HeaderDivider; feature #18) and the pane header row (PaneHeader; feature #18, WU6).
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -1632,6 +1632,19 @@
         <Setter Property="Margin" Value="16,0" />
         <Setter Property="Fill" Value="{StaticResource InfoBorderBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!--
+        A pane's header row (feature #18, WU6; moved from the Builder window, review F2 of #150): the
+        pane's label on the left, its count or button on the right, 42 px tall with 16 px side padding
+        and a 1 px line under it. The Builder's Commands, Panels and Profile panes and the Loader's
+        Profiles pane use it.
+    -->
+    <Style x:Key="PaneHeader" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="42" />
     </Style>
 
 </ResourceDictionary>

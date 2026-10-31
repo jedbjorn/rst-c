@@ -5,7 +5,8 @@
 // busy "Loading …" state, a toast and the destructive delete confirm. Spec #18 (AC4): Confirm Add-in
 // Changes from a real two-year plan, and the one add-in report (the Load's Add-in Check all clear
 // and with every section, Unload, the RST 3.0 move, Restore All). Each capture also samples the
-// pixels that prove its state.
+// pixels that prove its state. Feature #18 (spec #19, WU6, AC8): the Loader in the Builder's flavour
+// (the shared header and pane header), as f18-loader-* beside the Builder's f18-builder-* captures.
 
 using System.Windows;
 using System.Windows.Controls;
@@ -160,6 +161,72 @@ public class ProfileLoaderScreenshotTests
             var expected = new[] { UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.SuccessSoft, UiPalette.WarningSoft, UiPalette.ErrorSoft, UiPalette.WarningSoft };
             for (var i = 0; i < pills.Count; i++)
                 AssertColor(Palette(theme, expected[i]), At(bitmap, pills[i], root, 4, pills[i].ActualHeight / 2), $"status pill {i} fill");
+        }
+        finally
+        {
+            opened.Window.Close();
+        }
+    });
+
+    /// <summary>
+    /// Feature #18 (spec #19, WU6, AC8; decision #31): the Loader has the Builder's flavour. Its header
+    /// is the shared HeaderStrip (the Tint of decision #24: AccentSoft, an InfoBorder bottom line, 54 px)
+    /// with the shared title and divider, and its Profiles pane has the Builder's pane header row
+    /// (PaneHeader: 42 px, a line under it). The PNGs are named to sit beside f18-builder-default-*.
+    /// </summary>
+    private static void AssertBuilderFlavour(ProfileLoaderWindow window, BitmapSource bitmap, UiTheme theme, string what)
+    {
+        var root = window.Root;
+        var header = window.Header;
+        Assert.Same(window.FindResource("HeaderStrip"), header.Style);
+        Assert.Equal(54, header.ActualHeight);
+        Assert.Equal(new Thickness(16, 0, 16, 0), header.Padding);
+        AssertColor(Palette(theme, UiPalette.AccentSoft), At(bitmap, header, root, header.ActualWidth / 2, 4), $"{what} header tint");
+        AssertColor(Palette(theme, UiPalette.AccentSoft), At(bitmap, header, root, header.ActualWidth - 4, header.ActualHeight / 2), $"{what} header tint, right");
+        AssertColor(Palette(theme, UiPalette.InfoBorder), At(bitmap, header, root, header.ActualWidth / 2, header.ActualHeight - 0.5), $"{what} header bottom line");
+
+        var title = WindowCapture.Descendants<TextBlock>(header).Single(t => System.Windows.Automation.AutomationProperties.GetAutomationId(t) == "Loader.Title");
+        Assert.Same(window.FindResource("HeaderTitle"), title.Style);
+        Assert.Equal(14, title.FontSize);
+        Assert.Equal(FontWeights.SemiBold, title.FontWeight);
+        var divider = WindowCapture.Descendants<System.Windows.Shapes.Rectangle>(header).Single();
+        Assert.Same(window.FindResource("HeaderDivider"), divider.Style);
+        AssertColor(Palette(theme, UiPalette.InfoBorder), At(bitmap, divider, root, 0.5, divider.ActualHeight / 2), $"{what} header divider");
+
+        var pane = window.ProfilesHeader;
+        Assert.Same(window.FindResource("PaneHeader"), pane.Style);
+        Assert.Equal(42, pane.ActualHeight);
+        AssertColor(Palette(theme, UiPalette.SurfaceAlt), At(bitmap, pane, root, pane.ActualWidth / 2, 4), $"{what} Profiles pane header");
+        AssertColor(Palette(theme, UiPalette.Border), At(bitmap, pane, root, pane.ActualWidth / 2, pane.ActualHeight - 0.5), $"{what} Profiles pane header line");
+    }
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void The_Loader_has_the_Builder_flavour(UiTheme theme) => Sta(() =>
+    {
+        RstTheme.Apply(theme);
+        var opened = Open(LoaderFixtures.Backend(), (vm, _) => vm.SelectedCard = vm.Profiles.Single(c => c.Name == "Structure"));
+        try
+        {
+            var bitmap = CaptureLoader(opened, theme, "f18-loader-main");
+            AssertBuilderFlavour(opened.Window, bitmap, theme, "main");
+        }
+        finally
+        {
+            opened.Window.Close();
+        }
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void The_empty_Loader_has_the_Builder_flavour(UiTheme theme) => Sta(() =>
+    {
+        RstTheme.Apply(theme);
+        var opened = Open(new FakeLoaderBackend { AllTabs = LoaderFixtures.Ribbon });
+        try
+        {
+            var bitmap = CaptureLoader(opened, theme, "f18-loader-empty");
+            AssertBuilderFlavour(opened.Window, bitmap, theme, "empty");
         }
         finally
         {

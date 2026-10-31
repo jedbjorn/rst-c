@@ -81,19 +81,20 @@ public partial class ProfileBuilderWindow : Window
 
     /// <summary>
     /// Escape closes the Builder the way Exit does, through the unsaved-changes prompt (SC-010). Only
-    /// when nothing else takes it: an open menu, the icon picker and the dialogs handle their own
-    /// Escape, and a drag in progress ends on it.
+    /// a fresh press (not a key-repeat), and only when nothing else takes it: an open menu (⚙, the
+    /// profile menu) or popup, a dialog, and the icon picker handle their own Escape (EscapeGuard,
+    /// shared with the Loader and Health), and a drag in progress ends on it.
     /// </summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Handled || e.Key != Key.Escape || !EscapeCloses) return;
+        if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled) || !EscapeCloses) return;
         e.Handled = true;
         _ = Model.ExitAsync();
     }
 
     private bool EscapeCloses =>
-        Model.IsIdle && !Model.IsIconPickerOpen && Model.CurrentDrag is null && !SettingsMenu.IsOpen && !ProfileMenu.IsOpen;
+        Model.IsIdle && !Model.IsIconPickerOpen && Model.CurrentDrag is null && !EscapeGuard.HasSomethingOpen(this);
 
     // ---- the header's menus -------------------------------------------------------------------
 
