@@ -25,7 +25,7 @@ namespace RST.Core.Builder;
 public static class RequiredAddinDetector
 {
     /// <summary>
-    /// The Builder's <c>BUILTIN_TABS</c>. The same 19 names as the Loader's
+    /// The Builder's <c>BUILTIN_TABS</c>. The same 20 names as the Loader's
     /// (<see cref="RequiredAddinRules.BuiltinTabs"/>), so one set serves both.
     /// </summary>
     public static IReadOnlySet<string> BuiltinTabs => RequiredAddinRules.BuiltinTabs;

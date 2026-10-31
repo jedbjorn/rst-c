@@ -92,7 +92,7 @@ public static class RequiredAddinRules
     /// </summary>
     public static readonly IReadOnlySet<string> BuiltinTabs = new HashSet<string>(StringComparer.Ordinal)
     {
-        "Architecture", "Structure", "Systems", "Steel", "Precast",
+        "Architecture", "Structure", "Systems", "Steel", "Precast", "Concrete",
         "Insert", "Annotate", "Analyze", "Massing & Site", "Collaborate",
         "View", "Manage", "Modify", "Add-Ins", "Create", "RST",
         "FormIt", "FormIt Converter", "eTransmit",

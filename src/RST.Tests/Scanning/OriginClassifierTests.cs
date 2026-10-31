@@ -10,6 +10,7 @@ public sealed class OriginClassifierTests
 
     [Theory]
     [InlineData("Architecture")]
+    [InlineData("Concrete")]
     [InlineData("Modify")]
     [InlineData("RST")]
     public void BuiltinTab_NoPublisher_IsNative(string tab)
@@ -18,6 +19,12 @@ public sealed class OriginClassifierTests
                                    programFilesAutodesk: AutodeskRoot)
             .Should().Be(CommandOrigin.Native);
     }
+
+    [Theory]
+    [InlineData("ID_NUMBERING_REINF_PARTITIONS", CommandOrigin.Native)]
+    [InlineData("CustomCtrl_%Concrete%Acme%Go", CommandOrigin.Custom)]
+    public void Concrete_ribbon_buttons_keep_native_and_custom_origins(string id, CommandOrigin expected) =>
+        OriginClassifier.ClassifyRibbonButton("Concrete", id).Should().Be(expected);
 
     [Fact]
     public void NonAutodeskPublisher_IsThirdParty_EvenOnBuiltinTab()
