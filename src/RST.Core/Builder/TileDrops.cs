@@ -10,7 +10,11 @@
 //     full."); the stack's leading or trailing edge: inserted before or after the stack;
 //   - a whole stack (dragged by its header) never goes inside another stack: over a tile, a stack
 //     or a row it is inserted before or after by the half it is over;
-//   - the card outside the tiles: appended to the panel's end.
+//   - the card outside the tiles: appended to the panel's end;
+//   - a loose tool or a whole stack dropped where it already is (its neighbour's adjacent edge or
+//     half) is not accepted, as a stack row's is (WU3 review N3);
+//   - a drag or a target that is no longer where the card showed it (the source slot and the
+//     expected target are checked by reference) is Stale: nothing changes (WU3 review N1).
 // Tiles are laid out left to right, so the edges are the leading and trailing edges of a tile or a
 // stack group (a quarter of its width, at most 24 px); a stack's rows are stacked, so before and
 // after a row are its upper and lower halves. A catalogue command becomes a fresh slot on every
@@ -56,22 +60,29 @@ public enum TileDropKind
 
     /// <summary>Appended to the panel (a drop on the card outside the tiles, <see cref="PanelStacks.Append"/>).</summary>
     Append,
+
+    /// <summary>
+    /// The dragged slot or the target is no longer where the card showed it (the working copy changed
+    /// underneath): refused, nothing changes; the cards should be redrawn (WU3 review N1).
+    /// </summary>
+    Stale,
 }
 
 /// <summary>
 /// Where the pointer is: the panel and slot of a loose tool or a stack, and for a stack's row its
 /// index (else -1). <paramref name="X"/> is across the tile or the whole stack group
 /// (<paramref name="Width"/> wide); <paramref name="Y"/> is down the row (<paramref name="Height"/>
-/// tall), used only for a row.
+/// tall), used only for a row. <paramref name="Expected"/> is the slot the card showed at that place
+/// (the loose tool or the stack slot): when given, a plan checks it is still there (WU3 review N1).
 /// </summary>
-public readonly record struct TileHit(int Panel, int Slot, int Row, double X, double Width, double Y = 0, double Height = 0)
+public readonly record struct TileHit(int Panel, int Slot, int Row, double X, double Width, double Y = 0, double Height = 0, Slot? Expected = null)
 {
     /// <summary>Over a loose tool or a stack group (not one of its rows).</summary>
-    public static TileHit On(int panel, int slot, double x, double width) => new(panel, slot, -1, x, width);
+    public static TileHit On(int panel, int slot, double x, double width, Slot? expected = null) => new(panel, slot, -1, x, width, Expected: expected);
 
     /// <summary>Over row <paramref name="row"/> of a stack: <paramref name="x"/> across the group, <paramref name="y"/> down the row.</summary>
-    public static TileHit OnRow(int panel, int slot, int row, double x, double width, double y, double height) =>
-        new(panel, slot, row, x, width, y, height);
+    public static TileHit OnRow(int panel, int slot, int row, double x, double width, double y, double height, Slot? expected = null) =>
+        new(panel, slot, row, x, width, y, height, expected);
 }
 
 /// <summary>
@@ -83,8 +94,10 @@ public readonly record struct TileDrop(TileDropKind Kind, int Panel, int Slot, i
 {
     public static readonly TileDrop None = new(TileDropKind.None, -1, -1, null, DropMarker.None);
 
-    /// <summary>The drop would change the profile (Full and None do not).</summary>
-    public bool Accepted => Kind is not (TileDropKind.None or TileDropKind.Full);
+    public static readonly TileDrop Stale = new(TileDropKind.Stale, -1, -1, null, DropMarker.None);
+
+    /// <summary>The drop would change the profile (Full, None and Stale do not).</summary>
+    public bool Accepted => Kind is not (TileDropKind.None or TileDropKind.Full or TileDropKind.Stale);
 }
 
 public static class TileDrops
@@ -119,15 +132,17 @@ public static class TileDrops
     {
         ArgumentNullException.ThrowIfNull(profile);
         if (drag is null || drag.Kind == DragKind.Panel) return TileDrop.None;
-        if (!SlotAt(profile, hit.Panel, hit.Slot, out var target)) return TileDrop.None;
-        if (!Dragged(profile, drag, out var moving, out var wholeStack)) return TileDrop.None;
+        if (!SlotAt(profile, hit.Panel, hit.Slot, out var target)) return hit.Expected is null ? TileDrop.None : TileDrop.Stale;
+        if (hit.Expected is { } expected && !ReferenceEquals(expected, target)) return TileDrop.Stale;
+        if (!Dragged(profile, drag, out var moving, out var wholeStack)) return drag.Source is null ? TileDrop.None : TileDrop.Stale;
+        if (drag.Source is { } source && !ReferenceEquals(source, moving)) return TileDrop.Stale;
 
         var zone = ZoneOf(hit.X, hit.Width);
         var half = hit.X < hit.Width / 2 ? TileZone.Before : TileZone.After;
         var sameSlot = drag.Kind == DragKind.Slot && drag.PanelIndex == hit.Panel && drag.SlotIndex == hit.Slot;
 
         // A whole stack goes beside, never inside: by the half it is over.
-        if (wholeStack) return sameSlot ? TileDrop.None : Insert(hit, half);
+        if (wholeStack) return sameSlot ? TileDrop.None : Insert(drag, hit, half);
 
         if (PanelStacks.IsTool(target))
         {
@@ -135,11 +150,11 @@ public static class TileDrops
             if (ReferenceEquals(moving, target)) return TileDrop.None;
             return zone == TileZone.Middle
                 ? new TileDrop(TileDropKind.MakeStack, hit.Panel, hit.Slot, null, DropMarker.Over)
-                : Insert(hit, zone);
+                : Insert(drag, hit, zone);
         }
 
         // A stack: its edges insert beside it; a row places the tool before or after that row; the rest joins at the end.
-        if (zone != TileZone.Middle) return Insert(hit, zone);
+        if (zone != TileZone.Middle) return Insert(drag, hit, zone);
         var rows = PanelStacks.ToolsOf(profile, target);
         var from = IndexOf(rows, moving);
         if (hit.Row >= 0 && hit.Row < rows.Count)
@@ -167,7 +182,8 @@ public static class TileDrops
     {
         ArgumentNullException.ThrowIfNull(profile);
         if (drag is null || drag.Kind == DragKind.Panel || panel < 0 || panel >= profile.Panels.Count) return TileDrop.None;
-        if (!Dragged(profile, drag, out _, out _)) return TileDrop.None;
+        if (!Dragged(profile, drag, out var moving, out _)) return drag.Source is null ? TileDrop.None : TileDrop.Stale;
+        if (drag.Source is { } source && !ReferenceEquals(source, moving)) return TileDrop.Stale;
         // Already the panel's last slot: nothing to do.
         if (drag.Kind == DragKind.Slot && drag.Row < 0 && drag.PanelIndex == panel && drag.SlotIndex == profile.Panels[panel].Slots.Count - 1)
             return TileDrop.None;
@@ -192,9 +208,24 @@ public static class TileDrops
         };
     }
 
-    private static TileDrop Insert(TileHit hit, TileZone side) => side == TileZone.Before
-        ? new TileDrop(TileDropKind.InsertBefore, hit.Panel, hit.Slot, null, DropMarker.Before)
-        : new TileDrop(TileDropKind.InsertAfter, hit.Panel, hit.Slot, null, DropMarker.After);
+    /// <summary>
+    /// Inserted before or after the target slot. A loose tool or a whole stack dropped on its
+    /// neighbour's adjacent edge (or half) would land back where it is: not accepted, no marker
+    /// (WU3 review N3), as for a stack row.
+    /// </summary>
+    private static TileDrop Insert(BuilderDrag drag, TileHit hit, TileZone side)
+    {
+        var after = side != TileZone.Before;
+        if (drag.Kind == DragKind.Slot && drag.Row < 0 && drag.PanelIndex == hit.Panel)
+        {
+            var at = hit.Slot + (after ? 1 : 0);
+            if (drag.SlotIndex < at) at--;
+            if (at == drag.SlotIndex) return TileDrop.None;
+        }
+        return after
+            ? new TileDrop(TileDropKind.InsertAfter, hit.Panel, hit.Slot, null, DropMarker.After)
+            : new TileDrop(TileDropKind.InsertBefore, hit.Panel, hit.Slot, null, DropMarker.Before);
+    }
 
     private static TileDrop Refuse(TileHit hit) => new(TileDropKind.Full, hit.Panel, hit.Slot, null, DropMarker.Refused);
 

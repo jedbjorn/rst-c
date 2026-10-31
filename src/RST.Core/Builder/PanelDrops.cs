@@ -24,14 +24,17 @@ public enum DragKind
 
 /// <summary>
 /// The drag descriptor (the page's <c>drag</c> variable): the kind and its source. A slot drag names
-/// the panel and slot, and for a tool inside a stack its <paramref name="Row"/> (else -1).
+/// the panel and slot, for a tool inside a stack its <paramref name="Row"/> (else -1), and the
+/// <paramref name="Source"/> slot it was started from (the loose tool, the stack slot, or the
+/// stack's tool): a drop checks it is still at that place before it moves anything (WU3 review N1).
 /// </summary>
-public sealed record BuilderDrag(DragKind Kind, CatalogCommand? Command = null, int PanelIndex = -1, int SlotIndex = -1, int Row = -1)
+public sealed record BuilderDrag(DragKind Kind, CatalogCommand? Command = null, int PanelIndex = -1, int SlotIndex = -1, int Row = -1, Slot? Source = null)
 {
     public static BuilderDrag FromCatalog(CatalogCommand command) => new(DragKind.Catalog, command ?? throw new ArgumentNullException(nameof(command)));
 
-    /// <summary>A loose tool or a whole stack (<paramref name="row"/> -1), or a stack's row.</summary>
-    public static BuilderDrag FromSlot(int panelIndex, int slotIndex, int row = -1) => new(DragKind.Slot, null, panelIndex, slotIndex, row);
+    /// <summary>A loose tool or a whole stack (<paramref name="row"/> -1), or a stack's row; <paramref name="source"/> is that slot as the card showed it.</summary>
+    public static BuilderDrag FromSlot(int panelIndex, int slotIndex, int row = -1, Slot? source = null) =>
+        new(DragKind.Slot, null, panelIndex, slotIndex, row, source);
 
     public static BuilderDrag FromPanel(int panelIndex) => new(DragKind.Panel, null, panelIndex);
 }

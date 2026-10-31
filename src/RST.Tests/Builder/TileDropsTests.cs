@@ -171,12 +171,12 @@ public class TileDropsTests
     }
 
     [Theory]
-    [InlineData(true, "P0:C,[A B],D")]
-    [InlineData(false, "P0:[A B],C,D")]
+    [InlineData(true, "P0:D,[A B],C")]
+    [InlineData(false, "P0:[A B],D,C")]
     public void A_tool_on_the_edge_of_a_stack_is_inserted_beside_it_not_in_it(bool left, string expected)
     {
         var p = Make(["A+B", "C", "D"]);
-        var (plan, _) = Drop(p, BuilderDrag.FromSlot(0, 1), left ? LeftEdge(0, 0, SW) : RightEdge(0, 0, SW));
+        var (plan, _) = Drop(p, BuilderDrag.FromSlot(0, 2), left ? LeftEdge(0, 0, SW) : RightEdge(0, 0, SW));
         plan.Kind.Should().Be(left ? TileDropKind.InsertBefore : TileDropKind.InsertAfter);
         Shape(p).Should().Be(expected);
     }
@@ -245,21 +245,90 @@ public class TileDropsTests
     }
 
     [Theory]
-    [InlineData(true, "P0:[C D],[A B]")]
-    [InlineData(false, "P0:[A B],[C D]")]
+    [InlineData(true, "P0:X,[C D],[A B]")]
+    [InlineData(false, "P0:X,[A B],[C D]")]
     public void A_stack_dragged_by_its_header_moves_whole_and_never_inside_another(bool leftHalf, string expected)
     {
-        var p = Make(["A+B", "C+D"]);
-        // Over the other stack's middle, and over one of its rows: beside it by the half, never in it.
-        var middle = TileHit.On(0, 0, leftHalf ? SW / 2 - 10 : SW / 2 + 10, SW);
-        var plan = TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1), middle);
+        var p = Make(["X", "A+B", "C+D"]);
+        // The second stack over the first's middle, and over one of its rows: beside it by the half, never in it.
+        var drag = BuilderDrag.FromSlot(0, 2);
+        var middle = TileHit.On(0, 1, leftHalf ? SW / 2 - 10 : SW / 2 + 10, SW);
+        var plan = TileDrops.Plan(p, drag, middle);
+        if (!leftHalf)
+        {
+            plan.Kind.Should().Be(TileDropKind.None, "after its left neighbour is where it already is (review N3)");
+            plan.Marker.Should().Be(DropMarker.None);
+            // The first stack over the second's right half instead.
+            drag = BuilderDrag.FromSlot(0, 1);
+            middle = TileHit.On(0, 2, SW / 2 + 10, SW);
+            plan = TileDrops.Plan(p, drag, middle);
+            expected = "P0:X,[C D],[A B]";
+        }
         plan.Kind.Should().Be(leftHalf ? TileDropKind.InsertBefore : TileDropKind.InsertAfter);
-        var onRow = TileHit.OnRow(0, 0, 0, middle.X, SW, 2, RH);
-        TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1), onRow).Kind.Should().Be(plan.Kind);
-        TileDrops.Apply(p, BuilderDrag.FromSlot(0, 1), plan);
+        var onRow = TileHit.OnRow(0, middle.Slot, 0, middle.X, SW, 2, RH);
+        TileDrops.Plan(p, drag, onRow).Kind.Should().Be(plan.Kind);
+        TileDrops.Apply(p, drag, plan);
         AssertConsistent(p);
         Shape(p).Should().Be(expected);
         p.Stacks.Values.Should().OnlyContain(s => s.Tools.Count == 2);
+    }
+
+    [Theory]
+    [InlineData(1, 2, true)]   // B on the leading edge of its right neighbour C
+    [InlineData(1, 0, false)]  // B on the trailing edge of its left neighbour A
+    [InlineData(0, 1, true)]   // A on the leading edge of B
+    [InlineData(2, 1, false)]  // C on the trailing edge of B
+    public void A_loose_tool_dropped_where_it_already_is_is_not_accepted(int from, int target, bool leading)
+    {
+        var p = Make(["A", "B", "C"]);
+        var plan = TileDrops.Plan(p, BuilderDrag.FromSlot(0, from), leading ? LeftEdge(0, target) : RightEdge(0, target));
+        plan.Kind.Should().Be(TileDropKind.None);
+        plan.Marker.Should().Be(DropMarker.None);
+        TileDrops.Apply(p, BuilderDrag.FromSlot(0, from), plan).Should().Be(StackResult.Unchanged);
+        Shape(p).Should().Be("P0:A,B,C");
+    }
+
+    [Fact]
+    public void A_whole_stack_dropped_on_its_neighbour_s_adjacent_half_is_not_accepted()
+    {
+        var p = Make(["A", "B+C", "D"]);
+        TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1), TileHit.On(0, 0, W - 10, W)).Kind.Should().Be(TileDropKind.None);
+        TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1), TileHit.On(0, 2, 10, W)).Kind.Should().Be(TileDropKind.None);
+        TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1), TileHit.On(0, 2, W - 10, W)).Kind.Should().Be(TileDropKind.InsertAfter);
+    }
+
+    // ── identity (review N1) ──
+
+    [Fact]
+    public void A_drag_whose_source_moved_is_stale_and_changes_nothing()
+    {
+        var p = Make(["A", "B", "C"]);
+        var b = p.Panels[0].Slots[1];
+        var drag = BuilderDrag.FromSlot(0, 1, source: b);
+        TileDrops.Plan(p, drag, Middle(0, 0)).Kind.Should().Be(TileDropKind.MakeStack, "B is where the card showed it");
+
+        // The working copy changes underneath (another edit removed A): slot 1 is now C.
+        p.Panels[0].Slots.RemoveAt(0);
+        var plan = TileDrops.Plan(p, drag, Middle(0, 0));
+        plan.Kind.Should().Be(TileDropKind.Stale);
+        plan.Accepted.Should().BeFalse();
+        TileDrops.Apply(p, drag, plan).Should().Be(StackResult.Unchanged);
+        TileDrops.PlanCard(p, drag, 0).Kind.Should().Be(TileDropKind.Stale);
+        Shape(p).Should().Be("P0:B,C");
+    }
+
+    [Fact]
+    public void A_target_that_moved_is_stale()
+    {
+        var p = Make(["A", "B+C"]);
+        var a = p.Panels[0].Slots[0];
+        var stack = p.Panels[0].Slots[1];
+        TileDrops.Plan(p, BuilderDrag.FromCatalog(Wall), TileHit.On(0, 0, W / 2, W, a)).Kind.Should().Be(TileDropKind.MakeStack);
+        TileDrops.Plan(p, BuilderDrag.FromCatalog(Wall), TileHit.On(0, 0, W / 2, W, stack)).Kind.Should().Be(TileDropKind.Stale);
+        TileDrops.Plan(p, BuilderDrag.FromCatalog(Wall), TileHit.On(0, 5, W / 2, W, a)).Kind.Should().Be(TileDropKind.Stale, "gone");
+        var row = p.Stacks[stack.Name].Tools[1];
+        TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1, 1, row), Middle(0, 0)).Kind.Should().Be(TileDropKind.MakeStack);
+        TileDrops.Plan(p, BuilderDrag.FromSlot(0, 1, 0, row), Middle(0, 0)).Kind.Should().Be(TileDropKind.Stale, "row 0 is not that tool");
     }
 
     [Fact]
