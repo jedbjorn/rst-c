@@ -83,6 +83,7 @@ internal sealed class AddInsViewModel : ObservableObject
     private string? _actionError;
     private string? _result;
     private Task? _refreshing;
+    private bool _replacingProfiles;
 
     /// <param name="backend">The Loader's services over this user's files.</param>
     /// <param name="dialogs">The Loader's Confirm Add-in Changes and report dialogs.</param>
@@ -182,6 +183,8 @@ internal sealed class AddInsViewModel : ObservableObject
         get => _selected;
         set
         {
+            // The picker's write-back while Show swaps the list is not a pick (SC-019).
+            if (_replacingProfiles) return;
             if (!SetField(ref _selected, value)) return;
             DisableUnused = value is not null && TrayAddinService.Choices(value.Entry, _prefs).DisableUnused;
             OnPropertyChanged(nameof(CanApply));
@@ -289,22 +292,33 @@ internal sealed class AddInsViewModel : ObservableObject
 
         var keep = _selected;
         var options = profiles.Select(p => new ProfileOption(p)).ToList();
-        IsLoaded = true;
-        Years = status.Years.Select(y => new AddInsYearViewModel(y)).ToList();
-        Profiles = options;
         // Keep the user's pick; else the active profile; else the first.
         var pick = options.FirstOrDefault(o => keep is not null && Same(o, keep))
                    ?? options.FirstOrDefault(o => _activeProfile is not null && o.Name == _activeProfile)
                    ?? options.FirstOrDefault();
-        if (pick is not null && keep is not null && Same(pick, keep))
+        var kept = pick is not null && keep is not null && Same(pick, keep);
+        IsLoaded = true;
+        Years = status.Years.Select(y => new AddInsYearViewModel(y)).ToList();
+
+        // SC-019: every read makes new options (Profile is a class), so the picker cannot find its selected item in
+        // the new list: it clears its selection and writes null back through its two-way binding. Taken as a pick,
+        // that null re-seeded "Disable unused add-ins" to off, and the switch stayed off once the profile came back.
+        // The swap is the page's own, not the user's: the pick is in place before the picker sees the new list, and
+        // whatever the picker writes meanwhile is ignored.
+        _replacingProfiles = true;
+        try
         {
             _selected = pick;
-            OnPropertyChanged(nameof(SelectedProfile));
+            Profiles = options;
         }
-        else
+        finally
         {
-            SelectedProfile = pick;
+            _replacingProfiles = false;
         }
+        OnPropertyChanged(nameof(SelectedProfile));
+        // The same profile keeps the page's switch (after Apply it is what was just saved); a different one is
+        // seeded from its saved choice, as picking it does.
+        if (!kept) DisableUnused = pick is not null && TrayAddinService.Choices(pick.Entry, _prefs).DisableUnused;
         RaiseStateChanged();
         Log.Information("add-ins: page read: active={Active} years={Years} profiles={Profiles}",
             _activeProfile ?? "(none)", string.Join(",", status.Years.Select(y => y.Year + (y.Running ? " (open)" : "") + ":" + y.SwitchedOff.Count + " off, " + y.CouldNotChange.Count + " blocked")),
