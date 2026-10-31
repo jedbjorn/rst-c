@@ -131,41 +131,59 @@ public partial class ProfileBuilderWindow : Window
     private Point _dragStart;
     private BuilderDrag? _pendingDrag;
 
+    /// <summary>The drag a press has armed, waiting for the pointer to move past the drag distance (tests).</summary>
+    internal BuilderDrag? PendingDrag => _pendingDrag;
+
+    /// <summary>The pointer's position for a mouse event (a seam: the CI desktop has no mouse, so tests script it).</summary>
+    internal Func<MouseEventArgs, IInputElement, Point> PointerAt { get; set; } = (e, relativeTo) => e.GetPosition(relativeTo);
+
+    /// <summary>Whether the left button is down during a mouse move (a seam, as <see cref="PointerAt"/>).</summary>
+    internal Func<MouseEventArgs, bool> LeftPressed { get; set; } = e => e.LeftButton == MouseButtonState.Pressed;
+
+    /// <summary>Runs the OS drag loop (a seam: the drag-start tests record the call instead of running it).</summary>
+    internal Func<DependencyObject, IDataObject, DragDropEffects, DragDropEffects> RunDragDrop { get; set; } =
+        (source, data, effects) => DragDrop.DoDragDrop(source, data, effects);
+
     /// <summary>
     /// The drag a source element would start, from its view-model: a catalogue command, a panel (its
-    /// header), a tile or a stack's row, or a whole stack (its header).
+    /// header), a tile or a stack's row, or a whole stack (its header). A slot drag carries the slot
+    /// it was started from, so the drop can check it is still there (WU3 review N1).
     /// </summary>
     internal static BuilderDrag? DragFor(object? dataContext) => dataContext switch
     {
         CatalogNodeViewModel { Command: { } command } => BuilderDrag.FromCatalog(command),
         PanelCardViewModel card => BuilderDrag.FromPanel(card.Index),
-        ToolTileViewModel tile => BuilderDrag.FromSlot(tile.Panel.Index, tile.Index, tile.Row),
-        StackGroupViewModel stack => BuilderDrag.FromSlot(stack.Panel.Index, stack.Index),
+        ToolTileViewModel tile => BuilderDrag.FromSlot(tile.Panel.Index, tile.Index, tile.Row, tile.Model),
+        StackGroupViewModel stack => BuilderDrag.FromSlot(stack.Panel.Index, stack.Index, -1, stack.Model),
         _ => null,
     };
 
     private void OnDragSourceDown(object sender, MouseButtonEventArgs e)
     {
         _pendingDrag = null;
-        // Typing in a name box or clicking a button never starts a drag.
+        // Typing in a name box or clicking ✎ × ▲ ▼ never starts a drag. A tile's or a row's icon does,
+        // once the pointer moves past the drag distance; a still click opens the icon picker.
         if (IsInteractive(e.OriginalSource as DependencyObject, sender as DependencyObject)) return;
         _pendingDrag = DragFor((sender as FrameworkElement)?.DataContext);
-        _dragStart = e.GetPosition(this);
+        _dragStart = PointerAt(e, this);
     }
 
     private void OnDragSourceMove(object sender, MouseEventArgs e)
     {
-        if (_pendingDrag is null || e.LeftButton != MouseButtonState.Pressed || !Model.IsIdle) return;
-        var p = e.GetPosition(this);
+        if (_pendingDrag is null || !LeftPressed(e) || !Model.IsIdle) return;
+        var p = PointerAt(e, this);
         if (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         var drag = _pendingDrag;
         _pendingDrag = null;
+        // A press on the icon button captured the mouse: release it, so the button is no longer
+        // pressed and no Click (the icon picker) follows the drag (WU3 review B1).
+        if (Mouse.Captured is not null) Mouse.Capture(null);
         Model.BeginDrag(drag);
         try
         {
             var effects = drag.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
-            DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
+            RunDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
         }
         finally
         {
@@ -173,10 +191,13 @@ public partial class ProfileBuilderWindow : Window
         }
     }
 
+    /// <summary>The icon buttons of tiles and stack rows are drag handles as well as buttons.</summary>
+    internal const string IconHandleName = "IconHandle";
+
     private static bool IsInteractive(DependencyObject? source, DependencyObject? stop)
     {
-        for (var d = source; d is not null && !ReferenceEquals(d, stop); d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
-            if (d is TextBoxBase or ButtonBase) return true;
+        for (var d = source; d is not null && !ReferenceEquals(d, stop); d = ParentOf(d))
+            if (d is TextBoxBase || d is ButtonBase { Name: not IconHandleName }) return true;
         return false;
     }
 
@@ -214,12 +235,24 @@ public partial class ProfileBuilderWindow : Window
 
     private void OnDragLeave(object sender, DragEventArgs e) => Model.ClearDropMarkers();
 
+    /// <summary>
+    /// Focus entering a card (its name, a tile's or a row's name box, a button) selects that card, so
+    /// a double-click in Commands adds to the panel being edited (WU3 review F1). A TextBox handles
+    /// the mouse press, so the card's click binding never sees a click into a name box.
+    /// </summary>
+    private void OnCardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PanelCardViewModel card }) Model.SelectPanel(card.Index);
+    }
+
     private static bool UpperHalf(DragEventArgs e, FrameworkElement target) => e.GetPosition(target).Y < target.ActualHeight / 2;
 
     /// <summary>
     /// The tile, stack or stack row under the pointer (from the drag's original source up to the
     /// card): a row's position is across its whole stack (its edges insert beside the stack) and down
-    /// the row (before or after it); a tile's or a stack's is across it. Null outside every tile.
+    /// the row (before or after it); a tile's or a stack's is across it. The 10 px gutter after each
+    /// tile or stack (its cell's padding) counts as that tile's nearer edge, so a drop between two
+    /// tiles inserts between them (WU3 review N4). Null outside every tile and gutter.
     /// </summary>
     internal static TileHit? HitAt(DependencyObject? source, DependencyObject card, DragEventArgs e) =>
         HitAt(source, card, (element) => e.GetPosition(element));
@@ -239,7 +272,7 @@ public partial class ProfileBuilderWindow : Window
                 case "Tile" when element.DataContext is ToolTileViewModel tile:
                 {
                     var p = positionIn(element);
-                    return TileHit.On(tile.Panel.Index, tile.Index, p.X, element.ActualWidth);
+                    return TileHit.On(tile.Panel.Index, tile.Index, p.X, element.ActualWidth, tile.Model);
                 }
                 case "StackGroup" when element.DataContext is StackGroupViewModel stack:
                 {
@@ -247,9 +280,16 @@ public partial class ProfileBuilderWindow : Window
                     if (row is { DataContext: ToolTileViewModel r })
                     {
                         var y = positionIn(row).Y;
-                        return TileHit.OnRow(stack.Panel.Index, stack.Index, r.Row, p.X, element.ActualWidth, y, row.ActualHeight);
+                        return TileHit.OnRow(stack.Panel.Index, stack.Index, r.Row, p.X, element.ActualWidth, y, row.ActualHeight, stack.Model);
                     }
-                    return TileHit.On(stack.Panel.Index, stack.Index, p.X, element.ActualWidth);
+                    return TileHit.On(stack.Panel.Index, stack.Index, p.X, element.ActualWidth, stack.Model);
+                }
+                case "TileCell" when element is Border { Child: FrameworkElement inner } && element.DataContext is PanelItemViewModel item:
+                {
+                    // In the gutter: the nearer edge of the tile or stack the cell holds.
+                    var p = positionIn(inner);
+                    var x = p.X < inner.ActualWidth / 2 ? 0 : inner.ActualWidth;
+                    return TileHit.On(item.Panel.Index, item.Index, x, inner.ActualWidth, item.Model);
                 }
             }
         }
