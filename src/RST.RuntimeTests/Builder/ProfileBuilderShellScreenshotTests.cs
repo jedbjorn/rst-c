@@ -198,10 +198,18 @@ public class ProfileBuilderShellScreenshotTests
         Assert.True(Right(b, w.Root) < Left(w.ExportButton, w.Root), $"{when}: the profile button runs into Export ZIP");
     }
 
-    /// <summary>The name's width untrimmed: a TextBlock of the header name's font, unconstrained.</summary>
+    /// <summary>
+    /// The name's width untrimmed: a TextBlock of the header name's font, unconstrained, measured as the
+    /// window lays text out (its Display formatting mode and layout rounding; Ideal measures wider).
+    /// </summary>
     private static double FullWidth(ProfileBuilderWindow w, string text)
     {
-        var full = new TextBlock { Text = text, FontWeight = FontWeights.SemiBold, FontFamily = w.FontFamily, FontSize = w.FontSize };
+        var full = new TextBlock
+        {
+            Text = text, FontWeight = FontWeights.SemiBold, FontFamily = w.FontFamily, FontSize = w.FontSize,
+            UseLayoutRounding = w.UseLayoutRounding,
+        };
+        TextOptions.SetTextFormattingMode(full, TextOptions.GetTextFormattingMode(w));
         full.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return full.DesiredSize.Width;
     }
