@@ -150,7 +150,7 @@ function Wait-SettledTray([string]$Label, [int]$Seconds = 90) {
     }
     Start-Sleep -Milliseconds 500
   }
-  Start-Sleep -Seconds 5   # a second launch (Restart Manager's restart) has decided by now
+  Start-Sleep -Seconds 5   # any second launch has decided by now
   $t = @(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue)
   Show-TrayProcesses $Label
   Assert ($t.Count -eq 1 -and $t[0].Id -eq $id) "[$Label] exactly one RST.Tray process (pid $id; got $($t.Count))"
@@ -160,10 +160,9 @@ function Wait-SettledTray([string]$Label, [int]$Seconds = 90) {
 }
 
 # The tray the installer started: the expected exe, hidden, this user, this session, no more rights than the shell.
-# -ObserveElevation: after a repair or upgrade that closed a running tray, Restart Manager's own restart
-# (RegisterApplicationRestart, from msiexec: elevated when msiexec is) races RstStartTray's start; the elevation and
-# parent of the one that won are recorded, not asserted.
-function Assert-StartedTray($Proc, [string]$Exe, [string]$Label, [switch]$ObserveElevation) {
+# "Not a child of msiexec" holds with UAC off too: it is the parent, not the token, that tells RstStartTray's start
+# (through Explorer) from a start by msiexec itself (Restart Manager's restart, which SC-044 review B1 disabled).
+function Assert-StartedTray($Proc, [string]$Exe, [string]$Label) {
   $w = Get-CimInstance Win32_Process -Filter "ProcessId=$($Proc.Id)"
   Assert ($null -ne $w) "[$Label] the tray (pid $($Proc.Id)) is running"
   $f = Get-TokenFacts $Proc.Id
@@ -185,10 +184,7 @@ function Assert-StartedTray($Proc, [string]$Exe, [string]$Label, [switch]$Observ
     $checks += , @((-not $f.Elevated), "[$Label] it is not elevated (no Explorer of this user to compare with)")
   }
   $checks += , @(($null -eq $parent -or $parent.Name -ne 'msiexec.exe'), "[$Label] it is not a child of msiexec")
-  foreach ($c in $checks) {
-    if ($ObserveElevation) { Write-Host "OBSERVE: $($c[1]): $(if ($c[0]) { 'yes' } else { 'NO (Restart Manager''s restart won)' })" }
-    else { Assert $c[0] $c[1] }
-  }
+  foreach ($c in $checks) { Assert $c[0] $c[1] }
   Start-Sleep -Seconds 2
   $Proc.Refresh()
   Assert ($Proc.MainWindowHandle -eq [IntPtr]::Zero) "[$Label] it shows no window"

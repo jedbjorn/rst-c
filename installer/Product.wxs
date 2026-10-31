@@ -242,6 +242,16 @@
     <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
     <?endif?>
 
+    <?if $(var.Scope) = "user" ?>
+    <!-- SC-044 (decision #45; review B1): Restart Manager still closes a
+         running tray when a repair or upgrade replaces its files, but never
+         restarts it. Its restart would come from msiexec, elevated when
+         msiexec is (an elevated prompt, or RST-Setup.exe started elevated),
+         and could take the tray's mutex before RstStartTray's unelevated tray
+         does. Tray.wxs's RstStartTray is the only start after an install. -->
+    <Property Id="MSIDISABLERMRESTART" Value="1" />
+    <?endif?>
+
     <!-- An administrative install (msiexec /a) only unpacks the files to a
          folder; it installs nothing and does not run AppSearch, so the
          launch condition does not apply to it. -->

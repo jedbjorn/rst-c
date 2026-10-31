@@ -62,7 +62,7 @@ Local and push/PR builds without `-p:RstMsiVersion=` are stamped with the `.wixp
   - 2026 removed, then Repair: 2026 is dropped;
   - all three, same-version rebuild: one product;
   - uninstall: every tree is gone, and user data survives.
-  - the tray (SC-044): the first install leaves exactly one tray running, `--startup`, as the runner's user, in its session, not elevated (like the user's Explorer), no window, started by `RstStartTray`; a refused install starts none; a repair or upgrade with a tray running leaves exactly one; a no-op reinstall leaves the running one alone (`RstStartTray`: "already holds"); an uninstall starts none and runs no `RstStartTray`. `ci-machine-smoke.ps1`, `ci-tray-selfupdate.ps1` and `installer-bundle/ci-bundle-smoke.ps1` check their own paths (shared checks: `ci-tray-start.ps1`).
+  - the tray (SC-044): the first install leaves exactly one tray running, `--startup`, as the runner's user, in its session, not elevated (like the user's Explorer), no window, started by `RstStartTray`; a refused install starts none; a repair or upgrade with a tray running leaves exactly one, started by `RstStartTray` (its log names it; not a child of `msiexec`), and `MSIDISABLERMRESTART=1` is in the package; a no-op reinstall leaves the running one alone (`RstStartTray`: "already holds"); an uninstall starts none and runs no `RstStartTray`. `ci-machine-smoke.ps1`, `ci-tray-selfupdate.ps1` and `installer-bundle/ci-bundle-smoke.ps1` check their own paths (shared checks: `ci-tray-start.ps1`).
 - **`-Mode Migrate`** (job `msi-migrate`) upgrades from the public v2.2.0 preview MSI, from v2.2.0 `RST.msi` and from v3.0.0 `RST.msi`. Each upgrade leaves exactly one tray running, hidden, as the runner's user, not elevated.
 
 ## Setup UI & branding
@@ -150,30 +150,32 @@ msiexec /x RST.msi /qn
 | Sign-in | The `RST` Run value (`HKCU` for `RST.msi`, `HKLM` for `RST-Machine.msi`) | Task Manager's Startup toggle is respected. |
 | Revit | RST's add-in (`src/RST.Engine/Tray/TrayLauncher.cs`) | Only when no tray runs, and never from an elevated Revit. |
 | After an install, repair or upgrade (SC-044, decision #45) | The installer's `RstStartTray` custom action (`Tray.wxs`, `helper\StartTray.cs`), for the user who ran it | See below. |
-| After `RST.msi` closed a running tray | Restart Manager (`RegisterApplicationRestart`), `RST.msi` only | It restarts the tray from `msiexec`, so it is elevated when `msiexec` is. `RST-Machine.msi` turns Restart Manager off. |
+| After an installer closed a running tray | Nobody else. | Restart Manager still closes a running tray for a repair or upgrade, but never restarts it: `RST.msi` sets `MSIDISABLERMRESTART=1`, and `RST-Machine.msi` turns Restart Manager off. Its restart would come from `msiexec`, elevated when `msiexec` is (SC-044 review B1). `RstStartTray` starts the tray instead. |
 | After a self-update | The tray's updater copy (`RST.TrayUpdater.exe`) | No switch: the window opens with the result. |
 
 **`RstStartTray`** is an immediate custom action after `InstallFinalize`, run from the MSI's Binary table (it is never installed), with `Return="ignore"`. The install is already committed when it runs, so it can never fail or roll an install back. It does not run on an uninstall, or when an upgrade removes the old version (`REMOVE=ALL` in both). In order, it:
 
 1. starts none when it runs as a service account (SYSTEM, LocalService, NetworkService) or in session 0. That is a deployment tool such as SCCM or Intune. Each user's tray then starts at their sign-in.
 2. starts none when the tray's mutex `Local\RST.Tray.<UserSid>` exists. A tray already runs (a reinstall over a running tray), or RST's self-updater holds it while its `msiexec` runs, and then starts the tray itself. So a self-update still ends with the updater's one tray, window shown, and the updater needs no property to turn this off.
-3. finds this user's desktop shell: the Explorer that owns the desktop's shell window, or else an `explorer.exe` in this session running as the same user. An Explorer of another user, as with `runas` or over-the-shoulder elevation, is never used. The tray is created with that Explorer as its parent (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`), so Windows gives it Explorer's token, session and job, and Explorer's environment. It runs as the user, unelevated, outside `msiexec`'s process tree, exactly as at sign-in.
-4. with no such shell, starts none if it runs elevated under UAC, because that tray would run elevated and lose its icon after an Explorer restart (WU1 review N8). Otherwise it starts the tray directly.
-5. waits up to 20 seconds until the tray holds its mutex. So when Restart Manager also restarts a tray it closed, the unelevated one is normally first, and the other exits at its single-instance check. Either way one tray is left (SC-022).
+3. finds this user's desktop shell: the Explorer that owns the desktop's shell window, or else an `explorer.exe` in this session running as the same user. An Explorer of another user (as with `runas`) is never used, and with UAC on neither is an elevated one. The tray is created with that Explorer as its parent (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`), so Windows gives it Explorer's token, session and job, and Explorer's environment. It runs as the user, unelevated, outside `msiexec`'s process tree, exactly as at sign-in. The process handle opened for this is checked again (user, session, elevation, `explorer.exe` image), so a reused process id is never used.
+4. with no such shell, starts none if this process is elevated (or its token cannot be read), because that tray would run elevated and lose its icon after an Explorer restart (WU1 review N8). Otherwise, or with UAC off (`EnableLUA=0`, where every administrator's process has the full token), it starts the tray directly on the interactive desktop (`winsta0\default`). **CI never takes this direct route** (every runner has an Explorer), so it is checked on the VM only, like the split-token claim below.
+5. waits up to 20 seconds until the tray holds its mutex, or exits because another launch holds it (SC-022).
+
+Each run also deletes this helper's own logs older than 7 days.
 
 Each run writes `RST-StartTray-<yyyyMMdd-HHmmss>-<pid>.log` in the installer's `%TEMP%` (as SYSTEM: `C:\Windows\Temp\` or `C:\Windows\SystemTemp\`). It says which user and token it ran with, and what it started or why it started none.
 
 | Path | What starts the tray |
 |---|---|
-| `RST.msi`, with the UI or `/qn` | `RstStartTray`, as the user. This package never elevates. |
-| `RST-Machine.msi` from an elevated prompt, or double-clicked (UAC) | `RstStartTray`. It runs as the installing administrator, elevated or not, and starts the tray through that administrator's Explorer, so the tray is not elevated. |
+| `RST.msi`, with the UI or `/qn` | `RstStartTray`, as the user who runs it (elevated only when started from an elevated prompt), through that user's Explorer, so the tray is not elevated. |
+| `RST-Machine.msi` from an elevated prompt, or double-clicked (UAC) | `RstStartTray`, through the installing user's own unelevated Explorer, so the tray is not elevated. When a standard user types an administrator's credentials, the tray either starts unelevated for the signed-in user or, if no suitable Explorer is found, arrives at the next sign-in. It never starts elevated. |
 | `RST-Machine.msi` as SYSTEM (deployment tools) | Nothing. Each user's tray starts at their sign-in. |
 | `RST-Setup.exe`, "Just for me" | `RST.msi`'s `RstStartTray`, in Burn's per-user engine. |
 | `RST-Setup.exe`, "Everyone on this PC" | The bundle's `RemoveUserRst` helper, in the bundle's own process, after it has removed the user's own RST. `RST-Machine.msi` runs in Burn's elevated engine with `RSTFROMSETUP=1`, and skips its own start: removing the user's `RST.msi` closes every `RST.Tray.exe` on the desktop by name (its `util:CloseApplication`), so a tray started before it would not survive. The helper compiles in the same `StartTray.cs`. |
 | Self-update (the tray's **Update** button) | The updater, as before. `RST.msi`'s `RstStartTray` finds the updater holding the mutex and starts none. |
 | Any uninstall | Nothing. |
 
-The tray's one-time update-check notice opens on the tray's first start. With `RstStartTray` that is now right after the first install, not at the next sign-in.
+The tray's one-time update-check notice opens on the tray's first start. With `RstStartTray` that is now right after the first install, not at the next sign-in (kept on purpose: the Planner's call, review N5). The tray itself opens no window.
 
 ## Per-machine install (RST-Machine.msi)
 

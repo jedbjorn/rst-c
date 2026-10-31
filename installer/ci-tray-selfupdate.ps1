@@ -13,7 +13,7 @@
         RST, at the new version; the updater's own log lines. SC-044: RST.msi's RstStartTray, run by the updater's
         msiexec, found the updater holding the tray's mutex and started none (also in (3) and (5)).
     (3) the same with -NewerMsi in "race" mode: the tray is NOT closed, so msiexec meets it running: Windows
-        Installer's Restart Manager closes it and starts it again, and the updater starts one as well. The
+        Installer's Restart Manager closes it (and, since SC-044 review B1, does not restart it), and the updater starts one. The
         single-instance mutex must leave exactly one tray. SC-022: the old tray is never asked to quit here, so the
         updater cannot take the mutex in time; it must take it the moment msiexec's Restart Manager closes that tray
         and hand it over before it starts the new one.
@@ -270,11 +270,11 @@ Assert (@($lines | Where-Object { $_ -match 'updater: the tray.s single-instance
 Assert (@($lines | Where-Object { $_ -match 'updater: took the tray.s single-instance mutex .* once the tray let it go' }).Count -eq 1) '(3) the updater took the mutex once msiexec closed the tray'
 Assert (@($lines | Where-Object { $_ -match 'not confirmed released' }).Count -eq 0) '(3) the updater confirmed the hand-over (review N3)'
 Assert ([array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'released the tray.s single-instance mutex' } | Select-Object -First 1)) -lt [array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'updater: started the installed tray' } | Select-Object -First 1))) '(3) it handed the mutex over before starting the new tray'
-$null = Wait-OneTray $before '(3)' "Restart Manager's restart and the updater's start leave exactly one tray"
-# Two launches, one tray: whichever came second (Restart Manager's --startup or the updater's) found the first and exited.
+$null = Wait-OneTray $before '(3)' "the updater's start leaves exactly one tray"
+# One tray: a launch that came second (the updater's, if something else started one first) found it and exited.
 $second = @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match 'RST tray already running for this user' })
 $second | ForEach-Object { Write-Host "  log: $_" }
-Write-Host "OBSERVE: (3) launches that found a tray running and exited: $($second.Count) (1 when Restart Manager restarted the tray as well; 0 when CloseApplication closed it, which nothing restarts)"
+Write-Host "OBSERVE: (3) launches that found a tray running and exited: $($second.Count) (0 expected: Restart Manager no longer restarts the tray, MSIDISABLERMRESTART)"
 Assert ($second.Count -le 1) '(3) at most one launch found a tray already running'
 Assert-StartTraySkipped $since3 '(3)'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewerVersion)): installed" }).Count -gt 0 } 30 '(3) the running tray shows the updater''s result'

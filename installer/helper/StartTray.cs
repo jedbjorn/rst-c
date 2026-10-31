@@ -20,20 +20,23 @@
 //      RST's self-updater (which holds that mutex while it runs msiexec, then starts the tray itself), already has it:
 //      starting none. So a reinstall over a running tray, and a self-update, never start a second tray.
 //   3. The user's desktop shell: the Explorer that owns this desktop's shell window (GetShellWindow), or else an
-//      explorer.exe in this session, running as this same user (under runas or over-the-shoulder elevation the desktop
-//      belongs to someone else: that one is never used). The tray is created with that Explorer as its parent
-//      (PROC_THREAD_ATTRIBUTE_PARENT_PROCESS): Windows then gives it Explorer's token, session and job, so it runs as
-//      the user, at Explorer's own (normal, unelevated) rights, outside the installer's process tree, exactly as it
-//      does when the Run value starts it at sign-in. It gets the user's own environment (CreateEnvironmentBlock from
-//      Explorer's token) and the interactive desktop.
-//   4. No such shell: this process is elevated under UAC (TokenElevationTypeFull: msiexec from an elevated prompt, or a
-//      per-machine install's elevated engine) -> starting none: a tray started from here would run elevated, and an
-//      elevated tray loses its icon to UIPI after Explorer restarts (F17 WU1 review N8). Otherwise (not elevated, or UAC
-//      off, where every process has the full token and there is no UIPI to lose to) it is started directly.
+//      explorer.exe in this session, running as this same user (under runas the desktop belongs to someone else: that
+//      one is never used), and not elevated (with UAC on; review N2). The tray is created with that Explorer as its
+//      parent (PROC_THREAD_ATTRIBUTE_PARENT_PROCESS): Windows then gives it Explorer's token, session and job, so it
+//      runs as the user, at Explorer's own (normal, unelevated) rights, outside the installer's process tree, exactly
+//      as it does when the Run value starts it at sign-in. The handle opened for that is checked again (user, session,
+//      elevation, explorer.exe image), so a process id reused in between is never used (review N2). The tray gets the
+//      user's own environment (CreateEnvironmentBlock from Explorer's token) and the interactive desktop.
+//   4. No such shell: this process is elevated (TokenElevation, or a full UAC token: msiexec from an elevated prompt,
+//      or a per-machine install's elevated engine) and UAC is on -> starting none: a tray started from here would run
+//      elevated, and an elevated tray loses its icon to UIPI after Explorer restarts (F17 WU1 review N8). Otherwise
+//      (not elevated, or UAC off, EnableLUA=0, where every administrator's process has the full token and there is no
+//      UIPI to lose to; review N1) it is started directly, on the interactive desktop (winsta0\default; review N3).
 //   5. The start is "<tray>" --startup: hidden in the notification area, no window. This waits (up to 20 s) until that
-//      tray holds its mutex, or exits because another launch already holds it. Restart Manager may start the tray
-//      again too, after a repair or upgrade it closed it for (RegisterApplicationRestart): whichever launch comes second
-//      exits at the single-instance check, and waiting here makes this one, unelevated, the one that is normally first.
+//      tray holds its mutex, or exits because another launch already holds it. Restart Manager closes a running tray
+//      during a repair or upgrade but never restarts it (RST.msi: MSIDISABLERMRESTART=1; RST-Machine.msi: Restart
+//      Manager off), so this is the one start after an install (review B1).
+// Each run also deletes this helper's own logs older than 7 days beside its log (review N7).
 //
 // Exit codes, for the MSI log only (the custom action is Return="ignore": it never fails or rolls back an install):
 // 0 handled (started, already running, or starting none on purpose; the log says which); 1603 an unexpected failure.
@@ -52,6 +55,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
+using Microsoft.Win32;
 
 internal static class StartTray
 {
@@ -136,6 +140,9 @@ internal static class StartTray
     [DllImport("userenv.dll", SetLastError = true)]
     private static extern bool DestroyEnvironmentBlock(IntPtr environment);
 
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")]
+    private static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder name, ref uint size);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetShellWindow();
 
@@ -164,6 +171,7 @@ internal static class StartTray
     private static int Main(string[] args)
     {
         string log = RunLog(args.Length > 1 ? args[1].Trim() : "");
+        DeleteOldLogs(log);
         if (args.Length < 1 || args[0].Trim().Length == 0)
         {
             Write(log, "usage: RST.StartTray.exe <tray exe> [<log>]");
@@ -210,22 +218,29 @@ internal static class StartTray
                 return ExitHandled;
             }
 
-            int shellPid = FindShell(me, log);
+            // Review N1: a direct start only from a process known not to be elevated at all (an unreadable token counts as
+            // elevated), unless UAC is off (EnableLUA=0),
+            // where every administrator's process, Explorer included, has the full token.
+            bool uacOff = UacOff();
+            bool mayStartDirectly = uacOff || (me.ElevationType != 0 && !me.Elevated && me.ElevationType != TokenElevationTypeFull);
+            log("UAC " + (uacOff ? "off (EnableLUA=0)" : "on") + "; a direct start from this process is " + (mayStartDirectly ? "allowed" : "refused (it would run elevated)"));
+
+            int shellPid = FindShell(me, uacOff, log);
             ProcessInformation pi;
             string route;
             if (shellPid > 0)
             {
                 string error;
-                if (CreateTray(trayExe, shellPid, out pi, out error))
+                if (CreateTray(trayExe, shellPid, me, uacOff, out pi, out error))
                 {
                     route = "through the desktop shell (explorer.exe pid " + shellPid + ", as its child, with its token)";
                 }
-                else if (me.ElevationType == TokenElevationTypeFull)
+                else if (!mayStartDirectly)
                 {
                     log("could not start it through the desktop shell (" + error + "), and this process is elevated: starting none (it would run elevated); the tray starts at the next sign-in");
                     return ExitHandled;
                 }
-                else if (CreateTray(trayExe, 0, out pi, out error))
+                else if (CreateTray(trayExe, 0, me, uacOff, out pi, out error))
                 {
                     route = "directly (this process is not elevated; the desktop shell route failed: " + error + ")";
                 }
@@ -235,21 +250,21 @@ internal static class StartTray
                     return ExitFailure;
                 }
             }
-            else if (me.ElevationType == TokenElevationTypeFull)
+            else if (!mayStartDirectly)
             {
-                log("this process is elevated and no Explorer of this user runs in session " + me.Session
+                log("this process is elevated and no unelevated Explorer of this user runs in session " + me.Session
                     + ": starting none (a tray started from here would run elevated); the tray starts at the next sign-in");
                 return ExitHandled;
             }
             else
             {
                 string error;
-                if (!CreateTray(trayExe, 0, out pi, out error))
+                if (!CreateTray(trayExe, 0, me, uacOff, out pi, out error))
                 {
                     log("could not start " + trayExe + ": " + error);
                     return ExitFailure;
                 }
-                route = "directly (no Explorer of this user in this session; this process is not elevated)";
+                route = "directly (no Explorer of this user in this session; this process " + (uacOff ? "runs with UAC off" : "is not elevated") + ")";
             }
 
             try
@@ -306,7 +321,7 @@ internal static class StartTray
     }
 
     /// <summary>The pid of this user's desktop shell in this session, or 0.</summary>
-    private static int FindShell(TokenFacts me, Action<string> log)
+    private static int FindShell(TokenFacts me, bool uacOff, Action<string> log)
     {
         int pid = 0;
         IntPtr shell = GetShellWindow();
@@ -314,12 +329,12 @@ internal static class StartTray
         if (pid > 0)
         {
             TokenFacts f = Facts(pid);
-            if (IsUsersShell(f, me))
+            if (IsUsersShell(f, me, uacOff))
             {
                 log("desktop shell: pid " + pid + " (this desktop's shell window): " + f);
                 return pid;
             }
-            log("this desktop's shell window belongs to pid " + pid + " (" + f + "): not this user's in this session");
+            log("this desktop's shell window belongs to pid " + pid + " (" + f + "): not this user's unelevated shell in this session");
         }
         Process[] explorers = Process.GetProcessesByName("explorer");
         try
@@ -328,12 +343,12 @@ internal static class StartTray
             {
                 if (p.SessionId != me.Session) continue;
                 TokenFacts f = Facts(p.Id);
-                if (IsUsersShell(f, me))
+                if (IsUsersShell(f, me, uacOff))
                 {
                     log("desktop shell: explorer.exe pid " + p.Id + " in session " + me.Session + ": " + f);
                     return p.Id;
                 }
-                log("explorer.exe pid " + p.Id + " in session " + me.Session + " runs as another user or could not be read (" + f + "): not used");
+                log("explorer.exe pid " + p.Id + " in session " + me.Session + " runs as another user, elevated, or could not be read (" + f + "): not used");
             }
         }
         finally
@@ -344,13 +359,40 @@ internal static class StartTray
         return 0;
     }
 
-    private static bool IsUsersShell(TokenFacts shell, TokenFacts me)
+    /// <summary>
+    /// This user's shell in this session, and not elevated (review N2: an elevated Explorer would give the tray its
+    /// elevated token), unless UAC is off, where every administrator's Explorer has the full token.
+    /// </summary>
+    private static bool IsUsersShell(TokenFacts shell, TokenFacts me, bool uacOff)
     {
-        return shell.Sid != null && string.Equals(shell.Sid, me.Sid, StringComparison.OrdinalIgnoreCase) && shell.Session == me.Session;
+        return shell.Sid != null && string.Equals(shell.Sid, me.Sid, StringComparison.OrdinalIgnoreCase) && shell.Session == me.Session
+            && (uacOff || (shell.ElevationType != 0 && !shell.Elevated && shell.ElevationType != TokenElevationTypeFull));
+    }
+
+    /// <summary>UAC is off: EnableLUA is 0 (HKLM\...\Policies\System). Missing or unreadable counts as on.</summary>
+    private static bool UacOff()
+    {
+        try
+        {
+            object v = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "EnableLUA", null);
+            return v is int && (int)v == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The process's image path (Win32 form), or null.</summary>
+    private static string ImagePath(IntPtr process)
+    {
+        uint size = 1024;
+        StringBuilder name = new StringBuilder((int)size);
+        return QueryFullProcessImageName(process, 0, name, ref size) ? name.ToString() : null;
     }
 
     /// <summary>Starts "trayExe" --startup, with the given process (Explorer) as its parent, or this process when 0.</summary>
-    private static bool CreateTray(string trayExe, int parentPid, out ProcessInformation pi, out string error)
+    private static bool CreateTray(string trayExe, int parentPid, TokenFacts me, bool uacOff, out ProcessInformation pi, out string error)
     {
         pi = new ProcessInformation();
         error = null;
@@ -366,6 +408,15 @@ internal static class StartTray
                 if (parent == IntPtr.Zero)
                 {
                     error = "OpenProcess(explorer.exe pid " + parentPid + ") failed: " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+                    return false;
+                }
+                // Review N2: the pid was found earlier; check the process behind this handle again, so a pid reused in
+                // between is never the tray's parent.
+                TokenFacts now = Facts(parent);
+                string image = ImagePath(parent);
+                if (!IsUsersShell(now, me, uacOff) || image == null || !string.Equals(Path.GetFileName(image), "explorer.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    error = "pid " + parentPid + " is no longer this user's unelevated explorer.exe (" + (image ?? "(path unknown)") + "; " + now + ")";
                     return false;
                 }
                 // The user's own environment, from Explorer's token: not the installer's.
@@ -397,6 +448,8 @@ internal static class StartTray
             }
             else
             {
+                // Review N3: the interactive desktop here too, not whatever this process was started on.
+                si.StartupInfo.lpDesktop = @"winsta0\default";
                 si.StartupInfo.cb = Marshal.SizeOf(typeof(StartupInfo));
             }
             StringBuilder commandLine = new StringBuilder("\"" + trayExe + "\" " + StartupArgument);
@@ -492,6 +545,30 @@ internal static class StartTray
         if (GetTokenInformation(token, infoClass, buffer, length, out length)) return buffer;
         Marshal.FreeHGlobal(buffer);
         return IntPtr.Zero;
+    }
+
+    /// <summary>This helper's own logs older than 7 days, beside this run's (review N7). Never throws.</summary>
+    private static void DeleteOldLogs(string log)
+    {
+        try
+        {
+            DateTime cutoff = DateTime.UtcNow.AddDays(-7);
+            foreach (string f in Directory.GetFiles(Path.GetDirectoryName(log), "RST-StartTray-*-*.log"))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(f) < cutoff) File.Delete(f);
+                }
+                catch
+                {
+                    // In use or not ours to delete: left alone.
+                }
+            }
+        }
+        catch
+        {
+            // Clean-up must never stop the install.
+        }
     }
 
     /// <summary>This run's own log: RST-StartTray-yyyyMMdd-HHmmss-pid.log beside the base path.</summary>

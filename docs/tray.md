@@ -188,9 +188,9 @@ The tray reads both keys when it starts and again before every daily check, and 
 
 When an install, repair or upgrade succeeds, the installer starts the tray for the user who ran it, hidden in the notification area. It starts it through that user's Explorer, so the tray runs with the user's normal rights, also when `msiexec` runs from an elevated prompt, and it is not part of `msiexec`'s process tree. It starts none when one already runs, and none when the installer runs as SYSTEM (SCCM, Intune): each user's tray then starts at their next sign-in.
 
-If the tray is running when `RST.msi` repairs or upgrades RST, Windows also closes it and may start it again when the install finishes. That restarted tray is a child process of `msiexec`. Only one tray runs: whichever starts second exits.
+If the tray is running when `RST.msi` repairs or upgrades RST, Windows closes it first, and the installer then starts it again as above. Windows itself does not restart it from `msiexec` (`MSIDISABLERMRESTART=1`), because that tray would run with `msiexec`'s rights. Only one tray runs.
 
-Script waits that follow the whole process tree, such as PowerShell's `Start-Process -Wait`, therefore do not return until the user quits the tray or signs out. Wait on msiexec's own exit instead:
+Script waits that follow the whole process tree, such as PowerShell's `Start-Process -Wait`, can still be held by a tray: when no Explorer of the user runs, the installer starts the tray directly, as a child of the install. Wait on msiexec's own exit instead:
 
 ```powershell
 $p = Start-Process msiexec.exe -ArgumentList '/i RST.msi /qn /norestart' -PassThru
@@ -200,9 +200,7 @@ $p.ExitCode
 
 From `cmd`, use `start /wait msiexec /i RST.msi /qn /norestart`.
 
-A deployment tool that runs the install inside a job object that ends its processes when the job closes will end the restarted tray too. The tray then comes back at the user's next sign-in.
-
-Run per-user `RST.msi` as the user, not from an elevated prompt, so that the restarted tray runs with the user's normal rights.
+A deployment tool that runs the install inside a job object that ends its processes when the job closes can end a tray started that way too. The tray then comes back at the user's next sign-in.
 
 ## Installed for everyone on this PC (IT)
 
