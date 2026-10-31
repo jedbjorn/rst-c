@@ -68,11 +68,155 @@
   <data name="Health_DeviceDescription" xml:space="preserve">
     <value>The same snapshot as Health in Revit: hardware, display and network, the Revit versions installed, Windows, and the junk files Revit leaves behind. Revit doesn't need to be open. Nothing is sent anywhere.</value>
   </data>
-  <data name="Health_ModelsHeading" xml:space="preserve">
+  <data name="Models_SearchPlaceholder" xml:space="preserve">
+    <value>Search every model by title, file name or path</value>
+  </data>
+  <data name="Models_SearchingAllTime" xml:space="preserve">
+    <value>Searching all time</value>
+  </data>
+  <data name="Models_ClearSearch" xml:space="preserve">
+    <value>Clear the search</value>
+  </data>
+  <data name="Models_TimeFrame" xml:space="preserve">
+    <value>Time frame</value>
+  </data>
+  <data name="Models_ChipRecent" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="Models_Chip3M" xml:space="preserve">
+    <value>3M</value>
+  </data>
+  <data name="Models_Chip6M" xml:space="preserve">
+    <value>6M</value>
+  </data>
+  <data name="Models_Chip1Y" xml:space="preserve">
+    <value>1Y</value>
+  </data>
+  <data name="Models_ChipRecentTip" xml:space="preserve">
+    <value>Models open in the last 14 days</value>
+  </data>
+  <data name="Models_Chip3MTip" xml:space="preserve">
+    <value>Models open in the last 13 weeks</value>
+  </data>
+  <data name="Models_Chip6MTip" xml:space="preserve">
+    <value>Models open in the last 26 weeks</value>
+  </data>
+  <data name="Models_Chip1YTip" xml:space="preserve">
+    <value>Models open in the last 52 weeks</value>
+  </data>
+  <data name="Models_VersionLabel" xml:space="preserve">
+    <value>Revit version</value>
+  </data>
+  <data name="Models_VersionAll" xml:space="preserve">
+    <value>All versions</value>
+  </data>
+  <data name="Models_VersionSelected" xml:space="preserve">
+    <value>Revit {0}</value>
+  </data>
+  <data name="Models_VersionTip" xml:space="preserve">
+    <value>Show only the models opened in these Revit versions in the time frame</value>
+  </data>
+  <data name="Models_GroupByLabel" xml:space="preserve">
+    <value>Group by</value>
+  </data>
+  <data name="Models_GroupByMajor" xml:space="preserve">
+    <value>Major</value>
+  </data>
+  <data name="Models_GroupByMinor" xml:space="preserve">
+    <value>Minor</value>
+  </data>
+  <data name="Models_GroupByNone" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="Models_StatModels" xml:space="preserve">
     <value>Models</value>
   </data>
-  <data name="Health_ModelsPlaceholder" xml:space="preserve">
-    <value>Every model you've worked on, across your Revit versions, will be listed here.</value>
+  <data name="Models_StatActive" xml:space="preserve">
+    <value>Active time</value>
+  </data>
+  <data name="Models_StatOpens" xml:space="preserve">
+    <value>Opens</value>
+  </data>
+  <data name="Models_StatAvgOpen" xml:space="preserve">
+    <value>Avg open time</value>
+  </data>
+  <data name="Models_StatSyncs" xml:space="preserve">
+    <value>Syncs</value>
+  </data>
+  <data name="Models_StatAvgSync" xml:space="preserve">
+    <value>Avg sync time</value>
+  </data>
+  <data name="Models_GroupVersion" xml:space="preserve">
+    <value>Revit {0}</value>
+  </data>
+  <data name="Models_UnknownMinor" xml:space="preserve">
+    <value>Revit {0} — unknown minor</value>
+  </data>
+  <data name="Models_UnknownVersion" xml:space="preserve">
+    <value>Unknown Revit version</value>
+  </data>
+  <data name="Models_CountOne" xml:space="preserve">
+    <value>1 model</value>
+  </data>
+  <data name="Models_CountMany" xml:space="preserve">
+    <value>{0} models</value>
+  </data>
+  <data name="Models_ActiveFormat" xml:space="preserve">
+    <value>{0} active</value>
+  </data>
+  <data name="Models_CardVersion" xml:space="preserve">
+    <value>Revit {0}</value>
+  </data>
+  <data name="Models_CardNoVersion" xml:space="preserve">
+    <value>Revit version unknown</value>
+  </data>
+  <data name="Models_CardLastActive" xml:space="preserve">
+    <value>Last active {0}</value>
+  </data>
+  <data name="Models_Workshared" xml:space="preserve">
+    <value>Workshared</value>
+  </data>
+  <data name="Models_Cloud" xml:space="preserve">
+    <value>Cloud</value>
+  </data>
+  <data name="Models_HealthGreen" xml:space="preserve">
+    <value>Green</value>
+  </data>
+  <data name="Models_HealthYellow" xml:space="preserve">
+    <value>Yellow</value>
+  </data>
+  <data name="Models_HealthAmber" xml:space="preserve">
+    <value>Amber</value>
+  </data>
+  <data name="Models_HealthRed" xml:space="preserve">
+    <value>Red</value>
+  </data>
+  <data name="Models_HealthGrey" xml:space="preserve">
+    <value>Not enough data</value>
+  </data>
+  <data name="Models_HealthTip" xml:space="preserve">
+    <value>Model health, from its file size, warnings, and open and sync times</value>
+  </data>
+  <data name="Models_CardHelp" xml:space="preserve">
+    <value>Opens this model's activity</value>
+  </data>
+  <data name="Models_NoPreview" xml:space="preserve">
+    <value>No preview</value>
+  </data>
+  <data name="Models_Loading" xml:space="preserve">
+    <value>Reading your models…</value>
+  </data>
+  <data name="Models_EmptyNoModels" xml:space="preserve">
+    <value>No model activity yet. Open a model in Revit and it appears here after you close Revit.</value>
+  </data>
+  <data name="Models_EmptyTimeFrame" xml:space="preserve">
+    <value>No models in this time frame</value>
+  </data>
+  <data name="Models_SwitchToOneYear" xml:space="preserve">
+    <value>Switch to 1Y</value>
+  </data>
+  <data name="Models_EmptyNoMatches" xml:space="preserve">
+    <value>No models match</value>
   </data>
   <data name="Updates_Heading" xml:space="preserve">
     <value>Updates</value>
