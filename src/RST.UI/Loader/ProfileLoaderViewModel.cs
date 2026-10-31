@@ -7,6 +7,7 @@
 // Spec #18 (feature #16): the plan the Confirm dialog shows is the plan the load runs; Load, Unload
 // and Restore All show the same add-in report; RST 3.0's renamed add-ins are moved once at boot;
 // the required add-in pills come from the add-in inventory.
+// SC-016: Load and Delete require a selection.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -83,9 +84,9 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         };
 
         ImportCommand = new RelayCommand(Import, () => IsIdle);
-        LoadCommand = new AsyncRelayCommand(RunLoadAsync, () => IsIdle);
+        LoadCommand = new AsyncRelayCommand(RunLoadAsync, () => IsIdle && HasSelection);
         UnloadCommand = new RelayCommand(Unload, () => IsIdle);
-        DeleteCommand = new RelayCommand(Delete, () => IsIdle);
+        DeleteCommand = new RelayCommand(Delete, () => IsIdle && HasSelection);
         RestoreCommand = new RelayCommand(RestoreAll, () => IsIdle);
         CloseCommand = new RelayCommand(RequestClose, () => IsIdle);
         OpenUrlCommand = new RelayCommand<string>(url => _openUrl(url));
@@ -391,6 +392,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         OnPropertyChanged(nameof(DetailUpdated));
         OnPropertyChanged(nameof(OpacityOverride));
         OnPropertyChanged(nameof(PreviewOpacity));
+        RelayCommand.Refresh();
     }
 
     private void RenderTabToggles(Profile profile)

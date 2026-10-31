@@ -3,8 +3,13 @@
 // override, import, load (the add-in plan, confirm, the report, Loading … and close, ok:false,
 // throws), unload, delete (incl. while loaded), restore all, the RST 3.0 move and close. Message
 // texts are checked against profile_loader.html's; the add-in parts follow spec #18 (AC4).
+// SC-016: selection gates and command refresh.
 
 using System.IO;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using RST.RuntimeTests.Support;
+using RST.Tests.Loader;
 using FluentAssertions;
 using RST.Core.Activation;
 using RST.Core.Configuration;
@@ -40,6 +45,73 @@ public class ProfileLoaderViewModelTests
         vm.Toast.Text.Should().Be(text);
         vm.Toast.Kind.Should().Be(kind);
         _clock.PendingDelays.Should().Contain(TransientMessage.InformDuration);
+    }
+
+    [Fact]
+    public void Load_and_delete_need_a_selection_and_idle_state()
+    {
+        var vm = Model(new FakeLoaderBackend().With(LoaderFixtures.Mep()));
+        vm.LoadCommand.CanExecute(null).Should().BeFalse();
+        vm.DeleteCommand.CanExecute(null).Should().BeFalse();
+        vm.UnloadCommand.CanExecute(null).Should().BeTrue();
+
+        vm.SelectedCard = vm.Profiles.Single();
+        vm.LoadCommand.CanExecute(null).Should().BeTrue();
+        vm.DeleteCommand.CanExecute(null).Should().BeTrue();
+        vm.Busy.Show("Working");
+        vm.LoadCommand.CanExecute(null).Should().BeFalse();
+        vm.DeleteCommand.CanExecute(null).Should().BeFalse();
+        vm.Busy.Hide();
+        vm.SelectedCard = null;
+        vm.LoadCommand.CanExecute(null).Should().BeFalse();
+        vm.DeleteCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Selection_refreshes_bound_buttons_without_an_input_event() => Screenshots.RunSta(() =>
+    {
+        try
+        {
+            var vm = Model(new FakeLoaderBackend().With(LoaderFixtures.Mep()));
+            var load = new Button { Command = vm.LoadCommand };
+            var delete = new Button { Command = vm.DeleteCommand };
+            void DrainRequery() => Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            DrainRequery();
+            load.IsEnabled.Should().BeFalse();
+            delete.IsEnabled.Should().BeFalse();
+            vm.SelectedCard = vm.Profiles.Single();
+            DrainRequery();
+            load.IsEnabled.Should().BeTrue();
+            delete.IsEnabled.Should().BeTrue();
+            vm.SelectedCard = null;
+            DrainRequery();
+            load.IsEnabled.Should().BeFalse();
+            delete.IsEnabled.Should().BeFalse();
+        }
+        finally
+        {
+            Dispatcher.CurrentDispatcher.InvokeShutdown();
+        }
+    });
+
+    [Fact]
+    public void Reopening_after_unload_disables_load_and_delete()
+    {
+        var profile = LoaderFixtures.Mep();
+        var backend = new FakeLoaderBackend().With(profile).ActiveIs(profile);
+        backend.OnUnload = () =>
+        {
+            backend.Active = new ActiveProfile { Blank = true };
+            return new UnloadOutcome(true, null, ActivationReport.Empty(ActivationIntent.Unload));
+        };
+        var vm = Model(backend);
+        vm.UnloadCommand.Execute(null);
+        backend.Calls.Should().Contain("Unload");
+        _clock.Advance(ProfileLoaderViewModel.CloseDelay);
+        var reopened = Model(backend);
+        reopened.SelectedCard.Should().BeNull();
+        reopened.LoadCommand.CanExecute(null).Should().BeFalse();
+        reopened.DeleteCommand.CanExecute(null).Should().BeFalse();
     }
 
     // ── boot ─────────────────────────────────────────────────────────────────

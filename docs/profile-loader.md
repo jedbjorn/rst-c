@@ -50,7 +50,7 @@ A profile can carry defaults set by its admin on the [Builder](profile-builder.m
 
 ### Loading a profile
 
-Click **Load Profile →**. The Loader then:
+Select a card to enable **Load Profile →** and **Delete Profile** (both are disabled while the Loader is busy). Click **Load Profile →**. The Loader then:
 
 1. Works out which add-ins to switch, in **every Revit year installed** on the computer (see [Ribbon Tools](ribbon-tools.md#how-add-ins-are-switched-on-and-off)). If **Disable unused add-ins** is on, or anything would change, shows **Confirm Add-in Changes** for **your Windows user, in Revit 2026 and 2027** (the years it covers): **Will Be Switched Off**, **Will Be Switched Back On**, **Staying On (Required)**, and **Can't Be Changed** when something is locked by your administrator, one line per add-in with its years, for example "DiRoots.One (2026, 2027)". **Cancel** is the default button, so pressing Enter cancels. **Confirm & Load** goes ahead and runs exactly what the dialog showed.
 2. Shows **Loading <profile>** while it works. The add-in changes run in the background, so the window stays responsive.
