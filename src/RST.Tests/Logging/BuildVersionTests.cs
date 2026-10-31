@@ -70,13 +70,16 @@ public class BuildVersionTests
     [Fact]
     public void RSTs_assemblies_carry_one_release_version_in_file_and_informational_version()
     {
-        // Directory.Build.props: every RST assembly from one Version (0.0.0-dev here, the release's a.b.c in CI).
+        // Directory.Build.props: every RST assembly from one Version (0.1.0-dev here, the release's a.b.c in CI).
         var core = typeof(BuildVersion).Assembly;
         var informational = core.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
         BuildVersion.Informational(core).Should().Be(informational);
 
         var numeric = BuildVersion.Product(informational).Split('-')[0];
         core.GetCustomAttribute<AssemblyFileVersionAttribute>()!.Version.Should().Be(numeric + ".0");
+        // Never below the 0.1.0.0 every release through v3.1.1 shipped: Windows Installer would not install the
+        // "older" file over it, and an MSI upgrade would leave it missing (msi-migrate).
+        Version.Parse(numeric).Should().BeGreaterThanOrEqualTo(new Version(0, 1, 0));
         var plus = informational.IndexOf('+');
         if (plus >= 0) informational[(plus + 1)..].Should().HaveLength(7, "the commit is the short hash (RstShortSourceRevision)");
     }

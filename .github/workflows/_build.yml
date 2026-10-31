@@ -216,7 +216,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       # SC-054: the release's a.b.c stamps every RST assembly (FileVersion,
-      # InformationalVersion); 0.0.0-dev on push/PR builds. stage.sh checks
+      # InformationalVersion); 0.1.0-dev on push/PR builds. stage.sh checks
       # the staged binaries carry it (build/check-version-stamp.py).
       - run: build/stage.sh ${{ matrix.major }} Release
         env:
@@ -235,7 +235,7 @@ jobs:
   # RST tray (feature #17, spec #20 §1): RST.Tray.exe is built once, not per
   # Revit year (net8.0-windows, RollForward=Major), by build/stage.sh tray
   # into build/Tray/. RST.msi's Main feature installs it; the version stamp
-  # is the release's a.b.c (0.0.0-dev on push/PR builds).
+  # is the release's a.b.c (0.1.0-dev on push/PR builds).
   stage-tray:
     name: Stage Tray
     runs-on: ubuntu-latest

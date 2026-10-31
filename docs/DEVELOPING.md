@@ -667,7 +667,10 @@ changing only its `using` line (`using Serilog;` became `using RST.Core.Logging;
 - **The build's version (SC-054, SC-015):** `Directory.Build.props` stamps every RST assembly from
   one `Version`: `FileVersion` `a.b.c.0` and `InformationalVersion` `a.b.c+<7-character commit>`
   (target `RstShortSourceRevision`). CI passes the release's `a.b.c` as `RST_VERSION` to
-  `build/stage.sh`, which builds with `-p:Version`; a dev or PR build is `0.0.0-dev`. The stage then
+  `build/stage.sh`, which builds with `-p:Version`; a dev or PR build is `0.1.0-dev` (FileVersion `0.1.0.0`, what
+  every release through v3.1.1 shipped: Windows Installer will not install a file older than the
+  one on disk, so a lower dev FileVersion would leave the bootstrap missing after a dev MSI upgrades
+  a release; the `msi-migrate` jobs catch that). The stage then
   runs `build/check-version-stamp.py`, which fails unless each staged RST binary's version
   resource carries that version. `AssemblyVersion` stays `0.1.0.0` (see the resolver, below), so
   code that wants the build reads `BuildVersion.Informational(assembly)` (`RST.Core/Logging`), never
