@@ -664,6 +664,16 @@ changing only its `using` line (`using Serilog;` became `using RST.Core.Logging;
 - **Tests:** `RST.Tests/Logging` (templates, line format, file names, the daily and size rolls,
   retention, shared writers, threads, failures); `RuntimeTests` replace `Log.Logger` with a list
   sink to assert what a window logged.
+- **The build's version (SC-054, SC-015):** `Directory.Build.props` stamps every RST assembly from
+  one `Version`: `FileVersion` `a.b.c.0` and `InformationalVersion` `a.b.c+<7-character commit>`
+  (target `RstShortSourceRevision`). CI passes the release's `a.b.c` as `RST_VERSION` to
+  `build/stage.sh`, which builds with `-p:Version`; a dev or PR build is `0.0.0-dev`. The stage then
+  runs `build/check-version-stamp.py`, which fails unless each staged RST binary's version
+  resource carries that version. `AssemblyVersion` stays `0.1.0.0` (see the resolver, below), so
+  code that wants the build reads `BuildVersion.Informational(assembly)` (`RST.Core/Logging`), never
+  `GetName().Version`. The engine's header line is `BuildVersion.EngineHeader`; the bootstrap,
+  which cannot reference RST.Core, has its own copy (`RstBootstrap.BuildText`). Where each line
+  appears: [Logging](logging.md#which-build-is-installed).
 
 ## The bootstrap's assembly resolver
 
@@ -686,6 +696,11 @@ For RST's own, `EngineDependencyResolver` (in `RstBootstrap.cs`, decisions #27 a
 - when nothing is loaded yet and the request is above the copy RST ships, returns `null` with a
   `WRN`;
 - never throws from inside the event: a failure becomes a `WRN` line and `null`.
+
+Because it compares versions, RST's `AssemblyVersion` is fixed at `0.1.0.0` in every release
+(`Directory.Build.props`); only `FileVersion` and `InformationalVersion` carry the release. A
+per-release `AssemblyVersion` (`3.2.0.0`) would make a v3 copy decline a `0.1.0.0` copy already
+loaded in the same Revit process (a different major). `RST.Tests/Logging/BuildVersionTests` pins it.
 
 After the engine's `OnStartup`, the boot log records what the app folder ships:
 `Third-party DLLs shipped: none (3 RST DLLs in the app folder; decision #33)`. It is a `WRN`
