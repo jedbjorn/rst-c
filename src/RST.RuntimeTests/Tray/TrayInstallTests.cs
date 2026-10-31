@@ -405,13 +405,14 @@ public class TrayInstanceClaimTests
             Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { })); // a tray started now exits
             using var second = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(200)); // nor can a second updater take it
             Assert.False(second.Held);
-            Assert.False(second.Release());
+            Assert.Equal(ClaimRelease.NotHeld, second.Release());
         }
         finally
         {
-            Assert.True(claim.Release());
+            Assert.Equal(ClaimRelease.Released, claim.Release());
         }
         Assert.False(claim.Held);
+        Assert.Equal(ClaimRelease.Released, claim.Release()); // once confirmed, the same answer again (Dispose too)
         using var tray = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
         Assert.NotNull(tray); // the new tray takes it after the hand-over
     }
@@ -447,7 +448,7 @@ public class TrayInstanceClaimTests
         Assert.True(SpinWait.SpinUntil(() => claim.Held, TimeSpan.FromSeconds(10)), "the pending claim did not take the freed mutex");
         Assert.Contains(log, l => l.Contains("took the tray's single-instance mutex", StringComparison.Ordinal));
         Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { })); // Restart Manager's restart exits
-        Assert.True(claim.Release());
+        Assert.Equal(ClaimRelease.Released, claim.Release());
         using var next = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
         Assert.NotNull(next); // the updater's tray, after the hand-over
     }
@@ -479,7 +480,7 @@ public class TrayInstanceClaimTests
         tray.Join();
         Assert.True(SpinWait.SpinUntil(() => claim.Held, TimeSpan.FromSeconds(10)), "the pending claim did not take the abandoned mutex");
         Assert.Null(SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { }));
-        Assert.True(claim.Release());
+        Assert.Equal(ClaimRelease.Released, claim.Release());
         using var next = SingleInstance.TryClaim(sid, signalFirst: false, log: _ => { });
         Assert.NotNull(next);
     }

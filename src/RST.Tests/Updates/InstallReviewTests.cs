@@ -344,10 +344,20 @@ public sealed class SelfUpdateApplyTests : IDisposable
             Events.Add("taken late");
         }
 
+        /// <summary>The claim's thread finishes only after this many Release calls (review N3: a late wake-up).</summary>
+        public int UnconfirmedReleases { get; set; }
+
+        /// <summary>False: the old tray is still running when the wait for it times out.</summary>
+        public bool TrayExits { get; set; } = true;
+
+        /// <summary>The timeouts the updater asked for, in order: the tray wait, then the claim (review N2).</summary>
+        public List<TimeSpan> Timeouts { get; } = new();
+
         public bool WaitForTrayExit(int pid, TimeSpan timeout)
         {
             Waited.Add(pid);
-            return true;
+            Timeouts.Add(timeout);
+            return TrayExits;
         }
 
         public bool StartTray()
@@ -357,23 +367,30 @@ public sealed class SelfUpdateApplyTests : IDisposable
             return true;
         }
 
-        public ITrayInstanceClaim? ClaimTrayInstance(TimeSpan timeout)
+        public ITrayInstanceClaim ClaimTrayInstance(TimeSpan timeout)
         {
             Events.Add("claim");
+            Timeouts.Add(timeout);
             Held = ClaimFree;
             return new Claim(this);
         }
 
         private sealed class Claim(FakeHost host) : ITrayInstanceClaim
         {
-            private bool? _released;
+            private ClaimRelease? _released;
 
             public bool Held => _released is null && host.Held;
 
-            public bool Release()
+            public ClaimRelease Release()
             {
                 if (_released is { } was) return was;
-                _released = host.Held;
+                if (host.UnconfirmedReleases > 0)
+                {
+                    host.UnconfirmedReleases--;
+                    host.Events.Add("unconfirmed");
+                    return ClaimRelease.Unconfirmed;
+                }
+                _released = host.Held ? ClaimRelease.Released : ClaimRelease.NotHeld;
                 host.Events.Add(host.Held ? "release" : "stop waiting");
                 host.Held = false;
                 return _released.Value;
@@ -402,9 +419,44 @@ public sealed class SelfUpdateApplyTests : IDisposable
         _msiexec.BeforeRun = _ => _host.TrayLetGo();
         (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
         _host.Events.Should().Equal("claim", "taken late", "release", "start");
-        _log.Should().Contain(l => l.Contains("was not free within 60 s; going on, and taking it the moment the tray lets it go"));
+        _log.Should().Contain(l => l.Contains("was not free within 5 s; going on, and taking it the moment the tray lets it go"));
         _log.Should().Contain("updater: released the tray's single-instance mutex");
-        _log.Should().NotContain(l => l.Contains("going on without it"));
+    }
+
+    [Fact]
+    public async Task After_the_wait_for_the_tray_the_claim_waits_only_briefly_before_msiexec()
+    {
+        // Review N2: the old tray's wait has already had its minute (or the tray is gone); the claim's own wait is short,
+        // since it goes on in the background and msiexec is what closes a tray that still holds the mutex.
+        _host.TrayExits = false;
+        _host.ClaimFree = false;
+        (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
+        _host.Timeouts.Should().Equal(SelfUpdateApply.TrayExitTimeout, SelfUpdateApply.ClaimTimeout);
+        SelfUpdateApply.ClaimTimeout.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(5));
+        _msiexec.Calls.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_release_confirmed_late_still_hands_over_and_starts_the_tray()
+    {
+        _host.UnconfirmedReleases = 2;
+        (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
+        _host.Events.Should().Equal("claim", "unconfirmed", "unconfirmed", "release", "start");
+        _log.Should().Contain("updater: released the tray's single-instance mutex");
+    }
+
+    [Fact]
+    public async Task A_release_never_confirmed_starts_no_tray_whose_check_would_fail()
+    {
+        // Review N3: the mutex may still be held by the claim's thread. A tray started now would find it held, signal a
+        // tray that is not there and exit, leaving none; so none is started, and nothing claims it was released.
+        _host.UnconfirmedReleases = SelfUpdateApply.ReleaseAttempts;
+        (await Apply(Verified())).Should().Be(SelfUpdateApply.Installed);
+        _host.TraysStarted.Should().Be(0);
+        _host.Events.Should().NotContain("start");
+        _log.Should().NotContain("updater: released the tray's single-instance mutex");
+        _log.Should().Contain(l => l.Contains("was not confirmed released; no tray is started now"));
+        Result().Problem.Should().Be(InstallProblem.None); // the result is still recorded for the next tray
     }
 
     [Fact]

@@ -151,7 +151,7 @@ internal sealed class TrayInstanceClaim : ITrayInstanceClaim
     private Thread? _owner;
     private volatile bool _held;
     private volatile bool _wasHeld;
-    private int _released;
+    private bool _stopped, _finished;
 
     private TrayInstanceClaim(Action<string>? log) => _log = log ?? (_ => { });
 
@@ -229,16 +229,25 @@ internal sealed class TrayInstanceClaim : ITrayInstanceClaim
         }
     }
 
-    public bool Release()
+    /// <summary>How long one <see cref="Release"/> waits for the claim's thread to finish.</summary>
+    private static readonly TimeSpan ReleaseWait = TimeSpan.FromSeconds(10);
+
+    public ClaimRelease Release()
     {
-        if (Interlocked.Exchange(ref _released, 1) == 0)
+        lock (_stop)
         {
-            _stop.Set();
-            if (_owner is { } owner && !owner.Join(TimeSpan.FromSeconds(10))) return _held;
-            _stop.Dispose();
+            if (_finished) return _wasHeld ? ClaimRelease.Released : ClaimRelease.NotHeld;
+            if (!_stopped)
+            {
+                _stopped = true;
+                _stop.Set();
+            }
+            // Review N3: only a finished thread has certainly released the mutex (or stopped waiting for it).
+            if (_owner is { } owner && !owner.Join(ReleaseWait)) return ClaimRelease.Unconfirmed;
+            _finished = true;
             _decided.Dispose();
+            return _wasHeld ? ClaimRelease.Released : ClaimRelease.NotHeld;
         }
-        return _wasHeld;
     }
 
     /// <summary>Releases the mutex (and waits until it is released, so a tray started next can take it).</summary>
@@ -272,7 +281,7 @@ internal sealed class UpdaterHost : ISelfUpdateHost
         }
     }
 
-    public ITrayInstanceClaim? ClaimTrayInstance(TimeSpan timeout) => TrayInstanceClaim.TryClaim(SingleInstance.CurrentUserSid(), timeout, _log);
+    public ITrayInstanceClaim ClaimTrayInstance(TimeSpan timeout) => TrayInstanceClaim.TryClaim(SingleInstance.CurrentUserSid(), timeout, _log);
 
     /// <summary>
     /// Starts the installed tray (no switch: its window opens on the result). It is started even when another tray
