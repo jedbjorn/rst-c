@@ -185,7 +185,7 @@ New profile :::class1 -> Name + assemble panels :::class2 -> Presets + cleanup t
 
 ### Editing an existing profile
 
-Choose a profile from the dropdown at the top left (the loaded one is marked "(loaded)"). Its panels, tools and settings load into the Builder. Your edits are made to a working copy, so the dropdown keeps showing the saved profiles until you save.
+Choose a profile from the dropdown at the top left (the loaded one is marked "loaded" in the list; while it is open, a green dot follows its name on the button). Its panels, tools and settings load into the Builder. Your edits are made to a working copy, so the dropdown keeps showing the saved profiles until you save.
 
 ### Unsaved changes
 

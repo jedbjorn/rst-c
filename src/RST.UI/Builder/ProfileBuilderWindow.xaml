@@ -688,18 +688,20 @@
                                       AutomationProperties.AutomationId="Builder.ProfileButton"
                                       AutomationProperties.Name="{x:Static res:UiStrings.Builder_ProfileSelectorTip}">
                             <!--
-                                The name, "(loaded)" right after it (as the spike), the chevron at the right edge. The
-                                inner panel hugs its content, so a long name trims to the space left and "(loaded)"
-                                (docked first) keeps its width; the full name is the name's tooltip.
+                                The name, the loaded profile's green dot right after it (the Loader's "● Loaded" mark:
+                                its brush and size; "Loaded" is its tooltip and name), the chevron at the right edge. The
+                                inner panel hugs its content, so a long name trims to the space left and the dot (docked
+                                first) keeps its width; the full name is the name's tooltip.
                             -->
                             <DockPanel>
                                 <TextBlock x:Name="ProfileChevron" DockPanel.Dock="Right" Text="▾" Style="{StaticResource MutedText}"
                                            VerticalAlignment="Center" Margin="8,0,0,0" />
                                 <DockPanel HorizontalAlignment="Left">
-                                    <TextBlock x:Name="LoadedMark" DockPanel.Dock="Right" Text="{x:Static res:UiStrings.Builder_LoadedMark}"
-                                               Style="{StaticResource MutedText}" Margin="6,0,0,0" VerticalAlignment="Center"
+                                    <TextBlock x:Name="LoadedMark" DockPanel.Dock="Right" Text="●" Style="{StaticResource SuccessText}" FontSize="11"
+                                               Margin="6,0,0,0" ToolTip="{x:Static res:UiStrings.Builder_LoadedMark}"
                                                Visibility="{Binding IsLoadedProfile, Converter={StaticResource BoolToVisible}}"
-                                               AutomationProperties.AutomationId="Builder.LoadedMark" />
+                                               AutomationProperties.AutomationId="Builder.LoadedMark"
+                                               AutomationProperties.Name="{x:Static res:UiStrings.Builder_LoadedMark}" />
                                     <TextBlock x:Name="ProfileButtonName" Text="{Binding DisplayName}" ToolTip="{Binding DisplayName}" FontWeight="SemiBold"
                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                AutomationProperties.AutomationId="Builder.ProfileButtonName" />

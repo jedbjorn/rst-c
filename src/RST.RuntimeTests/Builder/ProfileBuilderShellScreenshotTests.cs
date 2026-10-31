@@ -7,7 +7,7 @@
 // dialogs. Each capture also checks the state it shows (the header's Tint, the pane widths, the
 // ticked profile, the refusal line). The F18 follow-up adds the header's alignment with the panes: the
 // divider on the Commands pane's border and the title over the Panels label, at the default width and at
-// the minimum, with a long profile name and with a wider Export ZIP.
+// the minimum: common names in full beside the green loaded dot, a long name trimmed, a wider Export ZIP.
 
 using System.Windows;
 using System.Windows.Automation;
@@ -148,7 +148,7 @@ public class ProfileBuilderShellScreenshotTests
             // The panes: Commands 320, Profile 330 (decision #25's build notes).
             Assert.Equal(320, window.Panes.ColumnDefinitions[0].ActualWidth);
             Assert.Equal(330, window.Panes.ColumnDefinitions[2].ActualWidth);
-            // The profile button: the name and "(loaded)"; General is the open tab; clean: no indicator, Save off.
+            // The profile button: the name and the loaded dot; General is the open tab; clean: no indicator, Save off.
             Assert.Equal("Architecture", window.ProfileButtonName.Text);
             Assert.True(h.Model.IsLoadedProfile);
             Assert.Same(window.GeneralTab, window.ProfileTabs.SelectedItem);
@@ -185,17 +185,35 @@ public class ProfileBuilderShellScreenshotTests
         Assert.True(Math.Abs(title - panels) <= 1, $"{when}: the title starts at x {title}, the Panels label at x {panels}");
     }
 
-    /// <summary>In the profile button, left to right and inside it: the name, "(loaded)", the chevron.</summary>
+    /// <summary>In the profile button, left to right and inside it: the name, the loaded dot, the chevron.</summary>
     private static void AssertProfileButtonHoldsItsParts(ProfileBuilderWindow w, string when)
     {
         var b = w.ProfileButton;
-        Assert.True(w.LoadedMark.ActualWidth > 0, $"{when}: \"(loaded)\" is not shown");
+        Assert.True(w.LoadedMark.IsVisible && w.LoadedMark.ActualWidth > 0, $"{when}: the loaded dot is not shown");
         Assert.True(Right(w.ProfileButtonName, b) <= Left(w.LoadedMark, b) + 0.5,
-            $"{when}: the name (ends at x {Right(w.ProfileButtonName, b)}) runs into \"(loaded)\" (starts at x {Left(w.LoadedMark, b)}; button {b.ActualWidth} wide)");
+            $"{when}: the name (ends at x {Right(w.ProfileButtonName, b)}) runs into the loaded dot (starts at x {Left(w.LoadedMark, b)}; button {b.ActualWidth} wide)");
         Assert.True(Right(w.LoadedMark, b) <= Left(w.ProfileChevron, b) + 0.5,
-            $"{when}: \"(loaded)\" (ends at x {Right(w.LoadedMark, b)}) runs into the chevron (starts at x {Left(w.ProfileChevron, b)})");
+            $"{when}: the loaded dot (ends at x {Right(w.LoadedMark, b)}) runs into the chevron (starts at x {Left(w.ProfileChevron, b)})");
         Assert.True(Right(w.ProfileChevron, b) <= b.ActualWidth, $"{when}: the chevron (ends at x {Right(w.ProfileChevron, b)}) is cut off");
         Assert.True(Right(b, w.Root) < Left(w.ExportButton, w.Root), $"{when}: the profile button runs into Export ZIP");
+    }
+
+    /// <summary>The name's width untrimmed: a TextBlock of the header name's font, unconstrained.</summary>
+    private static double FullWidth(ProfileBuilderWindow w, string text)
+    {
+        var full = new TextBlock { Text = text, FontWeight = FontWeights.SemiBold, FontFamily = w.FontFamily, FontSize = w.FontSize };
+        full.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return full.DesiredSize.Width;
+    }
+
+    /// <summary>The header shows <paramref name="name"/> in full (no ellipsis), with the dot and the chevron.</summary>
+    private static void AssertNameUntrimmed(ProfileBuilderWindow w, string name, string when)
+    {
+        Assert.Equal(name, w.ProfileButtonName.Text);
+        var full = FullWidth(w, name);
+        Assert.True(w.ProfileButtonName.ActualWidth >= full - 1,
+            $"{when}: \"{name}\" is trimmed ({w.ProfileButtonName.ActualWidth} px shown of {full})");
+        AssertProfileButtonHoldsItsParts(w, when);
     }
 
     [Theory]
@@ -211,12 +229,22 @@ public class ProfileBuilderShellScreenshotTests
             Screenshots.Save(bitmap, Name($"f18-builder-header-{width}", theme));
             Assert.Equal(width, bitmap.PixelWidth);
             AssertHeaderLinesUp(window, $"{width} px");
-            AssertProfileButtonHoldsItsParts(window, $"{width} px");
-            Assert.Equal("Architecture", window.ProfileButtonName.Text);
+            AssertNameUntrimmed(window, "Architecture", $"{width} px");
             Assert.Equal("Architecture", window.ProfileButtonName.ToolTip);
+            // The loaded mark is the Loader's: its green (SuccessBrush), "Loaded" as its tooltip and name.
+            Assert.Equal(Palette(theme, UiPalette.Success), ((SolidColorBrush)window.LoadedMark.Foreground).Color);
+            Assert.Equal("Loaded", window.LoadedMark.ToolTip);
+            Assert.Equal("Loaded", AutomationProperties.GetName(window.LoadedMark));
             var buttonWidth = window.ProfileButton.ActualWidth;
 
-            // A long name trims to the space left; "(loaded)" and the chevron stay, the button keeps its width.
+            // A common name of about the same length: in full too.
+            h.Model.ProfileName = "Studio Demo";
+            bitmap = WindowCapture.Content(window, size);
+            Screenshots.Save(bitmap, Name($"f18-builder-header-studio-demo-{width}", theme));
+            AssertNameUntrimmed(window, "Studio Demo", $"{width} px, Studio Demo");
+            AssertHeaderLinesUp(window, $"{width} px, Studio Demo");
+
+            // A long name trims to the space left; the dot and the chevron stay, the button keeps its width.
             const string longName = "Architecture — Interiors and Workshare Coordination Standards 2027";
             h.Model.ProfileName = longName;
             bitmap = WindowCapture.Content(window, size);
@@ -224,14 +252,12 @@ public class ProfileBuilderShellScreenshotTests
             Assert.Equal(longName, window.ProfileButtonName.Text);
             Assert.Equal(longName, window.ProfileButtonName.ToolTip);
             Assert.Equal(buttonWidth, window.ProfileButton.ActualWidth);
-            var full = new TextBlock { Text = longName, FontWeight = FontWeights.SemiBold, FontFamily = window.FontFamily, FontSize = window.FontSize };
-            full.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Assert.True(window.ProfileButtonName.ActualWidth < full.DesiredSize.Width, "the long name is trimmed");
+            Assert.True(window.ProfileButtonName.ActualWidth < FullWidth(window, longName), "the long name is trimmed");
             AssertHeaderLinesUp(window, $"{width} px, a long name");
             AssertProfileButtonHoldsItsParts(window, $"{width} px, a long name");
 
             // A wider Export ZIP (another wording): the profile button gives way; the alignment holds. Modestly
-            // wider: the button still has room for "(loaded)" and the chevron (it is about 157 px at "Export ZIP").
+            // wider: the button still has room for the dot and the chevron (it is about 157 px at "Export ZIP").
             window.ExportButton.Content = "Export as ZIP…";
             WindowCapture.Content(window, size);
             Assert.True(window.ProfileButton.ActualWidth < buttonWidth, "the profile button narrows for a wider Export ZIP");

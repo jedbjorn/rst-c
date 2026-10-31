@@ -986,7 +986,7 @@ Revit's commands could not be read. Restart Revit and open the Builder again; th
     <value>Switch profile</value>
   </data>
   <data name="Builder_LoadedMark" xml:space="preserve">
-    <value>(loaded)</value>
+    <value>Loaded</value>
   </data>
   <data name="Builder_RenameMenu" xml:space="preserve">
     <value>Rename…</value>

@@ -441,7 +441,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// <summary>The Profile pane's header: "· editing &lt;name&gt;".</summary>
     public string EditingText => UiStrings.Builder_EditingName(DisplayName);
 
-    /// <summary>The header button's "(loaded)": the editor holds the profile the Loader has loaded.</summary>
+    /// <summary>The header button's green "Loaded" dot: the editor holds the profile the Loader has loaded.</summary>
     public bool IsLoadedProfile => _editMode && !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
 
     private void RaiseName()
