@@ -15,6 +15,7 @@
     Assert-StartedTray        that tray: the expected exe, --startup, this user,
                               this session (not 0), no more rights than this
                               user's Explorer (unelevated under UAC), no window
+                              (so no first-run notice, decision #65)
     Assert-NoTray <label>     no RST.Tray process within a grace period
     Get-StartTrayLog <since>  the RST-StartTray-<time>-<pid>.log files written
                               since then (the installer's TEMP; as SYSTEM
@@ -188,7 +189,8 @@ function Assert-StartedTray($Proc, [string]$Exe, [string]$Label) {
   foreach ($c in $checks) { Assert $c[0] $c[1] }
   Start-Sleep -Seconds 2
   $Proc.Refresh()
-  Assert ($Proc.MainWindowHandle -eq [IntPtr]::Zero) "[$Label] it shows no window"
+  # Decision #65: no window also means no first-run notice (the callers seed no "updateNoticeShownUtc").
+  Assert ($Proc.MainWindowHandle -eq [IntPtr]::Zero) "[$Label] it shows no window (no first-run update-check notice either, decision #65)"
 }
 
 function Assert-NoTray([string]$Label, [int]$GraceSeconds = 10) {

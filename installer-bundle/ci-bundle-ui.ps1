@@ -58,11 +58,11 @@ foreach ($y in '2025', '2026', '2027') {
   $d = Join-Path $ProgramFiles64 "Autodesk\Revit $y"; New-Item -ItemType Directory -Force $d | Out-Null
   Set-Content -Path (Join-Path $d 'Revit.exe') -Value 'rst-c ci stub' -NoNewline
 }
-# Every install now starts the tray (SC-044). Its one-time notices would open windows of their own over setup's, so
-# they are marked shown; the tray itself starts hidden.
+# Every install now starts the tray (SC-044). Its one-time installed-twice notice would open a window of its own over
+# setup's, so it is marked shown; the tray itself starts hidden, and since decision #65 it has no update-check notice.
 $traySettings = Join-Path $env:APPDATA 'RST\tray_settings.json'
 New-Item -ItemType Directory -Force (Split-Path $traySettings) | Out-Null
-Set-Content -Path $traySettings -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00", "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+Set-Content -Path $traySettings -Value '{ "theme": "system", "checkForUpdates": true, "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
 
 # msiexec, waited on by its own handle (never -Wait, which waits for every descendant: a tray the install started).
 function Invoke-MsiexecOwn([string]$Arguments) {

@@ -1,5 +1,5 @@
 // rst-c's own: the RST tray's Core rules (spec #20 §1, §4; F17 WU1): the settings file (defaults, fail-closed
-// damaged reads, merged atomic writes), theme resolution, the UpdateChecks preset, the first-run notice rule,
+// damaged reads, merged atomic writes, the retired update-notice field), theme resolution, the UpdateChecks preset,
 // the command line, and the names and log glob the tray shares with the installer and the engine.
 
 using System;
@@ -72,12 +72,12 @@ public sealed class TraySettingsTests : IDisposable
         var shown = new DateTimeOffset(2026, 10, 30, 9, 0, 0, TimeSpan.Zero);
         TraySettings.Update(s => s.Theme = TrayThemeChoice.Dark, PathIn).Should().NotBeNull();
         TraySettings.Update(s => s.CheckForUpdates = false, PathIn).Should().NotBeNull();
-        TrayUpdateNotice.MarkShown(shown, PathIn).Should().BeTrue();
+        TrayShadowNotice.MarkShown(shown, PathIn).Should().BeTrue();
 
         var s = TraySettings.Read(PathIn);
         s.Theme.Should().Be(TrayThemeChoice.Dark, "a later update must not revert an earlier one");
         s.CheckForUpdates.Should().BeFalse();
-        s.UpdateNoticeShownUtc.Should().Be(shown);
+        s.ShadowNoticeShownUtc.Should().Be(shown);
 
         var json = File.ReadAllText(PathIn);
         json.Should().Contain("\"theme\": \"dark\"").And.Contain("\"checkForUpdates\": false");
@@ -95,6 +95,24 @@ public sealed class TraySettingsTests : IDisposable
         s.WasDamaged.Should().BeFalse();
         s.Theme.Should().Be(TrayThemeChoice.Light);
         s.CheckForUpdates.Should().BeFalse("the fail-closed value is what gets saved");
+    }
+
+    [Fact]
+    public void A_file_from_a_tray_that_showed_the_update_notice_still_parses_and_keeps_the_field()
+    {
+        // Decision #65: v3.2 shows no update-check notice. A v3.1 file records when it was shown; it must still read
+        // (checks stay as the user set them) and a later write must keep the value, unread.
+        File.WriteAllText(PathIn,
+            "{ \"theme\": \"light\", \"checkForUpdates\": true, \"updateNoticeShownUtc\": \"2026-10-30T00:00:00+00:00\" }");
+
+        var s = TraySettings.Read(PathIn);
+        s.WasDamaged.Should().BeFalse();
+        s.CheckForUpdates.Should().BeTrue("the notice's record has nothing to do with the setting");
+        s.Theme.Should().Be(TrayThemeChoice.Light);
+        s.UpdateNoticeShownUtc.Should().Be(new DateTimeOffset(2026, 10, 30, 0, 0, 0, TimeSpan.Zero));
+
+        TraySettings.Update(x => x.Theme = TrayThemeChoice.Dark, PathIn).Should().NotBeNull();
+        TraySettings.Read(PathIn).UpdateNoticeShownUtc.Should().Be(s.UpdateNoticeShownUtc);
     }
 
     [Fact]
@@ -140,17 +158,6 @@ public sealed class TrayRulesTests
         UpdateChecksPolicy.Resolve(true, new int?[] { null, 0 }).Should().Be(new UpdateChecksState(false, true));
         UpdateChecksPolicy.Resolve(true, new int?[] { 1, null }).Should().Be(new UpdateChecksState(true, false),
             "only 0 is defined; another value leaves the user in charge");
-    }
-
-    [Fact]
-    public void Notice_shows_only_when_checks_are_on_and_it_was_never_shown()
-    {
-        var fresh = new TraySettings();
-        TrayUpdateNotice.ShouldShow(fresh, new UpdateChecksState(true, false)).Should().BeTrue();
-        TrayUpdateNotice.ShouldShow(fresh, new UpdateChecksState(false, false)).Should().BeFalse();
-        TrayUpdateNotice.ShouldShow(fresh, new UpdateChecksState(false, true)).Should().BeFalse("a preset-off tray never announces checks");
-        var shown = new TraySettings { UpdateNoticeShownUtc = DateTimeOffset.UnixEpoch };
-        TrayUpdateNotice.ShouldShow(shown, new UpdateChecksState(true, false)).Should().BeFalse();
     }
 
     [Fact]

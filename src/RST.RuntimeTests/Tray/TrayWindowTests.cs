@@ -172,29 +172,6 @@ public class TrayWindowScreenshotTests
         }
     });
 
-    [Theory]
-    [MemberData(nameof(Themes))]
-    public void The_first_run_update_notice(UiTheme theme) => Sta(theme, () =>
-    {
-        var dialog = new MessageDialog(
-            new MessageDialogModel(TrayStrings.Notice_Title, TrayStrings.Notice_Heading, TrayStrings.Notice_Message, []),
-            TrayHost.NoticeAutomationId);
-        try
-        {
-            WindowCapture.ShowOffScreen(dialog);
-            WindowCapture.DoEvents();
-            // The dialog paints its color on the window itself (as StyleGalleryScreenshotTests captures it).
-            var bitmap = WindowCapture.Client(dialog);
-            Screenshots.Save(bitmap, Name("notice", theme));
-            AssertColor(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 1, 1), "notice background");
-            Assert.True(Screenshots.DistinctPixels(bitmap) > 30, "the notice looks blank");
-        }
-        finally
-        {
-            dialog.Close();
-        }
-    });
-
     // F17 WU5 (spec #20 §7): the one-time "installed twice" notice, in the same dialog and family look.
     [Theory]
     [MemberData(nameof(Themes))]

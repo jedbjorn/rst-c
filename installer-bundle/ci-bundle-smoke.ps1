@@ -139,10 +139,11 @@ function Assert([bool]$Cond, [string]$What) {
 function Observe([string]$What) { Write-Host "OBSERVED: $What" }
 . (Join-Path $PSScriptRoot '..\installer\ci-tray-start.ps1')
 $UserTrayExe = Join-Path $env:LOCALAPPDATA 'Programs\RST\Tray\RST.Tray.exe'
-# The tray now starts after every install (SC-044): its one-time notices would open windows of their own.
+# The tray now starts after every install (SC-044): its one-time installed-twice notice would open a window of its own.
+# No update-check notice is seeded away: since decision #65 there is none, and Assert-StartedTray's "no window" checks it.
 $TraySettings = Join-Path $AppData 'RST\tray_settings.json'
 New-Item -ItemType Directory -Force (Split-Path $TraySettings) | Out-Null
-Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00", "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": true, "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
 Show-RunnerTokens
 
 # Add/Remove Programs entries: the Uninstall keys of HKCU and HKLM (both views).

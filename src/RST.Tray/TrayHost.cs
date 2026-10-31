@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the RST tray's coordinator (spec #20 §1; F17 WU1). It owns the icon, the one window
-// (built lazily on first open, rebuilt on a theme change, released when closed), the settings and the first-run
-// update-check notice, and it ends the process cleanly on Quit, on WM_CLOSE (Windows Installer's
+// (built lazily on first open, rebuilt on a theme change, released when closed), the settings and the one-time
+// "installed twice" notice, and it ends the process cleanly on Quit, on WM_CLOSE (Windows Installer's
 // util:CloseApplication) and at sign-out. Event-driven: no polling. Besides the icon's short add retries at sign-in,
 // its one timer is the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing.
 // Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, never while Revit runs, msiexec for
@@ -30,8 +30,6 @@ namespace RST.Tray;
 
 internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposable
 {
-    public const string NoticeAutomationId = "TrayUpdateNotice";
-
     public const string ShadowNoticeAutomationId = "TrayShadowNotice";
 
     private readonly TrayArguments _args;
@@ -190,11 +188,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         {
             if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
         }),
-        new("notices", () => _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
-        {
-            ShowNoticeIfDue();
-            ShowShadowNoticeIfDue();
-        })),
+        // Decision #65: no update-check notice at first run; docs/tray.md explains the checks and how to turn them off.
+        new("notices", () => _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowShadowNoticeIfDue)),
     ];
 
     private void StartIcon()
@@ -629,34 +624,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     private void ApplyTheme() =>
         RstTheme.Apply(TrayTheme.Resolve(_settings.Theme, WindowsState.AppsUseLightTheme(), WindowsState.HighContrast));
-
-    /// <summary>The one-time update-check notice (modelled on the former telemetry first-run notice). Never throws.</summary>
-    private void ShowNoticeIfDue()
-    {
-        try
-        {
-            if (_quitting || !TrayUpdateNotice.ShouldShow(_settings, _checks)) return;
-            var dialog = new MessageDialog(
-                new MessageDialogModel(TrayStrings.Notice_Title, TrayStrings.Notice_Heading, TrayStrings.Notice_Message, []),
-                NoticeAutomationId)
-            {
-                WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                ShowInTaskbar = true,
-                Icon = TrayWindow.WindowIcon(),
-            };
-            if (_window is { IsVisible: true } owner) dialog.Owner = owner;
-            Log.Information("showing the update-check notice");
-            dialog.ShowDialog();
-            if (TrayUpdateNotice.MarkShown(DateTimeOffset.UtcNow, log: m => Log.Warning("{Message}", m)))
-                _settings = TraySettings.Read(log: m => Log.Warning("{Message}", m));
-            else
-                Log.Warning("update-check notice shown but not recorded; it shows again next start");
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "update-check notice failed");
-        }
-    }
 
     /// <summary>
     /// F17 WU5 (spec #20 §7): when RST is installed both for this user and for everyone on the PC, Revit loads the
