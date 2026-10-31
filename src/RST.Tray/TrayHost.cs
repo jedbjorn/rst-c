@@ -21,6 +21,7 @@ using RST.Tray.Shell;
 using RST.Tray.Updates;
 using RST.Tray.Windows;
 using RST.UI.Dialogs;
+using RST.UI.Health;
 using RST.UI.Loader;
 using RST.UI.Theming;
 using RST.Core.Logging;
@@ -339,7 +340,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             // RSTify Presets?"), owned by this window.
             var dialogs = new LoaderDialogs();
             var messages = new DialogService();
-            var built = new TrayWindow(new TrayViewModel(this, _page, this, new AddInsViewModel(_addins, dialogs, messages, _addinsWork)));
+            // The Health page's Device sub-tab (spec #25): the add-in's snapshot and cleanup, outside Revit, in
+            // tray_health_scan.json; its "Delete selected junk?" is owned by this window too.
+            var health = new TrayHealthViewModel(new DeviceHealthService(), messages);
+            var built = new TrayWindow(new TrayViewModel(this, _page, this, new AddInsViewModel(_addins, dialogs, messages, _addinsWork), health));
             dialogs.Owner = built;
             messages.Owner = built;
             _window = built;

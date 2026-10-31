@@ -39,6 +39,24 @@ public sealed class HealthSnapshot
     /// snapshots captured before this field existed.
     /// </summary>
     [JsonPropertyName("gpus")] public List<Gpu> Gpus { get; set; } = new();
+
+    /// <summary>
+    /// The supported Revit years installed on this PC, with each one's build: the tray's Device page
+    /// (spec #25, decision #59) shows these in its Revit section in place of the rows that only exist
+    /// inside a running Revit. Set only by the tray's scan (tray_health_scan.json); null in the add-in's
+    /// health_scan.json, and left out of that file, so its shape is unchanged.
+    /// </summary>
+    [JsonPropertyName("revitInstalls")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<RevitInstallInfo>? RevitInstalls { get; set; }
+}
+
+/// <summary>One installed Revit year on the tray's snapshot: the year, its build ("" when unreadable) and its folder.</summary>
+public sealed class RevitInstallInfo
+{
+    [JsonPropertyName("year")]       public int    Year       { get; set; }
+    [JsonPropertyName("build")]      public string Build      { get; set; } = "";
+    [JsonPropertyName("installDir")] public string InstallDir { get; set; } = "";
 }
 
 public sealed class CleanupSummary

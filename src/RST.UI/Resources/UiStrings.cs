@@ -164,6 +164,14 @@ public static class UiStrings
 
     public static string Health_RevitBuild(object? arg0) => Format(nameof(Health_RevitBuild), arg0);
 
+    public static string Health_RowInstalledRevit => Get(nameof(Health_RowInstalledRevit));
+
+    public static string Health_NoRevitInstalled => Get(nameof(Health_NoRevitInstalled));
+
+    public static string Health_RowRevitYear(object? arg0) => Format(nameof(Health_RowRevitYear), arg0);
+
+    public static string Health_JunkTargetYear(object? arg0, object? arg1) => Format(nameof(Health_JunkTargetYear), arg0, arg1);
+
     public static string Health_ModelSize(object? arg0) => Format(nameof(Health_ModelSize), arg0);
 
     public static string Health_Enabled => Get(nameof(Health_Enabled));

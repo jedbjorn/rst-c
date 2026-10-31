@@ -25,6 +25,7 @@ internal partial class TrayWindow : Window
         {
             viewModel.RequestClose -= OnRequestClose;
             viewModel.Updates.Detach(); // the checker outlives the window
+            viewModel.Health.Dispose(); // a scan or clean still running finishes in the background (HealthWork)
         };
     }
 

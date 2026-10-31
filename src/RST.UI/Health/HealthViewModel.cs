@@ -36,6 +36,9 @@ public sealed class HealthViewModelOptions
     /// <summary>The toast's one-shot timer (see <see cref="TransientMessage"/>); null: a dispatcher timer.</summary>
     public Func<TimeSpan, Action, IDisposable>? ToastSchedule { get; init; }
 
+    /// <summary>Where the snapshot is shown: the add-in (default) or the tray's Device page (spec #25), which lists the installed Revit years.</summary>
+    public HealthScope Scope { get; init; } = HealthScope.Revit;
+
     private static IDisposable DispatcherRepeat(TimeSpan interval, Action tick)
     {
         var timer = new DispatcherTimer { Interval = interval };
@@ -459,7 +462,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     private void Render(HealthSnapshot? snap)
     {
-        var report = HealthReport.Build(snap, _culture, _zone);
+        var report = HealthReport.Build(snap, _culture, _zone, _options.Scope);
         Device = report.Device;
         Captured = report.Captured;
         Sections = report.Sections;
