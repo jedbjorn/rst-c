@@ -626,7 +626,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void ApplyTheme() =>
         RstTheme.Apply(TrayTheme.Resolve(_settings.Theme, WindowsState.AppsUseLightTheme(), WindowsState.HighContrast));
 
-    /// <summary>The one-time update-check notice (the telemetry ConsentNotice precedent). Never throws.</summary>
+    /// <summary>The one-time update-check notice (modelled on the former telemetry first-run notice). Never throws.</summary>
     private void ShowNoticeIfDue()
     {
         try
