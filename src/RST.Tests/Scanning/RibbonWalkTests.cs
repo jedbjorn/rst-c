@@ -495,6 +495,25 @@ public sealed class RibbonWalkTests
         walker.Counts.OutsidePostableCommand.Should().Be(1);
         walker.Counts.Unresolved.Should().Be(2);
         walker.Counts.NotPostableIds.Should().Equal("ID_SETTINGS_PENS", "ID_NOT_POSTABLE_MENU_ITEM", "CustomCtrl_%Acme%Gone");
+        // RibbonScanner logs one line per reason.
+        walker.Counts.OutsidePostableCommandIds.Should().Equal("ID_NOT_POSTABLE_MENU_ITEM");
+        walker.Counts.UnresolvedIds.Should().Equal("ID_SETTINGS_PENS", "CustomCtrl_%Acme%Gone");
+    }
+
+    [Fact]
+    public void A_manifest_command_with_a_GUID_id_is_admitted_like_any_external_command()
+    {
+        // <AddIn Type="Command"> entries (Add-Ins > External Tools) may carry their ClientId as the id.
+        var walker = RuleWalker();
+        N[] items =
+        [
+            Box(RibbonContainerKind.SplitButton, null, "External Tools").With(
+                MenuItem("{3F7C4A9E-2B1D-4E8F-9A6C-5D0E1F2A3B4C}"), MenuItem("3f7c4a9e-2b1d-4e8f-9a6c-5d0e1f2a3b4d")),
+        ];
+
+        walker.WalkPanel(items, null).Select(h => h.Id).Should().Equal(
+            "{3F7C4A9E-2B1D-4E8F-9A6C-5D0E1F2A3B4C}", "3f7c4a9e-2b1d-4e8f-9a6c-5d0e1f2a3b4d");
+        walker.Counts.NotPostable.Should().Be(0);
     }
 
     [Fact]

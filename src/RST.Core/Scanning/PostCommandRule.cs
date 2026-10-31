@@ -11,7 +11,11 @@
 //   - its id is one of this Revit's PostableCommand ids (BuiltinCommandScanner's seed, read from
 //     the running Revit every scan, so a new Revit year brings its own set); or
 //   - its id is an external command's: Revit gives the buttons an add-in creates through the Revit
-//     API ids that start with CustomCtrl_ (OriginClassifier.AddinButtonIdPrefix).
+//     API ids that start with CustomCtrl_ (OriginClassifier.AddinButtonIdPrefix), and a command an
+//     add-in manifest registers (<AddIn Type="Command">, Add-Ins > External Tools) may carry the
+//     manifest's ClientId GUID as its id (https://blog.autodesk.io/programmatic-custom-add-in-external-command-launch/).
+//     Any id that parses as a GUID counts, braces or not: admitting is the safe direction, since
+//     at worst a saved button shows the plain message.
 // Everything else (an internal Revit command the ribbon shows but PostableCommand does not hold, or
 // a button an add-in drew straight into AdWindows) is left out, counted and logged by the scan.
 //
@@ -24,9 +28,15 @@ namespace RST.Core.Scanning;
 
 public static class PostCommandRule
 {
-    /// <summary>True for the id of a button an add-in made through the Revit API (an external command).</summary>
+    /// <summary>
+    /// True for an external command's id: a button an add-in made through the Revit API
+    /// (<c>CustomCtrl_…</c>), or a manifest-registered command's ClientId GUID (with or without braces).
+    /// </summary>
     public static bool IsExternalCommandId(string? id) =>
-        id is not null && id.StartsWith(OriginClassifier.AddinButtonIdPrefix, StringComparison.Ordinal);
+        id is not null
+        && (id.StartsWith(OriginClassifier.AddinButtonIdPrefix, StringComparison.Ordinal)
+            || Guid.TryParseExact(id, "D", out _)
+            || Guid.TryParseExact(id, "B", out _));
 
     /// <summary>
     /// True when Revit lets an add-in post <paramref name="id"/>: an external command's id, or one

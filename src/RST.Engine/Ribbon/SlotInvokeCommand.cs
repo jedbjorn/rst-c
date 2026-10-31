@@ -19,9 +19,13 @@
 // is neither a PostableCommand nor an external command; Text Types was
 // one). The catalogue leaves those out now, but a profile saved earlier
 // may still hold one: its click logs a Warning and shows the plain
-// SlotMessages.NotPostable message, not "failed unexpectedly". Revit
-// itself is asked (PostCommand), not a list, so a working button can
-// never be stopped by a wrong guess here.
+// SlotMessages.NotPostable message, not "failed unexpectedly", once
+// UIApplication.CanPostCommand confirms Revit won't post it (otherwise
+// the exception takes the failure path, ERR). Revit itself is asked, not
+// a list, so a working button can never be stopped by a wrong guess here.
+// An id LookupCommandId can't find gets SlotMessages.NotFound: "the
+// add-in doesn't appear to be installed" for an add-in's id (CustomCtrl_
+// or a manifest GUID), the plain message for any other (a Revit tool).
 //
 // The dialog texts live in RST.Core.Ribbon.SlotMessages (unit-tested).
 
@@ -72,14 +76,17 @@ internal sealed class SlotInvokeCommand : ICommand
                     {
                         Log.Warning("SlotInvokeCommand: Revit command id not found ({CommandId}, display={DisplayName})",
                                     _target.Payload, _target.DisplayName);
-                        Show(SlotMessages.MissingAddin(_target.DisplayName), "missing-addin");
+                        // An add-in's id: its add-in is missing. Any other id: a Revit tool add-ins can't run.
+                        Show(SlotMessages.NotFound(_target.Payload, _target.DisplayName), "not-found");
                         return;
                     }
                     try
                     {
                         _ui.PostCommand(id);
                     }
-                    catch (Autodesk.Revit.Exceptions.ArgumentException ex)
+                    // Plain message only when Revit itself confirms it won't post this id; any other
+                    // ArgumentException goes on to the failure path below (ERR).
+                    catch (Autodesk.Revit.Exceptions.ArgumentException ex) when (CanPost(id) == false)
                     {
                         // "The commandId must be in Autodesk.Revit.UI.PostableCommand or an external command."
                         Log.Warning("SlotInvokeCommand: Revit doesn't let add-ins run {CommandId} (display={DisplayName}): {Error}",
@@ -94,6 +101,20 @@ internal sealed class SlotInvokeCommand : ICommand
             Log.Error(ex, "SlotInvokeCommand failed (kind={Kind}, payload={Payload}, display={DisplayName})",
                       _target.Kind, _target.Payload, _target.DisplayName);
             Show(SlotMessages.Failure(_target.DisplayName, ex.Message), "failure");
+        }
+    }
+
+    /// <summary>
+    /// UIApplication.CanPostCommand, guarded: it runs inside an exception filter, so it must never
+    /// throw. Null when Revit couldn't answer (then the click takes the failure path).
+    /// </summary>
+    private bool? CanPost(RevitCommandId id)
+    {
+        try { return _ui.CanPostCommand(id); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "SlotInvokeCommand: CanPostCommand threw ({CommandId})", _target.Payload);
+            return null;
         }
     }
 

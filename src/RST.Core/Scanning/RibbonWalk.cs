@@ -214,11 +214,23 @@ public sealed class RibbonScanCounts
     public int Cycles { get; private set; }
     public int DepthCapped { get; private set; }
 
-    private readonly List<string> _notPostableIds = new();
-    private readonly HashSet<string> _notPostableSeen = new(StringComparer.Ordinal);
+    private readonly DistinctIds _notPostableIds = new();
+    private readonly DistinctIds _outsideIds = new();
+    private readonly DistinctIds _unresolvedIds = new();
 
-    /// <summary>The distinct Ids left out as not postable, in the order the walk met them.</summary>
-    public IReadOnlyList<string> NotPostableIds => _notPostableIds;
+    /// <summary>The distinct Ids left out as not postable (either reason), in the order the walk met them.</summary>
+    public IReadOnlyList<string> NotPostableIds => _notPostableIds.List;
+    /// <summary>The distinct Ids left out as outside PostableCommand (SC-051), in walk order.</summary>
+    public IReadOnlyList<string> OutsidePostableCommandIds => _outsideIds.List;
+    /// <summary>The distinct Ids left out as unresolved by LookupCommandId (SC-027), in walk order.</summary>
+    public IReadOnlyList<string> UnresolvedIds => _unresolvedIds.List;
+
+    private sealed class DistinctIds
+    {
+        private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
+        public List<string> List { get; } = new();
+        public void Add(string id) { if (_seen.Add(id)) List.Add(id); }
+    }
 
     public int Collected(RibbonContainerKind kind) => _collected[(int)kind];
     public int ExcludedAsToggle(RibbonContainerKind kind) => _excluded[(int)kind];
@@ -233,13 +245,8 @@ public sealed class RibbonScanCounts
     }
 
     internal void AddExcluded(RibbonContainerKind kind) => _excluded[(int)kind]++;
-    internal void AddOutsidePostableCommand(string id) { OutsidePostableCommand++; NoteNotPostable(id); }
-    internal void AddUnresolved(string id) { Unresolved++; NoteNotPostable(id); }
-
-    private void NoteNotPostable(string id)
-    {
-        if (_notPostableSeen.Add(id)) _notPostableIds.Add(id);
-    }
+    internal void AddOutsidePostableCommand(string id) { OutsidePostableCommand++; _outsideIds.Add(id); _notPostableIds.Add(id); }
+    internal void AddUnresolved(string id) { Unresolved++; _unresolvedIds.Add(id); _notPostableIds.Add(id); }
     internal void AddCycle() => Cycles++;
     internal void AddDepthCapped() => DepthCapped++;
     internal void AddItemSkipped() => ItemsSkipped++;
@@ -256,7 +263,9 @@ public sealed class RibbonScanCounts
         MenuItemsCollected += other.MenuItemsCollected;
         OutsidePostableCommand += other.OutsidePostableCommand;
         Unresolved += other.Unresolved;
-        foreach (var id in other._notPostableIds) NoteNotPostable(id);
+        foreach (var id in other._notPostableIds.List) _notPostableIds.Add(id);
+        foreach (var id in other._outsideIds.List) _outsideIds.Add(id);
+        foreach (var id in other._unresolvedIds.List) _unresolvedIds.Add(id);
         Cycles += other.Cycles;
         DepthCapped += other.DepthCapped;
     }

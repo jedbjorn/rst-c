@@ -35,10 +35,12 @@
 //
 // SC-051 (decision #63): only what Revit lets an add-in post reaches the
 // catalog: one of this Revit's PostableCommand ids (CommandCatalog passes
-// BuiltinCommandScanner's seed) or an external command's CustomCtrl_ id (see
+// BuiltinCommandScanner's seed) or an external command's id (CustomCtrl_ or a
+// manifest GUID, see
 // RST.Core.Scanning.PostCommandRule). Text Types (ID_SETTINGS_TEXT) and the
 // other internal commands PostCommand refuses are left out, counted as
-// "outside PostableCommand" in the summary and listed on one Information line.
+// "outside PostableCommand" in the summary and listed on their own Information
+// line (ids LookupCommandId could not find get a separate "unresolved" line).
 //
 // Reliability (review N4): a throw from a tab (its title or panels), a panel
 // (its source, title, items or launcher) or a single item skips only that
@@ -110,7 +112,7 @@ internal static class RibbonScanner
     /// ribbon order, then every dialog launcher. <paramref name="resolves"/> is asked only for
     /// kinds the walk reaches since SC-027; <paramref name="isPostableCommand"/>, when given, holds
     /// the PostableCommand ids every id is checked against (SC-051, see RibbonWalker). Logs one
-    /// Information line with the scan's counts, and one with the ids left out as not postable.
+    /// Information line with the scan's counts, and one per reason listing the ids left out.
     /// </summary>
     internal static IReadOnlyList<ScannedCommand> EnumerateTabs(
         IEnumerable<RibbonTab?>? tabs, Func<string, bool> resolves, RibbonScanCounts? counts = null,
@@ -193,9 +195,13 @@ internal static class RibbonScanner
                   tabsSkippedRestricted, tabsSkippedRst);
         // SC-027: one line per scan, so a VM run or a new Revit year can be checked from the log.
         Log.Information("RibbonScanner: {Summary}", counts.Summary());
-        if (counts.NotPostableIds.Count > 0)
-            Log.Information("RibbonScanner: left out {Count} ids Revit won't let add-ins run: {Ids}",
-                            counts.NotPostableIds.Count, string.Join(", ", counts.NotPostableIds));
+        // SC-051: one line per reason, so each list can be checked on its own.
+        if (counts.OutsidePostableCommandIds.Count > 0)
+            Log.Information("RibbonScanner: left out {Count} ids Revit won't let add-ins run (outside PostableCommand): {Ids}",
+                            counts.OutsidePostableCommandIds.Count, string.Join(", ", counts.OutsidePostableCommandIds));
+        if (counts.UnresolvedIds.Count > 0)
+            Log.Information("RibbonScanner: left out {Count} ids Revit couldn't find (unresolved): {Ids}",
+                            counts.UnresolvedIds.Count, string.Join(", ", counts.UnresolvedIds));
 
         items.AddRange(launchers);
         return items;

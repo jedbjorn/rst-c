@@ -28,6 +28,17 @@ public static class SlotMessages
         "Revit doesn’t let add-ins run this command, so RST can’t start it for you. " +
         "Use it from Revit’s own ribbon instead. You can remove this button from the profile in the Builder.");
 
+    /// <summary>
+    /// The command id is not in this Revit (RevitCommandId.LookupCommandId returned null). An
+    /// add-in's id (CustomCtrl_… or a manifest GUID, PostCommandRule.IsExternalCommandId) means its
+    /// add-in is missing or disabled; any other id is one of Revit's own tools, which Revit doesn't
+    /// let add-ins run (SC-051), so it gets the plain NotPostable message.
+    /// </summary>
+    public static SlotMessage NotFound(string? commandId, string displayName) =>
+        RST.Core.Scanning.PostCommandRule.IsExternalCommandId(commandId)
+            ? MissingAddin(displayName)
+            : NotPostable(displayName);
+
     /// <summary>Anything else that went wrong.</summary>
     public static SlotMessage Failure(string displayName, string error) => new(
         $"“{displayName}” couldn’t run.",

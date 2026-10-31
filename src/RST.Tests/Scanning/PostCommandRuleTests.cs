@@ -19,6 +19,12 @@ public sealed class PostCommandRuleTests
     [InlineData("CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_Builder", true)]
     [InlineData("CustomCtrl_%PanelParts%Split", true)]
     [InlineData("CustomCtrl_%CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Select Points%Select Points", true)]
+    // A manifest-registered command (<AddIn Type="Command">, Add-Ins > External Tools) may carry
+    // the manifest's ClientId GUID as its id, with or without braces, in either case.
+    [InlineData("3f7c4a9e-2b1d-4e8f-9a6c-5d0e1f2a3b4c", true)]
+    [InlineData("{3F7C4A9E-2B1D-4E8F-9A6C-5D0E1F2A3B4C}", true)]
+    [InlineData("3f7c4a9e-2b1d-4e8f-9a6c-5d0e1f2a3b4", false)]
+    [InlineData("3f7c4a9e2b1d4e8f9a6c5d0e1f2a3b4c", false)]
     [InlineData("customctrl_%Acme%Go", false)]
     [InlineData("ID_SETTINGS_TEXT", false)]
     [InlineData("Kinship.Open", false)]
@@ -34,6 +40,7 @@ public sealed class PostCommandRuleTests
     [InlineData("ID_STRUCTURAL_SETTINGS", true)]
     // External commands, whether or not the seed holds them.
     [InlineData("CustomCtrl_%CustomCtrl_%Add-Ins%eTransmit%eTransmit", true)]
+    [InlineData("{3F7C4A9E-2B1D-4E8F-9A6C-5D0E1F2A3B4C}", true)]
     // Revit's own tools that PostableCommand does not hold: PostCommand refuses them.
     [InlineData("ID_SETTINGS_TEXT", false)]
     [InlineData("ID_INPLACE_WALL", false)]
