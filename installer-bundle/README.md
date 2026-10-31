@@ -57,6 +57,7 @@ They set the Burn variable `InstallScope` to `user` or `machine`. **The user alw
      - Each product must be removable, with its cached installer present; otherwise it stops with exit 1612.
    - **After a stop or a failure:** the helper is vital, so Burn rolls `RST-Machine.msi` back. The user keeps their own RST, and the setup reports the failure. A removal that fails midway (the preview gone, then `RST.msi` fails) still leaves `RST.msi`.
    - **A leftover per-user `RST.addin` that no installer can remove** (a hand copy) stays. It is reported like any shadow: the engine logs it, and the tray tells the user once. A bare `RST-Machine.msi` refuses it instead and names the file.
+   - **Then it starts the tray** (SC-044): `C:\Program Files\RST\Tray\RST.Tray.exe --startup`, for this user, hidden, never elevated, none when one runs. It uses the same code as the MSIs' `RstStartTray` (`installer/helper/StartTray.cs`, compiled in), and its log says what it did. `RST-Machine.msi` skips its own start under setup (`RSTFROMSETUP=1`): removing the user's `RST.msi` closes every `RST.Tray.exe` on the desktop by name, so a tray it started would be closed again. Never after a stop or a failure. See [installer/README.md](../installer/README.md#when-the-tray-starts).
    - **Burn's own `RST` package,** whose condition is false on this path, then finds the bundled version already gone. Burn logs that and carries on.
 3. **Ticked companions install for the installing user.** Companions stay per user (contract C1). Every other user adds them from their RST tray.
 
@@ -144,7 +145,7 @@ dotnet build installer-bundle\RST.Setup.wixproj -c Release
 
 | File | Role |
 |---|---|
-| `RST.Setup.wixproj` | the bundle project; inputs `RstMsi`, `RstMachineMsi`, `CompanionRegistry`, `CompanionPayloadDir`, `RstBundleVersion`. It compiles `helper\RemoveUserRst.cs` with the .NET Framework 4 compiler that ships in Windows |
+| `RST.Setup.wixproj` | the bundle project; inputs `RstMsi`, `RstMachineMsi`, `CompanionRegistry`, `CompanionPayloadDir`, `RstBundleVersion`. It compiles `helper\RemoveUserRst.cs`, with `..\installer\helper\StartTray.cs`, with the .NET Framework 4 compiler that ships in Windows |
 | `Bundle.wxs` | bundle identity, the BA, the scope variable and search, the chain (`RST.msi`, the helper, `RST-Machine.msi` + the generated `RstCompanions` group) |
 | `helper\RemoveUserRst.cs` | the "Everyone on this PC" helper: checks, then removes the installing user's own per-user `RST.msi` (any version) and `RST-R27.msi` preview (C# 5, no dependencies) |
 | `gen-companions.ps1` | runs before every compile: reads the registry, re-checks each payload's sha256, writes `obj\gen\Companions.g.wxs` (variables + `MsiPackage`s) and `obj\gen\thm.xml` (the theme with one checkbox per shippable companion). Zero shippable → empty chain, no checkboxes |

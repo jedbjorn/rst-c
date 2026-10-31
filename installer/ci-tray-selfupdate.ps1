@@ -2,7 +2,7 @@
   rst-c's own: AC8 on Windows CI (feature #17, spec #20 §5; F17 WU4). RST updates itself, tray included, from one
   RST.msi build of this commit to a newer one, through the tray's real updater copy:
 
-    (1) install -OldMsi (this commit at -OldVersion) per user; start its tray (--startup)
+    (1) install -OldMsi (this commit at -OldVersion) per user; the install starts its tray (--startup, SC-044)
     (2) RST.RuntimeTests TraySelfUpdateFixtureTests ("close"): -NewMsi, served at v<NewVersion> by a fake GitHub,
         passes RST's four checks against the INSTALLED RST (real msi.dll), lands in %LocalAppData%\RST\Tray\cache\rst\,
         and the real SelfUpdater copies the INSTALLED tray to %LocalAppData%\RST\Tray\updater\ as RST.TrayUpdater.exe
@@ -10,9 +10,10 @@
         hand-off. The updater waits for it, runs msiexec, records the result and starts the new tray.
         Asserted here: the old tray is gone; exactly one RST.Tray.exe runs, a new process from the install folder,
         started by the updater; it shows the updater's result; Windows Installer and Add/Remove Programs list ONE
-        RST, at the new version; the updater's own log lines.
+        RST, at the new version; the updater's own log lines. SC-044: RST.msi's RstStartTray, run by the updater's
+        msiexec, found the updater holding the tray's mutex and started none (also in (3) and (5)).
     (3) the same with -NewerMsi in "race" mode: the tray is NOT closed, so msiexec meets it running: Windows
-        Installer's Restart Manager closes it and starts it again, and the updater starts one as well. The
+        Installer's Restart Manager closes it (and, since SC-044 review B1, does not restart it), and the updater starts one. The
         single-instance mutex must leave exactly one tray. SC-022: the old tray is never asked to quit here, so the
         updater cannot take the mutex in time; it must take it the moment msiexec's Restart Manager closes that tray
         and hand it over before it starts the new one.
@@ -160,6 +161,14 @@ function Wait-OneTray([int]$LinesBefore, [string]$Label, [string]$What = 'exactl
   Assert ($trays.Count -eq 1 -and $trays[0].ProcessId -eq $id) "$Label $What (got $($trays.Count), pid $id settled)"
   return $trays[0]
 }
+. (Join-Path $PSScriptRoot 'ci-tray-start.ps1')
+# SC-044: RST.msi's RstStartTray ran during the updater's msiexec and started none, because the updater held the
+# tray's single-instance mutex; the self-update's one tray is the updater's own start.
+function Assert-StartTraySkipped([datetime]$Since, [string]$Label) {
+  $lines = Get-StartTrayLines $Since $Label
+  Assert (@($lines | Where-Object { $_ -match 'already holds Local\\RST\.Tray\.' }).Count -ge 1) "$Label RST.msi's RstStartTray found the updater holding the tray's mutex and started none"
+  Assert (@($lines | Where-Object { $_ -match 'started RST\.Tray pid' }).Count -eq 0) "$Label RstStartTray started no tray of its own"
+}
 function Start-Tray {
   $p = Start-Process $TrayExe -ArgumentList '--startup' -PassThru
   Wait-Until { Test-TrayMutex } 45 'the tray takes its mutex'
@@ -207,13 +216,18 @@ foreach ($y in '2025', '2026', '2027') {
 Assert (@(Get-Process -Name 'Revit' -ErrorAction SilentlyContinue).Count -eq 0) 'no Revit.exe runs (the stubs are files only)'
 New-Item -ItemType Directory -Force (Split-Path $TraySettings) | Out-Null
 Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": false, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+$before = @(Get-TrayLog).Count
 Invoke-Msiexec '/i' $OldMsi "install-$OldVersion"
 Assert-OneRst $OldVersion '(1) installed'
-$oldTray = Start-Tray
+# SC-044: the install started the tray itself, hidden.
+$t1 = Wait-OneTray $before '(1)' 'the install started exactly one tray'
+Assert ($t1.CommandLine -match '--startup') "(1) it runs hidden (--startup): $($t1.CommandLine)"
+$oldTray = [int]$t1.ProcessId
 Show-State '(1)'
 
 # ---- (2) self-update, the tray quits after the hand-off
 $before = @(Get-TrayLog).Count
+$since2 = Get-Date
 $h = Invoke-HandOff $NewMsi $NewVersion 'close' $oldTray
 Assert ($h.closed) '(2) the old tray was asked to quit after the hand-off'
 Wait-Until { -not (Get-Process -Id $oldTray -ErrorAction SilentlyContinue) } 60 '(2) the old tray exits'
@@ -230,6 +244,9 @@ $newTray = Wait-OneTray $before '(2)'
 Assert ($newTray.ProcessId -ne $oldTray) "(2) it is a new process (pid $($newTray.ProcessId), the old was $oldTray)"
 Assert ($newTray.ExecutablePath -eq $TrayExe) "(2) it runs from the install folder ($($newTray.ExecutablePath))"
 Assert ($newTray.ParentProcessId -eq $updaterPid) "(2) the updater (pid $updaterPid) started it (parent $($newTray.ParentProcessId))"
+# SC-044, unchanged self-update: the updater held the tray's mutex while msiexec ran, so RST.msi's RstStartTray started
+# none; the updater's own start (no switch: the window, with the result) is the one tray.
+Assert-StartTraySkipped $since2 '(2)'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewVersion)): installed" }).Count -gt 0 } 30 '(2) the new tray shows the updater''s result'
 Assert (-not (Test-Path (Join-Path $LocalRoot 'selfupdate.json'))) '(2) the result is shown once (selfupdate.json consumed)'
 Assert (-not (Test-Path (Join-Path $LocalRoot 'updater\RST.Tray.exe'))) '(2) the updater copy never holds RST.Tray.exe'
@@ -243,6 +260,7 @@ Show-State '(2)'
 
 # ---- (3) the race: the tray still runs when msiexec does
 $before = @(Get-TrayLog).Count
+$since3 = Get-Date
 $h = Invoke-HandOff $NewerMsi $NewerVersion 'race' $newTray.ProcessId
 $lines = Wait-Updater $before 'race'
 Assert (@($lines | Where-Object { $_ -match 'updater: msiexec exited 0 ' }).Count -eq 1) '(3) msiexec exited 0 with the tray running (no reboot needed)'
@@ -252,12 +270,13 @@ Assert (@($lines | Where-Object { $_ -match 'updater: the tray.s single-instance
 Assert (@($lines | Where-Object { $_ -match 'updater: took the tray.s single-instance mutex .* once the tray let it go' }).Count -eq 1) '(3) the updater took the mutex once msiexec closed the tray'
 Assert (@($lines | Where-Object { $_ -match 'not confirmed released' }).Count -eq 0) '(3) the updater confirmed the hand-over (review N3)'
 Assert ([array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'released the tray.s single-instance mutex' } | Select-Object -First 1)) -lt [array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'updater: started the installed tray' } | Select-Object -First 1))) '(3) it handed the mutex over before starting the new tray'
-$null = Wait-OneTray $before '(3)' "Restart Manager's restart and the updater's start leave exactly one tray"
-# Two launches, one tray: whichever came second (Restart Manager's --startup or the updater's) found the first and exited.
+$null = Wait-OneTray $before '(3)' "the updater's start leaves exactly one tray"
+# One tray: a launch that came second (the updater's, if something else started one first) found it and exited.
 $second = @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match 'RST tray already running for this user' })
 $second | ForEach-Object { Write-Host "  log: $_" }
-Write-Host "OBSERVE: (3) launches that found a tray running and exited: $($second.Count) (1 when Restart Manager restarted the tray as well; 0 when CloseApplication closed it, which nothing restarts)"
+Write-Host "OBSERVE: (3) launches that found a tray running and exited: $($second.Count) (0 expected: Restart Manager no longer restarts the tray, MSIDISABLERMRESTART)"
 Assert ($second.Count -le 1) '(3) at most one launch found a tray already running'
+Assert-StartTraySkipped $since3 '(3)'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewerVersion)): installed" }).Count -gt 0 } 30 '(3) the running tray shows the updater''s result'
 Assert (-not (Test-Path (Join-Path $LocalRoot 'selfupdate.json'))) '(3) the result is shown once'
 Assert-OneRst $NewerVersion '(3) after the race'
@@ -290,8 +309,10 @@ $null = Start-Tray   # (4) uninstalls with a tray running, as before
 # ---- (4) uninstall (the updater's msiexec logs are kept first: the uninstall removes them)
 Copy-Item (Join-Path $LocalRoot 'logs\*') $OutDir -ErrorAction SilentlyContinue
 $pc = (Get-Related)[0].ProductCode
+$since4 = Get-Date
 Invoke-Msiexec '/x' $pc 'uninstall'
 Wait-Until { (Get-Trays).Count -eq 0 } 30 '(4) no tray runs after uninstall'
+Assert ((Get-StartTrayLog $since4 '(4) uninstall').Count -eq 0) '(4) the uninstall ran no RstStartTray: nothing was started'
 Assert ((Get-Updaters).Count -eq 0) '(4) no updater runs'
 Assert ((Get-Related).Count -eq 0) '(4) RST is uninstalled'
 Assert (-not (Test-Path $LocalRoot)) "(4) $LocalRoot (cache, updater copy, install logs) is removed"
@@ -307,12 +328,16 @@ function Invoke-Bundle([string]$Exe, [string[]]$BundleArgs, [string]$Name) {
   Write-Host "  exit $($p.ExitCode)"
   if ($p.ExitCode -notin 0, 3010) { Get-Content $log -Tail 60 | Write-Host; throw "$Name exited $($p.ExitCode)" }
 }
+$before = @(Get-TrayLog).Count
 Invoke-Bundle $OldBundle @('/quiet', '/norestart') "bundle-install-$OldVersion"
 Assert-OneRst $OldVersion '(5) installed by RST-Setup.exe' -Bundle
-$bundleTray = Start-Tray
+$t5 = Wait-OneTray $before '(5)' 'the bundle''s install started exactly one tray'   # SC-044: RST.msi's RstStartTray
+Assert ($t5.CommandLine -match '--startup') "(5) it runs hidden (--startup): $($t5.CommandLine)"
+$bundleTray = [int]$t5.ProcessId
 Show-State '(5)'
 
 $before = @(Get-TrayLog).Count
+$since5 = Get-Date
 $h = Invoke-HandOff $NewBundle $NewVersion 'bundle' $bundleTray -Bundle
 Assert ($h.kind -eq 'Bundle') '(5) the tray chose RST-Setup.exe: it found the bundle''s per-user registration'
 Assert ($h.closed) '(5) the old tray was asked to quit after the hand-off'
@@ -326,6 +351,7 @@ $bundleNew = Wait-OneTray $before '(5)'
 Assert ($bundleNew.ProcessId -ne $bundleTray) '(5) it is a new process'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewVersion)): installed" }).Count -gt 0 } 30 '(5) the new tray shows the updater''s result'
 Assert-OneRst $NewVersion '(5) after the bundle self-update' -Bundle
+Assert-StartTraySkipped $since5 '(5)'
 Show-State '(5) after'
 
 # ---- (6) the bundle's own uninstall still works and leaves nothing
@@ -335,8 +361,10 @@ Write-Host "bundle uninstall: $($arp.QuietUninstall)"
 Assert ($arp.QuietUninstall -match '^"?(.+?\.exe)"?\s+(.*)$') '(6) the bundle entry has a quiet uninstall command'
 $uninstallExe = $Matches[1]
 $uninstallArgs = @($Matches[2] -split '\s+' | Where-Object { $_ }) + @('/norestart')
+$since6 = Get-Date
 Invoke-Bundle $uninstallExe $uninstallArgs 'bundle-uninstall'
 Wait-Until { (Get-Trays).Count -eq 0 } 30 '(6) no tray runs after the bundle uninstall'
+Assert ((Get-StartTrayLog $since6 '(6) bundle uninstall').Count -eq 0) '(6) the bundle uninstall ran no RstStartTray: nothing was started'
 Assert ((Get-Related).Count -eq 0) '(6) the bundle uninstall removed RST'
 Assert ((Get-RstArp).Count -eq 0) '(6) no RST entry is left in Add/Remove Programs'
 Assert (-not (Test-Path $LocalRoot)) "(6) $LocalRoot is removed"

@@ -17,6 +17,8 @@
     user     "Just for me (recommended)", the default. RST.msi, per user.
              Every package on this path is per user, so Burn never
              launches an elevated engine (the bundle smoke asserts it).
+             RST.msi's own RstStartTray starts the tray for the user at
+             the end of its install (SC-044).
     machine  "Everyone on this PC". In chain order (review D1: the user
              always ends with RST, in one form or the other):
                1. RSTMachine (RST-Machine.msi), per machine: the one step
@@ -41,8 +43,10 @@
                   adds them from the RST tray).
              2, 3 and 4 run in the bundle's unelevated process, as the
              installing user, so they see and change only that user's
-             products. A declined UAC prompt stops setup before any package
-             runs: nothing changes.
+             products. 2 then starts RST-Machine's tray for that user
+             (SC-044); RST-Machine.msi, run in the elevated engine, does not.
+             A declined UAC prompt stops setup before any package runs:
+             nothing changes.
   The scope is not remembered by Burn. It is found again on every run:
   when RST-Machine.msi is installed it is "machine" (the "Just for me"
   button is then disabled: going back to per user is uninstall, then
@@ -134,12 +138,17 @@
            midway (the preview removed, then RST.msi fails), RST.msi is still
            there. Permanent with no detection: it runs on every machine-path
            install and is never uninstalled; with nothing to remove it exits
-           0. Arguments: its log, and the UI level (4 = full UI: it may ask
-           "Close Revit, then Retry"). Exit 32 = Revit is running; 1612 = a
-           product cannot be removed; 1602 = cancelled at the Revit prompt. -->
+           0. Arguments: its log, the UI level (4 = full UI: it may ask
+           "Close Revit, then Retry") and RST-Machine.msi's tray. Exit 32 =
+           Revit is running; 1612 = a product cannot be removed; 1602 =
+           cancelled at the Revit prompt. On success it then starts that tray
+           for this user (SC-044, decision #45: hidden, never elevated, none
+           while a tray runs), which RST-Machine.msi itself skips here
+           (RSTFROMSETUP): removing the user's own RST.msi closes every
+           RST.Tray.exe on the desktop by name. -->
       <ExePackage Id="RemoveUserRst" Name="RST.RemoveUserRst.exe" SourceFile="$(var.RemoveUserRstExe)"
                   PerMachine="no" Permanent="yes" Vital="yes" Cache="remove" DetectCondition=""
-                  InstallArguments="&quot;[WixBundleLog_RemoveUserRst]&quot; [WixBundleUILevel]"
+                  InstallArguments="&quot;[WixBundleLog_RemoveUserRst]&quot; [WixBundleUILevel] &quot;[ProgramFiles64Folder]RST\Tray\RST.Tray.exe&quot;"
                   InstallCondition="InstallScope = &quot;machine&quot;">
         <ExitCode Value="0" Behavior="success" />
         <ExitCode Value="3010" Behavior="scheduleReboot" />
