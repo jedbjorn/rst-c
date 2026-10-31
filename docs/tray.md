@@ -41,6 +41,8 @@ Click the icon to open the window. Right-click it for the menu: **Open RST**, **
 
 Each Windows user has their own tray, settings and log, whichever MSI installed it: a per-machine install shares only the program files. Only one tray runs per user and sign-in session: starting `RST.Tray.exe` again brings the running tray's window to the front.
 
+Restart Manager may restart the tray hidden after a third-party installer closes it; a `--startup` start elevated through UAC or running as SYSTEM logs one line and exits until the next sign-in or Revit launch (SC-047 R3, decision #40). An account with no split token (UAC off, or the built-in Administrator with Admin Approval Mode off, as on the CI runners) runs the tray with the same full token it gets at sign-in; double-clicked starts are unchanged.
+
 The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own ten files, and neither one's automatic clean-up deletes the other's. Health's **RST Logs** clean-up, which you start yourself, clears both, except the log the tray has open.
 
 ## Updates

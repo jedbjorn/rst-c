@@ -160,8 +160,10 @@ msiexec /x RST.msi /qn
 | Sign-in | The `RST` Run value (`HKCU` for `RST.msi`, `HKLM` for `RST-Machine.msi`) | Task Manager's Startup toggle is respected. |
 | Revit | RST's add-in (`src/RST.Engine/Tray/TrayLauncher.cs`) | Only when no tray runs, and never from an elevated Revit. |
 | After an install, repair or upgrade (SC-044, decision #45) | The installer's `RstStartTray` custom action (`Tray.wxs`, `helper\StartTray.cs`), for the user who ran it | See below. |
-| After an installer closed a running tray | Nobody else. | Restart Manager still closes a running tray for a repair or upgrade, but never restarts it: `RST.msi` sets `MSIDISABLERMRESTART=1`, and `RST-Machine.msi` turns Restart Manager off. Its restart would come from `msiexec`, elevated when `msiexec` is (SC-044 review B1). `RstStartTray` starts the tray instead. |
+| After an RST installer closed a running tray | Nobody else. | Restart Manager still closes a running tray for a repair or upgrade, but never restarts it: `RST.msi` sets `MSIDISABLERMRESTART=1`, and `RST-Machine.msi` turns Restart Manager off. Its restart would come from `msiexec`, elevated when `msiexec` is (SC-044 review B1). `RstStartTray` starts the tray instead. |
 | After a self-update | The tray's updater copy (`RST.TrayUpdater.exe`) | No switch: the window opens with the result. |
+
+Third-party installers can still use the tray's Restart Manager registration (`--startup`, decision #40). Such hidden starts log and exit before creating an icon when elevated through UAC or running as SYSTEM, returning at the next sign-in or Revit launch; explicit starts and accounts without a split token are unchanged (SC-047 R3).
 
 **`RstStartTray`** is an immediate custom action after `InstallFinalize`, run from the MSI's Binary table (it is never installed), with `Return="ignore"`. The install is already committed when it runs, so it can never fail or roll an install back. It does not run on an uninstall, or when an upgrade removes the old version (`REMOVE=ALL` in both). In order, it:
 
