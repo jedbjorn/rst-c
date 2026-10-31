@@ -188,7 +188,9 @@ for tools and stacks, `PanelDrops` for the panel reorder, and `PanelStacks` for 
   clicking ✎, ×, ▲ or ▼ never start one. A tile's or a stack row's icon (`IconHandle`) is the
   exception: a press there arms a drag that starts once the pointer moves past
   `SystemParameters.MinimumHorizontal/VerticalDragDistance` (the button's mouse capture is released
-  first, so no Click follows), and a still click opens the icon picker. A tile's name box is only as
+  first, so no Click follows), and a still click opens the icon picker. The move is watched in the
+  **Preview** phase (`PreviewMouseMove`): a button holding the mouse marks the bubbling `MouseMove`
+  handled, so a bubbling handler on the tile or row would never see it. A tile's name box is only as
   wide as its text, a row's sits left, so the rest of each tile and row can be grabbed; the hover-only
   × takes no press while hidden (`IsHitTestVisible` follows the hover). The pointer, the button state
   and the OS drag loop are window seams (`PointerAt`, `LeftPressed`, `RunDragDrop`) so the runtime

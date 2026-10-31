@@ -657,8 +657,14 @@ public class ProfileBuilderDragStartTests
         on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseDownEvent });
     }
 
-    private static void Move(UIElement on) =>
-        on.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = UIElement.MouseMoveEvent });
+    /// <summary>A move as the input system raises it: the tunnelling PreviewMouseMove, then (unless handled) the bubbling MouseMove.</summary>
+    private static void Move(UIElement on)
+    {
+        var preview = new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.PreviewMouseMoveEvent };
+        on.RaiseEvent(preview);
+        if (preview.Handled) return;
+        on.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent });
+    }
 
     private static Button IconOf(FrameworkElement tileOrRow) =>
         WindowCapture.Descendants<Button>(tileOrRow).Single(b => b.Name == ProfileBuilderWindow.IconHandleName);
@@ -696,6 +702,52 @@ public class ProfileBuilderDragStartTests
             Assert.Null(rig.Window.PendingDrag);
             Assert.Null(rig.Harness.Model.CurrentDrag);
             Assert.False(rig.Harness.Model.IsIconPickerOpen, "a drag from the icon is not a click on it");
+        }
+        finally
+        {
+            Close(rig);
+        }
+    });
+
+    [Fact]
+    public void A_drag_starts_from_an_icon_that_holds_the_mouse_and_handles_the_bubbling_move() => Sta(() =>
+    {
+        // Review N6. With a real mouse the icon button captures the mouse on the press and marks every
+        // bubbling MouseMove handled while it is held (ButtonBase.OnMouseMove). The CI desktop has no
+        // pressed button, so ButtonBase never does that here: the icons get a handler that does the
+        // same, and the button takes the capture for real where the session allows it.
+        var rig = Open();
+        try
+        {
+            foreach (var (element, expected) in new (FrameworkElement, BuilderDrag)[]
+                     {
+                         (Tile(rig.Window, 0, 1), ProfileBuilderWindow.DragFor(rig.Harness.Model.Panels[0].Tile(1))!),
+                         (StackRow(rig.Window, 1, 1, 2), ProfileBuilderWindow.DragFor(rig.Harness.Model.Panels[1].Tile(1, row: 2))!),
+                     })
+            {
+                rig.Started.Clear();
+                var icon = IconOf(element);
+                var bubblingMoves = 0;
+                icon.AddHandler(UIElement.MouseMoveEvent, new MouseEventHandler((_, e) =>
+                {
+                    bubblingMoves++;
+                    e.Handled = true; // as ButtonBase does while it holds the mouse
+                }));
+                rig.Pointer = new Point(200, 200);
+                Press(icon);
+                var captured = icon.CaptureMouse();
+                rig.Pointer = new Point(230, 200);
+                Move(icon);
+
+                var started = Assert.Single(rig.Started);
+                Assert.Equal(expected, started.Drag);
+                Assert.Same(element, started.Source);
+                Assert.Equal(1, bubblingMoves); // the button saw the move too, and handled it
+                Assert.False(icon.IsMouseCaptured, $"the icon released the mouse (captured before: {captured})");
+                Assert.False(icon.IsPressed, "no Click (the icon picker) follows the drag");
+                Assert.False(rig.Harness.Model.IsIconPickerOpen);
+                WindowCapture.DoEvents();
+            }
         }
         finally
         {

@@ -168,6 +168,9 @@ public partial class ProfileBuilderWindow : Window
         _dragStart = PointerAt(e, this);
     }
 
+    // Wired to PreviewMouseMove (WU3 review N6): a ButtonBase that holds the mouse (the icon after a
+    // press) marks the bubbling MouseMove handled, so a bubbling handler on the tile or row would never
+    // see the move that should start the drag. The tunnelling move reaches the tile first.
     private void OnDragSourceMove(object sender, MouseEventArgs e)
     {
         if (_pendingDrag is null || !LeftPressed(e) || !Model.IsIdle) return;
