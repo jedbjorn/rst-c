@@ -12,8 +12,11 @@
 //     against a LocalPathGuard-verified local path. The heavier
 //     model_stats capture (Document.GetWarnings + the local file's
 //     length, again only through LocalPathGuard) never runs inside an
-//     open/save/sync handler: those only REQUEST it, and it runs at the
-//     next Revit Idling (spec #24 Capture Additions, ModelStatsGate);
+//     open handler: open/save/sync only REQUEST it, and it runs at the
+//     next Revit Idling (spec #24 Capture Additions, ModelStatsGate).
+//     The exception is a model that is closing — it is gone before
+//     Idling, so its pending or during-close capture runs in the
+//     closing/save/sync handler while the Document is valid;
 //   - telemetry never takes Revit down — every handler body is guarded;
 //     on failure the event drops, the first failure per site logs once
 //     (via the injected callback → Log), and collection keeps going.
@@ -61,6 +64,9 @@ public sealed class TelemetryCollector : IDisposable
     // subscribed. Idling is hooked only while a capture is pending —
     // never left on, since it fires continuously while Revit is idle.
     private bool _statsIdlingHooked;
+    // DocumentClosed carries only the id: the tracking key each closing
+    // document had, so the gate's closing state can be ended.
+    private readonly Dictionary<int, string> _closingStatsKeys = new();
     private readonly System.Collections.Generic.HashSet<string> _warnedSites = new();
 
     private readonly CollectorLifecycle _lifecycle;
@@ -288,6 +294,10 @@ public sealed class TelemetryCollector : IDisposable
             // DocumentClosed won't expose the Document — remember the id
             // now (regardless of the flag, to keep the count honest).
             _tracker.Closing(args.DocumentId);
+            // A pending model_stats request would be dropped at Idling
+            // (the model is gone by then): capture it now, while the
+            // Document is valid, before doc_closing (review WU2-01).
+            ModelStatsClosing(doc!, args.DocumentId);
             if (!_lifecycle.IsEnabled) return;
             var keys = IdentityCapture.CaptureKeys(doc!);
             var closingId = args.DocumentId;
@@ -305,6 +315,7 @@ public sealed class TelemetryCollector : IDisposable
         {
             var status = args.Status;
             var succeeded = status == RevitAPIEventStatus.Succeeded;
+            ModelStatsClosingEnded(args.DocumentId);
             // Unknown id ⇒ a document we never emitted doc_closing for
             // (linked, untrackable) — stay symmetric and emit nothing.
             if (!_tracker.TryCompleteClosing(args.DocumentId, succeeded)) return;
@@ -441,9 +452,11 @@ public sealed class TelemetryCollector : IDisposable
     /// <summary>
     /// After an open, save or sync: ask for a model_stats capture at the
     /// next Idling. Cheap — a tracking-key read, a set insert, and (for
-    /// the first pending model) one Idling subscription. Its own guard,
-    /// so a failure here never costs the open/save/sync record already
-    /// emitted.
+    /// the first pending model) one Idling subscription. The one
+    /// exception: a save or sync while the model is closing (Close →
+    /// Save, Synchronize and Close) captures at once, since the model is
+    /// gone before Idling (review WU2-01). Its own guard, so a failure
+    /// here never costs the open/save/sync record already emitted.
     /// </summary>
     private void RequestModelStats(Document doc)
     {
@@ -451,9 +464,44 @@ public sealed class TelemetryCollector : IDisposable
         {
             if (!_lifecycle.IsEnabled) return;
             var key = IdentityCapture.TrackingKey(doc);
-            if (!_statsGate.Request(key) || _statsIdlingHooked) return;
-            _uiApp.Idling += OnIdlingModelStats;
-            _statsIdlingHooked = true;
+            switch (_statsGate.Request(key))
+            {
+                case ModelStatsDecision.CaptureNow:
+                    CaptureModelStats(doc, key);
+                    break;
+                case ModelStatsDecision.Defer when !_statsIdlingHooked:
+                    _uiApp.Idling += OnIdlingModelStats;
+                    _statsIdlingHooked = true;
+                    break;
+            }
+        });
+    }
+
+    /// <summary>
+    /// DocumentClosing: mark the model closing (so a save or sync during
+    /// the close captures at once), and capture a request still pending
+    /// from an earlier save or sync. Runs whatever the collection flag
+    /// (marking is in-process only); captures only while collecting.
+    /// </summary>
+    private void ModelStatsClosing(Document doc, int documentId)
+    {
+        Guarded("model_stats_closing", () =>
+        {
+            var key = IdentityCapture.TrackingKey(doc);
+            _closingStatsKeys[documentId] = key;
+            if (_statsGate.Closing(key) && _lifecycle.IsEnabled)
+                CaptureModelStats(doc, key);
+        });
+    }
+
+    /// <summary>DocumentClosed, succeeded or cancelled: the model is no
+    /// longer closing (a cancelled close's later saves defer again).</summary>
+    private void ModelStatsClosingEnded(int documentId)
+    {
+        Guarded("model_stats_closed", () =>
+        {
+            if (_closingStatsKeys.Remove(documentId, out var key))
+                _statsGate.ClosingEnded(key);
         });
     }
 
