@@ -57,8 +57,8 @@ public sealed class RollupCleanupTests : IDisposable
         _f.Pass().Sealed.Should().Be(5);
         closed.Should().OnlyContain(p => File.Exists(p));
         SealState(closed[0]).Should().Be("current");
-        _f.Rollup(_doc)!.SealedSessions.Should().HaveCount(5);
-        _f.Rollup(_doc)!.Pending.Should().BeEmpty();
+        _f.Rollup(_doc)!.Pending.Values.Should().HaveCount(5).And.OnlyContain(p => p.Sealed,
+            "a sealed share stays replaceable while its raw file exists");
 
         // Pass 3 carries the seal into .bak.json, verifies both copies, deletes the older two.
         _f.Pass().Deleted.Should().Be(2);
@@ -72,6 +72,8 @@ public sealed class RollupCleanupTests : IDisposable
         _f.Rollup(_doc)!.Days.Sum(d => d.ActiveMs).Should().Be(5 * 10 * 60_000);
         _f.PassUntilQuiet();
         _f.OutboxNames().Should().HaveCount(5);
+        _f.Rollup(_doc)!.Pending.Should().HaveCount(3, "the deleted files' shares are absorbed into the permanent totals");
+        _f.Rollup(_doc)!.Days.Sum(d => d.ActiveMs).Should().Be(5 * 10 * 60_000);
     }
 
     [Fact]
@@ -82,8 +84,8 @@ public sealed class RollupCleanupTests : IDisposable
         _f.Pass();
         var id = ModelKey.From(_doc)!.Value.ModelId;
         var store = new RollupStore(_f.Rollups);
-        store.ReadCopy(id, backup: false, out _)!.SealedSessions.Should().HaveCount(5);
-        store.ReadCopy(id, backup: true, out _)!.SealedSessions.Should().HaveCount(4, "the backup is the write before the last seal");
+        store.ReadCopy(id, backup: false, out _)!.Pending.Values.Count(p => p.Sealed).Should().Be(5);
+        store.ReadCopy(id, backup: true, out _)!.Pending.Values.Count(p => p.Sealed).Should().Be(4, "the backup is the write before the last seal");
 
         // A ledger that claims more than the files show must not delete anything.
         var ledgerPath = Path.Combine(_f.Rollups, "ledger.json");
@@ -92,7 +94,7 @@ public sealed class RollupCleanupTests : IDisposable
         // Take the seals out of the backup entirely.
         var bak = _f.BakPath(_doc);
         var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(bak))!;
-        json["sealed_sessions"] = new System.Text.Json.Nodes.JsonArray();
+        foreach (var share in json["pending"]!.AsObject()) share.Value!["sealed"] = false;
         File.WriteAllText(bak, json.ToJsonString());
 
         _f.Pass().Deleted.Should().Be(0);
@@ -157,14 +159,16 @@ public sealed class RollupCleanupTests : IDisposable
     }
 
     [Fact]
-    public void A_raw_file_pruned_by_age_before_sealing_is_sealed_from_its_pending_share()
+    public void A_raw_file_pruned_by_age_before_sealing_has_its_share_absorbed()
     {
         var closed = Enumerable.Range(20, 5).Select(Closed).ToArray();
         _f.Pass();
         File.Delete(closed[0]); // the backstop got there first
         _f.Pass();
         var r = _f.Rollup(_doc)!;
-        r.Pending.Should().BeEmpty();
+        r.Pending.Should().HaveCount(4, "the vanished file's share is absorbed; the others stay replaceable")
+            .And.NotContainKey(OutboxFiles.TryParseSessionGuid(Path.GetFileName(closed[0]))!);
+        r.Pending.Values.Should().OnlyContain(p => p.Sealed);
         r.Days.Sum(d => d.ActiveMs).Should().Be(5 * 10 * 60_000);
         _f.Ledger().Files.Should().HaveCount(4);
     }

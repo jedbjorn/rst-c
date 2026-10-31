@@ -162,16 +162,8 @@ public static class ModelActivityReader
             if (currentModel is null || SessionReplay.BuildMatcher(currentModel) is not { } matcher)
                 return ModelActivity.Empty;
             var store = new RollupStore(options.RollupsDir, options.FileIO, options.Log);
-            var today = ActiveTime.LocalDay(options.NowUtc, options.Zone);
-            var index = store.LoadIndex(ReadMode.Reader, today, out _);
-            var ids = index.Models
-                .Where(r => matcher.Matches(r.Keys.ToKeysEvent()))
-                .OrderBy(r => ModelKeyRank(r.KeyKind))
-                .ThenBy(r => r.ModelId, StringComparer.Ordinal)
-                .Select(r => r.ModelId)
-                .ToList();
-            var primaryKey = ModelKey.From(currentModel) ?? new ModelKey(matcher.Kind, "");
-            return Read(store, ids, matcher.Matches, matcher.Kind, primaryKey, currentModel, options);
+            var index = store.LoadIndex(ReadMode.Reader, ActiveTime.LocalDay(options.NowUtc, options.Zone), out _);
+            return Read(store, Resolve(index, matcher.Matches), currentModel, matcher.Kind, options);
         }
         catch (Exception ex)
         {
@@ -180,18 +172,26 @@ public static class ModelActivityReader
         }
     }
 
-    /// <summary>The tray's model detail: one model by id, plus whatever is not folded yet.</summary>
+    /// <summary>
+    /// The tray's model detail: one model by id, plus whatever is not folded yet. The model is
+    /// resolved exactly as <see cref="ReadCurrentModel"/> resolves it — the same rollups through
+    /// the same ladder — so for the same range the tray and Revit show the same numbers
+    /// (spec #25 AC 4), Revit's live session aside.
+    /// </summary>
     public static ModelActivity ReadModel(string modelId, ActivityReadOptions options)
     {
         try
         {
             var store = new RollupStore(options.RollupsDir, options.FileIO, options.Log);
-            var r = store.LoadModel(modelId, ReadMode.Reader).Value;
-            if (r is null) return ModelActivity.Empty;
-            var identity = r.Keys.ToIdentity();
+            var index = store.LoadIndex(ReadMode.Reader, ActiveTime.LocalDay(options.NowUtc, options.Zone), out _);
+            var keys = index.Models.FirstOrDefault(m => m.ModelId == modelId)?.Keys
+                ?? store.LoadModel(modelId, ReadMode.Reader).Value?.Keys;
+            if (keys is null) return ModelActivity.Empty;
+            var identity = keys.ToIdentity();
             if (SessionReplay.BuildMatcher(identity) is not { } matcher) return ModelActivity.Empty;
-            var key = ModelKey.From(identity) ?? new ModelKey(r.KeyKind, modelId);
-            return Read(store, new[] { modelId }, matcher.Matches, matcher.Kind, key, identity, options);
+            var ids = Resolve(index, matcher.Matches);
+            if (!ids.Contains(modelId)) ids.Add(modelId);
+            return Read(store, ids, identity, matcher.Kind, options);
         }
         catch (Exception ex)
         {
@@ -201,7 +201,7 @@ public static class ModelActivityReader
     }
 
     /// <summary>index.json's rows (spec #25's Models list), from its .bak.json or rebuilt from the
-    /// model files when unreadable. Never throws.</summary>
+    /// model files when unreadable; a bad row is skipped. Never throws.</summary>
     public static IReadOnlyList<ModelIndexRow> ReadIndex(string? rollupsDir = null, DateTimeOffset? nowUtc = null,
         TimeZoneInfo? zone = null, Action<string>? log = null)
     {
@@ -218,13 +218,60 @@ public static class ModelActivityReader
         }
     }
 
+    /// <summary>
+    /// Every rollup the matcher accepts: each index row is tried with its keys and with each
+    /// identity value it has since learned (keys_seen) substituted at its level — so a key first
+    /// seen after the model was keyed still finds it — under the ladder's usual rules: a present
+    /// key that differs rejects. Highest-keyed rollup first.
+    /// </summary>
+    internal static List<string> Resolve(RollupIndexFile index, Func<TelemetryEvent, bool> matches) =>
+        index.Models
+            .Where(row => KeyVariants(row.Keys, row.KeysSeen).Any(matches))
+            .OrderBy(row => new ModelKey(row.KeyKind, "").Rank)
+            .ThenBy(row => row.ModelId, StringComparer.Ordinal)
+            .Select(row => row.ModelId)
+            .ToList();
+
+    private static IEnumerable<TelemetryEvent> KeyVariants(RollupKeys keys, KeysSeen seen)
+    {
+        yield return keys.ToKeysEvent();
+        foreach (var v in seen.CreationGuids) yield return With(keys, k => k.CreationGuid = v);
+        foreach (var v in seen.CentralPaths) yield return With(keys, k => k.CentralPath = v);
+        foreach (var v in seen.CentralGuids) yield return With(keys, k => k.CentralGuid = v);
+        foreach (var v in seen.CloudModelGuids) yield return With(keys, k => k.CloudModelGuid = v);
+        foreach (var v in seen.CloudProjectGuids) yield return With(keys, k => k.CloudProjectGuid = v);
+    }
+
+    private static TelemetryEvent With(RollupKeys keys, Action<RollupKeys> set)
+    {
+        var copy = new RollupKeys
+        {
+            CloudProjectGuid = keys.CloudProjectGuid,
+            CloudModelGuid = keys.CloudModelGuid,
+            CentralGuid = keys.CentralGuid,
+            CentralPath = keys.CentralPath,
+            CreationGuid = keys.CreationGuid,
+        };
+        set(copy);
+        return copy.ToKeysEvent();
+    }
+
     private static ModelActivity Read(
-        RollupStore store, IReadOnlyList<string> ids, Func<TelemetryEvent, bool> matches, string kind,
-        ModelKey key, DocumentIdentity identity, ActivityReadOptions o)
+        RollupStore store, IReadOnlyList<string> ids, DocumentIdentity fallbackIdentity, string kind, ActivityReadOptions o)
     {
         var rollups = new List<ModelRollup>();
         foreach (var id in ids)
             if (store.LoadModel(id, ReadMode.Reader).Value is { } r) rollups.Add(r);
+        rollups = rollups.OrderBy(r => new ModelKey(r.KeyKind, "").Rank).ThenBy(r => r.ModelId, StringComparer.Ordinal).ToList();
+
+        // One matcher for what is not folded yet, whichever entry point asked: the primary
+        // rollup's keys when there is one, else the caller's identity (a model never folded).
+        var identity = rollups.Count > 0 ? rollups[0].Keys.ToIdentity() : fallbackIdentity;
+        if (SessionReplay.BuildMatcher(identity) is not { } matcher) return ModelActivity.Empty;
+        var key = rollups.Count > 0
+            ? new ModelKey(rollups[0].KeyKind, rollups[0].ModelId)
+            : ModelKey.From(identity) ?? new ModelKey(matcher.Kind, "");
+
         // The requested ids, not only the ones that loaded: a folded file of a model whose
         // rollup is unreadable here is folded in memory instead.
         var idSet = new HashSet<string>(ids, StringComparer.Ordinal);
@@ -233,34 +280,31 @@ public static class ModelActivityReader
             .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        // What the rollups do not hold yet, folded in memory.
+        // What the rollups do not hold for exactly this file, folded in memory.
         var extra = new List<(string Guid, ModelContribution C, FileFingerprint F)>();
         foreach (var path in ListOutbox(o.OutboxDir, o.Log))
         {
             try
             {
                 var name = Path.GetFileName(path);
-                var guid = OutboxFiles.TryParseSessionGuid(name);
-                if (guid is not null && rollups.Any(r => r.IsSealed(guid))) continue; // permanent already
                 var (size, ts) = RollupStore.Stat(path);
                 if (size < 0) continue;
-                if (guid is not null && ledgerRows.TryGetValue(name, out var row) && row.Unclosed != true &&
-                    row.Size == size && RollupJson.TruncateMs(row.LastWriteUtc) == ts)
-                {
-                    if (rollups.Any(r => r.Pending.ContainsKey(guid))) continue; // folded, still pending
-                    if (!row.Models.Any(m => idSet.Contains(m.ModelId))) continue; // folded, another model
-                    // Folded into one of ours, but the rollup lacks it (restored from .bak.json): fold it here.
-                }
+                var guid = OutboxFiles.TryParseSessionGuid(name);
+                if (guid is not null && rollups.Any(r => r.Holds(guid, size, ts))) continue; // this very file is in
+                if (ledgerRows.TryGetValue(name, out var row) && row.Unclosed != true &&
+                    row.Size == size && RollupJson.TruncateMs(row.LastWriteUtc) == ts &&
+                    !row.Models.Any(m => idSet.Contains(m.ModelId)))
+                    continue; // folded, and it touched other models only
 
                 var events = OutboxFiles.ReadEvents(path);
                 if (events.Count == 0) continue;
                 var info = SessionInfo.Read(events, name);
                 var sessionGuid = info.SessionGuid ?? guid;
                 if (sessionGuid is null) continue;
-                if (rollups.Any(r => r.IsSealed(sessionGuid))) continue;
-                var c = ActivityFold.Contribute(events, matches, key, identity, info, o.Zone,
+                if (rollups.Any(r => r.Holds(sessionGuid, size, ts))) continue;
+                var c = ActivityFold.Contribute(events, matcher.Matches, key, identity, info, o.Zone,
                     info.Closed ? DateTimeOffset.MaxValue : o.NowUtc, o.LiveSessionGuid);
-                // Replace, never add to, a share the rollups hold for this session (a changed file).
+                // Replace, never add to, a share the rollups hold for another version of this file.
                 foreach (var r in rollups) RollupEditor.RemovePending(r, sessionGuid, o.Zone, o.NowUtc);
                 if (!c.IsEmpty) extra.Add((sessionGuid, c, new FileFingerprint(name, size, ts)));
             }
@@ -283,6 +327,7 @@ public static class ModelActivityReader
                 sessionActive = (sessionActive ?? 0) + c.LiveActiveMs / 1000.0;
             }
         }
+        RollupEditor.TrimEvents(view, o.NowUtc); // the event window ages even while nothing folds
 
         foreach (var d in view.Days) d.Clamp();
         ModelStatsPoint? last = null;
@@ -305,8 +350,6 @@ public static class ModelActivityReader
     }
 
     private readonly record struct FileFingerprint(string Name, long Size, DateTimeOffset LastWriteUtc);
-
-    private static int ModelKeyRank(string kind) => new ModelKey(kind, "").Rank;
 
     private static string[] ListOutbox(string dir, Action<string>? log)
     {

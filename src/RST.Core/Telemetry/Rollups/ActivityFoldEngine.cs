@@ -9,14 +9,21 @@
 //      from .bak.json and re-folding the sessions it lost;
 //   2. fold one changed or new closed session file per step, oldest first:
 //      write each touched rollup, then index.json, then ledger.json — the
-//      ledger last, so a crash between writes re-folds that file next pass;
-//   3. seal files folded in an earlier pass and unchanged since; carry a
-//      seal into .bak.json when the model is not written again;
-//   4. clean up: delete a raw file only when it is closed and not live, its
-//      share is sealed in every model it touched in both the rollup and its
+//      ledger last, so a crash between writes re-folds that file next pass.
+//      A changed file replaces its share even when it was sealed; the seal
+//      is cleared and comes back only on a later unchanged pass;
+//   3. maintenance and sealing: age event windows that expired, seal files
+//      folded in an earlier pass and unchanged since, carry a seal into
+//      .bak.json when the model is not written again, absorb the shares of
+//      files that are gone;
+//   4. clean up: delete a raw file only when — re-checked under a handle
+//      that blocks writers, right before the delete — it is unchanged since
+//      it was folded, closed and not live, its share is sealed for exactly
+//      that file in every model it touched in both the rollup and its
 //      .bak.json, it is not one of the 3 newest closed files, and every
 //      registered retention gate allows it.
 // Every failure is per file: logged, left for the next pass, never thrown.
+// A failed index or ledger write stops the pass before cleanup.
 
 using System.IO;
 using RST.Core.Configuration;
@@ -45,8 +52,9 @@ public sealed class RollupStoreOptions
     /// <summary>The newest closed session files cleanup always keeps (a re-fold buffer).</summary>
     public int KeepNewestClosed { get; init; } = 3;
 
-    /// <summary>Test seam: called with "models" after the rollups of a fold step are
-    /// written and "index" after the index; throwing there simulates a crash.</summary>
+    /// <summary>Test seam, called at named points ("models" and "index" in a fold step,
+    /// "delete:&lt;file name&gt;" just before cleanup takes a file); throwing there simulates a
+    /// crash, writing there simulates a concurrent change.</summary>
     internal Action<string>? FaultHook { get; init; }
 
     internal RollupFileIO? FileIO { get; init; }
@@ -90,25 +98,41 @@ public sealed class ActivityFoldEngine
     }
 
     /// <summary>
-    /// One whole pass: when the outbox matches the ledger and nothing awaits sealing or
-    /// cleanup it ends at once; otherwise it folds every pending file (calling
-    /// <paramref name="betweenSteps"/> after each — the worker's pause), then seals and
-    /// cleans up. Never throws.
+    /// One whole pass: when the outbox matches the ledger and nothing awaits sealing,
+    /// maintenance or cleanup it ends at once; otherwise it folds every pending file (calling
+    /// <paramref name="betweenSteps"/> after each — the worker's pause), then seals and cleans
+    /// up. Never throws: a failure is logged and counted in <see cref="FoldPassResult.Failed"/>.
     /// </summary>
     public FoldPassResult RunPass(Action? betweenSteps = null, CancellationToken cancel = default)
     {
-        using var pass = TryBeginPass();
-        if (pass is null) return new FoldPassResult(true, false, 0, 0, 0, 0);
-        if (!pass.HasWork) return new FoldPassResult(false, true, 0, 0, 0, 0);
-        while (!cancel.IsCancellationRequested && pass.FoldNext())
+        FoldPass? pass = null;
+        int sealedCount = 0, deleted = 0;
+        try
         {
-            try { betweenSteps?.Invoke(); } catch { /* the pause must not end the pass */ }
+            pass = TryBeginPass();
+            if (pass is null) return new FoldPassResult(true, false, 0, 0, 0, 0);
+            if (!pass.HasWork) return new FoldPassResult(false, true, 0, 0, 0, 0);
+            while (!cancel.IsCancellationRequested && pass.FoldNext())
+            {
+                try { betweenSteps?.Invoke(); } catch { /* the pause must not end the pass */ }
+            }
+            if (!cancel.IsCancellationRequested)
+            {
+                sealedCount = pass.Seal();
+                deleted = pass.Cleanup();
+            }
+            return new FoldPassResult(false, false, pass.Folded, pass.Failed, sealedCount, deleted);
         }
-        if (cancel.IsCancellationRequested)
-            return new FoldPassResult(false, false, pass.Folded, pass.Failed, 0, 0);
-        var sealedCount = pass.Seal();
-        var deleted = pass.Cleanup();
-        return new FoldPassResult(false, false, pass.Folded, pass.Failed, sealedCount, deleted);
+        catch (Exception ex)
+        {
+            SafeLog(_options.Log, "activity fold: pass failed (retried next pass): " + ex.Message);
+            return new FoldPassResult(false, false, pass?.Folded ?? 0, (pass?.Failed ?? 0) + 1, sealedCount, deleted);
+        }
+        finally
+        {
+            try { pass?.Dispose(); }
+            catch (Exception ex) { SafeLog(_options.Log, "activity fold: pass end failed: " + ex.Message); }
+        }
     }
 
     /// <summary>The exclusive lock file; null when held elsewhere.</summary>
@@ -152,9 +176,12 @@ public sealed class FoldPass : IDisposable
     private readonly List<OutboxFile> _toFold;
     private readonly HashSet<string> _closedSeen = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _currentAtStart;
+    private readonly List<string> _expiring;
     private int _cursor;
     private bool _indexDirty;
     private bool _ledgerDirty;
+    private bool _persistFailed;
+    private bool _disposed;
 
     private sealed record OutboxFile(string Name, string Path, string? SessionGuid, long Size, DateTimeOffset LastWriteUtc);
 
@@ -172,17 +199,24 @@ public sealed class FoldPass : IDisposable
 
         _outbox = ListOutbox();
         _outboxGuids = new HashSet<string>(_outbox.Values.Select(f => f.SessionGuid).OfType<string>(), StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _ledger.Files)
+            if (_outbox.ContainsKey(row.Name) && row.SessionGuid.Length > 0) _outboxGuids.Add(row.SessionGuid);
         _ledgerDirty = _ledger.Files.Any(r => !_outbox.ContainsKey(r.Name));
 
+        _toFold = new List<OutboxFile>();
         VerifyRollups();
 
-        _toFold = _outbox.Values
+        foreach (var f in _outbox.Values
             .Where(f => LedgerRow(f.Name) is not { } row || !SameFingerprint(row, f))
-            .OrderBy(f => f.LastWriteUtc).ThenBy(f => f.Name, StringComparer.Ordinal)
-            .ToList();
+            .OrderBy(f => f.LastWriteUtc).ThenBy(f => f.Name, StringComparer.Ordinal))
+            if (!_toFold.Contains(f)) _toFold.Add(f);
         _currentAtStart = new HashSet<string>(_ledger.Files
             .Where(r => r.Models.Any(m => m.Sealed == SealStates.Current))
             .Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
+        _expiring = _index.Models
+            .Where(m => m.NextEventExpiryUtc is { } at && at <= _now)
+            .Select(m => m.ModelId)
+            .ToList();
     }
 
     public int Folded { get; private set; }
@@ -192,10 +226,10 @@ public sealed class FoldPass : IDisposable
     public int RemainingToFold => _toFold.Count - _cursor;
 
     /// <summary>False when the outbox matches the ledger and nothing awaits sealing, carrying
-    /// a seal into .bak.json, or cleanup — the pass can end at once.</summary>
+    /// a seal into .bak.json, event-window maintenance or cleanup — the pass can end at once.</summary>
     public bool HasWork =>
-        RemainingToFold > 0 || _indexDirty || _ledgerDirty ||
-        _ledger.Files.Any(r => r.Models.Any(m => m.Sealed != SealStates.Both)) ||
+        RemainingToFold > 0 || _indexDirty || _ledgerDirty || _expiring.Count > 0 ||
+        _ledger.Files.Any(r => r.Unclosed != true && r.Models.Any(m => m.Sealed != SealStates.Both)) ||
         DeletionCandidates().Any();
 
     /// <summary>Fold the oldest pending closed session file. True when a file was folded or
@@ -237,11 +271,19 @@ public sealed class FoldPass : IDisposable
         return false;
     }
 
-    /// <summary>Seal every file folded in an earlier pass and unchanged since; carry seals made
-    /// in an earlier pass into .bak.json; seal the shares of files that vanished (pruned by
-    /// age or by hand). Returns the number of seals made.</summary>
+    /// <summary>Maintenance and sealing: age expired event windows; absorb the shares of files
+    /// that vanished (pruned by age or by hand); seal every file folded in an earlier pass and
+    /// unchanged since; carry seals made in an earlier pass into .bak.json. Returns the number of
+    /// seals made.</summary>
     public int Seal()
     {
+        foreach (var id in _expiring)
+        {
+            try { Maintain(id); }
+            catch (Exception ex) { Log("activity event-window maintenance failed for " + id + ": " + ex.Message); }
+        }
+        _expiring.Clear();
+
         var count = 0;
         foreach (var row in _ledger.Files.ToList())
         {
@@ -250,17 +292,17 @@ public sealed class FoldPass : IDisposable
                 if (!_outbox.TryGetValue(row.Name, out var file))
                 {
                     // The raw file is gone: nothing can replace its share any more.
-                    foreach (var m in row.Models) SealInModel(m.ModelId, row.SessionGuid, row, requireFingerprint: false);
+                    foreach (var m in row.Models) Maintain(m.ModelId);
                     _ledger.Files.Remove(row);
                     _ledgerDirty = true;
                     continue;
                 }
-                if (!SameFingerprint(row, file) || row.FoldedPass >= _pass) continue;
+                if (row.Unclosed == true || !SameFingerprint(row, file) || row.FoldedPass >= _pass) continue;
                 foreach (var m in row.Models)
                 {
                     if (m.Sealed == SealStates.No)
                     {
-                        if (SealInModel(m.ModelId, row.SessionGuid, row, requireFingerprint: true) is { } sealedNow)
+                        if (SealInModel(m.ModelId, row) is { } sealedNow)
                         {
                             m.Sealed = SealStates.Current;
                             _ledgerDirty = true;
@@ -273,7 +315,8 @@ public sealed class FoldPass : IDisposable
                     }
                     else if (m.Sealed == SealStates.Current && _currentAtStart.Contains(row.Name))
                     {
-                        m.Sealed = CarryToBackup(m.ModelId, row.SessionGuid);
+                        m.Sealed = CarryToBackup(m.ModelId, row);
+                        if (m.Sealed == SealStates.No) MarkForRefold(row);
                         _ledgerDirty = true;
                     }
                 }
@@ -283,45 +326,54 @@ public sealed class FoldPass : IDisposable
                 Log("activity seal failed for " + row.Name + " (retried next pass): " + ex.Message);
             }
         }
-        Flush();
+        TryFlush();
         return count;
     }
 
-    /// <summary>Delete raw files that pass every cleanup rule. Returns the number deleted.</summary>
+    /// <summary>Delete raw files that pass every cleanup rule. Returns the number deleted. Does
+    /// nothing after a failed index or ledger write in this pass.</summary>
     public int Cleanup()
     {
+        if (_persistFailed) return 0;
         var deleted = 0;
         var gates = _o.Gates ?? RetentionGates.Registered;
+        var touched = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var row in DeletionCandidates().ToList())
         {
             try
             {
-                var file = _outbox[row.Name];
-                if (_o.IsLive(file.Path)) continue;
-                if (!SealVerified(row)) continue;
-                var candidate = new RetentionCandidate(file.Path, row.SessionGuid,
-                    row.Models.Select(m => m.ModelId).ToList(), row.Size, row.LastWriteUtc);
-                if (!RetentionGates.AllAllow(gates, candidate, _o.Log)) continue;
-                File.Delete(file.Path);
-                _outbox.Remove(row.Name);
-                _ledger.Files.Remove(row);
-                _ledgerDirty = true;
-                deleted++;
+                if (TryDelete(row, gates))
+                {
+                    _outbox.Remove(row.Name);
+                    _outboxGuids.Remove(row.SessionGuid);
+                    _ledger.Files.Remove(row);
+                    _ledgerDirty = true;
+                    foreach (var m in row.Models) touched.Add(m.ModelId);
+                    deleted++;
+                }
             }
             catch (Exception ex)
             {
                 Log("activity cleanup skipped " + row.Name + ": " + ex.Message);
             }
         }
-        Flush();
+        // The deleted files' shares move into the permanent totals; .bak.json keeps the
+        // sealed shares until the model's next write.
+        foreach (var id in touched)
+        {
+            try { Maintain(id); }
+            catch (Exception ex) { Log("activity cleanup: absorbing into " + id + " failed (retried next pass): " + ex.Message); }
+        }
+        TryFlush();
         return deleted;
     }
 
     public void Dispose()
     {
-        try { Flush(); }
-        catch (Exception ex) { Log("activity fold: final write failed: " + ex.Message); }
-        _lock.Dispose();
+        if (_disposed) return;
+        _disposed = true;
+        try { TryFlush(); }
+        finally { _lock.Dispose(); }
     }
 
     // ---- folding ----------------------------------------------------------
@@ -348,11 +400,15 @@ public sealed class FoldPass : IDisposable
         {
             var pending = RollupEditor.ToPending(c, f.Name, f.Size, f.LastWriteUtc);
             var changed = RollupEditor.ApplyPending(r, guid, pending, c.IdentityEvents, _o.Zone, _now);
-            changed |= RollupEditor.PruneSealedMarkers(r, SessionPresent);
+            changed |= RollupEditor.AbsorbGone(r, SessionPresent);
             var path = _store.ModelPath(r.ModelId);
             var (bytes, ts) = changed || repaired || !File.Exists(path) ? _store.SaveModel(r) : RollupStore.Stat(path);
             written[r.ModelId] = (r, bytes, ts);
-            states.Add(new LedgerModel { ModelId = r.ModelId, Sealed = r.IsSealed(guid) ? SealStates.Current : SealStates.No });
+            states.Add(new LedgerModel
+            {
+                ModelId = r.ModelId,
+                Sealed = r.IsSealed(guid, f.Size, f.LastWriteUtc) ? SealStates.Current : SealStates.No,
+            });
         }
 
         // Models the file no longer touches (it changed after folding) lose its share.
@@ -369,6 +425,7 @@ public sealed class FoldPass : IDisposable
         _o.FaultHook?.Invoke("models");
 
         foreach (var (r, bytes, ts) in written.Values) UpsertIndexRow(RollupEditor.BuildIndexRow(r, _today, bytes, ts));
+        _indexDirty = true;
         _store.SaveIndex(_index, _now);
         _indexDirty = false;
         _o.FaultHook?.Invoke("index");
@@ -385,21 +442,37 @@ public sealed class FoldPass : IDisposable
         SaveLedger();
     }
 
-    // ---- sealing ----------------------------------------------------------
+    // ---- maintenance and sealing ------------------------------------------
 
-    /// <summary>Seal the session in one model. True = sealed now, false = already sealed,
-    /// null = the rollup does not hold the session's share (re-fold it).</summary>
-    private bool? SealInModel(string modelId, string guid, LedgerRow row, bool requireFingerprint)
+    /// <summary>Age the event window and absorb shares whose raw file is gone; write when
+    /// anything changed.</summary>
+    private void Maintain(string modelId)
+    {
+        var (r, outcome) = _store.LoadModel(modelId, ReadMode.Writer);
+        if (outcome is ReadOutcome.Restored or ReadOutcome.Lost) Heal(modelId, null);
+        if (r is null) return;
+        var opens = r.Opens.Count;
+        var syncs = r.Syncs.Count;
+        RollupEditor.TrimEvents(r, _now);
+        var changed = r.Opens.Count != opens || r.Syncs.Count != syncs;
+        changed |= RollupEditor.AbsorbGone(r, SessionPresent);
+        if (!changed && outcome == ReadOutcome.Ok) return;
+        var (bytes, ts) = _store.SaveModel(r);
+        UpsertIndexRow(RollupEditor.BuildIndexRow(r, _today, bytes, ts));
+        _indexDirty = true;
+    }
+
+    /// <summary>Seal the session in one model, for the ledger row's file fingerprint. True =
+    /// sealed now, false = already sealed, null = the rollup does not hold this file's share
+    /// (re-fold it).</summary>
+    private bool? SealInModel(string modelId, LedgerRow row)
     {
         var (r, outcome) = _store.LoadModel(modelId, ReadMode.Writer);
         if (outcome is ReadOutcome.Restored or ReadOutcome.Lost) Heal(modelId, row.Name);
-        if (r is null) return null;
-        if (r.IsSealed(guid)) return false;
-        if (!r.Pending.TryGetValue(guid, out var p)) return null;
-        if (requireFingerprint && (p.Size != row.Size || p.LastWriteUtc != RollupJson.TruncateMs(row.LastWriteUtc)))
-            return null;
-        RollupEditor.Seal(r, guid);
-        RollupEditor.PruneSealedMarkers(r, g => SessionPresent(g) || string.Equals(g, guid, StringComparison.Ordinal));
+        if (r is null || !r.Holds(row.SessionGuid, row.Size, row.LastWriteUtc)) return null;
+        if (r.IsSealed(row.SessionGuid, row.Size, row.LastWriteUtc)) return false;
+        RollupEditor.Seal(r, row.SessionGuid, row.Size, row.LastWriteUtc);
+        RollupEditor.AbsorbGone(r, SessionPresent);
         var (bytes, ts) = _store.SaveModel(r);
         UpsertIndexRow(RollupEditor.BuildIndexRow(r, _today, bytes, ts));
         _indexDirty = true;
@@ -408,12 +481,13 @@ public sealed class FoldPass : IDisposable
 
     /// <summary>A seal made in an earlier pass: when .bak.json lacks it (the model was not
     /// written since), write the verified current rollup again so .bak.json becomes a copy.</summary>
-    private string CarryToBackup(string modelId, string guid)
+    private string CarryToBackup(string modelId, LedgerRow row)
     {
         var bak = _store.ReadCopy(modelId, backup: true, out _);
-        if (bak is not null && bak.IsSealed(guid)) return SealStates.Both;
+        if (bak is not null && bak.IsSealed(row.SessionGuid, row.Size, row.LastWriteUtc)) return SealStates.Both;
         var current = _store.ReadCopy(modelId, backup: false, out var bytes);
-        if (current is null || bytes is null || !current.IsSealed(guid)) return SealStates.No;
+        if (current is null || bytes is null || !current.IsSealed(row.SessionGuid, row.Size, row.LastWriteUtc))
+            return SealStates.No;
         var (size, ts) = _store.Recommit(modelId, bytes);
         UpsertIndexRow(RollupEditor.BuildIndexRow(current, _today, size, ts));
         _indexDirty = true;
@@ -441,8 +515,49 @@ public sealed class FoldPass : IDisposable
         }
     }
 
-    /// <summary>Re-read both copies of every touched rollup: the seal must be in each. The
-    /// ledger's word alone never deletes anything.</summary>
+    /// <summary>
+    /// Delete one candidate, re-checking everything against the file as it is now: it is taken
+    /// under a handle that refuses writers (a live Revit session's writer refuses it in turn),
+    /// its length and last write must still be the folded ones, and both copies of every touched
+    /// rollup must hold the seal for exactly that file. The delete happens while the handle is
+    /// held, so nothing can change the file between the check and the delete.
+    /// </summary>
+    private bool TryDelete(LedgerRow row, IReadOnlyList<IRetentionGate> gates)
+    {
+        if (!_outbox.TryGetValue(row.Name, out var file)) return false;
+        if (_o.IsLive(file.Path)) return false;
+        _o.FaultHook?.Invoke("delete:" + row.Name);
+
+        FileStream guard;
+        try
+        {
+            guard = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.Delete);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false; // live, locked or gone: not now
+        }
+        using (guard)
+        {
+            var size = guard.Length;
+            var lastWrite = RollupJson.TruncateMs(new DateTimeOffset(File.GetLastWriteTimeUtc(file.Path), TimeSpan.Zero));
+            if (size != row.Size || lastWrite != RollupJson.TruncateMs(row.LastWriteUtc))
+            {
+                Log("activity cleanup: " + row.Name + " changed since it was folded; re-folding first");
+                MarkForRefold(row);
+                return false;
+            }
+            if (!SealVerified(row)) return false;
+            var candidate = new RetentionCandidate(file.Path, row.SessionGuid,
+                row.Models.Select(m => m.ModelId).ToList(), row.Size, row.LastWriteUtc);
+            if (!RetentionGates.AllAllow(gates, candidate, _o.Log)) return false;
+            File.Delete(file.Path);
+            return true;
+        }
+    }
+
+    /// <summary>Re-read both copies of every touched rollup: each must hold the seal for exactly
+    /// this file. The ledger's word alone never deletes anything.</summary>
     private bool SealVerified(LedgerRow row)
     {
         var ok = true;
@@ -450,8 +565,8 @@ public sealed class FoldPass : IDisposable
         {
             var current = _store.ReadCopy(m.ModelId, backup: false, out _);
             var bak = _store.ReadCopy(m.ModelId, backup: true, out _);
-            var inCurrent = current?.IsSealed(row.SessionGuid) == true;
-            var inBak = bak?.IsSealed(row.SessionGuid) == true;
+            var inCurrent = current?.IsSealed(row.SessionGuid, row.Size, row.LastWriteUtc) == true;
+            var inBak = bak?.IsSealed(row.SessionGuid, row.Size, row.LastWriteUtc) == true;
             if (inCurrent && inBak) continue;
             ok = false;
             m.Sealed = inCurrent ? SealStates.Current : SealStates.No;
@@ -511,7 +626,7 @@ public sealed class FoldPass : IDisposable
         row.Size = -1; // fingerprint can never match: the file folds again
         foreach (var m in row.Models) m.Sealed = SealStates.No;
         _ledgerDirty = true;
-        if (_outbox.TryGetValue(row.Name, out var f) && _toFold is not null && !_toFold.Skip(_cursor).Contains(f))
+        if (_outbox.TryGetValue(row.Name, out var f) && !_toFold.Skip(_cursor).Contains(f))
             _toFold.Add(f);
     }
 
@@ -566,14 +681,27 @@ public sealed class FoldPass : IDisposable
         _ledgerDirty = false;
     }
 
-    private void Flush()
+    /// <summary>Write what is dirty: index, then ledger. A failure is logged and stops the pass
+    /// before cleanup; the in-memory state is not trusted further, and the next pass retries
+    /// from what is on disk.</summary>
+    private void TryFlush()
     {
-        if (_indexDirty)
+        try
         {
-            _store.SaveIndex(_index, _now);
-            _indexDirty = false;
+            if (_indexDirty)
+            {
+                _store.SaveIndex(_index, _now);
+                _indexDirty = false;
+            }
+            if (_ledgerDirty) SaveLedger();
         }
-        if (_ledgerDirty) SaveLedger();
+        catch (Exception ex)
+        {
+            _persistFailed = true;
+            _indexDirty = _ledgerDirty = false; // never retried from this pass's memory
+            Failed++;
+            Log("activity fold: writing the index or ledger failed (retried next pass): " + ex.Message);
+        }
     }
 
     private void Log(string message) => ActivityFoldEngine.SafeLog(_o.Log, message);

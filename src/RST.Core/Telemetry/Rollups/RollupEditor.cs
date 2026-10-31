@@ -39,16 +39,17 @@ internal static class RollupEditor
 
     /// <summary>
     /// Put <paramref name="pending"/> in as session <paramref name="sessionGuid"/>'s share,
-    /// replacing any earlier share of that session. No-op (false) when the session is
-    /// already sealed, or its pending share is identical — re-folding an unchanged file
-    /// leaves the rollup byte-identical.
+    /// replacing any earlier share of that session — sealed or not: while the raw file exists a
+    /// change always replaces, and the replacement is unsealed until a later unchanged pass.
+    /// No-op (false) when the share is identical (same fingerprint and content) — re-folding an
+    /// unchanged file leaves the rollup byte-identical and keeps its seal.
     /// </summary>
     public static bool ApplyPending(
         ModelRollup r, string sessionGuid, PendingSession pending,
         IEnumerable<TelemetryEvent> identityEvents, TimeZoneInfo zone, DateTimeOffset nowUtc)
     {
-        if (r.IsSealed(sessionGuid)) return false;
         r.Pending.TryGetValue(sessionGuid, out var old);
+        pending.Sealed = false;
         if (old is not null && SameContent(old, pending)) return false;
 
         var days = r.Days.ToDictionary(d => d.Date);
@@ -86,30 +87,38 @@ internal static class RollupEditor
         return true;
     }
 
-    /// <summary>Move session <paramref name="sessionGuid"/>'s pending share into the permanent
-    /// rows. Days, events and health inputs are unchanged — only the bookkeeping moves.</summary>
-    public static bool Seal(ModelRollup r, string sessionGuid)
+    /// <summary>Seal session <paramref name="sessionGuid"/>'s share for exactly this file
+    /// fingerprint. True when it was sealed now; false when it was already sealed or the share
+    /// does not match the file (it must re-fold first). Totals are unchanged.</summary>
+    public static bool Seal(ModelRollup r, string sessionGuid, long size, DateTimeOffset lastWriteUtc)
     {
-        if (!r.Pending.TryGetValue(sessionGuid, out var p)) return false;
-        var bases = r.PendingBase.ToDictionary(d => d.Date);
-        foreach (var d in p.Days)
-        {
-            if (!bases.TryGetValue(d.Date, out var b)) bases[d.Date] = b = new RollupDay { Date = d.Date };
-            b.Add(d);
-        }
-        r.Pending.Remove(sessionGuid);
-        AddSealed(r, sessionGuid);
-        DropUntouchedBases(r, bases);
-        r.PendingBase = bases.Values.OrderBy(d => d.Date).ToList();
+        if (!r.Pending.TryGetValue(sessionGuid, out var p) || !p.Matches(size, lastWriteUtc) || p.Sealed) return false;
+        p.Sealed = true;
         return true;
     }
 
-    /// <summary>Forget seal markers for sessions whose raw file is gone (it can never re-fold).</summary>
-    public static bool PruneSealedMarkers(ModelRollup r, Func<string, bool> sessionFilePresent)
+    /// <summary>
+    /// Move the shares of sessions whose raw file is gone into the permanent totals — nothing can
+    /// replace them any more. Days, events and health inputs are unchanged; only the bookkeeping
+    /// moves. True when anything moved.
+    /// </summary>
+    public static bool AbsorbGone(ModelRollup r, Func<string, bool> sessionFilePresent)
     {
-        var before = r.SealedSessions.Count;
-        r.SealedSessions.RemoveAll(g => !sessionFilePresent(g));
-        return r.SealedSessions.Count != before;
+        var gone = r.Pending.Keys.Where(g => !sessionFilePresent(g)).ToList();
+        if (gone.Count == 0) return false;
+        var bases = r.PendingBase.ToDictionary(d => d.Date);
+        foreach (var guid in gone)
+        {
+            foreach (var d in r.Pending[guid].Days)
+            {
+                if (!bases.TryGetValue(d.Date, out var b)) bases[d.Date] = b = new RollupDay { Date = d.Date };
+                b.Add(d);
+            }
+            r.Pending.Remove(guid);
+        }
+        DropUntouchedBases(r, bases);
+        r.PendingBase = bases.Values.OrderBy(d => d.Date).ToList();
+        return true;
     }
 
     /// <summary>
@@ -163,6 +172,7 @@ internal static class RollupEditor
             IsCloud = r.Identity.IsCloud,
             RollupBytes = rollupBytes,
             RollupLastWriteUtc = rollupLastWriteUtc is { } written ? RollupJson.TruncateMs(written) : null,
+            NextEventExpiryUtc = NextEventExpiry(r),
         };
         var firstRecentDay = today.AddDays(-(ModelIndexRow.RecentDays - 1));
         var firstRecentWeek = ActivityWeeks.WeekStart(today).AddDays(-7 * (ModelIndexRow.RecentWeeks - 1));
@@ -217,7 +227,6 @@ internal static class RollupEditor
             Days = primary.Days.Select(d => d.Clone()).ToList(),
             Opens = new List<DurationPoint>(primary.Opens),
             Syncs = new List<DurationPoint>(primary.Syncs),
-            SealedSessions = new List<string>(primary.SealedSessions),
         };
         merged.KeysSeen.Add(primary.KeysSeen);
         if (rollups.Count == 1) return merged;
@@ -237,10 +246,10 @@ internal static class RollupEditor
             merged.OpensTrimmedThrough = Max(merged.OpensTrimmedThrough, other.OpensTrimmedThrough);
             merged.SyncsTrimmedThrough = Max(merged.SyncsTrimmedThrough, other.SyncsTrimmedThrough);
             merged.KeysSeen.Add(other.KeysSeen);
-            foreach (var g in other.SealedSessions) AddSealed(merged, g);
             if (other.Identity.AsOf is { } asOf && (merged.Identity.AsOf is null || asOf > merged.Identity.AsOf))
                 merged.Identity = other.Identity;
         }
+        foreach (var d in days.Values) d.Clamp();
         merged.Days = days.Values.OrderBy(d => d.Date).ToList();
         merged.Opens = SortPoints(merged.Opens);
         merged.Syncs = SortPoints(merged.Syncs);
@@ -266,6 +275,9 @@ internal static class RollupEditor
             }
             else
             {
+                // Overlapping sessions can sum past a day; the stored view is capped like
+                // every reader's (the shares keep their own values for replacement).
+                row.Clamp();
                 row.Health = previousHealth;
                 days[date] = row;
             }
@@ -311,12 +323,32 @@ internal static class RollupEditor
         }
     }
 
+    /// <summary>
+    /// Fill a key level the model was first seen without, from an identity the model's matcher
+    /// accepted (for example a creation GUID first captured in a later session). Only empty
+    /// levels fill — a known key is never replaced, so the ladder's rejection rules hold and the
+    /// model id never changes.
+    /// </summary>
+    private static void LearnKeys(RollupKeys keys, DocumentIdentity id)
+    {
+        if (keys.CloudProjectGuid is null && keys.CloudModelGuid is null &&
+            !string.IsNullOrWhiteSpace(id.CloudProjectGuid) && !string.IsNullOrWhiteSpace(id.CloudModelGuid))
+        {
+            keys.CloudProjectGuid = id.CloudProjectGuid;
+            keys.CloudModelGuid = id.CloudModelGuid;
+        }
+        if (keys.CentralGuid is null && !string.IsNullOrWhiteSpace(id.CentralGuid)) keys.CentralGuid = id.CentralGuid;
+        if (string.IsNullOrEmpty(keys.CentralPath) && !string.IsNullOrWhiteSpace(id.CentralPath)) keys.CentralPath = id.CentralPath;
+        if (keys.CreationGuid is null && !string.IsNullOrWhiteSpace(id.CreationGuid)) keys.CreationGuid = id.CreationGuid;
+    }
+
     private static void MergeIdentity(ModelRollup r, IEnumerable<TelemetryEvent> identityEvents)
     {
         foreach (var e in identityEvents)
         {
             var id = DocumentIdentity.ReadFrom(e);
             r.KeysSeen.Add(id);
+            LearnKeys(r.Keys, id);
             var ts = RollupJson.TruncateMs(e.Ts);
             if (r.Identity.AsOf is { } asOf && ts < asOf) continue;
             r.Identity = new RollupIdentity
@@ -331,14 +363,28 @@ internal static class RollupEditor
         }
     }
 
-    private static void AddSealed(ModelRollup r, string sessionGuid)
+    /// <summary>Same fingerprint and content, the seal aside.</summary>
+    private static bool SameContent(PendingSession a, PendingSession b)
     {
-        var i = r.SealedSessions.BinarySearch(sessionGuid, StringComparer.Ordinal);
-        if (i < 0) r.SealedSessions.Insert(~i, sessionGuid);
+        bool sa = a.Sealed, sb = b.Sealed;
+        a.Sealed = b.Sealed = false;
+        try { return RollupJson.Serialize(a).AsSpan().SequenceEqual(RollupJson.Serialize(b)); }
+        finally { a.Sealed = sa; b.Sealed = sb; }
     }
 
-    private static bool SameContent(PendingSession a, PendingSession b) =>
-        RollupJson.Serialize(a).AsSpan().SequenceEqual(RollupJson.Serialize(b));
+    /// <summary>When the next stored event leaves the window: the oldest point beyond the newest
+    /// 10 of each list, plus 90 days.</summary>
+    public static DateTimeOffset? NextEventExpiry(ModelRollup r)
+    {
+        DateTimeOffset? next = null;
+        foreach (var list in new[] { r.Opens, r.Syncs })
+            if (list.Count > EventMinimum)
+            {
+                var at = list[0].Ts.AddDays(EventWindowDays);
+                if (next is null || at < next) next = at;
+            }
+        return next;
+    }
 
     internal static List<DurationPoint> SortPoints(IEnumerable<DurationPoint> points) =>
         points.OrderBy(p => p.Ts).ThenBy(p => p.Seconds).ToList();

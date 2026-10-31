@@ -55,14 +55,14 @@ A document opened once through an identity-capture gap (for example the central 
 |---|---|
 | `schema_version` | `1` |
 | `model_id`, `key_kind` | The id and the ladder level it is keyed at |
-| `keys` | `cloud_project_guid`, `cloud_model_guid`, `central_guid`, `central_path`, `creation_guid` of the `doc_opened` that defined the model; matching uses these |
+| `keys` | `cloud_project_guid`, `cloud_model_guid`, `central_guid`, `central_path`, `creation_guid` of the `doc_opened` that defined the model, with any level it lacked filled from a later identity the model matched (a known key is never replaced); matching uses these and `keys_seen` |
 | `keys_seen` | Every value seen of each key (`cloud_project_guids`, `cloud_model_guids`, `central_guids`, `central_paths`, `creation_guids`), plus the last 20 `local_paths` and `titles`, most recent last |
 | `identity` | Latest `title`, `local_path`, `central_path`, `is_workshared`, `is_cloud`, and `as_of` (the event they came from) |
 | `days` | The daily rows (table below): **the whole truth**, sealed and pending together |
 | `opens` | `[{ "ts", "seconds" }]` timed opens (`doc_opening` → `doc_opened`), oldest first |
 | `syncs` | `[{ "ts", "seconds" }]` syncs, plotted at their start, oldest first |
 | `opens_trimmed_through`, `syncs_trimmed_through` | The newest event the window has dropped; absent when none |
-| `pending`, `pending_base`, `sealed_sessions` | Fold bookkeeping (below); a reader can ignore them |
+| `pending`, `pending_base` | Fold bookkeeping (below); a reader can ignore them |
 
 **Daily rows** are a table: `{"columns": [...], "rows": [[...], ...]}`. Map cells by column name. Columns in schema 1:
 
@@ -75,13 +75,13 @@ A document opened once through an identity-capture gap (for example the central 
 | `syncs`, `sync_seconds_sum`, `sync_seconds_max` | Syncs that day: count, sum, longest |
 | `revit_versions`, `revit_subversions` | The Revit versions (`2026`) and subversions (`2026.4`) the model was open in that day; subversions are empty before v3.2 |
 | `stats_ts`, `warnings_count`, `file_size_bytes` | The day's latest `model_stats`; all null when none was recorded that day. A null size is data (network, cloud or unsaved model) |
-| `health_file_size_bytes`, `health_warnings_count`, `health_open_median_seconds`, `health_sync_median_seconds` | The four health inputs as they stood at the end of the day |
+| `health_file_size_bytes`, `health_warnings_count`, `health_open_median_seconds`, `health_sync_median_seconds` | The four health inputs as they stood at the end of the day; all null is a day with no inputs (grey), not a missing row |
 
 **Event window.** `opens` and `syncs` keep the last **90 days** and always at least the **last 10** of each.
 
-**Concurrent sessions.** Two Revit instances with the same model open at once each count their own time, so a day can over-count the overlap. Readers clamp every duration to 0–24 h per day and never trust a negative value.
+**Concurrent sessions.** Two Revit instances with the same model open at once each count their own time, so a day can over-count the overlap. The stored `days` are capped at 24 h per duration column (the index totals come from the same capped rows), and readers clamp every duration to 0–24 h and never trust a negative value.
 
-**Bookkeeping.** While an outbox file still exists, its share of each model is held under `pending[<session_guid>]` (its file name, size and last-write time, its own day rows and events), and `pending_base` holds, for each day a pending share touches, that day's sealed totals. A file that changes after folding is re-folded by replacing its share. **Sealing** moves a share into the permanent totals and records the session in `sealed_sessions`; markers are dropped once the raw file is gone. `days`, `opens` and `syncs` already include every pending share.
+**Bookkeeping.** While an outbox file still exists, its share of each model is held under `pending[<session_guid>]`: its `file` name, `size` and `last_write_utc`, `sealed`, and its own day rows and events. `pending_base` holds, for each day a pending share touches, that day's permanent totals. A file that changes after folding is re-folded by replacing its share, **even when it was sealed**: the seal belongs to one file fingerprint (size and last write), so a changed file's share is unsealed until a later pass finds it unchanged. Once the raw file is gone, its share is absorbed into the permanent totals and leaves `pending`. `days`, `opens` and `syncs` already include every pending share.
 
 ## Index
 
@@ -99,8 +99,9 @@ A document opened once through an identity-capture gap (for example the central 
 | `recent_days_totals` | Table (`date` + the six totals): the last 14 days ending the day the row was written, days with data only |
 | `recent_weeks_totals` | Table (`date` = the week's Monday + the six totals): the last 53 ISO weeks, the current one included |
 | `rollup_bytes`, `rollup_last_write_utc` | The rollup's size and last-write time when the row was written |
+| `next_event_expiry_utc` | When the rollup's oldest stored event point leaves the 90-day window; the fold trims it on a pass after that |
 
-Recent windows are dated, so a row written days ago is still correct: filter by date against your own today.
+Recent windows are dated, so a row written days ago is still correct: filter by date against your own today. A row that does not parse (or has no valid `model_id`) is skipped; the rest still read.
 
 ## Ledger
 
@@ -108,14 +109,14 @@ Recent windows are dated, so a row written days ago is still correct: filter by 
 
 ## Active time
 
-Decision #46. For each model, within each interval it is open in a session (from `doc_opened` to its close, `session_end` or `collection_disabled`, whichever comes first):
+Decision #46. For each model, within each interval it is open in a session (from `doc_opened` to its `doc_closing` — or `doc_closed` when there is no `doc_closing` — `session_end` or `collection_disabled`, whichever comes first; a close Revit cancelled or failed leaves the model open):
 
 1. every `doc_changed_pulse` at *t* marks [*t*, *t* + 1 min) active;
 2. two consecutive pulses of that interval at most **10 minutes** apart also mark the time between them active;
 3. spans are clipped to the interval, so a gap never bridges a close or a collection gap;
 4. active time is the length of the union, split at local midnight.
 
-Edits Revit makes for you (a sync's reload, another add-in's change) count; a model open but untouched counts nothing.
+Edits Revit makes for you (a sync's reload, another add-in's change) count; a model open but untouched counts nothing. Open time (`open_seconds`) still runs to `doc_closed`.
 
 ## Model health
 
@@ -136,9 +137,9 @@ Long ranges (6M, 1Y) plot ISO weeks, Monday start, derived from the daily rows w
 
 ## Folding and cleanup
 
-The tray folds one closed outbox file (it has `session_end` and no Revit holds it) per step, oldest first, writing each touched rollup, then the index, then the ledger. A pass that finds the outbox unchanged ends there. A file folded in one pass is sealed on a later pass if unchanged; a seal reaches `.bak.json` when the model is next written, or on the following pass.
+The tray folds one closed outbox file (it has `session_end` and no Revit holds it) per step, oldest first, writing each touched rollup, then the index, then the ledger. A pass that finds the outbox unchanged ends there. A file folded in one pass is sealed on a later pass if unchanged; a seal reaches `.bak.json` when the model is next written, or on the following pass. A `model_stats` record is attributed by its keys, even when it lands after `doc_closing`.
 
-A raw outbox file is deleted only when **all** hold: it is closed and not live; its share is sealed in every model it touched, and both the rollup and its `.bak.json` (read back from disk) contain the seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. The age prune (`retentionDays`, default 180) stays as a backstop for files the tray never folds.
+A raw outbox file is deleted only when **all** hold, re-checked right before the delete under a handle that refuses writers: it is closed and not live, and its size and last write are still the folded ones; its share is sealed for exactly that file in every model it touched, and both the rollup and its `.bak.json` (read back from disk) hold that seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. A failed index or ledger write stops the pass before cleanup. The age prune (`retentionDays`, default 180) stays as a backstop for files the tray never folds.
 
 ## Retention hook for forks
 
@@ -160,4 +161,4 @@ Return false to keep the file for now (it is asked again next pass). A gate that
 
 ## Reading from code
 
-In-process readers use the same code Revit does: `ModelActivityReader.ReadCurrentModel(identity, options)` (Revit; adds the live session) or `ModelActivityReader.ReadModel(modelId, options)` (the tray), which fold any not-yet-folded outbox files in memory and write nothing, and `ModelActivityReader.ReadIndex()` for the list of models.
+In-process readers use the same code Revit does: `ModelActivityReader.ReadCurrentModel(identity, options)` (Revit; adds the live session) or `ModelActivityReader.ReadModel(modelId, options)` (the tray), and `ModelActivityReader.ReadIndex()` for the list of models. Both detail reads resolve the model the same way (every rollup its keys and learned aliases match), fold in memory any outbox file the rollups do not hold for exactly that file version, age the event window to now, and write nothing — so Revit and the tray show the same totals.

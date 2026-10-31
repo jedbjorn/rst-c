@@ -89,6 +89,27 @@ internal sealed class SessionBuilder
         return this;
     }
 
+    /// <summary>doc_closing at <paramref name="closingTs"/>, doc_closed at <paramref name="closedTs"/>
+    /// (with an optional status such as "Cancelled").</summary>
+    public SessionBuilder Close(DateTimeOffset closingTs, DocumentIdentity id, DateTimeOffset closedTs, string? status = null)
+    {
+        var closingId = "c" + (++_closing);
+        var closing = Add(TelemetryEventTypes.DocClosing, closingTs);
+        id.WriteKeysTo(closing);
+        closing.SetField(TelemetryFields.ClosingId, closingId);
+        var closed = Add(TelemetryEventTypes.DocClosed, closedTs);
+        closed.SetField(TelemetryFields.ClosingId, closingId);
+        if (status is not null) closed.SetField(TelemetryFields.Status, status);
+        return this;
+    }
+
+    /// <summary>doc_opened with no doc_opening before it: open, but no timed open.</summary>
+    public SessionBuilder OpenedOnly(DateTimeOffset ts, DocumentIdentity id)
+    {
+        id.WriteTo(Add(TelemetryEventTypes.DocOpened, ts));
+        return this;
+    }
+
     /// <summary>The synthetic doc_closed recovery writes for a crashed session (keys, no closing_id).</summary>
     public SessionBuilder RecoveryClose(DateTimeOffset ts, DocumentIdentity id)
     {

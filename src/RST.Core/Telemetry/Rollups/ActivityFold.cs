@@ -124,7 +124,7 @@ internal static class ActivityFold
 
         foreach (var (day, ms) in ActiveTime.MillisecondsByDay(SessionReplay.MergeIntervals(sink.Intervals), zone))
             Row(day).OpenMs += ms;
-        foreach (var (day, ms) in ActiveTime.MillisecondsByDay(ActiveTime.Spans(sink.Intervals, sink.Pulses), zone))
+        foreach (var (day, ms) in ActiveTime.MillisecondsByDay(ActiveTime.Spans(sink.ActiveIntervals, sink.Pulses), zone))
             Row(day).ActiveMs += ms;
 
         var opens = new List<DurationPoint>();

@@ -55,6 +55,11 @@ internal sealed class ReplaySink
     /// live session's replay (they end at now).</summary>
     public List<(DateTimeOffset Start, DateTimeOffset End)> LiveIntervals { get; } = new();
 
+    /// <summary>The same occupancies as <see cref="Intervals"/>, but a close ends at its
+    /// doc_closing rather than its doc_closed — the boundary active time is clipped to
+    /// (spec #24, Active Time rule 3: whichever comes first).</summary>
+    public List<(DateTimeOffset Start, DateTimeOffset End)> ActiveIntervals { get; } = new();
+
     public List<DurationPoint> OpenPoints { get; } = new();
 
     public List<DurationPoint> SyncPoints { get; } = new();
@@ -195,6 +200,9 @@ internal static class SessionReplay
         // doc_closed carries no keys of its own, so this is what the
         // close resolution judges against.
         var closingIds = new Dictionary<string, DocumentIdentity>();
+        // closing_id → the doc_closing's ts: a close that happens ends the
+        // model's active interval there, not at the later doc_closed.
+        var closingTs = new Dictionary<string, DateTimeOffset>();
         // Current file's in-flight syncs: join key → sync_start ts.
         var pendingSyncs = new Dictionary<string, DateTimeOffset>();
         var sessionEnded = false;
@@ -202,7 +210,10 @@ internal static class SessionReplay
         void CloseAll(DateTimeOffset endTs)
         {
             foreach (var openedTs in openDocs.Values)
+            {
                 AddInterval(intervals, openedTs, endTs, nowUtc);
+                AddInterval(sink.ActiveIntervals, openedTs, endTs, nowUtc);
+            }
             openDocs.Clear();
             allOpenDocs.Clear();
         }
@@ -210,13 +221,14 @@ internal static class SessionReplay
         // SC-043: the matched interval under a key ends when its last
         // MATCHING element retires — a rejecting sibling keeps the key
         // live for resolution, never the current file's time.
-        void RetireMatchedIfLast(string key, List<OpenDoc> docs, DateTimeOffset endTs)
+        void RetireMatchedIfLast(string key, List<OpenDoc> docs, DateTimeOffset endTs, DateTimeOffset? activeEndTs = null)
         {
             if (!openDocs.TryGetValue(key, out var openedTs)) return;
             foreach (var d in docs)
                 if (d.Matched) return;
             openDocs.Remove(key);
             AddInterval(intervals, openedTs, endTs, nowUtc);
+            AddInterval(sink.ActiveIntervals, openedTs, activeEndTs ?? endTs, nowUtc);
         }
 
         foreach (var e in events)
@@ -341,7 +353,11 @@ internal static class SessionReplay
                 case TelemetryEventTypes.DocClosing:
                 {
                     var closingId = e.GetString(TelemetryFields.ClosingId);
-                    if (closingId is not null) closingIds[closingId] = DocumentIdentity.ReadFrom(e);
+                    if (closingId is not null)
+                    {
+                        closingIds[closingId] = DocumentIdentity.ReadFrom(e);
+                        closingTs[closingId] = e.Ts;
+                    }
                     break;
                 }
 
@@ -361,6 +377,10 @@ internal static class SessionReplay
                         ? ci
                         : DocumentIdentity.ReadFrom(e);
                     if (closingId is not null) closingIds.Remove(closingId);
+                    // Active time stops at the doc_closing of a close that happened.
+                    DateTimeOffset activeEnd = e.Ts;
+                    if (closingId is not null && closingTs.Remove(closingId, out var closingAt) && closingAt < activeEnd)
+                        activeEnd = closingAt;
 
                     // The close retires a doc only when exactly one live
                     // candidate is consistent with its identity, judged
@@ -406,7 +426,7 @@ internal static class SessionReplay
                     if (key is null) break;
                     var closeDocs = allOpenDocs[key];
                     closeDocs.RemoveAt(index);
-                    RetireMatchedIfLast(key, closeDocs, e.Ts);
+                    RetireMatchedIfLast(key, closeDocs, e.Ts, activeEnd);
                     if (closeDocs.Count == 0) allOpenDocs.Remove(key);
                     break;
                 }
@@ -481,6 +501,7 @@ internal static class SessionReplay
                     pendingOpenings.Clear();
                     pendingSyncs.Clear();
                     closingIds.Clear();
+                    closingTs.Clear();
                     break;
 
                 case TelemetryEventTypes.SessionEnd:

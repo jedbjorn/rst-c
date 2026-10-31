@@ -244,13 +244,22 @@ public sealed class RollupIdentity
     public DateTimeOffset? AsOf { get; set; }
 }
 
-/// <summary>One session's not-yet-sealed share of a rollup (spec #24: held while the raw
-/// file exists, so a changed file re-folds by replacement).</summary>
+/// <summary>One session's share of a rollup, held while its raw file exists so a changed file
+/// re-folds by replacement — sealed or not (spec #24). Once the raw file is gone the share is
+/// absorbed into the permanent totals.</summary>
 internal sealed class PendingSession
 {
     public string File { get; set; } = "";
     public long Size { get; set; }
     public DateTimeOffset LastWriteUtc { get; set; }
+
+    /// <summary>True once a later pass found the file unchanged (the seal). The seal holds only
+    /// for this <see cref="Size"/> and <see cref="LastWriteUtc"/>: a changed file replaces the
+    /// share and clears it.</summary>
+    public bool Sealed { get; set; }
+
+    internal bool Matches(long size, DateTimeOffset lastWriteUtc) =>
+        Size == size && RollupJson.TruncateMs(LastWriteUtc) == RollupJson.TruncateMs(lastWriteUtc);
 
     [JsonConverter(typeof(DayTableConverter))]
     public List<RollupDay> Days { get; set; } = new();
@@ -290,21 +299,20 @@ internal sealed class ModelRollup
 
     public DateTimeOffset? SyncsTrimmedThrough { get; set; }
 
-    /// <summary>Per session GUID, its unsealed contribution.</summary>
+    /// <summary>Per session GUID, its share while the raw file exists (sealed or not).</summary>
     public SortedDictionary<string, PendingSession> Pending { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>For each day a pending contribution touches, that day's sealed totals.</summary>
+    /// <summary>For each day a pending share touches, that day's permanent totals.</summary>
     [JsonConverter(typeof(DayTableConverter))]
     public List<RollupDay> PendingBase { get; set; } = new();
 
-    /// <summary>Sessions sealed into the permanent rows whose raw file may still exist.</summary>
-    public List<string> SealedSessions { get; set; } = new();
+    /// <summary>True when the session's share is sealed for exactly this file fingerprint.</summary>
+    internal bool IsSealed(string sessionGuid, long size, DateTimeOffset lastWriteUtc) =>
+        Pending.TryGetValue(sessionGuid, out var p) && p.Sealed && p.Matches(size, lastWriteUtc);
 
-    internal bool Contains(string sessionGuid) =>
-        Pending.ContainsKey(sessionGuid) || IsSealed(sessionGuid);
-
-    internal bool IsSealed(string sessionGuid) =>
-        SealedSessions.BinarySearch(sessionGuid, StringComparer.Ordinal) >= 0;
+    /// <summary>True when the rollup holds the share of exactly this file fingerprint.</summary>
+    internal bool Holds(string sessionGuid, long size, DateTimeOffset lastWriteUtc) =>
+        Pending.TryGetValue(sessionGuid, out var p) && p.Matches(size, lastWriteUtc);
 }
 
 /// <summary>A day's or a week's totals in an index row.</summary>
@@ -387,6 +395,10 @@ public sealed class ModelIndexRow
     /// mismatch makes the next pass verify the rollup.</summary>
     public long RollupBytes { get; set; }
     public DateTimeOffset? RollupLastWriteUtc { get; set; }
+
+    /// <summary>When the rollup's oldest stored event point leaves the 90-day window (beyond the
+    /// newest 10); a pass on or after it trims the rollup. Null when nothing can expire.</summary>
+    public DateTimeOffset? NextEventExpiryUtc { get; set; }
 }
 
 /// <summary><c>index.json</c>.</summary>
@@ -395,6 +407,14 @@ internal sealed class RollupIndexFile
     public int SchemaVersion { get; set; } = RollupSchema.Version;
     public DateTimeOffset? UpdatedUtc { get; set; }
     public List<ModelIndexRow> Models { get; set; } = new();
+}
+
+/// <summary>index.json as read: rows are parsed one at a time so a bad row is skipped.</summary>
+internal sealed class RollupIndexDocument
+{
+    public int SchemaVersion { get; set; }
+    public DateTimeOffset? UpdatedUtc { get; set; }
+    public List<System.Text.Json.JsonElement>? Models { get; set; }
 }
 
 /// <summary>Seal state of one session in one model.</summary>

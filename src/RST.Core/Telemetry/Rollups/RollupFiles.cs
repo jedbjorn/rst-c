@@ -180,6 +180,15 @@ internal sealed class RollupFileIO
 
     private enum ParseState { Missing, Ok, Corrupt, Locked, TooNew }
 
+    /// <summary>Strict parse of bytes already read: the value, or null when corrupt or of an
+    /// unknown schema (<paramref name="tooNew"/> then says whether it was newer).</summary>
+    public T? Parse<T>(byte[] bytes, Func<T, bool>? validate, out bool tooNew) where T : class
+    {
+        var (state, value) = ParseBytes(bytes, validate);
+        tooNew = state == ParseState.TooNew;
+        return state is ParseState.Ok or ParseState.TooNew ? value : null;
+    }
+
     private (ParseState State, T? Value) TryParse<T>(string path, Func<T, bool>? validate) where T : class
     {
         byte[]? bytes;
@@ -187,7 +196,11 @@ internal sealed class RollupFileIO
         catch (IOException) { return (ParseState.Locked, null); }
         catch (UnauthorizedAccessException) { return (ParseState.Locked, null); }
         if (bytes is null) return (ParseState.Missing, null);
+        return ParseBytes(bytes, validate);
+    }
 
+    private static (ParseState State, T? Value) ParseBytes<T>(byte[] bytes, Func<T, bool>? validate) where T : class
+    {
         try
         {
             if (JsonNode.Parse(bytes) is not JsonObject obj) return (ParseState.Corrupt, null);
@@ -197,7 +210,12 @@ internal sealed class RollupFileIO
             {
                 // Newer than this build: read what we can, never discard it.
                 T? best = null;
-                try { best = obj.Deserialize<T>(RollupJson.Options); } catch { /* best effort */ }
+                try
+                {
+                    best = obj.Deserialize<T>(RollupJson.Options);
+                    if (best is not null && validate is not null && !validate(best)) best = null;
+                }
+                catch { best = null; /* best effort */ }
                 return (ParseState.TooNew, best);
             }
             if (version < RollupSchema.Version)

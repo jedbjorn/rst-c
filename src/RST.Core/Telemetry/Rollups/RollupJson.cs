@@ -198,6 +198,10 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
         public DateTimeOffset? StatsTs;
         public long? Warnings, Size, HSize, HWarnings;
         public double? HOpen, HSync;
+
+        /// <summary>The row carries health columns: all-null cells are a day with no inputs
+        /// (a grey dot), not a day without health.</summary>
+        public bool HealthSeen;
     }
 
     protected override void ReadCell(Cells c, string column, JsonElement v)
@@ -219,10 +223,10 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
             case "stats_ts": c.StatsTs = RollupJson.ReadTs(v); break;
             case "warnings_count": c.Warnings = NonNegative(RollupJson.ReadLong(v)); break;
             case "file_size_bytes": c.Size = NonNegative(RollupJson.ReadLong(v)); break;
-            case "health_file_size_bytes": c.HSize = NonNegative(RollupJson.ReadLong(v)); break;
-            case "health_warnings_count": c.HWarnings = NonNegative(RollupJson.ReadLong(v)); break;
-            case "health_open_median_seconds": c.HOpen = NonNegativeSeconds(v); break;
-            case "health_sync_median_seconds": c.HSync = NonNegativeSeconds(v); break;
+            case "health_file_size_bytes": c.HealthSeen = true; c.HSize = NonNegative(RollupJson.ReadLong(v)); break;
+            case "health_warnings_count": c.HealthSeen = true; c.HWarnings = NonNegative(RollupJson.ReadLong(v)); break;
+            case "health_open_median_seconds": c.HealthSeen = true; c.HOpen = NonNegativeSeconds(v); break;
+            case "health_sync_median_seconds": c.HealthSeen = true; c.HSync = NonNegativeSeconds(v); break;
         }
     }
 
@@ -232,7 +236,7 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
         if (d.Date == default) return null;
         if (c.StatsTs is { } ts)
             d.Stats = new ModelStatsPoint(ts, ToInt(c.Warnings), c.Size);
-        if (c.HSize is not null || c.HWarnings is not null || c.HOpen is not null || c.HSync is not null)
+        if (c.HealthSeen)
             d.Health = new HealthInputs(c.HSize, ToInt(c.HWarnings), c.HOpen, c.HSync);
         d.Clamp();
         return d;
