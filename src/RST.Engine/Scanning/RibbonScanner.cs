@@ -1,6 +1,6 @@
 // RibbonScanner.cs — walk the live Revit ribbon to enumerate commands.
 //
-// The Id surfaced by Autodesk.Windows.RibbonButton.Id is treated as opaque:
+// The Id surfaced by an Autodesk.Windows ribbon item is treated as opaque:
 // RevitCommandId.LookupCommandId(id) is the universal resolver for both
 // built-in ("ID_BUTTON_*") and add-in IDs. Empirically (Revit 2026 probe,
 // 272/272 round-trip) custom add-in IDs come back with a double prefix
@@ -14,6 +14,18 @@
 // — so "Wall" gets bucketed under Architecture > Build instead of
 // landing in a "(unknown)" group in the catalog tree.
 //
+// SC-027: the walk itself (which containers are descended, which leaves are
+// collected, which on/off state controls are left out, cycle and depth
+// guards, the per-scan counts) lives in RST.Core.Scanning.RibbonWalker, on
+// plain data. This file only maps AdWindows types onto it (Describe) and
+// supplies the tab filter and the Revit postability check. Every container
+// AdWindows has is walked: RibbonListButton (split, menu, checklist, radio
+// group and any subclass, incl. Revit's UIFramework.RvtMenuSplitButton and
+// SplitRadioGroup), RibbonRowPanel (stacks, fold panels), RibbonMenuItem
+// with a sub-menu (UIFramework.RvtLargeMenuItem), and each panel's
+// RibbonPanelSource.DialogLauncher. RibbonList (combos, galleries) is not:
+// its entries are values (a type, a design option), not commands.
+//
 // Excluded tabs:
 //   - ModeRestrictedTabs — contextual editing modes (family editor, in-place
 //                          model/mass, MEP zone); commands aren't usable
@@ -25,7 +37,9 @@
 // enrichment in exchange. Same applies to host tabs (Add-Ins, FormIt) per
 // PR #10.
 
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Windows;
 using RST.Core.Scanning;
 using RST.Engine.Ribbon;
@@ -41,86 +55,135 @@ internal static class RibbonScanner
         if (ribbon is null)
         {
             Log.Warning("RibbonScanner: ComponentManager.Ribbon is null — no add-in commands will be enumerated");
-            yield break;
+            return Array.Empty<ScannedCommand>();
         }
+        return EnumerateTabs(ribbon.Tabs, IsPostable);
+    }
 
-        var tabsTotal = 0;
-        var tabsWalked = 0;
+    /// <summary>
+    /// The walk over the given tabs (the live ribbon's, or a test's). <paramref name="isPostable"/>
+    /// is asked only for kinds the walk reaches since SC-027 (see RibbonWalker). Logs one
+    /// Information line with the scan's counts once enumeration completes.
+    /// </summary>
+    internal static IEnumerable<ScannedCommand> EnumerateTabs(
+        IEnumerable<RibbonTab?> tabs, Func<string, bool> isPostable, RibbonScanCounts? counts = null)
+    {
+        counts ??= new RibbonScanCounts();
+        var walker = new RibbonWalker<RibbonItem>(Describe, isPostable, counts);
+
         var tabsSkippedRestricted = 0;
         var tabsSkippedRst = 0;
-        var buttonsEmitted = 0;
 
-        foreach (var tab in ribbon.Tabs)
+        foreach (var tab in tabs)
         {
             if (tab is null) continue;
-            tabsTotal++;
+            counts.TabsTotal++;
             if (ModeRestrictedTabs.Contains(tab.Title)) { tabsSkippedRestricted++; continue; }
             // The active profile's tab, if any. RST built those buttons this
             // session, so reading them back would surface circular entries.
             // The permanent RST tools panel is intentionally not excluded:
             // users may place Builder, Loader, RSTify, or Health on a profile.
             if (RstManagedTabs.Contains(tab.Title))     { tabsSkippedRst++; continue; }
-            tabsWalked++;
+            counts.TabsWalked++;
 
             var perTab = 0;
             foreach (var panel in tab.Panels)
             {
                 var source = panel?.Source;
                 if (source is null) continue;
-                foreach (var item in source.Items)
+
+                List<RibbonHit> hits;
+                try
                 {
-                    foreach (var cmd in EnumerateItem(item, tab.Title, source.Title))
-                    {
-                        perTab++;
-                        buttonsEmitted++;
-                        yield return cmd;
-                    }
+                    hits = walker.WalkPanel(source.Items, DialogLauncherOf(source));
+                }
+                catch (Exception ex)
+                {
+                    // One odd panel must not cost the whole catalog.
+                    Log.Warning(ex, "RibbonScanner: skipped panel {Tab} / {Panel}", tab.Title, source.Title);
+                    continue;
+                }
+
+                foreach (var hit in hits)
+                {
+                    perTab++;
+                    yield return new ScannedCommand(
+                        Id: hit.Id,
+                        DisplayName: hit.DisplayName,
+                        // SC-007 (spec #18): Revit's own buttons on its own tabs are Native; an add-in's
+                        // CustomCtrl_ button is Custom wherever it sits.
+                        Origin: OriginClassifier.ClassifyRibbonButton(tab.Title, hit.Id),
+                        AddinFile: null,
+                        AssemblyPath: null,
+                        SourceTab: tab.Title,
+                        SourcePanel: source.Title);
                 }
             }
             Log.Debug("RibbonScanner: tab={Tab} → {Count} buttons", tab.Title, perTab);
         }
 
-        Log.Debug("RibbonScanner: tabsTotal={Total}, walked={Walked}, " +
-                  "skippedRestricted={Restricted}, skippedRst={Rst}, buttons={Buttons}",
-                  tabsTotal, tabsWalked, tabsSkippedRestricted, tabsSkippedRst, buttonsEmitted);
+        Log.Debug("RibbonScanner: skippedRestricted={Restricted}, skippedRst={Rst}",
+                  tabsSkippedRestricted, tabsSkippedRst);
+        // SC-027: one line per scan, so a VM run or a new Revit year can be checked from the log.
+        Log.Information("RibbonScanner: {Summary}", counts.Summary());
     }
 
-    private static IEnumerable<ScannedCommand> EnumerateItem(
-        RibbonItem? item, string tabTitle, string? panelTitle)
+    /// <summary>
+    /// Maps an AdWindows item onto the walker's plain model. Order matters: the list-button
+    /// subclasses before RibbonListButton, RibbonToggleButton and RibbonListButton before
+    /// RibbonButton, the RibbonCommandItem subclasses before RibbonCommandItem.
+    /// </summary>
+    internal static RibbonNode<RibbonItem> Describe(RibbonItem item)
     {
-        if (item is null) yield break;
-
-        if (item is RibbonSplitButton split)
+        switch (item)
         {
-            foreach (var sub in split.Items)
-                foreach (var c in EnumerateItem(sub, tabTitle, panelTitle))
-                    yield return c;
-            yield break;
+            case RibbonSplitButton split:          // incl. UIFramework.RvtMenuSplitButton
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.SplitButton, split.Items);
+            case RibbonChecklistButton checklist:
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.Checklist, checklist.Items, checklist.Id, NameOf(checklist));
+            case RibbonRadioButtonGroup radio:     // incl. UIFramework.SplitRadioGroup
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.RadioGroup, radio.Items);
+            case RibbonMenuButton menu:            // incl. UIFramework.SwitchWindowMenuButton
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.MenuButton, menu.Items, menu.Id, NameOf(menu));
+            case RibbonListButton list:
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.ListButton, list.Items, list.Id, NameOf(list));
+            case RibbonRowPanel row:               // incl. RibbonFoldPanel
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.Stack, row.Items);
+            case RibbonMenuItem menuItem when menuItem.Items is { } subItems && subItems.Any():
+                // A sub-menu (UIFramework.RvtLargeMenuItem "Annotations"): its header only opens it.
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.SubMenu, subItems);
+            case RibbonToggleButton toggle:
+                return RibbonNode<RibbonItem>.Leaf(RibbonLeafKind.ToggleButton, toggle.Id, NameOf(toggle));
+            case RibbonButton button:
+                return RibbonNode<RibbonItem>.Leaf(RibbonLeafKind.Button, button.Id, NameOf(button));
+            case RibbonCheckBox checkBox:
+                return RibbonNode<RibbonItem>.Leaf(RibbonLeafKind.CheckBox, checkBox.Id, NameOf(checkBox));
+            case RibbonMenuItem menuItem:          // incl. UIFramework.RvtLargeMenuItem
+                return RibbonNode<RibbonItem>.Leaf(RibbonLeafKind.MenuItem, menuItem.Id, NameOf(menuItem));
+            case RibbonCommandItem command:
+                return RibbonNode<RibbonItem>.Leaf(RibbonLeafKind.CommandItem, command.Id, NameOf(command));
+            default:
+                // Separators, row and panel breaks, labels, text boxes, combos, galleries.
+                return RibbonNode<RibbonItem>.Ignored;
         }
+    }
 
-        if (item is RibbonRowPanel row)
+    private static string NameOf(RibbonItem item) =>
+        RibbonWalkRules.DisplayNameFor(item.Text, item.Name, item.Id ?? "");
+
+    private static RibbonItem? DialogLauncherOf(RibbonPanelSource source)
+    {
+        try { return source.DialogLauncher; }
+        catch (Exception ex)
         {
-            foreach (var sub in row.Items)
-                foreach (var c in EnumerateItem(sub, tabTitle, panelTitle))
-                    yield return c;
-            yield break;
+            Log.Debug(ex, "RibbonScanner: no dialog launcher readable on {Panel}", source.Title);
+            return null;
         }
+    }
 
-        if (item is RibbonButton button)
-        {
-            var id = button.Id;
-            if (string.IsNullOrEmpty(id)) yield break;
-
-            yield return new ScannedCommand(
-                Id: id!,
-                DisplayName: button.Text ?? id!,
-                // SC-007 (spec #18): Revit's own buttons on its own tabs are Native; an add-in's
-                // CustomCtrl_ button is Custom wherever it sits.
-                Origin: OriginClassifier.ClassifyRibbonButton(tabTitle, id),
-                AddinFile: null,
-                AssemblyPath: null,
-                SourceTab: tabTitle,
-                SourcePanel: panelTitle);
-        }
+    private static bool IsPostable(string id)
+    {
+        try { return Autodesk.Revit.UI.RevitCommandId.LookupCommandId(id) is not null; }
+        catch { return false; }
     }
 }
