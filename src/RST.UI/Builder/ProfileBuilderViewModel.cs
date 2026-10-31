@@ -699,6 +699,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         var name = _profile.Panels[index].Name;
         if (!_dialogs.Confirm(UiStrings.Builder_DeletePanelTitle(name), "", [], UiStrings.Builder_Delete, danger: true, DeletePanelDialogId)) return;
         _profile.Panels.RemoveAt(index);
+        // Its stacks go with it, so Profile.Stacks and the stack slots stay in step (WU3 review N2).
+        var orphans = ProfileEditing.RemoveOrphanStacks(_profile);
+        if (orphans.Count > 0) Log.Information("Builder: deleted panel {Panel} and its stacks {Stacks}", name, string.Join(", ", orphans));
         if (_selectedPanelIndex >= _profile.Panels.Count) _selectedPanelIndex = _profile.Panels.Count - 1;
         RenderCanvas();
     }
@@ -709,6 +712,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     internal void RemoveTile(ToolTileViewModel tile)
     {
+        if (!IsCurrent(tile, "remove a tool")) return;
         var panel = tile.Panel.Index;
         if (tile.InStack)
         {
@@ -716,17 +720,53 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         }
         else
         {
-            var slots = _profile.Panels[panel].Slots;
-            if (tile.Index < 0 || tile.Index >= slots.Count || !ReferenceEquals(slots[tile.Index], tile.Model)) return;
-            slots.RemoveAt(tile.Index);
+            _profile.Panels[panel].Slots.RemoveAt(tile.Index);
         }
         Log.Information("Builder: removed {Tool} from panel {Panel}", tile.Name, _profile.Panels[panel].Name);
         RenderCanvas();
     }
 
+    /// <summary>
+    /// The card a command came from still shows the working copy (WU3 review N1): the tile's or
+    /// stack's slot is the same object at the same place, and a stack holds the same tools in the
+    /// same order. The stack operations address slots by index, so an edit made underneath (WU4's
+    /// edit or remove everywhere on the open profile) must not let them hit another slot. Otherwise
+    /// the action is refused, logged, and the cards are redrawn.
+    /// </summary>
+    private bool IsCurrent(PanelItemViewModel item, string action)
+    {
+        var panel = item.Panel.Index;
+        var ok = panel >= 0 && panel < _profile.Panels.Count && ReferenceEquals(_profile.Panels[panel], item.Panel.Model);
+        if (ok)
+        {
+            var slots = _profile.Panels[panel].Slots;
+            switch (item)
+            {
+                case ToolTileViewModel { Stack: { } stack } row:
+                    ok = IsCurrentStack(slots, stack) && row.Row < stack.Rows.Count && ReferenceEquals(stack.Rows[row.Row].Model, row.Model);
+                    break;
+                case StackGroupViewModel stack:
+                    ok = IsCurrentStack(slots, stack);
+                    break;
+                default:
+                    ok = item.Index >= 0 && item.Index < slots.Count && ReferenceEquals(slots[item.Index], item.Model);
+                    break;
+            }
+        }
+        if (ok) return true;
+        Log.Warning("Builder: {Action} refused: the card no longer matches the profile; redrawing", action);
+        RenderCanvas();
+        return false;
+    }
+
+    private bool IsCurrentStack(List<Slot> slots, StackGroupViewModel stack) =>
+        stack.Index >= 0 && stack.Index < slots.Count && ReferenceEquals(slots[stack.Index], stack.Model)
+        && PanelStacks.ToolsOf(_profile, stack.Model).SequenceEqual(stack.Rows.Select(r => r.Model), ReferenceEqualityComparer.Instance);
+
     /// <summary>× on a stack: un-stacks it; its tools go back on the panel in order, in its place.</summary>
     internal void Unstack(StackGroupViewModel stack)
     {
+        if (!IsCurrent(stack, "un-stack")) return;
         if (PanelStacks.Unstack(_profile, stack.Panel.Index, stack.Index) != StackResult.Done) return;
         Log.Information("Builder: un-stacked {Count} tools on panel {Panel}", stack.Rows.Count, stack.Panel.Name);
         _selectedPanelIndex = stack.Panel.Index;
@@ -742,6 +782,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         if (loose.Count < PanelStacks.MinTools) return;
         var dialog = StackDialogModel.ForNew(panel.Name ?? "", loose, PackDirectory);
         if (!_builderDialogs.EditStack(dialog)) return;
+        if (!ReferenceEquals(_profile.Panels.ElementAtOrDefault(panelIndex), panel) || !LooseStillAt(panel, loose)) return;
         var picks = dialog.Picks.Where(p => !p.Member).Select(p => p.Index).ToList();
         var result = PanelStacks.NewStack(_profile, panelIndex, picks);
         Log.Information("Builder: new stack on {Panel} from {Count} tools → {Result}", panel.Name, picks.Count, result);
@@ -754,15 +795,26 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     internal void EditStack(StackGroupViewModel stack)
     {
+        if (!IsCurrent(stack, "edit a stack")) return;
         var panelIndex = stack.Panel.Index;
-        if (panelIndex < 0 || panelIndex >= _profile.Panels.Count) return;
         var panel = _profile.Panels[panelIndex];
         var loose = PanelStacks.LooseTools(_profile, panelIndex).Select(i => (i, panel.Slots[i])).ToList();
         var dialog = StackDialogModel.ForEdit(panel.Name ?? "", stack.Rows.Select(r => r.Model).ToList(), loose, PackDirectory);
         if (!_builderDialogs.EditStack(dialog)) return;
+        // The dialog is modal, but the working copy may still have changed while it was open.
+        if (!IsCurrent(stack, "edit a stack") || !LooseStillAt(panel, loose)) return;
         var result = PanelStacks.EditStack(_profile, panelIndex, stack.Index, dialog.Picks);
         Log.Information("Builder: edited a stack on {Panel} to {Count} tools → {Result}", panel.Name, dialog.Count, result);
         AfterStackEdit(panelIndex, result);
+    }
+
+    /// <summary>The loose tools a stack dialog listed are still at those places (else refused, logged, redrawn).</summary>
+    private bool LooseStillAt(ProfilePanel panel, IReadOnlyList<(int Slot, Slot Tool)> loose)
+    {
+        if (loose.All(l => l.Slot < panel.Slots.Count && ReferenceEquals(panel.Slots[l.Slot], l.Tool))) return true;
+        Log.Warning("Builder: stack dialog refused: the panel {Panel} changed while it was open; redrawing", panel.Name);
+        RenderCanvas();
+        return false;
     }
 
     private void AfterStackEdit(int panelIndex, StackResult result)
@@ -969,14 +1021,18 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     /// <summary>
     /// The pointer is over a tile, a stack or a stack's row: the marker shows what a drop would do
-    /// (TileDrops' rules). True when the drop would change the profile; a full stack shows the
-    /// refusal marker and answers false.
+    /// (TileDrops' rules). True when the target takes the drop: a change, or a full stack, which
+    /// shows the refusal marker and refuses on drop with its message. False for nothing to do or a
+    /// stale target (no marker).
     /// </summary>
     public bool DragOverTile(TileHit hit)
     {
         var plan = TileDrops.Plan(_profile, _drag, hit);
-        SetMarker(hit.Panel, plan.Kind == TileDropKind.None ? null : plan.Slot, plan.MarkerRow, plan.Marker);
-        return plan.Accepted;
+        var none = plan.Kind is TileDropKind.None or TileDropKind.Stale;
+        SetMarker(hit.Panel, none ? null : plan.Slot, plan.MarkerRow, plan.Marker);
+        // A full stack shows the refusal marker and still takes the drop, so the drop can refuse it
+        // with its message: OLE delivers no Drop after a None effect (WU3 review N5).
+        return !none;
     }
 
     /// <summary>The pointer left a target: its marker clears.</summary>
@@ -1012,6 +1068,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         Log.Information("Builder: drop {Kind} {Source} → panel {Panel} slot {Slot}: {Result}",
             plan.Kind, drag.Kind == DragKind.Catalog ? drag.Command?.Id : $"{drag.PanelIndex}/{drag.SlotIndex}/{drag.Row}", plan.Panel, plan.Slot, result);
         if (result == StackResult.Full) ShowToast(UiStrings.Builder_StackFull, BannerKind.Warning);
+        if (plan.Kind == TileDropKind.Stale)
+        {
+            // The working copy changed under the cards: nothing moved; show what is there now.
+            Log.Warning("Builder: drop refused: the dragged or target slot is no longer where the card showed it; redrawing");
+            _drag = null;
+            RenderCanvas();
+            return;
+        }
         AfterDrop(result == StackResult.Done ? plan.Panel : null);
     }
 
