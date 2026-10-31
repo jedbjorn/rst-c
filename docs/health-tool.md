@@ -91,7 +91,7 @@ The cleanup targets are fixed presets. A profile can turn them on or off or remo
 
 ### Which targets a profile offers
 
-The targets offered come from the loaded profile: its enabled targets, in its order and with its names. With no profile loaded, or a profile made before cleanup targets existed (before RST-031), Health offers the full preset list. An admin chooses a profile's targets in the [Profile Builder](profile-builder.md#junk-cleanup-targets).
+The targets offered come from the loaded profile: its enabled targets, in its order and with its names. With no profile loaded, or a profile made before cleanup targets existed (before RST-031), Health offers the full preset list. An admin chooses a profile's targets in the [Profile Builder](profile-builder.md#junk-cleanup).
 
 ### How the cleanup runs
 

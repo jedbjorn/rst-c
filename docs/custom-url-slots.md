@@ -46,16 +46,16 @@ The new button is part of the profile you are editing: save the profile to keep 
 
 ## Editing a tool everywhere
 
-**✎** on a Custom Tools row, or on a placed custom tool (a tile or a stack row), opens **Edit custom tool**, filled in. A warning names every profile that will change: "Changes apply everywhere this tool is used: <profiles>. Names and icons you gave it on a panel are kept." The button reads **Update in N profiles**; while your edit would change nothing it reads "Nothing to change yet: edit the label, address or icon."
+**✎** on a Custom Tools row, or on a placed custom tool (a tile or a stack row), opens **Edit custom tool**, filled in. When it opens, nothing would change yet: the dialog reads "Nothing to change yet: edit the label, address or icon." and the button reads **Update**, disabled. As soon as your edit changes something, a warning names every profile that will change: "Changes apply everywhere this tool is used: <profiles>. Names and icons you gave it on a panel are kept." The button then reads **Update in N profiles**, N being the profiles that will actually change. While the label or address is missing or not valid, the button reads **Update**, stays disabled, and the reason shows.
 
 When you confirm, in every saved profile that holds the tool, and in the profile open in the Builder:
 
 - every button with the old link gets the new link and the new label as its base name;
-- a button's **name** changes only where it is still the tool's old label, so a name given on a panel is kept;
-- a button's **icon** changes only where it is still the tool's old icon, so an icon picked on a panel is kept;
+- a button's **name** changes unless it was renamed on its panel, that is, unless it differs from the label the button was created with (its base name). A button with the same link but its own label in another profile was created with that label, so it takes the new label too;
+- a button's **icon** changes only where it is still the icon the Custom Tools list shows for the tool, so an icon picked on a panel is kept;
 - each changed file is validated and saved. Files the edit leaves as they are are not written.
 
-In the open profile the change is made to your working copy as well. If its saved file was written, that part of the change does not count as unsaved; your other unsaved edits stay unsaved. A profile that is open but not saved yet is listed as "(open, not saved yet)", and only its working copy changes.
+The profile open in the Builder shows the change at once. Where its file was written, the change is already saved; your other unsaved edits stay unsaved. A profile that is open but has never been saved is listed as "(open, not saved yet)": the change shows in the Builder and is saved with the profile.
 
 If the profile the Loader has loaded was changed, its ribbon tab is rebuilt straight away: the toast reads "Updated in N profiles. Ribbon reloaded." Add-ins are never switched by this reload.
 
@@ -71,7 +71,10 @@ An edit or remove never writes a file it cannot handle safely. These are listed 
 
 - a profile from an older version with no id: "a legacy profile with no id. Open it in the Builder and save it once.";
 - two files that share one profile's id: "files share this profile's id. Remove the stale copy.";
-- a file that could not be read, so it was not checked.
+- a file that could not be read, so it was not checked;
+- during an edit, a profile whose buttons for the tool all carry their own names and icons, so the edit changes nothing there: "<name>: nothing to change there; its names and icons are its own." This is not a failure.
+
+When every profile that holds the tool is refused, Edit reads "No profile can be changed." and its button stays disabled; Remove shows "No profile can be changed." instead of its confirmation.
 
 If a file fails to save during the change, the others stay changed: **Some profiles were not changed** lists each one with the reason, and each failure is logged. Nothing is skipped silently.
 
