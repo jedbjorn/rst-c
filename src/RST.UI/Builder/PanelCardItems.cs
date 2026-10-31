@@ -254,9 +254,9 @@ public sealed class ToolTileViewModel : PanelItemViewModel
     public ICommand RemoveCommand { get; }
 
     /// <summary>
-    /// WU4's hook: ✎ on a placed custom tool opens the Custom Tool dialog (edit everywhere). Null until
-    /// WU4 sets <see cref="ProfileBuilderViewModel.EditCustomToolCommand"/>; the button shows only then,
-    /// and only on a custom tool. Its parameter is this tile.
+    /// ✎ on a placed custom tool: the Custom Tool dialog, edit everywhere (WU4,
+    /// <see cref="ProfileBuilderViewModel.EditCustomToolCommand"/>). The button shows only on a custom
+    /// tool. Its parameter is this tile.
     /// </summary>
     public ICommand? EditCustomCommand => _owner.EditCustomToolCommand;
 

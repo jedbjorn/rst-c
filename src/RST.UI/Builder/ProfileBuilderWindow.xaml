@@ -339,7 +339,7 @@
                         </StackPanel>
                     </Border>
                     <StackPanel x:Name="Corner" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0" Opacity="0" IsHitTestVisible="False">
-                        <!-- WU4's hook: ✎ on a placed custom tool (shown only when WU4 provides the command). -->
+                        <!-- ✎ on a placed custom tool: edit it everywhere (WU4). -->
                         <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCustomCommand}" CommandParameter="{Binding}"
                                 Visibility="{Binding ShowsEditCustom, Converter={StaticResource BoolToVisible}}"
                                 ToolTip="{x:Static res:UiStrings.Builder_EditCustomToolTip}"
