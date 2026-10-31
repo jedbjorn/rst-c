@@ -41,27 +41,6 @@ public class CleanupYearsTests
         Assert.Equal(expected, CleanupYears.YearOfFolder(name));
 
     [Fact]
-    public void A_per_year_id_round_trips_and_a_plain_id_is_not_one()
-    {
-        var id = CleanupYears.PickId(CleanupDefaults.IdJournals, 2026);
-        Assert.Equal("rst.cleanup.journals@2026", id);
-        Assert.True(CleanupYears.TryParsePickId(id, out var key, out var year));
-        Assert.Equal(CleanupDefaults.IdJournals, key);
-        Assert.Equal(2026, year);
-
-        foreach (var plain in new[] { CleanupDefaults.IdJournals, "journals@26", "@2026", "a@20x6", "journals2026", "", null })
-        {
-            Assert.False(CleanupYears.TryParsePickId(plain, out var whole, out var none), plain);
-            Assert.Equal(plain ?? "", whole);
-            Assert.Equal(0, none);
-        }
-        // A custom target's id that already holds an "@" keeps it in the key.
-        Assert.True(CleanupYears.TryParsePickId("office@journals@2027", out var custom, out var y2));
-        Assert.Equal("office@journals", custom);
-        Assert.Equal(2027, y2);
-    }
-
-    [Fact]
     public void The_path_hint_names_that_years_folder()
     {
         Assert.Equal(@"%LocalAppData%\Autodesk\Revit\Autodesk Revit 2027\Journals",

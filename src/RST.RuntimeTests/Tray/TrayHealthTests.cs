@@ -206,6 +206,9 @@ public sealed class TrayJunkCleanupTests : IDisposable
         targets ?? CleanupDefaults.Build,
         _user.Folders);
 
+    /// <summary>The handle of the listed row named <paramref name="name"/>.</summary>
+    private static string IdOf(IReadOnlyList<CleanupTarget> rows, string name) => rows.Single(r => r.Name == name).Id;
+
     [Fact]
     public void Each_year_specific_target_is_listed_once_per_Revit_year_found()
     {
@@ -220,10 +223,11 @@ public sealed class TrayJunkCleanupTests : IDisposable
             "RST Logs",
         }, rows.Select(r => r.Name));
         var journals2027 = rows.Single(r => r.Name == "Journals — 2027");
-        Assert.Equal("rst.cleanup.journals@2027", journals2027.Id);
         Assert.Equal(@"%LocalAppData%\Autodesk\Revit\Autodesk Revit 2027\Journals", journals2027.Path);
         Assert.Equal(CleanupTarget.KindIniRecentFiles, rows.Single(r => r.Name == "Recent File List — 2026").Kind);
-        Assert.Equal(CleanupDefaults.IdTemp, rows[0].Id);
+        // Every row has its own handle, and none is a profile id or built from one (review F1).
+        Assert.Equal(rows.Count, rows.Select(r => r.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(rows, r => Assert.DoesNotContain("rst.cleanup", r.Id, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -234,11 +238,10 @@ public sealed class TrayJunkCleanupTests : IDisposable
         profile.Single(t => t.Id == CleanupDefaults.IdCollabCache).Enabled = false;
         var rows = Service(() => profile).GetCleanupTargets();
         Assert.Equal(new[] { "Temp", "PacCache", "Journals", "Recent File List", "RST Logs" }, rows.Select(r => r.Name));
-        Assert.Equal(CleanupDefaults.IdJournals, rows[2].Id);
     }
 
     [Fact]
-    public void A_profile_path_that_is_not_a_preset_is_never_fanned_out()
+    public void A_profile_path_that_is_not_a_preset_is_never_fanned_out_or_cleaned()
     {
         _user.WithTwoYears();
         var custom = new CleanupTarget
@@ -246,12 +249,12 @@ public sealed class TrayJunkCleanupTests : IDisposable
             Id = "custom", Name = "Custom", Kind = CleanupTarget.KindDirectory, Enabled = true,
             Path = @"%LocalAppData%\Autodesk\Revit\{revit-version}",
         };
-        var rows = Service(() => [custom]).GetCleanupTargets();
+        var service = Service(() => [custom]);
+        var rows = service.GetCleanupTargets();
         Assert.Equal("Custom", Assert.Single(rows).Name);
 
-        // And the cleaner refuses it whichever way it is asked, so nothing under the Revit folders goes.
-        var result = Service(() => [custom]).Clean(["custom", "custom@2026"]);
-        Assert.Empty(result.Deleted);
+        // The cleaner refuses it, so nothing under the Revit folders goes.
+        Assert.Empty(service.Clean([rows[0].Id]).Deleted);
         Assert.Equal(3, Directory.GetFiles(_user.Journals(2026)).Length);
     }
 
@@ -259,14 +262,17 @@ public sealed class TrayJunkCleanupTests : IDisposable
     public void One_run_cleans_every_chosen_year_and_counts_a_locked_file_as_skipped()
     {
         _user.WithTwoYears();
+        var service = Service();
+        var rows = service.GetCleanupTargets();
+        string j2026 = IdOf(rows, "Journals — 2026"), j2027 = IdOf(rows, "Journals — 2027");
         var locked = System.IO.Path.Combine(_user.Journals(2027), "journal.0001.txt");
         using (new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            var result = Service().Clean(["rst.cleanup.journals@2026", "rst.cleanup.journals@2027"]);
-            Assert.Equal(3, result.Deleted["rst.cleanup.journals@2026"]);
-            Assert.Equal(0, result.Skipped["rst.cleanup.journals@2026"]);
-            Assert.Equal(2, result.Deleted["rst.cleanup.journals@2027"]);
-            Assert.Equal(1, result.Skipped["rst.cleanup.journals@2027"]);
+            var result = service.Clean([j2026, j2027]);
+            Assert.Equal(3, result.Deleted[j2026]);
+            Assert.Equal(0, result.Skipped[j2026]);
+            Assert.Equal(2, result.Deleted[j2027]);
+            Assert.Equal(1, result.Skipped[j2027]);
         }
         Assert.Empty(Directory.GetFiles(_user.Journals(2026)));
         Assert.Equal(new[] { "journal.0001.txt" }, Directory.GetFiles(_user.Journals(2027)).Select(System.IO.Path.GetFileName));
@@ -278,21 +284,82 @@ public sealed class TrayJunkCleanupTests : IDisposable
     }
 
     [Fact]
-    public void A_row_cleans_only_its_own_year_and_an_id_naming_no_enabled_target_cleans_nothing()
+    public void A_row_cleans_only_its_own_year_and_a_handle_the_dialog_did_not_list_cleans_nothing()
     {
         _user.WithTwoYears();
-        var result = Service().Clean(["rst.cleanup.recentFiles@2027", "rst.cleanup.temp@2026", "rst.cleanup.nothing@2026", "nothing"]);
-        Assert.Equal(new[] { "rst.cleanup.recentFiles@2027" }, result.Deleted.Keys);
-        Assert.Equal(1, result.Deleted["rst.cleanup.recentFiles@2027"]);
+        var service = Service();
+        var rows = service.GetCleanupTargets();
+        var recent2027 = IdOf(rows, "Recent File List — 2027");
+        var result = service.Clean([recent2027, CleanupDefaults.IdTemp, "rst.cleanup.journals@2026", "row-99", ""]);
+        Assert.Equal(new[] { recent2027 }, result.Deleted.Keys);
+        Assert.Equal(1, result.Deleted[recent2027]);
         Assert.DoesNotContain("File1=", File.ReadAllText(_user.RevitIni(2027)));
         Assert.Contains("File1=", File.ReadAllText(_user.RevitIni(2026)));
-        Assert.True(File.Exists(System.IO.Path.Combine(_user.Temp, "tmp.txt")), "a year on a target that has none cleans nothing");
-
-        // A disabled target cannot be cleaned by its row's id.
-        var profile = CleanupDefaults.Build();
-        profile.Single(t => t.Id == CleanupDefaults.IdJournals).Enabled = false;
-        Assert.Empty(Service(() => profile).Clean(["rst.cleanup.journals@2026"]).Deleted);
+        Assert.True(File.Exists(System.IO.Path.Combine(_user.Temp, "tmp.txt")), "a profile id is not a row handle");
         Assert.Equal(3, Directory.GetFiles(_user.Journals(2026)).Length);
+
+        // A service that has listed nothing cleans nothing.
+        Assert.Empty(Service().Clean([recent2027]).Deleted);
+    }
+
+    [Fact]
+    public void A_row_listed_before_the_profile_changed_cleans_nothing()
+    {
+        _user.WithTwoYears();
+        var profile = CleanupDefaults.Build();
+        var service = Service(() => profile);
+        var rows = service.GetCleanupTargets();
+        var j2026 = IdOf(rows, "Journals — 2026");
+
+        // Switched off since the dialog opened.
+        profile.Single(t => t.Id == CleanupDefaults.IdJournals).Enabled = false;
+        Assert.Empty(service.Clean([j2026]).Deleted);
+
+        // Or another target now sits where Journals was.
+        profile.Single(t => t.Id == CleanupDefaults.IdJournals).Enabled = true;
+        (profile[0], profile[2]) = (profile[2], profile[0]);
+        Assert.Empty(service.Clean([j2026]).Deleted);
+        Assert.Equal(3, Directory.GetFiles(_user.Journals(2026)).Length);
+        Assert.True(File.Exists(System.IO.Path.Combine(_user.Temp, "tmp.txt")));
+    }
+
+    /// <summary>
+    /// PR #176 review F1: a profile may give Temp the id "rst.cleanup.journals@2026", the string the first build used
+    /// for the Journals — 2026 row. With Temp unticked and only that Journals row ticked, Temp's files must survive.
+    /// </summary>
+    [Fact]
+    public void A_profile_id_that_looks_like_a_year_row_never_cleans_another_target()
+    {
+        _user.WithTwoYears();
+        var profile = CleanupDefaults.Build();
+        profile.Single(t => t.Id == CleanupDefaults.IdTemp).Id = "rst.cleanup.journals@2026";
+        profile.Single(t => t.Id == CleanupDefaults.IdJournals).Id = "rst.cleanup.journals";
+        var service = Service(() => profile);
+        var rows = service.GetCleanupTargets();
+        Assert.Equal(rows.Count, rows.Select(r => r.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        var result = service.Clean([IdOf(rows, "Journals — 2026")]);
+
+        Assert.Equal(3, result.Deleted.Values.Single());
+        Assert.Empty(Directory.GetFiles(_user.Journals(2026)));
+        Assert.True(File.Exists(System.IO.Path.Combine(_user.Temp, "tmp.txt")), "the unticked Temp was cleaned");
+        Assert.Equal(3, Directory.GetFiles(_user.Journals(2027)).Length);
+
+        // And through the dialog: Temp off, only Journals — 2026 on.
+        _user.WithTwoYears();
+        Screenshots.RunSta(() =>
+        {
+            SynchronizationContext.SetSynchronizationContext(null);
+            var health = new TrayHealthViewModel(service, new FakeDialogs { ConfirmResult = true }, TrayHealthSamples.Options());
+            health.SubPage = HealthSubPage.Device;
+            health.Device.OpenJunk();
+            foreach (var t in health.Device.JunkTargets) t.IsSelected = t.Name == "Journals — 2026";
+            health.Device.RunJunkAsync().GetAwaiter().GetResult();
+            Assert.Equal("Journals — 2026: 3 deleted", health.Device.Toast.Text);
+            health.Dispose();
+        });
+        Assert.Empty(Directory.GetFiles(_user.Journals(2026)));
+        Assert.True(File.Exists(System.IO.Path.Combine(_user.Temp, "tmp.txt")), "the unticked Temp was cleaned through the dialog");
     }
 
     [Fact]

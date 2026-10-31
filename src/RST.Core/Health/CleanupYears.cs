@@ -1,8 +1,8 @@
 // rst-c's own (not vendored): the tray's Clean Junk Files lists each year-specific target once per Revit year
 // found (spec #25 Device; decision #56): "Journals — 2026", "Journals — 2027". These are the pure rules behind
-// that listing: which targets are year-specific, the year in an "Autodesk Revit YYYY" folder name, the id a
-// per-year row carries ("<target id>@<year>") and the path hint it shows. An id names a target and a year
-// only; the cleaner resolves the paths again from the profile's own target, so a row can never add a path.
+// that listing: which targets are year-specific, the year in an "Autodesk Revit YYYY" folder name and the path
+// hint a per-year row shows. A row's identity is never encoded in a string a profile could also produce: the
+// tray's DeviceHealthService keeps each row as a structured (target, year) pair (PR #176 review F1).
 
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -13,8 +13,6 @@ public static class CleanupYears
 {
     /// <summary>The fan-out token of a <c>CleanupTarget.Path</c> (one path per <c>Autodesk Revit YYYY</c> folder).</summary>
     public const string Token = "{revit-version}";
-
-    private const char Separator = '@';
 
     private static readonly Regex FolderRe = new(@"^Autodesk Revit ([0-9]{4})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
@@ -32,28 +30,6 @@ public static class CleanupYears
 
     /// <summary>"Autodesk Revit 2026".</summary>
     public static string FolderName(int year) => "Autodesk Revit " + year.ToString("0000", CultureInfo.InvariantCulture);
-
-    /// <summary>The id of a per-year row: the target's id (or name), "@", the year.</summary>
-    public static string PickId(string targetKey, int year) =>
-        targetKey + Separator + year.ToString("0000", CultureInfo.InvariantCulture);
-
-    /// <summary>
-    /// Splits a per-year row's id. False, with the whole id as the key, when it does not end in "@" and four
-    /// digits with something before them: a plain target id.
-    /// </summary>
-    public static bool TryParsePickId(string? id, out string targetKey, out int year)
-    {
-        targetKey = id ?? "";
-        year = 0;
-        if (string.IsNullOrEmpty(id) || id.Length < 6) return false;
-        var at = id.Length - 5;
-        if (id[at] != Separator) return false;
-        for (var i = at + 1; i < id.Length; i++)
-            if (id[i] is < '0' or > '9') return false;
-        targetKey = id[..at];
-        year = int.Parse(id.AsSpan(at + 1), NumberStyles.None, CultureInfo.InvariantCulture);
-        return true;
-    }
 
     /// <summary>The path hint of a per-year row: the target's path with the token replaced by that year's folder.</summary>
     public static string DisplayPath(string? rawPath, int year)

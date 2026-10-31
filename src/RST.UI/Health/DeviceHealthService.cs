@@ -6,8 +6,9 @@
 //   - no Revit is running, so the scan records the installed Revit years and their builds (RevitInstalls) instead
 //     of a running Revit's version, username, acceleration, model and warnings;
 //   - Clean Junk Files lists each year-specific target once per Revit year found ("Journals — 2026"), and a row
-//     cleans only that year's folder. The rows' ids are checked against the active profile's enabled targets
-//     again before anything is deleted, as in the add-in, and a year only narrows a target's own paths.
+//     cleans only that year's folder. A row is a structured (target, year) pair (CleanupRow), handed to the
+//     dialog as an opaque handle; before anything is deleted it is checked against the active profile's enabled
+//     targets again, as in the add-in, and a year only narrows that target's own paths.
 // No Revit is needed and nothing is shared with the add-in (decision #29). Activity is the Models page's (WU3).
 
 using System.Diagnostics;
@@ -21,6 +22,13 @@ using RST.UI.Resources;
 
 namespace RST.UI.Health;
 
+/// <summary>
+/// One row of the tray's Junk dialog: the target at <paramref name="TargetIndex"/> in the profile's list, with the
+/// id (or name) <paramref name="TargetKey"/> and path <paramref name="TargetPath"/> it had when listed, for every Revit
+/// year (<paramref name="RevitYear"/> null) or one.
+/// </summary>
+public sealed record CleanupRow(int TargetIndex, string TargetKey, string TargetPath, int? RevitYear);
+
 public sealed class DeviceHealthService : IHealthService
 {
     /// <summary>%AppData%\RST\tray_health_scan.json, the tray's snapshot (Revit's is health_scan.json).</summary>
@@ -30,6 +38,9 @@ public sealed class DeviceHealthService : IHealthService
     private readonly Func<IReadOnlyList<RevitInstallInfo>> _installedRevit;
     private readonly Func<IReadOnlyList<CleanupTarget>> _activeTargets;
     private readonly CleanupFolders? _folders;
+
+    /// <summary>The last listing's rows by handle (replaced whole on each listing; read by a clean on another thread).</summary>
+    private volatile IReadOnlyDictionary<string, CleanupRow> _rows = new Dictionary<string, CleanupRow>();
 
     /// <param name="snapshotPath">The snapshot file; null for <see cref="DefaultSnapshotPath"/>.</param>
     /// <param name="installedRevit">The installed Revit years and builds; null reads this PC (<see cref="ReadInstalledRevit"/>).</param>
@@ -84,67 +95,90 @@ public sealed class DeviceHealthService : IHealthService
 
     /// <summary>
     /// The Junk dialog's rows: the active profile's enabled targets (or the presets), in order, each year-specific
-    /// target once per Revit year found ("Journals — 2026", id "&lt;id&gt;@2026", the path with that year's folder).
-    /// A year-specific target with no year folder on this PC is listed once, as in the add-in.
+    /// target once per Revit year found ("Journals — 2026", the path with that year's folder). A year-specific target
+    /// with no year folder on this PC is listed once, as in the add-in.
+    /// <para>
+    /// Each row's identity is a structured <see cref="CleanupRow"/> (which target, which year), kept here and handed
+    /// out as an opaque handle (the row's <c>Id</c>), never a string built from the profile's ids: a profile's id can
+    /// be anything, so a "&lt;id&gt;@&lt;year&gt;" string could name another target (PR #176 review F1). <see cref="Clean"/>
+    /// accepts only the handles of the last listing.
+    /// </para>
     /// </summary>
     public IReadOnlyList<CleanupTarget> GetCleanupTargets()
     {
-        var targets = Enabled(_activeTargets()).ToList();
+        var targets = _activeTargets() ?? [];
         var rows = new List<CleanupTarget>();
-        foreach (var t in targets)
+        var issued = new Dictionary<string, CleanupRow>(StringComparer.Ordinal);
+        for (var index = 0; index < targets.Count; index++)
         {
+            var t = targets[index];
+            if (t is null || !t.Enabled) continue;
             var years = YearsOf(t);
             if (years.Count == 0)
             {
-                rows.Add(t);
+                rows.Add(Row(issued, new CleanupRow(index, Key(t), t.Path, null), t.Name, t.Path, t.Kind));
                 continue;
             }
             var name = string.IsNullOrEmpty(t.Name) ? UiStrings.Health_Unnamed : t.Name;
             foreach (var year in years)
             {
-                rows.Add(new CleanupTarget
-                {
-                    Id = CleanupYears.PickId(Key(t), year),
-                    Name = UiStrings.Health_JunkTargetYear(name, year.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                    Path = CleanupYears.DisplayPath(t.Path, year),
-                    Kind = t.Kind,
-                    Enabled = true,
-                });
+                rows.Add(Row(issued, new CleanupRow(index, Key(t), t.Path, year),
+                    UiStrings.Health_JunkTargetYear(name, year.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    CleanupYears.DisplayPath(t.Path, year), t.Kind));
             }
         }
-        Log.Information("Device health: cleanup rows {Rows} from {Targets} targets", rows.Count, targets.Count);
+        _rows = issued;
+        Log.Information("Device health: {Rows} cleanup rows from {Targets} targets", rows.Count, targets.Count);
         return rows;
     }
 
     public CleanResult Clean(IReadOnlyCollection<string> targetIds)
     {
         using var work = HealthWork.Begin();
-        Log.Information("Device health: clean {Ids}", string.Join(",", targetIds));
-        return HealthCleaner.Run(SelectPicks(_activeTargets(), targetIds), _folders);
+        Log.Information("Device health: clean {Rows}", string.Join(", ", targetIds.Select(id => _rows.TryGetValue(id, out var r) ? r.ToString() : id)));
+        return HealthCleaner.Run(SelectPicks(_rows, _activeTargets() ?? [], targetIds), _folders);
     }
 
     /// <summary>
-    /// The picks a clean may run: for each id, the enabled target of <paramref name="allowed"/> whose id (or name,
-    /// when it has none) it is, case-insensitively, for every year; or, for "&lt;id&gt;@&lt;year&gt;", that year-specific
-    /// target for that year only. An id that names no allowed target is ignored, so the dialog can never add a path,
-    /// and a year only narrows the target's own resolved paths. Each pick counts under the id it was asked by.
+    /// The picks a clean may run. Each <paramref name="rowIds"/> entry must be a handle of <paramref name="rows"/> (the
+    /// dialog's last listing); its <see cref="CleanupRow"/> must still name the same enabled target in
+    /// <paramref name="current"/> (the active profile now: same place, id and path), and a year only on a year-specific
+    /// target. Anything else (an unknown handle, a profile changed since the listing, a target switched off) is
+    /// ignored and logged, so a ticked row cleans exactly the target and year it showed and never another one. The
+    /// year only narrows that target's own resolved paths. Each pick counts under its row's handle.
     /// </summary>
-    public static IReadOnlyList<CleanupPick> SelectPicks(IEnumerable<CleanupTarget> allowed, IEnumerable<string> targetIds)
+    public static IReadOnlyList<CleanupPick> SelectPicks(IReadOnlyDictionary<string, CleanupRow> rows,
+                                                         IReadOnlyList<CleanupTarget> current, IEnumerable<string> rowIds)
     {
-        var enabled = Enabled(allowed).ToList();
         var picks = new List<CleanupPick>();
-        foreach (var id in targetIds.Where(i => !string.IsNullOrEmpty(i)).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var id in rowIds.Where(i => !string.IsNullOrEmpty(i)).Distinct(StringComparer.Ordinal))
         {
-            if (enabled.FirstOrDefault(t => string.Equals(Key(t), id, StringComparison.OrdinalIgnoreCase)) is { } whole)
-                picks.Add(new CleanupPick(whole, null, id));
-            else if (CleanupYears.TryParsePickId(id, out var key, out var year)
-                     && enabled.FirstOrDefault(t => CleanupYears.IsYearSpecific(t.Path)
-                                                    && string.Equals(Key(t), key, StringComparison.OrdinalIgnoreCase)) is { } perYear)
-                picks.Add(new CleanupPick(perYear, year, id));
-            else
-                Log.Warning("Device health: ignoring cleanup id {Id}: no such enabled target", id);
+            if (!rows.TryGetValue(id, out var row))
+            {
+                Log.Warning("Device health: ignoring cleanup row {Id}: not one the dialog listed", id);
+                continue;
+            }
+            var target = row.TargetIndex >= 0 && row.TargetIndex < current.Count ? current[row.TargetIndex] : null;
+            if (target is null || !target.Enabled
+                || !string.Equals(Key(target), row.TargetKey, StringComparison.Ordinal)
+                || !string.Equals(target.Path, row.TargetPath, StringComparison.Ordinal)
+                || (row.RevitYear is not null && !CleanupYears.IsYearSpecific(target.Path)))
+            {
+                Log.Warning("Device health: ignoring cleanup row {Row}: the profile's targets changed since it was listed", row);
+                continue;
+            }
+            picks.Add(new CleanupPick(target, row.RevitYear, id));
         }
         return picks;
+    }
+
+    /// <summary>Hands out the next row's handle for <paramref name="row"/> and returns the dialog's row.</summary>
+    private static CleanupTarget Row(Dictionary<string, CleanupRow> issued, CleanupRow row, string name, string path, string kind)
+    {
+        // An opaque, per-listing handle: it is only ever looked up in this listing, never parsed or matched to a profile id.
+        var handle = "row-" + issued.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        issued[handle] = row;
+        return new CleanupTarget { Id = handle, Name = name, Path = path, Kind = kind, Enabled = true };
     }
 
     /// <summary>The supported Revit years installed on this PC (decision #21: 2025 and later), each with Revit.exe's version.</summary>
