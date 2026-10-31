@@ -1,7 +1,7 @@
 // rst-c's own (not vendored); the capture helpers follow ProfileBuilderScreenshotTests and
 // ProfileLoaderScreenshotTests. Spec #17 (Ribbon Stacks), AC3 (revised 2026-10-30, decision #19):
-// a profile with a 2-item and a 3-item stack in the Builder (the panel cards with their read-only
-// stack slots, and the Live Preview) and in the Loader, rendered off-screen to PNG in light and
+// a profile with a 2-item and a 3-item stack in the Builder (the panel cards with their stack
+// groups, feature #18 WU3, and the Live Preview) and in the Loader, rendered off-screen to PNG in light and
 // dark. Each capture checks that the preview draws the stack rows with 16 px icons; a stack tool
 // with no pack icon draws the ribbon's default_16.png, also captured zoomed (preview-default16).
 
@@ -68,9 +68,9 @@ public class StackScreenshotTests
         {
             Capture(window, theme, "builder-stacks");
 
-            // The panel cards: the stack slots with their read-only names.
-            var stackBoxes = WindowCapture.Descendants<TextBox>(window.PanelCards).Where(t => Id(t) == "Builder.SlotName" && t.IsReadOnly).Select(t => t.Text);
-            Assert.Equal(new[] { "Openings", "Datum", "Help" }, stackBoxes);
+            // The panel cards: the stacks as groups of their tools (feature #18, WU3), never by name.
+            var stacks = WindowCapture.Descendants<Grid>(window.PanelCards).Where(g => g.Name == "StackGroup").Select(g => ((StackGroupViewModel)g.DataContext).Rows.Count);
+            Assert.Equal(new[] { 3, 2, 2 }, stacks);
 
             // The preview: 2 panels; 3 stacks drawn as rows with 16 px icons (7 tools).
             var preview = window.Preview;

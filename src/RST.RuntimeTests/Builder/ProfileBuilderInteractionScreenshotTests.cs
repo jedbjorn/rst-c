@@ -114,7 +114,7 @@ public class ProfileBuilderInteractionScreenshotTests
     public void The_icon_picker_shows_its_grid_with_the_current_selection(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
-        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        var (window, h) = Open(x => x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null));
         try
         {
             WindowCapture.DoEvents();
@@ -149,7 +149,7 @@ public class ProfileBuilderInteractionScreenshotTests
         RstTheme.Apply(theme);
         var (window, h) = Open(x =>
         {
-            x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+            x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
             x.Model.IconPicker!.TileCommand.Execute("parallel");
         });
         try
@@ -177,7 +177,7 @@ public class ProfileBuilderInteractionScreenshotTests
     public void The_icon_picker_answers_the_keyboard_and_escape_closes_in_two_steps() => Sta(() =>
     {
         RstTheme.Apply(UiTheme.Light);
-        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        var (window, h) = Open(x => x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null));
         try
         {
             var overlay = window.IconPickerOverlay;
@@ -228,8 +228,9 @@ public class ProfileBuilderInteractionScreenshotTests
         RstTheme.Apply(theme);
         var (window, h) = Open(x =>
         {
+            // Beam over the leading edge of Review's Notes tile: inserted before it (feature #18, WU3).
             x.Model.BeginDrag(BuilderDrag.FromSlot(0, 0));
-            x.Model.DragOverSlot(1, 1, upperHalf: true);
+            x.Model.DragOverTile(TileHit.On(1, 2, 4, 100));
         });
         try
         {
@@ -237,12 +238,12 @@ public class ProfileBuilderInteractionScreenshotTests
             var bitmap = WindowCapture.Content(window, BuilderSize);
             Screenshots.Save(bitmap, Name("builder-drag", theme));
             var marker = WindowCapture.Descendants<Border>(window.PanelCards)
-                .Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "Builder.SlotDropMarker"
-                             && b.DataContext is SlotRowViewModel { Panel.Index: 1, Index: 1 });
+                .Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "Builder.TileDropMarker"
+                             && b.DataContext is ToolTileViewModel { Panel.Index: 1, Index: 2 });
             Assert.Equal(Visibility.Visible, marker.Visibility);
-            Assert.Equal(new Thickness(0, 2, 0, 0), marker.BorderThickness);
-            AssertColor(Palette(theme, UiPalette.Success), At(bitmap, marker, window.Root, marker.ActualWidth / 2, 0.5), "drop-before line");
-            var source = WindowCapture.Descendants<Grid>(window.PanelCards).Single(g => g.Name == "SlotRow" && g.DataContext is SlotRowViewModel { Panel.Index: 0, Index: 0 });
+            Assert.Equal(new Thickness(3, 0, 0, 0), marker.BorderThickness);
+            AssertColor(Palette(theme, UiPalette.Success), At(bitmap, marker, window.Root, 1.5, marker.ActualHeight / 2), "drop-before line");
+            var source = WindowCapture.Descendants<Grid>(window.PanelCards).Single(g => g.Name == "Tile" && g.DataContext is ToolTileViewModel { Panel.Index: 0, Index: 0 });
             Assert.Equal(0.4, source.Opacity, 3);
         }
         finally
@@ -259,7 +260,7 @@ public class ProfileBuilderInteractionScreenshotTests
         RstTheme.Apply(theme);
         var (window, h) = Open(x =>
         {
-            x.Model.Panels[1].Slots[2].PickIconCommand.Execute(null);
+            x.Model.Panels[1].Tile(2).PickIconCommand.Execute(null);
             x.Model.IconPicker!.TileCommand.Execute("move");
             x.Model.IconPicker!.VariantCommand.Execute("purple");
             x.Model.PresetTabs.Single(t => t.Tab == "Enscape").IsHidden = true;
@@ -288,7 +289,7 @@ public class ProfileBuilderInteractionScreenshotTests
     public void A_click_inside_the_card_keeps_the_picker_and_a_click_on_the_scrim_cancels() => Sta(() =>
     {
         RstTheme.Apply(UiTheme.Light);
-        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        var (window, h) = Open(x => x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null));
         try
         {
             WindowCapture.DoEvents();

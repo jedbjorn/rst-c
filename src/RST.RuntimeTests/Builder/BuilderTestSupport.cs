@@ -231,6 +231,21 @@ public static class BuilderFixtures
     }
 }
 
+/// <summary>The panel cards' tiles and stacks by position (feature #18, WU3), for the tests.</summary>
+public static class PanelCardTestExtensions
+{
+    /// <summary>The loose tool at <paramref name="slot"/>, or row <paramref name="row"/> of the stack there.</summary>
+    public static ToolTileViewModel Tile(this PanelCardViewModel card, int slot, int row = -1) =>
+        row < 0 ? (ToolTileViewModel)card.Items[slot] : ((StackGroupViewModel)card.Items[slot]).Rows[row];
+
+    /// <summary>The stack at <paramref name="slot"/>.</summary>
+    public static StackGroupViewModel StackAt(this PanelCardViewModel card, int slot) => (StackGroupViewModel)card.Items[slot];
+
+    /// <summary>"Beam,Column,[Warnings Audit Purge],Notes": the panel's slots, a stack as its tools in brackets.</summary>
+    public static string Shape(Profile profile, int panel) => string.Join(",", profile.Panels[panel].Slots.Select(s =>
+        PanelStacks.IsStack(s) ? "[" + string.Join(" ", PanelStacks.ToolsOf(profile, s).Select(t => t.Name)) + "]" : s.Name));
+}
+
 /// <summary>
 /// Scripted answers for the Builder's dialogs. The name dialog types each of <see cref="Names"/> in
 /// turn and presses Confirm, as a user would after a refusal; it answers true at the first name
@@ -248,6 +263,35 @@ public sealed class FakeBuilderDialogs : IBuilderDialogs
     public List<string> Refusals { get; } = [];
 
     public List<ProfileBuilderViewModel> Brandings { get; } = [];
+
+    /// <summary>
+    /// What the next stack dialog does: ticks and orders as a user would, then answers Confirm (true)
+    /// or Cancel (false). Empty: the dialog is cancelled. Confirm is refused while the model cannot
+    /// confirm (New with fewer than 2), as the real button is disabled.
+    /// </summary>
+    public Queue<Func<StackDialogModel, bool>> Stacks { get; } = new();
+
+    /// <summary>Every stack dialog opened, with the picks it started with.</summary>
+    public List<(StackDialogModel Model, IReadOnlyList<StackPick> Initial)> StackDialogs { get; } = [];
+
+    public bool EditStack(StackDialogModel model)
+    {
+        StackDialogs.Add((model, model.Picks));
+        if (Stacks.Count == 0) return false;
+        return Stacks.Dequeue()(model) && model.CanConfirm;
+    }
+
+    /// <summary>Ticks the listed tools by name, in that order (a stack dialog script step).</summary>
+    public static void Tick(StackDialogModel model, params string[] names)
+    {
+        foreach (var name in names) model.Items.First(i => i.Name == name).IsChecked = true;
+    }
+
+    /// <summary>Unticks the listed tools by name.</summary>
+    public static void Untick(StackDialogModel model, params string[] names)
+    {
+        foreach (var name in names) model.Items.First(i => i.Name == name).IsChecked = false;
+    }
 
     public bool EditName(ProfileNameDialogModel model)
     {

@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the Builder's small rules (spec #16, WU4, AC5): shortId,
-// normalizeUrl (with Core's UrlNormalizer), normalizeHex, the new panel and slot shapes, the slot
-// count, the Pick-icon label and the two summaries, against profile_builder.html.
+// normalizeUrl (with Core's UrlNormalizer), normalizeHex and the new panel and slot shapes, against
+// profile_builder.html; and the panel cards' tool count, source line and tooltip (feature #18, WU3).
 
 using FluentAssertions;
 using RST.Core.Builder;
@@ -89,18 +89,37 @@ public class BuilderRulesTests
     }
 
     [Theory]
-    [InlineData(0, "0 slots")]
-    [InlineData(1, "1 slot")]
-    [InlineData(2, "2 slots")]
-    public void SlotCount_pluralizes(int n, string expected) => BuilderRules.SlotCount(n).Should().Be(expected);
+    [InlineData(0, "0 tools")]
+    [InlineData(1, "1 tool")]
+    [InlineData(5, "5 tools")]
+    public void ToolCountText_pluralizes(int n, string expected) => BuilderRules.ToolCountText(n).Should().Be(expected);
+
+    [Fact]
+    public void The_tool_count_counts_every_tool_in_a_stack_but_not_the_stack()
+    {
+        var p = new Profile();
+        p.Stacks["Stack 1"] = new Stack { Tools = [new Slot { Name = "W", CommandId = "W" }, new Slot { Name = "A", CommandId = "A" }, new Slot { Name = "P", CommandId = "P" }] };
+        var panel = new Panel { Slots = [new Slot { Name = "K", CommandId = "K" }, PanelStacks.StackSlot("Stack 1"), new Slot { Name = "N", CommandId = "N" }] };
+        p.Panels.Add(panel);
+        BuilderRules.ToolCount(p, panel).Should().Be(5);
+        BuilderRules.ToolCount(p, new Panel()).Should().Be(0);
+    }
 
     [Theory]
-    [InlineData("pack:house_purple", "house")]
-    [InlineData("pack:link_external", "link_external")]
-    [InlineData("PACK: level_green ", "level")]
-    [InlineData("custom.png", "Icon")]
-    [InlineData(null, "Icon")]
-    [InlineData("pack:../x", "Icon")]
-    public void The_pick_icon_label_is_the_design_or_Icon(string? icon, string expected) =>
-        BuilderRules.IconButtonLabel(new Slot { IconFile = icon }).Should().Be(expected);
+    [InlineData("ID_OBJECTS_BEAM", "Structure", "Structure", "Structure · Structure")]
+    [InlineData("ID_OBJECTS_BEAM", "Structure", null, "Structure")]
+    [InlineData("ID_OBJECTS_BEAM", null, "Build", "Build")]
+    [InlineData("CustomCtrl_%Add-Ins%Kinship%KinshipUploadThis2Library", null, null, "CustomCt…2Library")]
+    [InlineData("URL:https://wiki.studio.example/", "Custom", "Custom", "wiki.studio.example")]
+    [InlineData("URL:mailto:bim@studio.example", null, null, "bim@studio.example")]
+    [InlineData("URL:file://server/share", null, null, "server/share")]
+    public void The_source_line_is_tab_and_panel_or_the_link(string id, string? tab, string? panel, string expected) =>
+        BuilderRules.SourceLine(new Slot { Name = "x", CommandId = id, SourceTab = tab, SourcePanel = panel }).Should().Be(expected);
+
+    [Theory]
+    [InlineData("ID_OBJECTS_BEAM", "ID_OBJECTS_BEAM")]
+    [InlineData("URL:https://wiki.studio.example/", "https://wiki.studio.example/")]
+    [InlineData("URL:BIM@studio.example", "mailto:BIM@studio.example")]
+    public void The_tooltip_is_the_full_command_id_or_link(string id, string expected) =>
+        BuilderRules.ToolTipOf(new Slot { Name = "x", CommandId = id }).Should().Be(expected);
 }

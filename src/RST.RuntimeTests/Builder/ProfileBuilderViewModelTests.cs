@@ -95,14 +95,18 @@ public class ProfileBuilderViewModelTests
         h.Model.IsDirty.Should().BeFalse();
         h.Model.PreviewProfile.Should().BeSameAs(h.Model.Profile);
 
-        // The review row: a stack slot shows its type tag; a tool shows its icon and short id.
+        // The Review card (feature #18, WU3): a tile, a stack of 3 rows, a tile; 5 tools; the source
+        // line and the full command id as the tooltip; a non-pack icon shows the empty frame.
         var review = h.Model.Panels[1];
-        review.SlotCount.Should().Be("3 slots");
-        review.Slots[1].IsTool.Should().BeFalse();
-        review.Slots[1].TypeTag.Should().Be("stack");
-        review.Slots[0].IconLabel.Should().Be("box_open");
-        review.Slots[0].ShortCommandId.Should().Be("ID_KINSHIP");
-        review.Slots[2].IconLabel.Should().Be("Icon", "custom.png is not a pack icon");
+        review.ToolCount.Should().Be("5 tools");
+        review.Items.Select(i => i.GetType()).Should().Equal(typeof(ToolTileViewModel), typeof(StackGroupViewModel), typeof(ToolTileViewModel));
+        review.StackAt(1).Header.Should().Be("STACK · 3/3");
+        review.StackAt(1).Rows.Select(r => r.Name).Should().Equal("Warnings", "Audit", "Purge");
+        review.Tile(0).SourceLine.Should().Be("Kinship Tools");
+        review.Tile(0).ToolTip.Should().Be("ID_KINSHIP");
+        review.Tile(0).HasIcon.Should().BeTrue();
+        review.Tile(2).HasIcon.Should().BeFalse("custom.png is not a pack icon");
+        review.Tile(1, row: 0).HasIcon.Should().BeTrue("a stack row without a pack icon shows the ribbon's default 16 px icon");
 
         h.Model.NewProfileCommand.Execute(null);
         h.Model.IsEditMode.Should().BeFalse();
@@ -363,7 +367,7 @@ public class ProfileBuilderViewModelTests
         h.Model.AddCatalogCommand.Execute(wall);
         var slot = h.Model.Profile.Panels[0].Slots.Single();
         slot.Should().BeEquivalentTo(new Slot { SlotType = "tool", Name = "Wall", CommandId = "ID_OBJECTS_WALL", SourceTab = "Architecture", SourcePanel = "Build" });
-        h.Model.Panels[0].SlotCount.Should().Be("1 slot");
+        h.Model.Panels[0].ToolCount.Should().Be("1 tool");
         h.Model.IsDirty.Should().BeTrue();
     }
 
@@ -446,22 +450,18 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void Slots_move_rename_and_remove_without_a_confirm()
+    public void Tiles_rename_and_remove_without_a_confirm()
     {
         var h = BuilderHarness.Create();
         h.Model.SelectedProfileOption = h.Option("Structure");
-        var frame = h.Model.Panels[0];
-        frame.Slots[0].MoveDownCommand.Execute(null);
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Beam", "Brace");
-        h.Model.Panels[0].Slots[0].MoveUpCommand.Execute(null); // first: no-op
-        h.Model.Panels[0].Slots[2].MoveDownCommand.Execute(null); // last: no-op
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Beam", "Brace");
-        h.Model.Panels[0].Slots[1].Name = "Girder";
+        h.Model.Panels[0].Tile(1).Name = "Girder";
         h.Model.Profile.Panels[0].Slots[1].Name.Should().Be("Girder");
-        h.Model.Panels[0].Slots[2].RemoveCommand.Execute(null);
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Girder");
+        h.Model.Panels[0].Tile(2).RemoveCommand.Execute(null);
+        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Beam", "Girder");
         h.Dialogs.ConfirmCalls.Should().BeEmpty();
-        h.Model.Panels[0].SlotCount.Should().Be("2 slots");
+        h.Model.Panels[0].ToolCount.Should().Be("2 tools");
+        typeof(ToolTileViewModel).GetProperty("MoveUpCommand").Should().BeNull("the slot ▲ ▼ buttons are retired (spec #19)");
+        typeof(ToolTileViewModel).GetProperty("ShortCommandId").Should().BeNull("the command id moved to the tooltip");
     }
 
     // ── General, and the panel colour picker ──────────────────────────────────

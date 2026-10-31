@@ -23,6 +23,9 @@ public interface IBuilderDialogs
 
     /// <summary>⚙ → Branding…: the machine-wide logo and link, saved as they change; returns when it closes.</summary>
     void EditBranding(ProfileBuilderViewModel model);
+
+    /// <summary>+ New Stack, or ✎ on a stack (feature #18, WU3): true when the user confirmed the picks.</summary>
+    bool EditStack(StackDialogModel model);
 }
 
 /// <summary>Opens the Builder's dialogs, owned by the Builder window.</summary>
@@ -39,6 +42,8 @@ public sealed class BuilderDialogs : IBuilderDialogs
     public Window? Owner { get; set; }
 
     public bool EditName(ProfileNameDialogModel model) => new ProfileNameDialog(model) { Owner = Owner }.ShowDialog() == true;
+
+    public bool EditStack(StackDialogModel model) => new StackDialog(model) { Owner = Owner }.ShowDialog() == true;
 
     public void EditBranding(ProfileBuilderViewModel model)
     {

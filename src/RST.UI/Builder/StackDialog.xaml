@@ -1,0 +1,103 @@
+<!--
+    rst-c's own (not vendored); laid out after the kit's MessageDialog (splash-it
+    src/SplashIt.UI/Dialogs/MessageDialog.xaml, splash-it commit ba86a71, MIT, same owner) and the
+    approved spike's New Stack dialog (decision #25).
+    The Builder's New / Edit Stack dialog (feature #18, spec #19, WU3; decision #19): the heading, the
+    help line, the tools to pick from (a tick, the 16 px icon, the name, and for a ticked tool its place
+    "#n" with ▲ ▼), the count line, then Create stack / Save stack with Cancel.
+-->
+<Window x:Class="RST.UI.Builder.StackDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:RST.UI.Resources"
+        xmlns:builder="clr-namespace:RST.UI.Builder"
+        Title="{Binding Title}"
+        SizeToContent="Height" Width="440" MinHeight="180"
+        ResizeMode="NoResize" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}"
+        AutomationProperties.AutomationId="StackDialog">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- ▲ ▼ on a ticked tool. -->
+            <Style x:Key="OrderButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+                <Setter Property="Padding" Value="4,0" />
+                <Setter Property="MinWidth" Value="20" />
+                <Setter Property="MinHeight" Value="20" />
+                <Setter Property="FontSize" Value="10" />
+                <Setter Property="Margin" Value="2,0,0,0" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid x:Name="Root" Background="{StaticResource WindowBrush}">
+        <DockPanel Margin="16">
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button x:Name="ConfirmButton" Content="{Binding ConfirmText}" IsDefault="True" Style="{StaticResource PrimaryButton}"
+                        IsEnabled="{Binding CanConfirm}" Click="OnConfirm" MinWidth="88"
+                        AutomationProperties.AutomationId="StackDialog.Confirm" />
+                <Button Content="{x:Static res:UiStrings.Common_Cancel}" IsCancel="True" Margin="8,0,0,0" MinWidth="88"
+                        AutomationProperties.AutomationId="StackDialog.Cancel" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionText}" FontSize="14"
+                           AutomationProperties.AutomationId="StackDialog.Heading" />
+                <TextBlock Text="{Binding Help}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                           AutomationProperties.AutomationId="StackDialog.Help" />
+                <ItemsControl x:Name="PickList" ItemsSource="{Binding Items}" Focusable="False"
+                              AutomationProperties.AutomationId="StackDialog.Tools">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type builder:StackPickItemViewModel}">
+                            <Border x:Name="Row" Padding="6,4" CornerRadius="3" Background="Transparent"
+                                    AutomationProperties.Name="{Binding Name}">
+                                <DockPanel>
+                                    <StackPanel x:Name="OrderGroup" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                                                Visibility="Collapsed">
+                                        <ContentControl Style="{StaticResource Pill}" Content="{Binding OrderText}" VerticalAlignment="Center"
+                                                        AutomationProperties.AutomationId="StackDialog.Order" />
+                                        <Button Content="▲" Command="{Binding EarlierCommand}" Style="{StaticResource OrderButton}" Margin="6,0,0,0" AutomationProperties.AutomationId="StackDialog.Earlier"
+                                                ToolTip="{x:Static res:UiStrings.Builder_StackEarlierTip}"
+                                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_StackEarlierTip}" />
+                                        <Button Content="▼" Command="{Binding LaterCommand}" Style="{StaticResource OrderButton}" AutomationProperties.AutomationId="StackDialog.Later"
+                                                ToolTip="{x:Static res:UiStrings.Builder_StackLaterTip}"
+                                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_StackLaterTip}" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="MemberNote" DockPanel.Dock="Right" Text="{Binding MemberNote}"
+                                               Style="{StaticResource MutedText}" FontSize="11" Margin="8,0,8,0" VerticalAlignment="Center"
+                                               Visibility="Collapsed" />
+                                    <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding CanCheck}" VerticalAlignment="Center"
+                                              AutomationProperties.AutomationId="StackDialog.Pick" AutomationProperties.Name="{Binding Name}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="{Binding Icon}" Width="16" Height="16" Margin="2,0,8,0" VerticalAlignment="Center"
+                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="240" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DockPanel>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                    <Setter TargetName="OrderGroup" Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsMember}" Value="True">
+                                    <Setter TargetName="MemberNote" Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Row" Property="Background" Value="{StaticResource HoverBrush}" />
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="StatusLine" Text="{Binding Status}" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap"
+                           Margin="0,8,0,0" AutomationProperties.AutomationId="StackDialog.Status" />
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

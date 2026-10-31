@@ -483,7 +483,7 @@ public class ProfileBuilderWindowFlowTests
         try
         {
             PickInMenu(o, "Structure");
-            o.Window.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+            o.Window.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
             Settle();
             Assert.True(o.Window.Model.IsIconPickerOpen);
             o.Window.RaiseEvent(Escape(o.Window));

@@ -14,9 +14,13 @@
 // were; an unsaved-changes indicator; and Save enabled only when there are changes. The selected
 // panel's colour and name editing and the URL button editor went with the Properties pane; the
 // panel cards (WU3) and the Commands pane (WU4) take them over.
-// Stacks (feature #15, spec #17): the Builder keeps a profile's stacks as they are and the preview
-// draws them; it does not author them (feature #18, decision #19). A stack no panel places (its
-// slot deleted) is dropped by the save (ProfileSaveService), and from the editor once that worked.
+// Feature #18, WU3: the panel cards hold tiles and stacks (decisions #18 and #19). The colour and
+// name are edited on the card; tiles are dragged (TileDrops' rules: make a stack, join one, insert
+// beside, take out, move a whole stack, append), removed with ×, and grouped with + New Stack, ✎ and
+// × on a stack (the stack dialog). Every structural change goes through RST.Core's PanelStacks. A
+// profile the Builder opens is normalised first (PanelStacks.Normalize: a shared stack is split, a
+// broken one repaired), which counts as an unsaved change; Save refuses a stack of 4+ tools
+// (PanelStacks.SaveBlocker). The ▲ ▼ slot buttons and the slot rows' command ids are retired.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -310,8 +314,17 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
         _editMode = true;
         _originalName = _profile.ProfileName ?? "";
+
+        // The clean baseline is the profile as saved, taken BEFORE the stack normaliser (WU1 review
+        // F2, WU2 review F1): a repair then reads as an unsaved change, so Save is enabled and writes it.
+        _pristine = ProfileEditing.Snapshot(_profile);
+        var repaired = PanelStacks.Normalize(_profile, SerilogLoaderLog.Instance);
+        if (repaired.Changed)
+            Log.Information("Builder: {Name} normalised on open ({Count} repairs); the editor holds unsaved changes",
+                _profile.ProfileName, repaired.Notes.Count);
         ProfileChanged();
-        SnapshotPristine();
+        ProfileEdited();
+        if (repaired.Changed) ShowToast(UiStrings.Builder_StacksRepaired(repaired.Notes.Count), BannerKind.Info);
     }
 
     private void ProfileChanged()
@@ -322,6 +335,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         RebuildCleanupRows();
         RaiseName();
         OnPropertyChanged(nameof(ProfileTab));
+        OnPropertyChanged(nameof(PanelsTabName));
         OnPropertyChanged(nameof(MinVersion));
         OnPropertyChanged(nameof(PanelOpacity));
         OnPropertyChanged(nameof(PanelOpacityText));
@@ -459,10 +473,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             if (_profile.Tab == (value ?? "")) return;
             _profile.Tab = value ?? "";
             OnPropertyChanged();
+            OnPropertyChanged(nameof(PanelsTabName));
             RebuildPresetTabs(); // the profile's own tab is never offered for hiding
             PreviewChanged();
         }
     }
+
+    /// <summary>The Panels pane header's "on tab [name]" (a click focuses the tab field on General); "(no tab name)" while it is blank.</summary>
+    public string PanelsTabName => string.IsNullOrWhiteSpace(_profile.Tab) ? UiStrings.Builder_NoTabName : _profile.Tab!;
 
     public string MinVersion
     {
@@ -648,11 +666,18 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _selectedPanelIndex = _profile.Panels.Count - 1;
     }
 
+    /// <summary>
+    /// A click on a card selects it (the ring). Only the flags change: the cards are not rebuilt, so
+    /// a click that lands in a tile's name box keeps its focus.
+    /// </summary>
     internal void SelectPanel(int index)
     {
-        if (index == _selectedPanelIndex) return;
+        if (index == _selectedPanelIndex || index < 0 || index >= Panels.Count) return;
         _selectedPanelIndex = index;
-        RenderCanvas();
+        foreach (var card in Panels) card.IsSelected = card.Index == index;
+        OnPropertyChanged(nameof(SelectedPanel));
+        OnPropertyChanged(nameof(SelectedPanelIndex));
+        RelayCommand.Refresh();
     }
 
     internal void MovePanel(int index, int delta)
@@ -674,27 +699,137 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         var name = _profile.Panels[index].Name;
         if (!_dialogs.Confirm(UiStrings.Builder_DeletePanelTitle(name), "", [], UiStrings.Builder_Delete, danger: true, DeletePanelDialogId)) return;
         _profile.Panels.RemoveAt(index);
+        // Its stacks go with it, so Profile.Stacks and the stack slots stay in step (WU3 review N2).
+        var orphans = ProfileEditing.RemoveOrphanStacks(_profile);
+        if (orphans.Count > 0) Log.Information("Builder: deleted panel {Panel} and its stacks {Stacks}", name, string.Join(", ", orphans));
         if (_selectedPanelIndex >= _profile.Panels.Count) _selectedPanelIndex = _profile.Panels.Count - 1;
         RenderCanvas();
     }
 
-    internal void MoveSlot(int panelIndex, int slotIndex, int delta)
+    /// <summary>
+    /// × on a tile or a stack row: the tool leaves this panel only, without a confirm (spec #19,
+    /// "Remove from one panel"). A stack left with one tool becomes that tool in its place.
+    /// </summary>
+    internal void RemoveTile(ToolTileViewModel tile)
     {
-        var slots = _profile.Panels[panelIndex].Slots;
-        var to = slotIndex + delta;
-        if (to < 0 || to >= slots.Count) return;
-        var s = slots[slotIndex];
-        slots.RemoveAt(slotIndex);
-        slots.Insert(to, s);
+        if (!IsCurrent(tile, "remove a tool")) return;
+        var panel = tile.Panel.Index;
+        if (tile.InStack)
+        {
+            if (PanelStacks.RemoveRow(_profile, panel, tile.Index, tile.Row) != StackResult.Done) return;
+        }
+        else
+        {
+            _profile.Panels[panel].Slots.RemoveAt(tile.Index);
+        }
+        Log.Information("Builder: removed {Tool} from panel {Panel}", tile.Name, _profile.Panels[panel].Name);
         RenderCanvas();
     }
 
-    /// <summary>× on a slot row removes it (no confirm, as the page).</summary>
-    internal void DeleteSlot(int panelIndex, int slotIndex)
+    /// <summary>
+    /// The card a command came from still shows the working copy (WU3 review N1): the tile's or
+    /// stack's slot is the same object at the same place, and a stack holds the same tools in the
+    /// same order. The stack operations address slots by index, so an edit made underneath (WU4's
+    /// edit or remove everywhere on the open profile) must not let them hit another slot. Otherwise
+    /// the action is refused, logged, and the cards are redrawn.
+    /// </summary>
+    private bool IsCurrent(PanelItemViewModel item, string action)
     {
-        _profile.Panels[panelIndex].Slots.RemoveAt(slotIndex);
+        var panel = item.Panel.Index;
+        var ok = panel >= 0 && panel < _profile.Panels.Count && ReferenceEquals(_profile.Panels[panel], item.Panel.Model);
+        if (ok)
+        {
+            var slots = _profile.Panels[panel].Slots;
+            switch (item)
+            {
+                case ToolTileViewModel { Stack: { } stack } row:
+                    ok = IsCurrentStack(slots, stack) && row.Row < stack.Rows.Count && ReferenceEquals(stack.Rows[row.Row].Model, row.Model);
+                    break;
+                case StackGroupViewModel stack:
+                    ok = IsCurrentStack(slots, stack);
+                    break;
+                default:
+                    ok = item.Index >= 0 && item.Index < slots.Count && ReferenceEquals(slots[item.Index], item.Model);
+                    break;
+            }
+        }
+        if (ok) return true;
+        Log.Warning("Builder: {Action} refused: the card no longer matches the profile; redrawing", action);
+        RenderCanvas();
+        return false;
+    }
+
+    private bool IsCurrentStack(List<Slot> slots, StackGroupViewModel stack) =>
+        stack.Index >= 0 && stack.Index < slots.Count && ReferenceEquals(slots[stack.Index], stack.Model)
+        && PanelStacks.ToolsOf(_profile, stack.Model).SequenceEqual(stack.Rows.Select(r => r.Model), ReferenceEqualityComparer.Instance);
+
+    /// <summary>× on a stack: un-stacks it; its tools go back on the panel in order, in its place.</summary>
+    internal void Unstack(StackGroupViewModel stack)
+    {
+        if (!IsCurrent(stack, "un-stack")) return;
+        if (PanelStacks.Unstack(_profile, stack.Panel.Index, stack.Index) != StackResult.Done) return;
+        Log.Information("Builder: un-stacked {Count} tools on panel {Panel}", stack.Rows.Count, stack.Panel.Name);
+        _selectedPanelIndex = stack.Panel.Index;
         RenderCanvas();
     }
+
+    /// <summary>+ New Stack: the stack dialog over the panel's loose tools; 2-3 picks become a stack in the first pick's place.</summary>
+    internal void NewStack(int panelIndex)
+    {
+        if (panelIndex < 0 || panelIndex >= _profile.Panels.Count) return;
+        var panel = _profile.Panels[panelIndex];
+        var loose = PanelStacks.LooseTools(_profile, panelIndex).Select(i => (i, panel.Slots[i])).ToList();
+        if (loose.Count < PanelStacks.MinTools) return;
+        var dialog = StackDialogModel.ForNew(panel.Name ?? "", loose, PackDirectory);
+        if (!_builderDialogs.EditStack(dialog)) return;
+        if (!ReferenceEquals(_profile.Panels.ElementAtOrDefault(panelIndex), panel) || !LooseStillAt(panel, loose)) return;
+        var picks = dialog.Picks.Where(p => !p.Member).Select(p => p.Index).ToList();
+        var result = PanelStacks.NewStack(_profile, panelIndex, picks);
+        Log.Information("Builder: new stack on {Panel} from {Count} tools → {Result}", panel.Name, picks.Count, result);
+        AfterStackEdit(panelIndex, result);
+    }
+
+    /// <summary>
+    /// ✎ on a stack: the same dialog with its rows ticked; reorder, untick (back on the panel), add
+    /// the panel's loose tools. Saving with fewer than 2 removes the stack.
+    /// </summary>
+    internal void EditStack(StackGroupViewModel stack)
+    {
+        if (!IsCurrent(stack, "edit a stack")) return;
+        var panelIndex = stack.Panel.Index;
+        var panel = _profile.Panels[panelIndex];
+        var loose = PanelStacks.LooseTools(_profile, panelIndex).Select(i => (i, panel.Slots[i])).ToList();
+        var dialog = StackDialogModel.ForEdit(panel.Name ?? "", stack.Rows.Select(r => r.Model).ToList(), loose, PackDirectory);
+        if (!_builderDialogs.EditStack(dialog)) return;
+        // The dialog is modal, but the working copy may still have changed while it was open.
+        if (!IsCurrent(stack, "edit a stack") || !LooseStillAt(panel, loose)) return;
+        var result = PanelStacks.EditStack(_profile, panelIndex, stack.Index, dialog.Picks);
+        Log.Information("Builder: edited a stack on {Panel} to {Count} tools → {Result}", panel.Name, dialog.Count, result);
+        AfterStackEdit(panelIndex, result);
+    }
+
+    /// <summary>The loose tools a stack dialog listed are still at those places (else refused, logged, redrawn).</summary>
+    private bool LooseStillAt(ProfilePanel panel, IReadOnlyList<(int Slot, Slot Tool)> loose)
+    {
+        if (loose.All(l => l.Slot < panel.Slots.Count && ReferenceEquals(panel.Slots[l.Slot], l.Tool))) return true;
+        Log.Warning("Builder: stack dialog refused: the panel {Panel} changed while it was open; redrawing", panel.Name);
+        RenderCanvas();
+        return false;
+    }
+
+    private void AfterStackEdit(int panelIndex, StackResult result)
+    {
+        if (result == StackResult.Full) ShowToast(UiStrings.Builder_StackFull, BannerKind.Warning);
+        if (result != StackResult.Done) return;
+        _selectedPanelIndex = panelIndex;
+        RenderCanvas();
+    }
+
+    /// <summary>
+    /// WU4's hook for ✎ on a placed custom tool (its parameter is the <see cref="ToolTileViewModel"/>).
+    /// Null in WU3, so the tiles show no ✎; WU4 sets it when it adds the Custom Tool dialog.
+    /// </summary>
+    public ICommand? EditCustomToolCommand { get; private set; }
 
     /// <summary>The icon picker while it is open (the window shows it over everything), else null.</summary>
     public IconPickerViewModel? IconPicker
@@ -709,30 +844,31 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     public bool IsIconPickerOpen => _iconPicker is not null;
 
     /// <summary>
-    /// The Pick-icon button: opens the picker on the slot's current value (the pack list is read
-    /// once). Only a variant or None changes the slot; Cancel, Escape and an outside click do not.
+    /// A click on a tile's or a stack row's icon: opens the picker on the tool's current value (the
+    /// pack list is read once). Only a variant or None changes the tool; Cancel, Escape and an
+    /// outside click do not.
     /// </summary>
-    internal void PickIcon(SlotRowViewModel slot)
+    internal void PickIcon(ToolTileViewModel tile)
     {
         _iconPack ??= Safe(_backend.GetIconPack, [], "list_iconpack");
-        IconPicker = new IconPickerViewModel(_iconPack, slot.Model.IconFile, PackDirectory, outcome =>
+        IconPicker = new IconPickerViewModel(_iconPack, tile.Model.IconFile, PackDirectory, outcome =>
         {
             IconPicker = null;
             if (!outcome.Committed) return;
-            slot.Model.IconFile = outcome.Value;
-            Log.Information("Builder: icon for {Slot} → {Icon}", slot.Name, outcome.Value ?? "(none)");
-            slot.IconChanged();
+            tile.Model.IconFile = outcome.Value;
+            Log.Information("Builder: icon for {Slot} → {Icon}", tile.Name, outcome.Value ?? "(none)");
+            tile.IconChanged();
             PreviewChanged();
         });
     }
 
-    /// <summary>renderCanvas: the cards and rows again from the profile; the preview redraws.</summary>
+    /// <summary>renderCanvas: the cards, tiles and stacks again from the profile; the preview redraws.</summary>
     private void RenderCanvas()
     {
         Panels.Clear();
         for (var i = 0; i < _profile.Panels.Count; i++)
         {
-            Panels.Add(new PanelCardViewModel(_profile.Panels[i], i, this) { IsSelected = i == _selectedPanelIndex });
+            Panels.Add(new PanelCardViewModel(_profile.Panels[i], i, _profile, this) { IsSelected = i == _selectedPanelIndex });
         }
         OnPropertyChanged(nameof(HasPanels));
         OnPropertyChanged(nameof(SelectedPanel));
@@ -742,9 +878,17 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     /// <summary>
     /// The panel colour picker, starting from the selected panel's colour. Its Properties pane swatch
-    /// is retired (spec #19); the panel cards' swatch (WU3) opens it.
+    /// is retired (spec #19); each card's swatch (<see cref="PanelCardViewModel.PickColorCommand"/>)
+    /// selects its card and opens it.
     /// </summary>
     public ICommand PickColorCommand { get; }
+
+    /// <summary>A card's colour swatch: select that card, then the colour picker.</summary>
+    internal void PickPanelColor(int index)
+    {
+        SelectPanel(index);
+        if (_selectedPanelIndex == index) PickColor();
+    }
 
     private void PickColor()
     {
@@ -843,11 +987,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <summary>What is being dragged, or null.</summary>
     public BuilderDrag? CurrentDrag => _drag;
 
-    /// <summary>A drag starts: a catalogue command, a slot row (drawn faded) or a panel header.</summary>
+    /// <summary>A drag starts: a catalogue command, a tile or a stack row (drawn faded), a stack by its header (faded), or a panel header.</summary>
     public void BeginDrag(BuilderDrag drag)
     {
         _drag = drag ?? throw new ArgumentNullException(nameof(drag));
-        if (drag.Kind == DragKind.Slot && Slot(drag.PanelIndex, drag.SlotIndex) is { } row) row.IsDragSource = true;
+        if (drag.Kind != DragKind.Slot) return;
+        if (Item(drag.PanelIndex, drag.SlotIndex) is not { } item) return;
+        if (drag.Row < 0) item.IsDragSource = true;
+        else if (item is StackGroupViewModel stack && drag.Row < stack.Rows.Count) stack.Rows[drag.Row].IsDragSource = true;
     }
 
     /// <summary>The drag ended (dropped or cancelled): every marker clears.</summary>
@@ -855,49 +1002,81 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     {
         _drag = null;
         ClearDropMarkers();
-        foreach (var row in Panels.SelectMany(p => p.Slots)) row.IsDragSource = false;
+        foreach (var item in AllItems()) item.IsDragSource = false;
     }
 
-    /// <summary>The pointer is over a panel card (not over one of its slots). True when the card accepts the drag.</summary>
+    /// <summary>
+    /// The pointer is over a panel card outside its tiles: a panel marks before or after the card
+    /// (the cursor's half); a tool or a stack highlights it (appended to the panel's end). True when
+    /// the card accepts the drag.
+    /// </summary>
     public bool DragOverPanel(int panelIndex, bool upperHalf)
     {
-        var marker = PanelDrops.CardMarker(_drag, panelIndex, upperHalf);
-        SetMarker(panelIndex, null, marker);
+        var marker = _drag?.Kind == DragKind.Panel
+            ? PanelDrops.CardMarker(_drag, panelIndex, upperHalf)
+            : TileDrops.PlanCard(_profile, _drag, panelIndex).Marker;
+        SetMarker(panelIndex, null, -1, marker);
         return marker != DropMarker.None;
     }
 
-    /// <summary>The pointer is over a slot row. True when the row accepts the drag.</summary>
-    public bool DragOverSlot(int panelIndex, int slotIndex, bool upperHalf)
+    /// <summary>
+    /// The pointer is over a tile, a stack or a stack's row: the marker shows what a drop would do
+    /// (TileDrops' rules). True when the target takes the drop: a change, or a full stack, which
+    /// shows the refusal marker and refuses on drop with its message. False for nothing to do or a
+    /// stale target (no marker).
+    /// </summary>
+    public bool DragOverTile(TileHit hit)
     {
-        var marker = PanelDrops.SlotMarker(_drag, upperHalf);
-        SetMarker(panelIndex, slotIndex, marker);
-        return marker != DropMarker.None;
+        var plan = TileDrops.Plan(_profile, _drag, hit);
+        var none = plan.Kind is TileDropKind.None or TileDropKind.Stale;
+        SetMarker(hit.Panel, none ? null : plan.Slot, plan.MarkerRow, plan.Marker);
+        // A full stack shows the refusal marker and still takes the drop, so the drop can refuse it
+        // with its message: OLE delivers no Drop after a None effect (WU3 review N5).
+        return !none;
     }
 
     /// <summary>The pointer left a target: its marker clears.</summary>
     public void ClearDropMarkers()
     {
-        foreach (var card in Panels)
-        {
-            card.DropMarker = DropMarker.None;
-            foreach (var row in card.Slots) row.DropMarker = DropMarker.None;
-        }
+        foreach (var card in Panels) card.DropMarker = DropMarker.None;
+        foreach (var item in AllItems()) item.DropMarker = DropMarker.None;
     }
 
-    /// <summary>A drop on a panel card (panel reorder, command append, slot move to the end).</summary>
+    /// <summary>A drop on a panel card outside its tiles: a panel reorder, or a tool or stack to the panel's end.</summary>
     public void DropOnPanel(int panelIndex, bool upperHalf)
     {
-        if (_drag is null) return;
-        var selected = PanelDrops.DropOnPanel(_profile, _drag, panelIndex, upperHalf);
-        AfterDrop(selected);
+        if (_drag is not { } drag) return;
+        if (drag.Kind == DragKind.Panel)
+        {
+            AfterDrop(PanelDrops.DropOnPanel(_profile, drag, panelIndex, upperHalf));
+            return;
+        }
+        var plan = TileDrops.PlanCard(_profile, drag, panelIndex);
+        AfterTileDrop(drag, plan, TileDrops.Apply(_profile, drag, plan));
     }
 
-    /// <summary>A drop on a slot row (command insert, slot reorder or move across panels).</summary>
-    public void DropOnSlot(int panelIndex, int slotIndex, bool upperHalf)
+    /// <summary>A drop on a tile, a stack or a stack's row (TileDrops' rules); a full stack refuses with a toast.</summary>
+    public void DropOnTile(TileHit hit)
     {
-        if (_drag is null) return;
-        var selected = PanelDrops.DropOnSlot(_profile, _drag, panelIndex, slotIndex, upperHalf);
-        AfterDrop(selected);
+        if (_drag is not { } drag) return;
+        var plan = TileDrops.Plan(_profile, drag, hit);
+        AfterTileDrop(drag, plan, TileDrops.Apply(_profile, drag, plan));
+    }
+
+    private void AfterTileDrop(BuilderDrag drag, TileDrop plan, StackResult result)
+    {
+        Log.Information("Builder: drop {Kind} {Source} → panel {Panel} slot {Slot}: {Result}",
+            plan.Kind, drag.Kind == DragKind.Catalog ? drag.Command?.Id : $"{drag.PanelIndex}/{drag.SlotIndex}/{drag.Row}", plan.Panel, plan.Slot, result);
+        if (result == StackResult.Full) ShowToast(UiStrings.Builder_StackFull, BannerKind.Warning);
+        if (plan.Kind == TileDropKind.Stale)
+        {
+            // The working copy changed under the cards: nothing moved; show what is there now.
+            Log.Warning("Builder: drop refused: the dragged or target slot is no longer where the card showed it; redrawing");
+            _drag = null;
+            RenderCanvas();
+            return;
+        }
+        AfterDrop(result == StackResult.Done ? plan.Panel : null);
     }
 
     private void AfterDrop(int? selected)
@@ -912,20 +1091,28 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         RenderCanvas();
     }
 
-    private void SetMarker(int panelIndex, int? slotIndex, DropMarker marker)
+    /// <summary>One target is marked at a time: a card (slot null), a tile or stack (row -1), or a stack's row.</summary>
+    private void SetMarker(int panelIndex, int? slotIndex, int row, DropMarker marker)
     {
-        // One target is marked at a time, as the page's dragleave cleared the previous one.
         foreach (var card in Panels)
         {
             card.DropMarker = slotIndex is null && card.Index == panelIndex ? marker : DropMarker.None;
-            foreach (var row in card.Slots)
-                row.DropMarker = slotIndex is { } s && card.Index == panelIndex && row.Index == s ? marker : DropMarker.None;
+            foreach (var item in card.Items)
+            {
+                var here = slotIndex == item.Index && card.Index == panelIndex;
+                item.DropMarker = here && row < 0 ? marker : DropMarker.None;
+                if (item is StackGroupViewModel stack)
+                    foreach (var r in stack.Rows) r.DropMarker = here && r.Row == row ? marker : DropMarker.None;
+            }
         }
     }
 
-    private SlotRowViewModel? Slot(int panelIndex, int slotIndex) =>
-        panelIndex >= 0 && panelIndex < Panels.Count && slotIndex >= 0 && slotIndex < Panels[panelIndex].Slots.Count
-            ? Panels[panelIndex].Slots[slotIndex]
+    private IEnumerable<PanelItemViewModel> AllItems() =>
+        Panels.SelectMany(p => p.Items).SelectMany(i => i is StackGroupViewModel s ? s.Rows.Prepend<PanelItemViewModel>(s) : new[] { i });
+
+    private PanelItemViewModel? Item(int panelIndex, int slotIndex) =>
+        panelIndex >= 0 && panelIndex < Panels.Count && slotIndex >= 0 && slotIndex < Panels[panelIndex].Items.Count
+            ? Panels[panelIndex].Items[slotIndex]
             : null;
 
     // ---- the live preview ---------------------------------------------------------------------
@@ -986,6 +1173,13 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 Log.Warning("Builder: save aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
                 ShowToast(UiStrings.Builder_NameCollision((_profile.ProfileName ?? "").Trim()), BannerKind.Error);
                 return false;
+        }
+        // A stack of 4+ tools cannot be written (read validation stays strict, decision #28).
+        if (PanelStacks.SaveBlocker(_profile) is { } blocker)
+        {
+            Log.Warning("Builder: save refused: {Reason}", blocker);
+            ShowToast(blocker, BannerKind.Error);
+            return false;
         }
 
         _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup);
@@ -1195,6 +1389,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         public static readonly NoBuilderDialogs Instance = new();
 
         public bool EditName(ProfileNameDialogModel model) => false;
+
+        public bool EditStack(StackDialogModel model) => false;
 
         public void EditBranding(ProfileBuilderViewModel model)
         {

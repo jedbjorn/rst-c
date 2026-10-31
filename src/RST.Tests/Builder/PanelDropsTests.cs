@@ -1,5 +1,6 @@
-// rst-c's own (not vendored): the Builder's drag-and-drop index arithmetic (spec #16, WU5, AC5),
-// against profile_builder.html's card handlers (2346-2376) and slot handlers (2471-2504).
+// rst-c's own (not vendored): the Builder's panel reorder arithmetic (spec #16, WU5, AC5), against
+// profile_builder.html's card handlers (2346-2358). The catalogue and slot drops on cards and tiles
+// follow the stack rules since feature #18 (WU3): TileDropsTests.
 
 using FluentAssertions;
 using RST.Core.Builder;
@@ -47,80 +48,13 @@ public class PanelDropsTests
         Shape(p).Should().Be("P0: | P1:");
     }
 
-    // ── catalogue → card (2359-2369), slot → other card (2370-2376) ──
-
     [Fact]
-    public void A_command_dropped_on_a_card_is_appended()
+    public void Only_a_panel_reorders_panels()
     {
         var p = Make(["a"], ["b"]);
-        PanelDrops.DropOnPanel(p, BuilderDrag.FromCatalog(Wall), 1, true).Should().Be(1);
-        Shape(p).Should().Be("P0:a | P1:b,Wall");
-        p.Panels[1].Slots[1].Should().BeEquivalentTo(new Slot { SlotType = "tool", Name = "Wall", CommandId = "ID_WALL", SourceTab = "Architecture", SourcePanel = "Build" });
-    }
-
-    [Fact]
-    public void A_slot_dropped_on_another_card_moves_to_its_end()
-    {
-        var p = Make(["a", "b"], ["c"]);
-        PanelDrops.DropOnPanel(p, BuilderDrag.FromSlot(0, 0), 1, false).Should().Be(1);
-        Shape(p).Should().Be("P0:b | P1:c,a");
-    }
-
-    [Fact]
-    public void A_slot_dropped_on_its_own_card_does_nothing()
-    {
-        var p = Make(["a", "b"]);
-        PanelDrops.DropOnPanel(p, BuilderDrag.FromSlot(0, 0), 0, false).Should().BeNull();
-        Shape(p).Should().Be("P0:a,b");
-    }
-
-    // ── catalogue → slot (2480-2492) ──
-
-    [Theory]
-    [InlineData(0, true, "Wall,a,b")]
-    [InlineData(0, false, "a,Wall,b")]
-    [InlineData(1, false, "a,b,Wall")]
-    public void A_command_dropped_on_a_slot_is_inserted_before_or_after_it(int slot, bool upper, string expected)
-    {
-        var p = Make(["a", "b"]);
-        PanelDrops.DropOnSlot(p, BuilderDrag.FromCatalog(Wall), 0, slot, upper).Should().Be(0);
-        string.Join(",", p.Panels[0].Slots.Select(s => s.Name)).Should().Be(expected);
-    }
-
-    // ── slot → slot (2494-2503) ──
-
-    [Theory]
-    [InlineData(0, 2, true, "b,a,c,d")]   // down, before c: insertAt 2 → 1
-    [InlineData(0, 2, false, "b,c,a,d")]  // down, after c: insertAt 3 → 2
-    [InlineData(3, 1, true, "a,d,b,c")]   // up, before b
-    [InlineData(3, 1, false, "a,b,d,c")]  // up, after b
-    [InlineData(0, 1, true, "a,b,c,d")]   // onto the next slot's upper half: back where it was
-    [InlineData(1, 0, false, "a,b,c,d")]  // onto the previous slot's lower half: back where it was
-    [InlineData(3, 3, false, null)]       // onto itself: nothing
-    public void A_slot_moves_within_its_panel(int from, int target, bool upper, string? expected)
-    {
-        var p = Make(["a", "b", "c", "d"]);
-        var result = PanelDrops.DropOnSlot(p, BuilderDrag.FromSlot(0, from), 0, target, upper);
-        if (expected is null)
-        {
-            result.Should().BeNull();
-            expected = "a,b,c,d";
-        }
-        else
-        {
-            result.Should().Be(0);
-        }
-        string.Join(",", p.Panels[0].Slots.Select(s => s.Name)).Should().Be(expected);
-    }
-
-    [Theory]
-    [InlineData(0, true, "P0:b | P1:a,x,y")]
-    [InlineData(1, false, "P0:b | P1:x,y,a")]
-    public void A_slot_moves_across_panels_without_shifting(int target, bool upper, string expected)
-    {
-        var p = Make(["a", "b"], ["x", "y"]);
-        PanelDrops.DropOnSlot(p, BuilderDrag.FromSlot(0, 0), 1, target, upper).Should().Be(1);
-        Shape(p).Should().Be(expected);
+        PanelDrops.DropOnPanel(p, BuilderDrag.FromCatalog(Wall), 1, true).Should().BeNull("a command follows TileDrops");
+        PanelDrops.DropOnPanel(p, BuilderDrag.FromSlot(0, 0), 1, true).Should().BeNull("a tile follows TileDrops");
+        Shape(p).Should().Be("P0:a | P1:b");
     }
 
     [Fact]
@@ -129,12 +63,9 @@ public class PanelDropsTests
         PanelDrops.CardMarker(BuilderDrag.FromPanel(0), 1, true).Should().Be(DropMarker.Before);
         PanelDrops.CardMarker(BuilderDrag.FromPanel(0), 1, false).Should().Be(DropMarker.After);
         PanelDrops.CardMarker(BuilderDrag.FromPanel(1), 1, true).Should().Be(DropMarker.None);
-        PanelDrops.CardMarker(BuilderDrag.FromCatalog(Wall), 1, true).Should().Be(DropMarker.Over);
-        PanelDrops.CardMarker(BuilderDrag.FromSlot(1, 0), 1, true).Should().Be(DropMarker.Over);
+        PanelDrops.CardMarker(BuilderDrag.FromCatalog(Wall), 1, true).Should().Be(DropMarker.None);
+        PanelDrops.CardMarker(BuilderDrag.FromSlot(1, 0), 1, true).Should().Be(DropMarker.None);
         PanelDrops.CardMarker(null, 1, true).Should().Be(DropMarker.None);
-        PanelDrops.SlotMarker(BuilderDrag.FromSlot(0, 0), true).Should().Be(DropMarker.Before);
-        PanelDrops.SlotMarker(BuilderDrag.FromCatalog(Wall), false).Should().Be(DropMarker.After);
-        PanelDrops.SlotMarker(BuilderDrag.FromPanel(0), true).Should().Be(DropMarker.None, "panels never drop on slots");
     }
 
     [Fact]
@@ -142,8 +73,7 @@ public class PanelDropsTests
     {
         var p = Make(["a"]);
         PanelDrops.DropOnPanel(p, BuilderDrag.FromPanel(5), 0, true).Should().BeNull();
-        PanelDrops.DropOnSlot(p, BuilderDrag.FromSlot(0, 9), 0, 0, true).Should().BeNull();
-        PanelDrops.DropOnPanel(p, BuilderDrag.FromCatalog(Wall), 3, true).Should().BeNull();
+        PanelDrops.DropOnPanel(p, BuilderDrag.FromPanel(0), 3, true).Should().BeNull();
         Shape(p).Should().Be("P0:a");
     }
 }
