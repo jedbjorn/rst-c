@@ -137,6 +137,13 @@ function Assert([bool]$Cond, [string]$What) {
   Write-Host "PASS: $What"
 }
 function Observe([string]$What) { Write-Host "OBSERVED: $What" }
+. (Join-Path $PSScriptRoot '..\installer\ci-tray-start.ps1')
+$UserTrayExe = Join-Path $env:LOCALAPPDATA 'Programs\RST\Tray\RST.Tray.exe'
+# The tray now starts after every install (SC-044): its one-time notices would open windows of their own.
+$TraySettings = Join-Path $AppData 'RST\tray_settings.json'
+New-Item -ItemType Directory -Force (Split-Path $TraySettings) | Out-Null
+Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00", "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+Show-RunnerTokens
 
 # Add/Remove Programs entries: the Uninstall keys of HKCU and HKLM (both views).
 function Get-Arp {
@@ -190,10 +197,21 @@ function Set-RevitStubs {
   Write-Host "Revit stubs: $($Years.Keys -join ', ')"
 }
 
+# Waits on the started process itself, never on its process tree (PowerShell 7's Start-Process -Wait waits for every
+# descendant: a tray started from the install would hold it), with a hard timeout so CI cannot hang.
+function Wait-Own($Proc, [string]$What, [int]$Seconds = 600) {
+  $null = $Proc.Handle   # keep a handle so ExitCode is readable after the process exits
+  if (-not $Proc.WaitForExit($Seconds * 1000)) {
+    $Proc | Stop-Process -Force -ErrorAction SilentlyContinue
+    throw "FAIL: $What did not finish within $Seconds s"
+  }
+}
+
 function Invoke-Msiexec([string]$Verb, [string]$Target, [string]$Name) {
   $log = Join-Path $LogDir "$Name.log"
   Write-Host "msiexec $Verb $Target /qn (log: $log)"
-  $p = Start-Process msiexec.exe -ArgumentList "$Verb `"$Target`" /qn /l*v `"$log`"" -Wait -PassThru
+  $p = Start-Process msiexec.exe -ArgumentList "$Verb `"$Target`" /qn /l*v `"$log`"" -PassThru
+  Wait-Own $p "msiexec $Verb $Target"
   Write-Host "  exit $($p.ExitCode)"
   if ($p.ExitCode -ne 0) {
     if (Test-Path $log) { Get-Content $log -Tail 60 | Write-Host }
@@ -207,7 +225,8 @@ function Invoke-Bundle([string]$Exe, [string[]]$BundleArgs, [string]$Name, [swit
   $log = Join-Path $LogDir ("bundle-{0:d2}-$Name.log" -f $script:Step)
   $argList = @($BundleArgs) + @('/log', "`"$log`"")
   Write-Host "$([IO.Path]::GetFileName($Exe)) $($argList -join ' ')"
-  $p = Start-Process $Exe -ArgumentList $argList -Wait -PassThru
+  $p = Start-Process $Exe -ArgumentList $argList -PassThru
+  Wait-Own $p "$([IO.Path]::GetFileName($Exe)) $($BundleArgs -join ' ')"
   Write-Host "  exit $($p.ExitCode)"
   $script:LastBundleExit = $p.ExitCode
   Show-BurnLog $log
@@ -312,6 +331,9 @@ if ($Mode -eq 'Chain') {
   $b = Get-BundleArp
   Assert ($b.Count -eq 1 -and $b[0].DisplayName -eq 'RST' -and $b[0].Hive -eq 'HKCU' -and $b[0].SystemComponent -ne 1) '[A] one visible per-user "RST" bundle entry in Add/Remove Programs'
   Assert ((Get-ArpVisible 'RST').Count -eq 1) '[A] Settings > Apps shows one "RST" (RST.msi hidden behind the bundle)'
+  # SC-044: RST.msi (run by Burn's per-user engine) started the tray for this user.
+  $trayA = Wait-SettledTray 'A'
+  Assert-StartedTray $trayA $UserTrayExe 'A'
 
   # B - re-run, same command: nothing changes.
   $before = (Get-Item $FixtureTxt).LastWriteTimeUtc
@@ -323,11 +345,14 @@ if ($Mode -eq 'Chain') {
   Assert-Fixture '1.1.0' 'B' $pc110
   Assert ((Get-Item $FixtureTxt).LastWriteTimeUtc -eq $before) '[B] fixture.txt not rewritten'
   Assert ((Get-BundleArp).Count -eq 1) '[B] still one bundle entry'
+  $trayB = Wait-SettledTray 'B'
+  Assert ($trayB.Id -eq $trayA.Id) "[B] still exactly one tray, the same one (pid $($trayA.Id))"
 
   # C - uninstall the bundle: RST goes, the fixture stays (Permanent).
   Uninstall-BundleViaArp 'C-uninstall' | Out-Null
   Show-State 'C'
   Assert-Rst $false 'C'
+  Assert-NoTray 'C after the bundle uninstall'
   Assert-Fixture '1.1.0' 'C' $pc110
   Remove-Fixture 'C'
 
@@ -535,9 +560,12 @@ if ($Mode -eq 'Scope') {
   Assert-Plan $log 'RST' 'Install' 'S1'
   Assert-Plan $log 'RemoveUserRst' 'None' 'S1'
   Assert-Plan $log 'RSTMachine' 'None' 'S1'
+  $trayS1 = Wait-SettledTray 'S1'
+  Assert-StartedTray $trayS1 $UserTrayExe 'S1'
   $log = Uninstall-BundleViaArp 'S1-uninstall'
   Assert ((Get-Elevations $log) -eq 0) '[S1] its uninstall launched no elevated engine either'
   Assert-Rst $false 'S1 uninstalled'
+  Assert-NoTray 'S1 uninstalled'
 
   # S2 - "Everyone on this PC" over an older RST.msi installed for this user, with the fixture companion.
   Invoke-Msiexec '/i' $OlderRstMsi 'S2-older-user-rst'
@@ -564,6 +592,15 @@ if ($Mode -eq 'Scope') {
   Assert ([string](Get-ComProp $Installer 'ProductInfo' @($fx[0].ProductCode, 'AssignmentType')) -eq '0') '[S2] the companion is installed per user (contract C1)'
   $b = Get-BundleArp
   Assert ($b.Count -eq 1 -and $b[0].Hive -eq 'HKCU') '[S2] one per-user RST-Setup bundle entry'
+  # SC-044: the helper, in the bundle's own process, started RST-Machine's tray for this user once the user's copy was
+  # gone; RST-Machine.msi itself (in the elevated engine, RSTFROMSETUP=1) skipped its own start.
+  $trayS2 = Wait-SettledTray 'S2'
+  Assert-StartedTray $trayS2 $MachineTrayExe 'S2'
+  Assert (Select-String -Path $helper -Pattern "tray: started RST.Tray pid $($trayS2.Id) " -SimpleMatch -Quiet) "[S2] the helper started it (its log names pid $($trayS2.Id))"
+  $machineMsiLog = @(Get-ChildItem (Split-Path $log) -Filter "$([IO.Path]::GetFileNameWithoutExtension($log))_*RSTMachine*.log" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch 'rollback' })
+  Assert ($machineMsiLog.Count -ge 1) "[S2] Burn kept RST-Machine.msi's own log ($(($machineMsiLog | ForEach-Object { $_.Name }) -join ', '))"
+  Select-String -Path $machineMsiLog[0].FullName -Pattern 'RstStartTray' -SimpleMatch | Select-Object -First 4 | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+  Assert (Select-String -Path $machineMsiLog[0].FullName -Pattern 'Skipping action: RstStartTray (condition is false)' -SimpleMatch -Quiet) '[S2] RST-Machine.msi skipped its own RstStartTray under setup (RSTFROMSETUP)'
 
   # S3 - re-runs while RST-Machine is installed stay "machine": nothing installed per user, nothing switched.
   foreach ($run in @(@{ Name = 'S3-rerun-default'; Args = @('/quiet', '/norestart') }, @{ Name = 'S3-rerun-user'; Args = @('/quiet', '/norestart', 'InstallScope=user') })) {
@@ -573,6 +610,8 @@ if ($Mode -eq 'Scope') {
     Assert-Plan $log 'RSTMachine' 'None' $run.Name
     Assert-Rst $false $run.Name
     Assert-MachineProduct $true $run.Name
+    $trayS3 = Wait-SettledTray $run.Name
+    Assert ($trayS3.Id -eq $trayS2.Id) "[$($run.Name)] still exactly one tray, the same one (pid $($trayS2.Id))"
   }
 
   # S4 - uninstall the bundle: RST-Machine goes (one elevation), the companion stays.
@@ -580,6 +619,7 @@ if ($Mode -eq 'Scope') {
   Show-State 'S4' $codes
   Assert ((Get-Elevations $log) -eq 1) '[S4] the uninstall elevated once, for RST-Machine'
   Assert-MachineProduct $false 'S4'
+  Assert-NoTray 'S4 uninstalled'
   Assert-Rst $false 'S4'
   Assert-Fixture '1.1.0' 'S4 companion stays'
   Remove-Fixture 'S4'
@@ -598,8 +638,11 @@ if ($Mode -eq 'Scope') {
   $iMachine = Get-AppliedIndex $log 'RSTMachine'
   $iUser = Get-AppliedIndex $log 'RemoveUserRst'
   Assert ($iMachine -gt 0 -and $iUser -gt $iMachine) "[S5] RST-Machine installed first, then the user's copy was removed (log lines $iMachine < $iUser; review D1)"
+  $trayS5 = Wait-SettledTray 'S5'
+  Assert-StartedTray $trayS5 $MachineTrayExe 'S5'
   Uninstall-BundleViaArp 'S5-uninstall' | Out-Null
   Assert-MachineProduct $false 'S5 uninstalled'
+  Assert-NoTray 'S5 uninstalled'
 
   # S6 (review B2) - a v2.2.0 user: the public RST.msi 2.2.0 and the retired RST-R27.msi preview, both installed
   # for this user. "Everyone on this PC" must end with exactly "RST (all users)" and nothing per user.
@@ -668,6 +711,7 @@ if ($Mode -eq 'Scope') {
   Assert ($kept.Count -eq 1 -and $kept[0].Version -eq '1.0.0') '[S8] the user still has their RST 1.0.0'
   Assert (Test-Path (Join-Path $AppData 'Autodesk\Revit\Addins\2026\RST.addin')) '[S8] and its files'
   Assert-MachineProduct $false 'S8 RST-Machine rolled back: nothing left in Program Files, no HKLM Run'
+  Assert-NoTray 'S8 rolled back: no tray was started'
   foreach ($p in $kept) { Invoke-Msiexec '/x' $p.ProductCode 'S8-cleanup' }
   Assert ((Get-BundleArp).Count -eq 0) '[S8] no bundle left registered'
   Assert-Rst $false 'end'

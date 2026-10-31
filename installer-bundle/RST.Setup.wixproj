@@ -85,11 +85,15 @@
   <PropertyGroup>
     <RstFrameworkCsc>$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\csc.exe</RstFrameworkCsc>
     <RstRemoveUserRstSource>$(MSBuildProjectDirectory)\helper\RemoveUserRst.cs</RstRemoveUserRstSource>
+    <!-- SC-044: the tray start RST.msi and RST-Machine.msi also run (their
+         RstStartTray custom action), compiled in: after removing the user's
+         own RST the helper starts the per-machine tray for that user. -->
+    <RstStartTraySource>$(MSBuildProjectDirectory)\..\installer\helper\StartTray.cs</RstStartTraySource>
   </PropertyGroup>
-  <Target Name="RstBuildRemoveUserRst" BeforeTargets="CoreCompile" Inputs="$(RstRemoveUserRstSource)" Outputs="$(RstRemoveUserRstExe)">
+  <Target Name="RstBuildRemoveUserRst" BeforeTargets="CoreCompile" Inputs="$(RstRemoveUserRstSource);$(RstStartTraySource)" Outputs="$(RstRemoveUserRstExe)">
     <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstRemoveUserRstExe)'))" />
-    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstRemoveUserRstExe)&quot; &quot;$(RstRemoveUserRstSource)&quot;" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /main:RemoveUserRst /out:&quot;$(RstRemoveUserRstExe)&quot; &quot;$(RstRemoveUserRstSource)&quot; &quot;$(RstStartTraySource)&quot;" />
   </Target>
 
   <!-- The companion chain, its variables and the BA theme (one checkbox per

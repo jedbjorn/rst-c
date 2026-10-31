@@ -32,6 +32,7 @@ Click the icon to open the window. Right-click it for the menu: **Open RST**, **
 |---|---|
 | The app | `%LocalAppData%\Programs\RST\Tray\RST.Tray.exe` (`RST.msi`, just for you); `C:\Program Files\RST\Tray\RST.Tray.exe` (`RST-Machine.msi`, everyone on this PC) |
 | Start at sign-in | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`RST.msi`) or `HKLM\…\Run` (`RST-Machine.msi`), value `RST` = `"…\RST.Tray.exe" --startup` |
+| Start after installing | The installer starts it, hidden, for the user who ran the install, repair or upgrade (not as SYSTEM). Its `RST-StartTray-<time>-<pid>.log` in that user's `%TEMP%` says what it did. See [installer/README.md](../installer/README.md#when-the-tray-starts). |
 | Settings | `%AppData%\RST\tray_settings.json` |
 | Log | `%AppData%\RST\logs\tray_<yyyyMMdd>.log` (the newest 10 files are kept) |
 | Last update check | `%AppData%\RST\tray_updates.json`: the latest versions found and the ones already announced |
@@ -185,9 +186,11 @@ The tray reads both keys when it starts and again before every daily check, and 
 
 ## Silent installs and scripts (IT)
 
-If the tray is running when `RST.msi` repairs or upgrades RST, Windows closes it and starts it again when the install finishes. The restarted tray is a child process of `msiexec`.
+When an install, repair or upgrade succeeds, the installer starts the tray for the user who ran it, hidden in the notification area. It starts it through that user's Explorer, so the tray runs with the user's normal rights, also when `msiexec` runs from an elevated prompt, and it is not part of `msiexec`'s process tree. It starts none when one already runs, and none when the installer runs as SYSTEM (SCCM, Intune): each user's tray then starts at their next sign-in.
 
-Script waits that follow the whole process tree, such as PowerShell's `Start-Process -Wait`, therefore do not return until the user quits the tray or signs out. Wait on msiexec's own exit instead:
+If the tray is running when `RST.msi` repairs or upgrades RST, Windows closes it first, and the installer then starts it again as above. Windows itself does not restart it from `msiexec` (`MSIDISABLERMRESTART=1`), because that tray would run with `msiexec`'s rights. Only one tray runs.
+
+Script waits that follow the whole process tree, such as PowerShell's `Start-Process -Wait`, can still be held by a tray: when no Explorer of the user runs, the installer starts the tray directly, as a child of the install. Wait on msiexec's own exit instead:
 
 ```powershell
 $p = Start-Process msiexec.exe -ArgumentList '/i RST.msi /qn /norestart' -PassThru
@@ -197,9 +200,7 @@ $p.ExitCode
 
 From `cmd`, use `start /wait msiexec /i RST.msi /qn /norestart`.
 
-A deployment tool that runs the install inside a job object that ends its processes when the job closes will end the restarted tray too. The tray then comes back at the user's next sign-in.
-
-Run per-user `RST.msi` as the user, not from an elevated prompt, so that the restarted tray runs with the user's normal rights.
+A deployment tool that runs the install inside a job object that ends its processes when the job closes can end a tray started that way too. The tray then comes back at the user's next sign-in.
 
 ## Installed for everyone on this PC (IT)
 
@@ -215,7 +216,7 @@ RST-Setup.exe /quiet /norestart InstallScope=machine
 
 Deploy `RST-Machine.msi` on its own as SYSTEM. Run as SYSTEM, `RST-Setup.exe` would register itself, and install companions, for no real user.
 
-- **When the tray starts:** the installer never starts it. A tray started by an elevated installer would run elevated, and its icon would not come back after Explorer restarts. Each user's tray starts at their next sign-in, or when Revit starts it. A repair or upgrade asks a running tray on the installer's desktop to exit, and does not restart it, for the same reason. It comes back at the next sign-in, or with Revit.
+- **When the tray starts:** after a successful install, repair or upgrade, the installer starts the tray for the administrator who ran it, through their own Explorer, so it does not run elevated. A tray started by the elevated installer itself would run elevated, and its icon would not come back after Explorer restarts. Run as SYSTEM, it starts none. Every other user's tray starts at their next sign-in, or when Revit starts it. A repair or upgrade first asks a running tray on the installer's desktop to exit, and ends the other users' trays (below). Those come back at the next sign-in, or with Revit.
 - **Updates are an administrator's job.** A user's tray tells them a newer RST is out, but it does not install a per-machine RST, because that needs an administrator. Deploy the new `RST-Machine.msi`; it upgrades in place. Companions stay per user, so each user's tray keeps them up to date for that user.
 - **Update checks:** to turn them off for every user, set `HKLM\Software\Designs-OS\RST\Tray` `UpdateChecks` = `0` ([below](#turning-update-checks-off-for-everyone-it)).
 - **Signed-in users:** an uninstall, repair or upgrade ends every signed-in user's tray before it removes the files, in every session, also when a deployment tool runs it as SYSTEM. There is nothing to end first. A tray on the installer's own desktop is asked to exit. Every other tray that runs from `C:\Program Files\RST\Tray\` is then ended. A user's own per-user tray (`RST.msi`) is left alone. Each tray comes back at that user's next sign-in, or when Revit starts it. Until then its icon may linger until the pointer passes over it. If an uninstall finds anything else still using RST's files, typically Revit with RST loaded in some session, `msiexec` returns `3010` (restart needed). Each run's `RST-Machine-EndTrays-<time>-<pid>.log` in the installer's `%TEMP%` (as SYSTEM: `C:\Windows\Temp\`) lists what it ended and what still uses the files. See [installer/README.md](../installer/README.md) for how long the restart flag lasts.
@@ -237,7 +238,7 @@ Per-machine mode puts every RST program file under Program Files. AppLocker's de
 
 Uninstalling RST from **Settings → Apps** closes a running tray first, then removes the app and the `RST` Run value. `RST.msi` also removes `%LocalAppData%\RST\Tray\` (the download cache, the updater copy and the install logs). `RST-Machine.msi` leaves each user's `%LocalAppData%\RST\Tray\`, which is per-user data an administrator's uninstall cannot reach and must not delete. The tray's settings and log stay under `%AppData%\RST\` with the rest of your RST data, as profiles and logs always have.
 
-A repair or an upgrade also closes a running tray while its files are replaced. With `RST.msi`, if Windows shows a **Files in Use** dialog, the default choice closes the tray, and Windows starts it again, hidden in the notification area, when the install finishes. `RST-Machine.msi` does not restart it (see [Installed for everyone on this PC (IT)](#installed-for-everyone-on-this-pc-it)): it comes back at the next sign-in, or when Revit starts it. `RST.msi` only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone. `RST-Machine.msi` also ends its own trays in other users' sessions, the ones running from `C:\Program Files\RST\Tray\`, because no one else can close them.
+A repair or an upgrade also closes a running tray while its files are replaced. With `RST.msi`, if Windows shows a **Files in Use** dialog, the default choice closes the tray. When the install finishes, the installer starts the tray again, hidden in the notification area, for the user who ran it. `RST-Machine.msi` does the same for the administrator who ran it, but not as SYSTEM, and not for other signed-in users (see [Installed for everyone on this PC (IT)](#installed-for-everyone-on-this-pc-it)): theirs comes back at the next sign-in, or when Revit starts it. `RST.msi` only ever asks the tray to close. It never forces it to end, so another user's tray on the same computer is left alone. `RST-Machine.msi` also ends its own trays in other users' sessions, the ones running from `C:\Program Files\RST\Tray\`, because no one else can close them.
 
 ## For developers
 

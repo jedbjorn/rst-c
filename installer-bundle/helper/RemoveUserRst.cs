@@ -31,14 +31,18 @@
 // the box is up the helper briefly attaches to the foreground window's input and brings the box to the front. The log
 // says which owner it found and whether the box reached the front.
 //
-// Arguments: the log path (Burn passes [WixBundleLog_RemoveUserRst]; empty -> %TEMP%) and the bundle's UI level
-// ([WixBundleUILevel]: 4 = full UI). Each removal's Windows Installer log goes beside the log. Exit codes: 0 nothing
+// Then (SC-044), once nothing stopped it, it starts the per-machine tray for this user with StartTray.Run
+// (installer/helper/StartTray.cs, compiled into this exe), and logs what that did; it never changes the exit code.
+//
+// Arguments: the log path (Burn passes [WixBundleLog_RemoveUserRst]; empty -> %TEMP%), the bundle's UI level
+// ([WixBundleUILevel]: 4 = full UI) and the per-machine tray ([ProgramFiles64Folder]RST\Tray\RST.Tray.exe; empty or
+// missing -> no tray is started). Each removal's Windows Installer log goes beside the log. Exit codes: 0 nothing
 // to remove or all removed; 3010 removed, a restart is needed; 32 Revit is running; 1602 cancelled; 1612 a product
 // cannot be removed; anything else is the Windows Installer error that stopped it.
 //
 // Built by RST.Setup.wixproj with the .NET Framework 4 compiler that ships in Windows
 // (%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe, C# 5), so it needs no SDK or package and runs on the .NET
-// Framework 4.8 every supported Windows has. Keep it to C# 5.
+// Framework 4.8 every supported Windows has; with installer/helper/StartTray.cs and /main:RemoveUserRst. Keep it to C# 5.
 
 using System;
 using System.Collections.Generic;
@@ -207,6 +211,20 @@ internal static class RemoveUserRst
             : Path.Combine(Path.GetTempPath(), "RST-RemoveUserRst-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".log");
         int uiLevel;
         bool fullUi = args.Length > 1 && int.TryParse(args[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out uiLevel) && uiLevel == BundleUiFull;
+        int result = Remove(log, fullUi);
+
+        // SC-044 (decision #45): RST is now installed for everyone, and this user's own copy is gone: start the
+        // per-machine tray for this user (installer/helper/StartTray.cs: hidden, as this user, never elevated; none
+        // while a tray runs). Here, not in RST-Machine.msi: removing the user's RST.msi above closes every
+        // RST.Tray.exe on this desktop by name (its util:CloseApplication), a tray RST-Machine.msi had started too.
+        // Never on a stop or a failure (Burn then rolls RST-Machine back), and it never changes the exit code.
+        if ((result == ExitSuccess || result == (int)ErrorSuccessRebootRequired) && args.Length > 2 && args[2].Trim().Length > 0)
+            StartTray.Run(args[2].Trim(), delegate(string line) { Write(log, "tray: " + line); });
+        return result;
+    }
+
+    private static int Remove(string log, bool fullUi)
+    {
         try
         {
             Write(log, "RST-Setup: checking, then removing, this user's own RST before RST is installed for everyone on this PC");

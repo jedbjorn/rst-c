@@ -153,6 +153,23 @@
     <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstEndTraysExe)&quot; &quot;$(RstEndTraysSource)&quot;" />
   </Target>
 
+  <!-- Both packages (SC-044): the custom action that starts the tray for the
+       signed-in user after a successful install, repair or upgrade
+       (helper\StartTray.cs, Tray.wxs RstStartTray). Built the same way as
+       RstEndTrays, into the Binary table only, never installed. One output
+       for both scopes: the same source, the same exe. RST-Setup.exe's
+       RemoveUserRst helper compiles the same source into itself. -->
+  <PropertyGroup>
+    <RstStartTraySource>$(MSBuildProjectDirectory)\helper\StartTray.cs</RstStartTraySource>
+    <RstStartTrayExe>$(MSBuildProjectDirectory)\obj\helper\RST.StartTray.exe</RstStartTrayExe>
+    <DefineConstants>$(DefineConstants);RstStartTrayExe=$(RstStartTrayExe)</DefineConstants>
+  </PropertyGroup>
+  <Target Name="RstBuildStartTray" BeforeTargets="CoreCompile" Inputs="$(RstStartTraySource)" Outputs="$(RstStartTrayExe)">
+    <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstStartTrayExe)'))" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstStartTrayExe)&quot; &quot;$(RstStartTraySource)&quot;" />
+  </Target>
+
   <Target Name="RstGenerateTray" BeforeTargets="CoreCompile">
     <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-tray.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstTrayWxs)&quot;" />
     <ItemGroup>
