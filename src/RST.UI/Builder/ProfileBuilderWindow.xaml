@@ -130,14 +130,6 @@
                 </DataTemplate.Triggers>
             </DataTemplate>
 
-            <!-- A pane's header row: the label on the left, its count or button on the right. -->
-            <Style x:Key="PaneHeader" TargetType="Border">
-                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-                <Setter Property="BorderThickness" Value="0,0,0,1" />
-                <Setter Property="Padding" Value="16,0" />
-                <Setter Property="Height" Value="42" />
-            </Style>
-
             <!-- The Profile pane's field labels and help lines. -->
             <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource LabelText}">
                 <Setter Property="Margin" Value="0,0,0,4" />
