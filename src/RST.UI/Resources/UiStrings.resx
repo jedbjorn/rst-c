@@ -29,10 +29,6 @@
   <data name="Common_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
-  <data name="Window_ClosedAfterError" xml:space="preserve">
-    <value>{0} hit an unexpected error and was closed. Revit is fine; the details are in the RST log.</value>
-    <comment>{0} the window title (Health_WindowTitle, Loader_WindowTitle, Builder_WindowTitle). Revit shows it after the command (SC-045).</comment>
-  </data>
   <data name="Dialog_Items" xml:space="preserve">
     <value>Items</value>
   </data>
@@ -115,6 +111,10 @@
   <!-- Health window (spec #16, WU2): every message text from the retired health_viewer.html. -->
   <data name="Health_WindowTitle" xml:space="preserve">
     <value>RST — Health</value>
+  </data>
+  <data name="Health_ClosedAfterError" xml:space="preserve">
+    <value>RST closed Health after an unexpected error. Details are in the RST log.</value>
+    <comment>Revit shows it after the command when the window safety net (Dialogs.WindowGuard) closed the window after an error (SC-045).</comment>
   </data>
   <data name="Health_Heading" xml:space="preserve">
     <value>RST · Health</value>
@@ -416,6 +416,10 @@
   <!-- Loader (spec #16, WU3): the Profile Loader window and the shared ribbon preview. -->
   <data name="Loader_WindowTitle" xml:space="preserve">
     <value>RST — Profile Loader</value>
+  </data>
+  <data name="Loader_ClosedAfterError" xml:space="preserve">
+    <value>RST closed the Profile Loader after an unexpected error. Details are in the RST log.</value>
+    <comment>Revit shows it after the command when the window safety net (Dialogs.WindowGuard) closed the window after an error (SC-045).</comment>
   </data>
   <data name="Loader_Title" xml:space="preserve">
     <value>Profile Selector</value>
@@ -723,6 +727,10 @@
   </data>
   <data name="Builder_WindowTitle" xml:space="preserve">
     <value>RST — Profile Builder</value>
+  </data>
+  <data name="Builder_ClosedAfterError" xml:space="preserve">
+    <value>RST closed the Profile Builder after an unexpected error. Unsaved changes were not kept. Details are in the RST log.</value>
+    <comment>Revit shows it after the command when the window safety net (Dialogs.WindowGuard) closed the window after an error (SC-045). Unsaved edits are discarded, never saved from a faulted state.</comment>
   </data>
   <data name="Builder_Title" xml:space="preserve">
     <value>Profile Builder</value>

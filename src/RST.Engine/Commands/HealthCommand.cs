@@ -55,7 +55,7 @@ public sealed class HealthCommand : IExternalCommand
             {
                 // SC-045: the window safety net (WindowGuard) logged the error and closed the window.
                 Log.Warning("=== Health session closed after a UI error: duration={Ms}ms ===", sw.ElapsedMilliseconds);
-                message = UiStrings.Window_ClosedAfterError(UiStrings.Health_WindowTitle);
+                message = UiStrings.Health_ClosedAfterError;
                 return Result.Failed;
             }
             Log.Information("=== Health session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);

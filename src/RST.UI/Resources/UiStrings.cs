@@ -28,9 +28,6 @@ public static class UiStrings
 
     public static string Common_Cancel => Get(nameof(Common_Cancel));
 
-    /// <summary>Revit's message when the window safety net (Dialogs.WindowGuard) closed {0} after an error.</summary>
-    public static string Window_ClosedAfterError(object? arg0) => Format(nameof(Window_ClosedAfterError), arg0);
-
     public static string Dialog_Items => Get(nameof(Dialog_Items));
 
     public static string Edit_Cut => Get(nameof(Edit_Cut));
@@ -84,6 +81,9 @@ public static class UiStrings
     // Health window (spec #16, WU2).
 
     public static string Health_WindowTitle => Get(nameof(Health_WindowTitle));
+
+    /// <summary>Revit's message after the window safety net (Dialogs.WindowGuard) closed the window (SC-045).</summary>
+    public static string Health_ClosedAfterError => Get(nameof(Health_ClosedAfterError));
 
     public static string Health_Heading => Get(nameof(Health_Heading));
 
@@ -274,6 +274,9 @@ public static class UiStrings
     // ── Loader (spec #16, WU3: the Profile Loader window and the shared ribbon preview) ──
 
     public static string Loader_WindowTitle => Get(nameof(Loader_WindowTitle));
+
+    /// <summary>Revit's message after the window safety net (Dialogs.WindowGuard) closed the window (SC-045).</summary>
+    public static string Loader_ClosedAfterError => Get(nameof(Loader_ClosedAfterError));
 
     public static string Loader_Title => Get(nameof(Loader_Title));
 
@@ -470,6 +473,9 @@ public static class UiStrings
     // The Profile Builder (spec #16, WU4).
 
     public static string Builder_WindowTitle => Get(nameof(Builder_WindowTitle));
+
+    /// <summary>Revit's message after the window safety net (Dialogs.WindowGuard) closed the window (SC-045).</summary>
+    public static string Builder_ClosedAfterError => Get(nameof(Builder_ClosedAfterError));
 
     public static string Builder_Title => Get(nameof(Builder_Title));
 

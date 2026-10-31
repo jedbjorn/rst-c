@@ -40,7 +40,7 @@ public sealed class LoaderCommand : IExternalCommand
             {
                 // SC-045: the window safety net (WindowGuard) logged the error and closed the window.
                 Log.Warning("=== Loader session closed after a UI error: duration={Ms}ms ===", sw.ElapsedMilliseconds);
-                message = UiStrings.Window_ClosedAfterError(UiStrings.Loader_WindowTitle);
+                message = UiStrings.Loader_ClosedAfterError;
                 return Result.Failed;
             }
             Log.Information("=== Loader session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
