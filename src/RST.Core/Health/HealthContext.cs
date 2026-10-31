@@ -28,13 +28,11 @@ public sealed class HealthContext
     public bool?   IsWorkshared     { get; init; }
     public bool?   IsCloud          { get; init; }
 
-    // Live telemetry session, when the collector is running — the
-    // Activity tab's current-session block ticks from the start ts, and
-    // the aggregator extends this session's open interval to now. Null
-    // until the consent/collector wiring populates them (telemetry
-    // Build Plan step 5).
-    public string?         TelemetrySessionGuid     { get; init; }
-    public DateTimeOffset? TelemetrySessionStartUtc { get; init; }
+    // Live telemetry session, when the collector is running: the
+    // Activity read extends this session's file to now, which gives
+    // Activity (Session) (spec #24). Null when the collector is not
+    // running — Activity (Session) then reads "—".
+    public string? TelemetrySessionGuid { get; init; }
 
     public static HealthContext Empty { get; } = new();
 }

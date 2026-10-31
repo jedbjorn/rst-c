@@ -43,14 +43,10 @@ public sealed class HealthCommand : IExternalCommand
             // The Activity footer toggle routes back to the live
             // collector (markers + heartbeat); resolved at invoke time
             // so a collector that failed to start degrades to a no-op —
-            // the preference still persists via the service. The session
-            // start is a live read for the same reason: a mid-window
-            // enable emits session_start, and the clock should tick on
-            // the very next refresh.
+            // the preference still persists via the service.
             RevitThemeDetector.ApplyToWindows();
             var closedNormally = HealthLauncher.Show(commandData.Application.MainWindowHandle, context,
-                telemetryToggled: enabled => RstApplication.GetTelemetry()?.SetEnabled(enabled),
-                liveSessionStartUtc: () => RstApplication.GetTelemetry()?.SessionStartUtc);
+                telemetryToggled: enabled => RstApplication.GetTelemetry()?.SetEnabled(enabled));
             if (!closedNormally)
             {
                 // SC-045: the window safety net (WindowGuard) logged the error and closed the window.
@@ -170,7 +166,6 @@ public sealed class HealthCommand : IExternalCommand
             IsWorkshared = isWorkshared,
             IsCloud = isCloud,
             TelemetrySessionGuid = telemetry?.SessionGuid,
-            TelemetrySessionStartUtc = telemetry?.SessionStartUtc,
         };
     }
 

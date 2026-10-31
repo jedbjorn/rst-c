@@ -134,7 +134,7 @@ public class WindowStressTests
             Snapshot = HealthSamples.Snapshot(),
             ScanResult = HealthSamples.Snapshot(),
             Targets = [new RST.Core.Profiles.CleanupTarget { Id = "journals", Name = "Journals", Path = "%LocalAppData%" }],
-            Activity = days => new RST.Core.Health.ActivityData { RangeDays = days, SessionStartUtc = Now.AddHours(-1) },
+            Activity = () => new RST.Core.Health.ActivityData { Model = RST.Core.Telemetry.Rollups.ModelActivity.Empty },
         };
         var vm = new HealthViewModel(service, new FakeDialogs(), new HealthViewModelOptions
         {
@@ -144,7 +144,6 @@ public class WindowStressTests
                 work();
                 return scanGate.Task;
             },
-            StartTimer = (_, _) => new NoTimer(),
             Now = () => Now,
             Culture = CultureInfo.GetCultureInfo("en-US"),
             Zone = TimeZoneInfo.Utc,

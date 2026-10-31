@@ -103,6 +103,18 @@ public static class HealthFormat
         return JsNumber(JsRound(h * 10) / 10) + "h";
     }
 
+    /// <summary>
+    /// Active time (spec #24): whole minutes, "0m", "11m", "1h 05m", "26h 00m". Active time is
+    /// counted in edit-minute spans, so seconds would be noise.
+    /// </summary>
+    public static string Active(double? seconds)
+    {
+        if (seconds is not { } s || !double.IsFinite(s)) return Missing;
+        var minutes = JsRound(Math.Max(0, s) / 60);
+        if (minutes < 60) return JsNumber(minutes) + "m";
+        return JsNumber(Math.Floor(minutes / 60)) + "h " + JsNumber(minutes % 60).PadLeft(2, '0') + "m";
+    }
+
     /// <summary><c>fmtElapsed</c>: milliseconds as HH:MM:SS; <see cref="Missing"/> when negative.</summary>
     public static string Elapsed(double? ms)
     {

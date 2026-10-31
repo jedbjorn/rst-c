@@ -255,7 +255,7 @@ public sealed class DeviceHealthService : IHealthService
     private static string Key(CleanupTarget t) => string.IsNullOrEmpty(t.Id) ? t.Name ?? "" : t.Id;
 
     // The Models page (spec #25 WU3) owns activity; the Device page never asks for it.
-    public ActivityData GetActivity(int rangeDays) =>
+    public ActivityData GetActivity() =>
         throw new NotSupportedException("The tray's Device page has no Activity tab.");
 
     public TelemetryToggleResult SetTelemetryEnabled(bool enabled) =>

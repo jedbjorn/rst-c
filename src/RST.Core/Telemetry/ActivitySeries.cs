@@ -1,17 +1,12 @@
-// ActivitySeries.cs — the Activity tab's precomputed series, as returned
-// by ActivityAggregator. RST.UI's Health window reads these objects
-// directly (HealthService); only the aggregator parses the JSONL outbox.
+// ActivitySeries.cs — small shared telemetry read types: a timed event
+// point, the identity ladder's level names and the outbox's status line.
+// From spec #24 the Activity tab reads the per-model rollups
+// (ModelActivityReader); the old outbox-replay aggregator lives on only as
+// the test harness of SessionReplay's join rules (RST.Tests).
 //
-// All timestamps stay UTC on the wire — the dashboard converts for
-// display. Per-day buckets are calendar days in the zone the caller
-// passed to the aggregator (the user's local zone in production).
+// All timestamps stay UTC; the UI converts for display.
 
 namespace RST.Core.Telemetry;
-
-/// <summary>Hours the current file was open on one calendar day. The
-/// per-day series carries one point for every day in range, zeros
-/// included.</summary>
-public sealed record DayOpenHoursPoint(DateOnly Date, double Hours);
 
 /// <summary>One timed event — a load (doc_opening → doc_opened) or a
 /// sync (sync_start → sync_end) — plotted at <paramref name="Ts"/> with
@@ -34,39 +29,10 @@ public static class ActivityMatchKinds
 }
 
 /// <summary>Footer status line for the Activity tab: what the outbox
-/// holds right now. Sizes are file bytes (JSONL on disk), oldest is the
-/// first parseable event's ts across all files — null on an empty or
-/// unreadable outbox.</summary>
-public sealed record OutboxStatus(int FileCount, long TotalSizeBytes, DateTimeOffset? OldestEventTs)
+/// holds right now — file count and bytes on disk (JSONL). The footer's
+/// "since" is the current model's oldest rollup day (spec #24), not the
+/// outbox's.</summary>
+public sealed record OutboxStatus(int FileCount, long TotalSizeBytes)
 {
-    public static readonly OutboxStatus Empty = new(0, 0, null);
-}
-
-public sealed class ActivitySeries
-{
-    public static readonly ActivitySeries Empty = new();
-
-    /// <summary>See <see cref="ActivityMatchKinds"/>; null when no key
-    /// was usable and the series are necessarily empty.</summary>
-    public string? MatchedKeyKind { get; init; }
-
-    /// <summary>When the live session (the caller's
-    /// <c>liveSessionGuid</c>) currently has the file open: the ts its
-    /// earliest still-open interval started — the "open since" the
-    /// current-session block shows. Null when no live session was named,
-    /// the file isn't open in it, or collection was toggled off.</summary>
-    public DateTimeOffset? LiveOpenSinceUtc { get; init; }
-
-    /// <summary>One point per calendar day in range, oldest first,
-    /// zero-hour days included.</summary>
-    public IReadOnlyList<DayOpenHoursPoint> PerDayOpenHours { get; init; } =
-        Array.Empty<DayOpenHoursPoint>();
-
-    /// <summary>Load durations, one per open event in range, oldest first.</summary>
-    public IReadOnlyList<DurationPoint> OpenEvents { get; init; } =
-        Array.Empty<DurationPoint>();
-
-    /// <summary>Sync durations, one per sync in range, oldest first.</summary>
-    public IReadOnlyList<DurationPoint> SyncEvents { get; init; } =
-        Array.Empty<DurationPoint>();
+    public static readonly OutboxStatus Empty = new(0, 0);
 }

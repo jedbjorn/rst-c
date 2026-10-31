@@ -364,11 +364,15 @@
   <data name="Health_CollectionFailedTitle" xml:space="preserve">
     <value>Could not change collection</value>
   </data>
-  <data name="Health_StatSessionTimer" xml:space="preserve">
-    <value>Session Timer</value>
+  <data name="Health_StatActivitySession" xml:space="preserve">
+    <value>Activity (Session)</value>
   </data>
-  <data name="Health_StatSessionTotal" xml:space="preserve">
-    <value>Session Total</value>
+  <data name="Health_StatActivityTotal" xml:space="preserve">
+    <value>Activity (Total)</value>
+  </data>
+  <data name="Health_OpenedAt" xml:space="preserve">
+    <value>opened {0}</value>
+    <comment>{0} the local time the current model was opened in this Revit session.</comment>
   </data>
   <data name="Health_StatLongestSync" xml:space="preserve">
     <value>Longest Sync</value>
@@ -382,18 +386,40 @@
   <data name="Health_StatFileSize" xml:space="preserve">
     <value>File Size</value>
   </data>
-  <data name="Health_FileOpen" xml:space="preserve">
-    <value>file open {0}</value>
-    <comment>{0} how long the current file has been open, HH:MM:SS.</comment>
-  </data>
-  <data name="Health_ChartSession" xml:space="preserve">
-    <value>Session time — this file</value>
+  <data name="Health_ChartActive" xml:space="preserve">
+    <value>Active time — this file</value>
   </data>
   <data name="Health_ChartOpen" xml:space="preserve">
     <value>Opening time — this file</value>
   </data>
   <data name="Health_ChartSync" xml:space="preserve">
     <value>Sync history — this file</value>
+  </data>
+  <data name="Health_ChartHealth" xml:space="preserve">
+    <value>Health — this file</value>
+  </data>
+  <data name="Health_ChartWeekPoint" xml:space="preserve">
+    <value>Week of {0} — {1}</value>
+    <comment>A weekly chart dot's tooltip. {0} the week's Monday (yyyy-MM-dd); {1} the week's total.</comment>
+  </data>
+  <data name="Health_ChartWeekAverage" xml:space="preserve">
+    <value>Week of {0} — {1} average of {2}</value>
+    <comment>A weekly average dot's tooltip. {0} the week's Monday (yyyy-MM-dd); {1} the average duration; {2} the number of opens or syncs.</comment>
+  </data>
+  <data name="Health_ColourGreen" xml:space="preserve">
+    <value>Green</value>
+  </data>
+  <data name="Health_ColourYellow" xml:space="preserve">
+    <value>Yellow</value>
+  </data>
+  <data name="Health_ColourAmber" xml:space="preserve">
+    <value>Amber</value>
+  </data>
+  <data name="Health_ColourRed" xml:space="preserve">
+    <value>Red</value>
+  </data>
+  <data name="Health_ColourGrey" xml:space="preserve">
+    <value>Not enough data</value>
   </data>
   <data name="Health_ChartPoint" xml:space="preserve">
     <value>{0} — {1}</value>

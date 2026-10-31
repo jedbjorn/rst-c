@@ -1,13 +1,16 @@
 // rst-c's own (not vendored): the Health window's view-model, porting the flows of the retired
 // src/RST.UI/Assets/health_viewer.html (spec #16, WU2): open, Scan System, Clean Junk Files (the
-// Junk modal, confirm, Cleaning, the result), the Activity tab (stat cards, live session timer,
-// range pills, three charts) and the collection toggle. Scan and Clean run off the UI thread
-// (Planner default 8); while either runs, every command and input is disabled.
+// Junk modal, confirm, Cleaning, the result), the Activity tab and the collection toggle. Scan and
+// Clean run off the UI thread (Planner default 8); while either runs, every command and input is
+// disabled. From spec #24 the Activity tab reads the current model's rollups (IHealthService.
+// GetActivity → ModelActivityReader.ReadCurrentModel) and renders them through a
+// ModelActivityPanel: Activity (Session) and (Total) instead of the session timer and open hours,
+// four charts, per week at 6M. It refreshes when the tab is shown, on a range change, after a
+// collection toggle and after Scan System; nothing ticks.
 
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
-using System.Windows.Threading;
 using RST.Core.Health;
 using RST.Core.Telemetry;
 using RST.UI.Controls;
@@ -18,14 +21,11 @@ using RST.Core.Logging;
 
 namespace RST.UI.Health;
 
-/// <summary>The seams a test replaces: the background runner, the one-second ticker, the clock, culture and zone.</summary>
+/// <summary>The seams a test replaces: the background runner, the clock, culture and zone.</summary>
 public sealed class HealthViewModelOptions
 {
     /// <summary>Runs slow work (scan, clean) off the UI thread. Default: <see cref="Task.Run(Action)"/>.</summary>
     public Func<Action, Task> RunInBackground { get; init; } = Task.Run;
-
-    /// <summary>Starts a repeating tick and returns a handle that stops it. Default: a <see cref="DispatcherTimer"/>.</summary>
-    public Func<TimeSpan, Action, IDisposable> StartTimer { get; init; } = DispatcherRepeat;
 
     public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.UtcNow;
 
@@ -38,19 +38,6 @@ public sealed class HealthViewModelOptions
 
     /// <summary>Where the snapshot is shown: the add-in (default) or the tray's Device page (spec #25), which lists the installed Revit years.</summary>
     public HealthScope Scope { get; init; } = HealthScope.Revit;
-
-    private static IDisposable DispatcherRepeat(TimeSpan interval, Action tick)
-    {
-        var timer = new DispatcherTimer { Interval = interval };
-        timer.Tick += (_, _) => tick();
-        timer.Start();
-        return new Stop(timer.Stop);
-    }
-
-    private sealed class Stop(Action stop) : IDisposable
-    {
-        public void Dispose() => stop();
-    }
 }
 
 public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
@@ -76,8 +63,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     private bool _telemetryEnabled;
     private string _telemetryStatusLine = HealthFormat.Missing;
     private readonly SynchronizationContext? _context;
-    private IDisposable? _ticker;
-    private int _tickerGeneration;
+    private bool _activityLoaded;
 
     public HealthViewModel(IHealthService service, IDialogService dialogs, HealthViewModelOptions? options = null)
     {
@@ -93,22 +79,11 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
             if (e.PropertyName == nameof(BusyState.IsBusy)) OnBusyChanged();
         };
 
-        SessionTimer = new StatCard(UiStrings.Health_StatSessionTimer);
-        SessionTotal = new StatCard(UiStrings.Health_StatSessionTotal);
-        LongestSync = new StatCard(UiStrings.Health_StatLongestSync);
-        LongestOpen = new StatCard(UiStrings.Health_StatLongestOpen);
-        WarningCount = new StatCard(UiStrings.Health_StatWarnings);
-        FileSize = new StatCard(UiStrings.Health_StatFileSize);
-        StatCards = [SessionTimer, SessionTotal, LongestSync, LongestOpen, WarningCount, FileSize];
+        Activity = new ModelActivityPanel(includeSession: true, _culture, _zone);
 
         Ranges = ActivityRanges.Pills
             .Select(p => new RangeOption(p.Days, p.Label, p.Days == ActivityRanges.Default, OnRangeChosen))
             .ToList();
-
-        SessionChart = new ChartCard(UiStrings.Health_ChartSession);
-        OpenChart = new ChartCard(UiStrings.Health_ChartOpen);
-        SyncChart = new ChartCard(UiStrings.Health_ChartSync);
-        Charts = [SessionChart, OpenChart, SyncChart];
 
         ScanCommand = new AsyncRelayCommand(ScanAsync, () => CanStartWork);
         CleanCommand = new RelayCommand(OpenJunk, () => CanStartWork);
@@ -140,7 +115,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         private set => SetField(ref _captured, value);
     }
 
-    /// <summary>0 = Health, 1 = Activity. Switching to Activity loads it; leaving it stops the session timer.</summary>
+    /// <summary>0 = Health, 1 = Activity. Switching to Activity (re)loads it.</summary>
     public int SelectedTab
     {
         get => _selectedTab;
@@ -153,7 +128,6 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
             UiGuard.Run("Health: switch tab", () =>
             {
                 if (IsActivityTab) LoadActivity();
-                else StopTicker();
             });
         }
     }
@@ -219,20 +193,11 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     // ── Activity tab ────────────────────────────────────────────────────
 
-    public StatCard SessionTimer { get; }
+    /// <summary>The current model's cards and charts.</summary>
+    public ModelActivityPanel Activity { get; }
 
-    public StatCard SessionTotal { get; }
-
-    public StatCard LongestSync { get; }
-
-    public StatCard LongestOpen { get; }
-
-    public StatCard WarningCount { get; }
-
-    public StatCard FileSize { get; }
-
-    /// <summary>The six cards in order: Session Timer, Session Total, Longest Sync, Longest Open Time, Warning Count, File Size.</summary>
-    public IReadOnlyList<StatCard> StatCards { get; }
+    /// <summary>The six cards in order: Activity (Session), Activity (Total), Longest Sync, Longest Open Time, Warning Count, File Size.</summary>
+    public IReadOnlyList<StatCard> StatCards => Activity.StatCards;
 
     public IReadOnlyList<RangeOption> Ranges { get; }
 
@@ -240,16 +205,17 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     public int RangeDays
     {
         get => _rangeDays;
-        private set => SetField(ref _rangeDays, value);
+        private set
+        {
+            if (SetField(ref _rangeDays, value)) OnPropertyChanged(nameof(Range));
+        }
     }
 
-    public ChartCard SessionChart { get; }
+    /// <summary>The selected range pill.</summary>
+    public ActivityRange Range => ActivityRanges.For(RangeDays);
 
-    public ChartCard OpenChart { get; }
-
-    public ChartCard SyncChart { get; }
-
-    public IReadOnlyList<ChartCard> Charts { get; }
+    /// <summary>The four charts in order: Active time, Opening time, Sync history, Health.</summary>
+    public IReadOnlyList<ChartCard> Charts => Activity.Charts;
 
     /// <summary>The Collection toggle. Setting it saves the choice; a failure puts it back and says why.</summary>
     public bool TelemetryEnabled
@@ -264,7 +230,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         }
     }
 
-    /// <summary>"collection on · 12 files · 1.4 MB · since 7/1/2026".</summary>
+    /// <summary>"collection on · 12 files · 1.4 MB · since 7/1/2026"; "since" is the current model's oldest day with activity.</summary>
     public string TelemetryStatusLine
     {
         get => _telemetryStatusLine;
@@ -308,7 +274,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         RenderOrFallback(snap);
     }
 
-    /// <summary>Scan System: scans off the UI thread, then re-renders, or toasts "Scan failed".</summary>
+    /// <summary>Scan System: scans off the UI thread, then re-renders (and refreshes the Activity tab once it has been shown), or toasts "Scan failed".</summary>
     public async Task ScanAsync()
     {
         if (!CanStartWork) return;
@@ -318,6 +284,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
             HealthSnapshot? snap = null;
             await _options.RunInBackground(() => snap = _service.RunScan());
             RenderOrFallback(snap);
+            if (_activityLoaded) LoadActivity();
         }
         catch (Exception ex)
         {
@@ -403,13 +370,14 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         }
     }
 
-    /// <summary>Reloads the Activity tab for the selected range.</summary>
+    /// <summary>Re-reads the current model's activity and renders it for the selected range. Writes nothing.</summary>
     public void LoadActivity()
     {
+        _activityLoaded = true;
         ActivityData data;
         try
         {
-            data = _service.GetActivity(RangeDays);
+            data = _service.GetActivity();
         }
         catch (Exception ex)
         {
@@ -430,7 +398,6 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     public void Dispose()
     {
         _service.WorkFinished -= OnWorkFinished;
-        StopTicker();
         Toast.Dismiss();
     }
 
@@ -479,71 +446,19 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     private void RenderActivity(ActivityData data)
     {
-        StartTicker(data.SessionStartUtc, data.CurrentFileOpenUtc);
-        RenderTelemetryStatus(data.Status);
-        RenderStats(ActivityStats.From(data.File));
-
-        var file = data.File;
-        if (file is null)
+        RenderTelemetryStatus(data.Status, data.Model?.OldestDay);
+        if (data.Model is not { } model)
         {
-            foreach (var chart in Charts) chart.Set(null, UiStrings.Health_NoModelTitle, UiStrings.Health_NoModelHint);
+            Activity.RenderNoModel();
             return;
         }
-
-        // Session time: one point per calendar day, zeros included; an all-zero range has no history.
-        var perDay = file.PerDayOpenHours.Select(p => new ActivityChartPoint(
-            LocalMidnightMs(p.Date), p.Hours,
-            UiStrings.Health_ChartPoint(p.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), HealthFormat.HoursShort(p.Hours)))).ToList();
-        if (perDay.Any(p => p.Y > 0))
-            SessionChart.Set(ActivityChartLayout.Build(perDay, HealthFormat.HoursAxis, TickLabel));
-        else
-            SessionChart.Set(null, UiStrings.Health_NoTimeTitle, file.MatchedKeys is null ? UiStrings.Health_NoKeyHint : "");
-
-        SetDurationChart(OpenChart, file.OpenEvents, UiStrings.Health_NoOpensTitle);
-
-        // Sync history only applies to workshared and cloud models.
-        if (file.IsWorkshared != true && file.IsCloud != true)
-            SyncChart.Set(null, UiStrings.Health_NotWorksharedTitle, UiStrings.Health_NotWorksharedHint);
-        else
-            SetDurationChart(SyncChart, file.SyncEvents, UiStrings.Health_NoSyncsTitle);
+        var facts = new ModelActivityFacts(data.IsWorkshared, data.IsCloud, data.WarningsCount, data.FileSizeBytes);
+        Activity.Render(model, Range, ActiveTime.LocalDay(_options.Now(), _zone), facts);
     }
 
-    private void SetDurationChart(ChartCard card, IReadOnlyList<DurationPoint> events, string emptyTitle)
-    {
-        var points = events.Select(e => new ActivityChartPoint(
-            e.Ts.ToUnixTimeMilliseconds(), e.Seconds,
-            UiStrings.Health_ChartPoint(LocalTime(e.Ts).ToString("G", _culture), HealthFormat.Dur(e.Seconds)))).ToList();
-        switch (ActivityChartMath.Mode(points.Count))
-        {
-            case ChartMode.Empty:
-                card.Set(null, emptyTitle);
-                break;
-            case ChartMode.Dots:
-                card.Set(ActivityChartLayout.Build(points, HealthFormat.DurAxis, TickLabel), "", UiStrings.Health_NotEnoughHistory);
-                break;
-            default:
-                card.Set(ActivityChartLayout.Build(points, HealthFormat.DurAxis, TickLabel));
-                break;
-        }
-    }
+    private void RenderActivityError(string message) => Activity.RenderError(message);
 
-    private void RenderActivityError(string message)
-    {
-        StopTicker();
-        RenderStats(null);
-        foreach (var chart in Charts) chart.Set(null, UiStrings.Health_ActivityFailedTitle, message);
-    }
-
-    private void RenderStats(ActivityStats? s)
-    {
-        SessionTotal.Value = s is null ? HealthFormat.Missing : HealthFormat.HoursShort(s.TotalHours);
-        LongestSync.Value = s is null ? HealthFormat.Missing : HealthFormat.Dur(s.LongestSyncSeconds);
-        LongestOpen.Value = s is null ? HealthFormat.Missing : HealthFormat.Dur(s.LongestOpenSeconds);
-        WarningCount.Value = s is null ? HealthFormat.Missing : HealthFormat.Num(s.WarningsCount, _culture);
-        FileSize.Value = s is null ? HealthFormat.Missing : HealthFormat.Bytes(s.FileSizeBytes);
-    }
-
-    private void RenderTelemetryStatus(TelemetryStatus status)
+    private void RenderTelemetryStatus(TelemetryStatus status, DateOnly? since)
     {
         SetTelemetryState(status.Enabled);
         var bits = new List<string>
@@ -552,8 +467,8 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
             UiStrings.Health_StatusFiles(HealthFormat.Num(status.OutboxFileCount, _culture)),
             HealthFormat.Bytes(status.OutboxSizeBytes),
         };
-        if (status.OldestEventTs is { } oldest)
-            bits.Add(UiStrings.Health_StatusSince(LocalTime(oldest).ToString("d", _culture)));
+        if (since is { } day)
+            bits.Add(UiStrings.Health_StatusSince(day.ToDateTime(TimeOnly.MinValue).ToString("d", _culture)));
         TelemetryStatusLine = string.Join(" · ", bits);
     }
 
@@ -582,39 +497,6 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     private void SetTelemetryState(bool enabled) => SetField(ref _telemetryEnabled, enabled, nameof(TelemetryEnabled));
 
-    // ── session timer ───────────────────────────────────────────────────
-
-    /// <summary>True while the one-second session tick runs.</summary>
-    public bool IsTimerRunning => _ticker is not null;
-
-    private void StartTicker(DateTimeOffset? start, DateTimeOffset? fileOpen)
-    {
-        StopTicker();
-        void Tick()
-        {
-            var now = _options.Now();
-            SessionTimer.Value = start is { } s ? HealthFormat.Elapsed((now - s).TotalMilliseconds) : HealthFormat.Missing;
-            SessionTimer.Sub = fileOpen is { } f ? UiStrings.Health_FileOpen(HealthFormat.Elapsed((now - f).TotalMilliseconds)) : "";
-        }
-        Tick();
-        if (start is null && fileOpen is null) return;
-        var generation = ++_tickerGeneration;
-        _ticker = _options.StartTimer(TimeSpan.FromSeconds(1), () =>
-        {
-            if (generation == _tickerGeneration) Tick();
-        });
-        OnPropertyChanged(nameof(IsTimerRunning));
-    }
-
-    private void StopTicker()
-    {
-        if (_ticker is null) return;
-        _tickerGeneration++;
-        _ticker.Dispose();
-        _ticker = null;
-        OnPropertyChanged(nameof(IsTimerRunning));
-    }
-
     // ── helpers ─────────────────────────────────────────────────────────
 
     private void OnBusyChanged()
@@ -629,17 +511,4 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     private void Inform(string title, string text, BannerKind kind) => Toast.Show(text, kind, title: title);
 
     private static string Message(Exception ex) => string.IsNullOrEmpty(ex.Message) ? UiStrings.Health_UnknownError : ex.Message;
-
-    private DateTimeOffset LocalTime(DateTimeOffset ts) => TimeZoneInfo.ConvertTime(ts, _zone);
-
-    /// <summary>JS <c>Date.parse(date + 'T00:00:00')</c>: the day's local midnight, in epoch milliseconds.</summary>
-    private double LocalMidnightMs(DateOnly date)
-    {
-        var local = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, _zone.GetUtcOffset(local)).ToUnixTimeMilliseconds();
-    }
-
-    /// <summary>A date tick: JS <c>toLocaleDateString(undefined, { month: 'short', day: 'numeric' })</c>.</summary>
-    private string TickLabel(double ms) =>
-        HealthFormat.ShortMonthDay(LocalTime(DateTimeOffset.FromUnixTimeMilliseconds((long)ms)), _culture);
 }

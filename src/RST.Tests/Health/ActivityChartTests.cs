@@ -149,56 +149,6 @@ public class ActivityChartTests
         Assert.Equal(7, ActivityRanges.Default);
     }
 
-    [Theory]
-    [InlineData(-3, 7)]
-    [InlineData(7, 7)]
-    [InlineData(8, 30)]
-    [InlineData(30, 30)]
-    [InlineData(31, 90)]
-    [InlineData(90, 90)]
-    [InlineData(91, 180)]
-    [InlineData(365, 180)]
-    public void Range_ClampsToTheNearestAllowedRange(int requested, int expected) =>
-        Assert.Equal(expected, ActivityRanges.Clamp(requested));
-
-    [Fact]
-    public void StatValues_NoModelOpen_IsNull() => Assert.Null(ActivityStats.From(null));
-
-    [Fact]
-    public void StatValues_ComeFromTheChartedSeries_AndPassThePointInTimeValues()
-    {
-        var t = DateTimeOffset.UnixEpoch;
-        var s = ActivityStats.From(new ActivityFile
-        {
-            PerDayOpenHours = [new(new DateOnly(2026, 7, 20), 2.5), new(new DateOnly(2026, 7, 21), 1.5), new(new DateOnly(2026, 7, 22), 0)],
-            OpenEvents = [new(t, 12), new(t, 47.5), new(t, 30)],
-            SyncEvents = [new(t, 90), new(t, 8)],
-            WarningsCount = 1234,
-            FileSizeMb = 512,
-        });
-        Assert.NotNull(s);
-        Assert.Equal(4, s!.TotalHours);
-        Assert.Equal(47.5, s.LongestOpenSeconds);
-        Assert.Equal(90, s.LongestSyncSeconds);
-        Assert.Equal(1234, s.WarningsCount);
-        Assert.Equal(512d * 1024 * 1024, s.FileSizeBytes);
-    }
-
-    [Fact]
-    public void StatValues_EmptySeries_ZeroTotal_NullMaxes_NullPointInTime()
-    {
-        var s = ActivityStats.From(new ActivityFile());
-        Assert.NotNull(s);
-        Assert.Equal(0, s!.TotalHours);
-        Assert.Null(s.LongestOpenSeconds);
-        Assert.Null(s.LongestSyncSeconds);
-        Assert.Null(s.WarningsCount);
-        Assert.Null(s.FileSizeBytes);
-        // The cards then read "0h" and "—".
-        Assert.Equal("0h", HealthFormat.HoursShort(s.TotalHours));
-        Assert.Equal("—", HealthFormat.Dur(s.LongestOpenSeconds));
-    }
-
     [Fact]
     public void Layout_Empty_HasNothingToDraw()
     {

@@ -411,7 +411,6 @@ public sealed class FocusReturnTests : IDisposable
                 work();
                 return Task.CompletedTask;
             },
-            StartTimer = (_, _) => new NoTimer(),
             Now = () => Now,
             Culture = culture,
             Zone = TimeZoneInfo.Utc,

@@ -68,6 +68,41 @@ public static class OutboxFiles
     }
 
     /// <summary>
+    /// The Activity footer's status line: file count and total bytes on
+    /// disk. Never throws; a missing dir is an empty outbox, a file whose
+    /// length cannot be read still counts.
+    /// </summary>
+    public static OutboxStatus ReadStatus(string outboxDir, Action<string>? log = null)
+    {
+        string[] files;
+        try
+        {
+            if (!Directory.Exists(outboxDir)) return OutboxStatus.Empty;
+            files = Directory.GetFiles(outboxDir, "*" + Extension);
+        }
+        catch (Exception ex)
+        {
+            SafeLog(log, "telemetry status scan failed: " + ex.Message);
+            return OutboxStatus.Empty;
+        }
+        if (files.Length == 0) return OutboxStatus.Empty;
+
+        long totalBytes = 0;
+        foreach (var path in files)
+        {
+            try { totalBytes += new FileInfo(path).Length; }
+            catch (Exception ex) { SafeLog(log, "telemetry status size failed for " + Path.GetFileName(path) + ": " + ex.Message); }
+        }
+        return new OutboxStatus(files.Length, totalBytes);
+    }
+
+    private static void SafeLog(Action<string>? log, string message)
+    {
+        try { log?.Invoke(message); }
+        catch { /* logging must never take the status line down */ }
+    }
+
+    /// <summary>
     /// Read every parseable event in file order, skipping blank and
     /// unparseable lines (a crash costs at most one partial trailing
     /// line). Opens with FileShare.ReadWrite so live files stay readable.

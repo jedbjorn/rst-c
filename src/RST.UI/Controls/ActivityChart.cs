@@ -2,7 +2,9 @@
 // replacing buildChartSvg's inline SVG in the retired health_viewer.html. It draws an
 // RST.Core ActivityChartLayout in the same 760 x 190 logical box: gridlines with y labels, date
 // ticks, the monotone curve as a WPF Path of BezierSegments, and dots with hover tooltips. The box
-// scales to the card's width, as the SVG did (width 100 %, height auto).
+// scales to the card's width, as the SVG did (width 100 %, height auto). A dot with a Tone (the
+// Health trend chart, spec #24) is filled with that severity's brush; a gridline with no label
+// (the trend chart's band edges) draws only its line.
 
 using System.Windows;
 using System.Windows.Controls;
@@ -16,6 +18,9 @@ public sealed class ActivityChart : Viewbox
 {
     public const double DotRadius = 3;
 
+    /// <summary>A toned dot (the Health trend chart) is larger: its colour is the reading.</summary>
+    public const double TonedDotRadius = 5;
+
     /// <summary>A hovered dot grows from r = 3 to r = 5, as <c>.act-dot:hover</c> did.</summary>
     public const double DotHoverScale = 5.0 / 3.0;
 
@@ -24,6 +29,11 @@ public sealed class ActivityChart : Viewbox
     public static readonly DependencyProperty GridBrushProperty = Register(nameof(GridBrush), typeof(Brush));
     public static readonly DependencyProperty LabelBrushProperty = Register(nameof(LabelBrush), typeof(Brush));
     public static readonly DependencyProperty DotStrokeBrushProperty = Register(nameof(DotStrokeBrush), typeof(Brush));
+    public static readonly DependencyProperty OkBrushProperty = Register(nameof(OkBrush), typeof(Brush));
+    public static readonly DependencyProperty WarnSoftBrushProperty = Register(nameof(WarnSoftBrush), typeof(Brush));
+    public static readonly DependencyProperty WarnBrushProperty = Register(nameof(WarnBrush), typeof(Brush));
+    public static readonly DependencyProperty DangerBrushProperty = Register(nameof(DangerBrush), typeof(Brush));
+    public static readonly DependencyProperty NoDataBrushProperty = Register(nameof(NoDataBrush), typeof(Brush));
 
     private readonly Canvas _canvas = new()
     {
@@ -74,6 +84,41 @@ public sealed class ActivityChart : Viewbox
         set => SetValue(DotStrokeBrushProperty, value);
     }
 
+    /// <summary>A toned dot's fill for <see cref="HealthSeverity.Ok"/> (green); Health's <c>SuccessBrush</c>.</summary>
+    public Brush? OkBrush
+    {
+        get => (Brush?)GetValue(OkBrushProperty);
+        set => SetValue(OkBrushProperty, value);
+    }
+
+    /// <summary>A toned dot's fill for <see cref="HealthSeverity.WarnSoft"/> (yellow); <c>CautionTextBrush</c>.</summary>
+    public Brush? WarnSoftBrush
+    {
+        get => (Brush?)GetValue(WarnSoftBrushProperty);
+        set => SetValue(WarnSoftBrushProperty, value);
+    }
+
+    /// <summary>A toned dot's fill for <see cref="HealthSeverity.Warn"/> (amber); <c>WarningTextBrush</c>.</summary>
+    public Brush? WarnBrush
+    {
+        get => (Brush?)GetValue(WarnBrushProperty);
+        set => SetValue(WarnBrushProperty, value);
+    }
+
+    /// <summary>A toned dot's fill for <see cref="HealthSeverity.Danger"/> (red); <c>ErrorBrush</c>.</summary>
+    public Brush? DangerBrush
+    {
+        get => (Brush?)GetValue(DangerBrushProperty);
+        set => SetValue(DangerBrushProperty, value);
+    }
+
+    /// <summary>A toned dot's fill for any other tone (Grey, "not enough data"); <c>MutedTextBrush</c>.</summary>
+    public Brush? NoDataBrush
+    {
+        get => (Brush?)GetValue(NoDataBrushProperty);
+        set => SetValue(NoDataBrushProperty, value);
+    }
+
     /// <summary>The drawing surface (for tests): gridlines, labels, the curve Path and the dot Ellipses.</summary>
     public Canvas Surface => _canvas;
 
@@ -94,6 +139,7 @@ public sealed class ActivityChart : Viewbox
                 X1 = ActivityChartLayout.PadLeft, X2 = ActivityChartLayout.Width - ActivityChartLayout.PadRight,
                 Y1 = y, Y2 = y, Stroke = GridBrush, StrokeThickness = 1,
             });
+            if (g.Label.Length == 0) continue;
             // Right-aligned 6 px left of the plot, centred on the line.
             var label = Label(g.Label, TextAlignment.Right);
             label.Width = ActivityChartLayout.PadLeft - 6;
@@ -129,19 +175,30 @@ public sealed class ActivityChart : Viewbox
         foreach (var d in layout.Dots)
         {
             var scale = new ScaleTransform(1, 1);
+            var r = d.Tone is null ? DotRadius : TonedDotRadius;
             var dot = new Ellipse
             {
-                Width = DotRadius * 2, Height = DotRadius * 2, Fill = LineBrush, Stroke = DotStrokeBrush, StrokeThickness = 1,
+                Width = r * 2, Height = r * 2, Fill = DotFill(d.Tone), Stroke = DotStrokeBrush, StrokeThickness = 1,
                 RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = scale, ToolTip = d.Label, Cursor = System.Windows.Input.Cursors.Hand,
             };
             ToolTipService.SetInitialShowDelay(dot, 0);
             dot.MouseEnter += (_, _) => { scale.ScaleX = DotHoverScale; scale.ScaleY = DotHoverScale; };
             dot.MouseLeave += (_, _) => { scale.ScaleX = 1; scale.ScaleY = 1; };
-            Canvas.SetLeft(dot, d.X - DotRadius);
-            Canvas.SetTop(dot, d.Y - DotRadius);
+            Canvas.SetLeft(dot, d.X - r);
+            Canvas.SetTop(dot, d.Y - r);
             _canvas.Children.Add(dot);
         }
     }
+
+    private Brush? DotFill(HealthSeverity? tone) => tone switch
+    {
+        null => LineBrush,
+        HealthSeverity.Ok => OkBrush,
+        HealthSeverity.WarnSoft => WarnSoftBrush,
+        HealthSeverity.Warn => WarnBrush,
+        HealthSeverity.Danger => DangerBrush,
+        _ => NoDataBrush,
+    };
 
     private TextBlock Label(string text, TextAlignment alignment) => new()
     {

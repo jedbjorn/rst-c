@@ -99,7 +99,6 @@ internal static class TrayHealthSamples
             work();
             return Task.CompletedTask;
         },
-        StartTimer = (_, _) => new NoTimer(),
         Culture = CultureInfo.GetCultureInfo("en-US"),
         Zone = TimeZoneInfo.Utc,
         ToastSchedule = (_, _) => new NoTimer(),
@@ -425,7 +424,7 @@ public class TrayHealthViewModelTests
 
         public CleanResult Clean(IReadOnlyCollection<string> targetIds) => new();
 
-        public ActivityData GetActivity(int rangeDays) => throw new NotSupportedException();
+        public ActivityData GetActivity() => throw new NotSupportedException();
 
         public TelemetryToggleResult SetTelemetryEnabled(bool enabled) => new(false, null, null);
 

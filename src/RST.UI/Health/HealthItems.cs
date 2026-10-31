@@ -1,5 +1,6 @@
 // rst-c's own (not vendored): the Health window's small bindable items (spec #16, WU2): the
-// Activity stat cards, range pills and chart cards, and the Junk modal's target rows.
+// Activity stat cards, range pills and chart cards (shared with the tray's model detail through
+// ModelActivityPanel, spec #25), and the Junk modal's target rows.
 
 using RST.Core.Health;
 using RST.UI.Mvvm;
@@ -7,13 +8,16 @@ using RST.UI.Resources;
 
 namespace RST.UI.Health;
 
-/// <summary>An Activity stat card: label, value and an optional sub-line (only the Session Timer has one).</summary>
-public sealed class StatCard(string label) : ObservableObject
+/// <summary>An Activity stat card: label, value and an optional sub-line; <see cref="AutomationKey"/> names the card for UI automation.</summary>
+public sealed class StatCard(string label, string automationKey = "Health.Stat") : ObservableObject
 {
     private string _value = HealthFormat.Missing;
     private string _sub = "";
 
     public string Label { get; } = label;
+
+    /// <summary>The card's AutomationId ("Health.Stat.ActivityTotal").</summary>
+    public string AutomationKey { get; } = automationKey;
 
     public string Value
     {
@@ -28,7 +32,7 @@ public sealed class StatCard(string label) : ObservableObject
     }
 }
 
-/// <summary>A range pill (7D, 1M, 3M, 6M). Checking it selects its range.</summary>
+/// <summary>A range pill (7D, 1M, 3M, 6M; the tray adds 1Y). Checking it selects its range.</summary>
 public sealed class RangeOption : ObservableObject
 {
     private readonly Action<RangeOption> _selected;
@@ -46,6 +50,9 @@ public sealed class RangeOption : ObservableObject
 
     public string Label { get; }
 
+    /// <summary>The pill's AutomationId ("Health.Range.6M").</summary>
+    public string AutomationKey => "Health.Range." + Label;
+
     /// <summary>Two-way bound to the pill. The user checking it reloads the activity; the pills are mutually exclusive.</summary>
     public bool IsSelected
     {
@@ -62,13 +69,16 @@ public sealed class RangeOption : ObservableObject
 }
 
 /// <summary>An Activity chart card: its title and either a chart, an empty state, or a single dot with a hint under it.</summary>
-public sealed class ChartCard(string title) : ObservableObject
+public sealed class ChartCard(string title, string automationKey = "Health.ChartCard") : ObservableObject
 {
     private ActivityChartLayout? _chart;
     private string _emptyTitle = "";
     private string _emptyHint = "";
 
     public string Title { get; } = title;
+
+    /// <summary>The card's AutomationId ("Health.Chart.Health").</summary>
+    public string AutomationKey { get; } = automationKey;
 
     /// <summary>The chart, or null when the card shows only its empty state.</summary>
     public ActivityChartLayout? Chart

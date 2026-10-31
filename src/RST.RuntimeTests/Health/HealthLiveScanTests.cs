@@ -71,7 +71,6 @@ public class HealthLiveScanTests
                     work();
                     return Task.CompletedTask;
                 },
-                StartTimer = (_, _) => new NoTimer(),
                 Culture = culture,
                 Zone = TimeZoneInfo.Utc,
                 ToastSchedule = (_, _) => new NoTimer(),

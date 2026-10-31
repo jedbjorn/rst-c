@@ -95,7 +95,6 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
         : new HealthViewModelOptions
         {
             RunInBackground = o.RunInBackground,
-            StartTimer = o.StartTimer,
             Now = o.Now,
             Culture = o.Culture,
             Zone = o.Zone,
@@ -134,7 +133,7 @@ internal sealed class NoHealthService : IHealthService
 
     public CleanResult Clean(IReadOnlyCollection<string> targetIds) => new();
 
-    public ActivityData GetActivity(int rangeDays) => throw new NotSupportedException();
+    public ActivityData GetActivity() => throw new NotSupportedException();
 
     public TelemetryToggleResult SetTelemetryEnabled(bool enabled) => new(false, null, null);
 

@@ -2,8 +2,9 @@
     rst-c's own (not vendored). The Health window (spec #16, WU2), native WPF on the family theme,
     replacing v2.2.0's HTML page health_viewer.html one for one: the header (title, Health / Activity
     tabs, Device and Captured), the Health tab's four collapsible sections, the Activity tab's stat
-    cards, range pills and charts, the per-tab footer, the Junk modal, the Cleaning overlay and the
-    toast. The view-model is HealthViewModel.
+    cards, range pills and charts (spec #24: a ModelActivityPanel drawn by HealthResources.xaml's
+    templates), the per-tab footer, the Junk modal, the Cleaning overlay and the toast. The
+    view-model is HealthViewModel.
 -->
 <Window x:Class="RST.UI.Health.HealthWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -25,59 +26,6 @@
                 <!-- The snapshot's dot, rows, sections and the Junk modal's content, shared with the tray's Device page. -->
                 <ResourceDictionary Source="/RST.UI;component/Health/HealthResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
-
-            <!-- An Activity stat card. -->
-            <DataTemplate x:Key="StatCardTemplate" DataType="{x:Type health:StatCard}">
-                <Border Style="{StaticResource Panel}" Padding="12,10" Margin="4,0">
-                    <StackPanel>
-                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
-                                   TextWrapping="Wrap" MinHeight="30" />
-                        <TextBlock Text="{Binding Value}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                                   Margin="0,2,0,0" AutomationProperties.AutomationId="Health.StatValue" />
-                        <TextBlock Text="{Binding Sub}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
-                                   TextTrimming="CharacterEllipsis" MinHeight="15" Margin="0,2,0,0" />
-                    </StackPanel>
-                </Border>
-            </DataTemplate>
-
-            <!-- An Activity chart card: the chart, an empty state, or a single dot and its hint. -->
-            <DataTemplate x:Key="ChartCardTemplate" DataType="{x:Type health:ChartCard}">
-                <Border Style="{StaticResource Panel}" Padding="18,14,18,10" Margin="0,0,0,10">
-                    <StackPanel>
-                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
-                        <controls:ActivityChart Layout="{Binding Chart}"
-                                                Visibility="{Binding HasChart, Converter={StaticResource BoolToVisible}}"
-                                                LineBrush="{StaticResource AccentForegroundBrush}"
-                                                GridBrush="{StaticResource DividerBrush}"
-                                                LabelBrush="{StaticResource MutedTextBrush}"
-                                                DotStrokeBrush="{StaticResource SurfaceBrush}"
-                                                AutomationProperties.AutomationId="Health.Chart" />
-                        <StackPanel x:Name="Empty" Margin="12,24">
-                            <TextBlock Text="{Binding EmptyTitle}" FontSize="13" Foreground="{StaticResource MutedTextBrush}"
-                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,4"
-                                       Visibility="{Binding HasEmptyTitle, Converter={StaticResource BoolToVisible}}"
-                                       AutomationProperties.AutomationId="Health.ChartEmptyTitle" />
-                            <TextBlock Text="{Binding EmptyHint}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
-                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
-                                       Visibility="{Binding HasEmptyHint, Converter={StaticResource BoolToVisible}}"
-                                       AutomationProperties.AutomationId="Health.ChartEmptyHint" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-                <DataTemplate.Triggers>
-                    <MultiDataTrigger>
-                        <MultiDataTrigger.Conditions>
-                            <Condition Binding="{Binding HasEmptyTitle}" Value="False" />
-                            <Condition Binding="{Binding HasEmptyHint}" Value="False" />
-                        </MultiDataTrigger.Conditions>
-                        <Setter TargetName="Empty" Property="Visibility" Value="Collapsed" />
-                    </MultiDataTrigger>
-                    <DataTrigger Binding="{Binding HasChart}" Value="True">
-                        <Setter TargetName="Empty" Property="Margin" Value="12,2,12,4" />
-                    </DataTrigger>
-                </DataTemplate.Triggers>
-            </DataTemplate>
-
         </ResourceDictionary>
     </Window.Resources>
 
@@ -128,18 +76,12 @@
                               MaxWidth="820" Focusable="False" />
             </ScrollViewer>
 
-            <!-- Activity tab: six stat cards, the range pills and three charts. -->
+            <!-- Activity tab: six stat cards, the range pills and four charts (a ModelActivityPanel, shared with the tray). -->
             <ScrollViewer x:Name="ActivityPane" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="18,16,18,8"
                           Visibility="{Binding IsActivityTab, Converter={StaticResource BoolToVisible}}" Focusable="False">
                 <StackPanel MaxWidth="820">
-                    <ItemsControl ItemsSource="{Binding StatCards}" ItemTemplate="{StaticResource StatCardTemplate}" Margin="-4,0,-4,10"
-                                  Focusable="False">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Rows="1" Columns="6" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
+                    <ContentControl Content="{Binding Activity}" ContentTemplate="{StaticResource ModelActivityStats}"
+                                    Focusable="False" IsTabStop="False" />
                     <Border Style="{StaticResource RangePillGroup}" Margin="0,0,0,10">
                         <ItemsControl ItemsSource="{Binding Ranges}" IsEnabled="{Binding IsIdle}" Focusable="False"
                                       AutomationProperties.AutomationId="Health.Ranges">
@@ -151,12 +93,14 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type health:RangeOption}">
                                     <RadioButton Style="{StaticResource RangePill}" GroupName="HealthRange" Content="{Binding Label}"
-                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                 AutomationProperties.AutomationId="{Binding AutomationKey}" />
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Border>
-                    <ItemsControl ItemsSource="{Binding Charts}" ItemTemplate="{StaticResource ChartCardTemplate}" Focusable="False" />
+                    <ContentControl Content="{Binding Activity}" ContentTemplate="{StaticResource ModelActivityCharts}"
+                                    Focusable="False" IsTabStop="False" />
                 </StackPanel>
             </ScrollViewer>
 

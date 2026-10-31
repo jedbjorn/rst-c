@@ -2,13 +2,16 @@
 // HealthBridge (v2.2.0's host object behind the HTML page health_viewer.html) with the JSON layer removed
 // (spec #16, WU2). Same reads, writes and rules: the snapshot at %AppData%\RST\health_scan.json,
 // the active profile's enabled cleanup targets (or the defaults), the ids re-checked here before
-// anything is deleted, the activity aggregation and the consent toggle.
+// anything is deleted, the activity read and the consent toggle. From spec #24 the activity read is
+// the current model's rollups plus unfolded and live outbox files, folded in memory
+// (ModelActivityReader.ReadCurrentModel); it writes nothing.
 
 using System.IO;
 using RST.Core.Configuration;
 using RST.Core.Health;
 using RST.Core.Profiles;
 using RST.Core.Telemetry;
+using RST.Core.Telemetry.Rollups;
 using RST.UI.Resources;
 using RST.Core.Logging;
 
@@ -36,8 +39,12 @@ public interface IHealthService
     /// </summary>
     CleanResult Clean(IReadOnlyCollection<string> targetIds);
 
-    /// <summary>The current model's activity over <paramref name="rangeDays"/> (clamped to 7/30/90/180). Throws on failure.</summary>
-    ActivityData GetActivity(int rangeDays);
+    /// <summary>
+    /// The current model's activity, every day it has (the tab slices the range), plus the footer
+    /// status; <see cref="ActivityData.Model"/> is null with no model open. Reads, never writes.
+    /// Throws on failure.
+    /// </summary>
+    ActivityData GetActivity();
 
     /// <summary>Saves the collection choice and reconciles this process's collector.</summary>
     TelemetryToggleResult SetTelemetryEnabled(bool enabled);
@@ -92,8 +99,8 @@ public sealed class HealthService : IHealthService
 
     private readonly HealthContext _context;
     private readonly Action<bool>? _telemetryToggled;
-    private readonly Func<DateTimeOffset?>? _liveSessionStartUtc;
     private readonly string _snapshotPath;
+    private readonly Func<ActivityReadOptions>? _readOptions;
 
     /// <param name="context">The Revit context captured before the window opened.</param>
     /// <param name="telemetryToggled">
@@ -101,18 +108,16 @@ public sealed class HealthService : IHealthService
     /// when the disk already matched (SC-034: another instance may have written the shared prefs while
     /// this process's collector kept its old state). Null: persist only.
     /// </param>
-    /// <param name="liveSessionStartUtc">
-    /// A live read of the collector's session start, preferred over the context's captured value, so a
-    /// mid-window enable starts the session clock on the next refresh. Null: the context's value only.
-    /// </param>
     /// <param name="snapshotPath">The snapshot file; null for <see cref="DefaultSnapshotPath"/>.</param>
-    public HealthService(HealthContext? context, Action<bool>? telemetryToggled = null,
-                         Func<DateTimeOffset?>? liveSessionStartUtc = null, string? snapshotPath = null)
+    /// <param name="readOptions">Where and when the activity read looks (tests: folders, clock and zone); null: the user's
+    /// outbox and rollups, now, local time. The live session always comes from <paramref name="context"/>.</param>
+    public HealthService(HealthContext? context, Action<bool>? telemetryToggled = null, string? snapshotPath = null,
+                         Func<ActivityReadOptions>? readOptions = null)
     {
         _context = context ?? HealthContext.Empty;
         _telemetryToggled = telemetryToggled;
-        _liveSessionStartUtc = liveSessionStartUtc;
         _snapshotPath = snapshotPath ?? DefaultSnapshotPath;
+        _readOptions = readOptions;
         Log.Information("HealthService ready: revit={Revit}, model={Model}", _context.RevitVersion, _context.ModelName);
     }
 
@@ -189,38 +194,24 @@ public sealed class HealthService : IHealthService
             .ToArray();
     }
 
-    public ActivityData GetActivity(int rangeDays)
+    public ActivityData GetActivity()
     {
         try
         {
-            var range = ActivityRanges.Clamp(rangeDays);
+            var options = ReadOptions();
             var currentFile = BuildCurrentFileIdentity();
-            var outboxDir = AppDataPaths.TelemetryOutboxDir;
-            Action<string> log = m => Log.Warning("Telemetry activity: {Message}", m);
-            var series = ActivityAggregator.Aggregate(
-                outboxDir, currentFile, range, DateTimeOffset.UtcNow,
-                TimeZoneInfo.Local, _context.TelemetrySessionGuid, log);
-            var outbox = ActivityAggregator.ReadStatus(outboxDir, log);
+            var model = currentFile is null ? null : ModelActivityReader.ReadCurrentModel(currentFile, options);
+            var outbox = OutboxFiles.ReadStatus(options.OutboxDir, ActivityLog);
             var prefs = TelemetryPrefs.Read();
-
             return new ActivityData
             {
-                RangeDays = range,
-                SessionStartUtc = _liveSessionStartUtc is null ? _context.TelemetrySessionStartUtc : _liveSessionStartUtc(),
-                CurrentFileOpenUtc = series.LiveOpenSinceUtc,
-                File = currentFile is null ? null : new ActivityFile
-                {
-                    MatchedKeys = series.MatchedKeyKind,
-                    IsWorkshared = _context.IsWorkshared,
-                    IsCloud = _context.IsCloud,
-                    // The stat cards' point-in-time values (captured at window open).
-                    WarningsCount = _context.WarningsCount,
-                    FileSizeMb = _context.ModelSizeMb,
-                    PerDayOpenHours = series.PerDayOpenHours,
-                    OpenEvents = series.OpenEvents,
-                    SyncEvents = series.SyncEvents,
-                },
-                Status = new TelemetryStatus(prefs.Enabled, outbox.FileCount, outbox.TotalSizeBytes, outbox.OldestEventTs),
+                Model = model,
+                IsWorkshared = _context.IsWorkshared,
+                IsCloud = _context.IsCloud,
+                // The Warning Count and File Size cards: read by Revit when the window opened.
+                WarningsCount = _context.WarningsCount,
+                FileSizeBytes = _context.ModelSizeMb is { } mb ? mb * 1024 * 1024 : null,
+                Status = new TelemetryStatus(prefs.Enabled, outbox.FileCount, outbox.TotalSizeBytes),
             };
         }
         catch (Exception ex)
@@ -229,6 +220,23 @@ public sealed class HealthService : IHealthService
             throw;
         }
     }
+
+    /// <summary>The user's folders, now, in local time (or the test's); this Revit session's file extends to now.</summary>
+    private ActivityReadOptions ReadOptions()
+    {
+        var where = _readOptions?.Invoke();
+        return new ActivityReadOptions
+        {
+            OutboxDir = where?.OutboxDir ?? AppDataPaths.TelemetryOutboxDir,
+            RollupsDir = where?.RollupsDir ?? AppDataPaths.TelemetryRollupsDir,
+            Zone = where?.Zone ?? TimeZoneInfo.Local,
+            NowUtc = where?.NowUtc ?? DateTimeOffset.UtcNow,
+            LiveSessionGuid = _context.TelemetrySessionGuid,
+            Log = ActivityLog,
+        };
+    }
+
+    private static void ActivityLog(string message) => Log.Warning("Telemetry activity: {Message}", message);
 
     public TelemetryToggleResult SetTelemetryEnabled(bool enabled)
     {
@@ -266,9 +274,9 @@ public sealed class HealthService : IHealthService
     }
 
     /// <summary>
-    /// The open document's identity keys for current-file matching; null when no model is open,
+    /// The open document's identity keys for current-model matching; null when no model is open,
     /// which differs from a document whose keys all failed to capture (that still returns an identity,
-    /// and the aggregator reports no usable key).
+    /// and the read reports no usable key: "save it first").
     /// </summary>
     private DocumentIdentity? BuildCurrentFileIdentity()
     {

@@ -731,31 +731,6 @@ internal static class SessionReplay
         return merged;
     }
 
-    /// <summary>Split merged intervals at local-midnight boundaries and
-    /// sum hours per calendar day in [firstDay, lastDay].</summary>
-    internal static Dictionary<DateOnly, double> BucketByDay(
-        List<(DateTimeOffset Start, DateTimeOffset End)> merged,
-        TimeZoneInfo zone, DateOnly firstDay, DateOnly lastDay)
-    {
-        var days = new Dictionary<DateOnly, double>();
-        foreach (var (start, end) in merged)
-        {
-            var cur = start;
-            while (cur < end)
-            {
-                var local = TimeZoneInfo.ConvertTime(cur, zone);
-                var day = DateOnly.FromDateTime(local.Date);
-                var dayEndUtc = NextLocalMidnightUtc(local, zone);
-                var segEnd = end < dayEndUtc ? end : dayEndUtc;
-                if (segEnd <= cur) break; // safety: never loop in place
-                if (day >= firstDay && day <= lastDay)
-                    days[day] = days.GetValueOrDefault(day) + (segEnd - cur).TotalHours;
-                cur = segEnd;
-            }
-        }
-        return days;
-    }
-
     internal static DateTimeOffset NextLocalMidnightUtc(DateTimeOffset local, TimeZoneInfo zone)
     {
         var nextMidnight = DateTime.SpecifyKind(local.Date.AddDays(1), DateTimeKind.Unspecified);

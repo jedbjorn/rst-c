@@ -1,8 +1,9 @@
 // rst-c's own (not vendored): the Health window's flows against a scripted service (spec #16, WU2,
 // AC5): open, scan (success, failure, busy gating), clean (nothing selected, cancel at the
 // confirm, success with the per-target lines, failure), the collection toggle (success, failure
-// revert), the range pills, the Activity states, and the session timer starting and stopping
-// with the tab.
+// revert), the range pills, and the Activity tab on the rollup read path (spec #24): Activity
+// (Session) and (Total), the four charts per day / per event and per ISO week at 6M, the Health
+// trend's coloured dots, the empty states, and when it re-reads (tab shown, range, toggle, scan).
 
 using System.Globalization;
 using System.IO;
@@ -18,37 +19,11 @@ public class HealthViewModelTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 30, 14, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A hand-cranked repeating timer.</summary>
-    private sealed class FakeTimer
-    {
-        public List<(TimeSpan Interval, Action Tick, Handle Handle)> Started { get; } = [];
-
-        public IDisposable Start(TimeSpan interval, Action tick)
-        {
-            var handle = new Handle();
-            Started.Add((interval, tick, handle));
-            return handle;
-        }
-
-        public bool Running => Started.Count > 0 && !Started[^1].Handle.Stopped;
-
-        public void Tick() => Started[^1].Tick();
-
-        public sealed class Handle : IDisposable
-        {
-            public bool Stopped { get; private set; }
-
-            public void Dispose() => Stopped = true;
-        }
-    }
-
     private sealed class Harness
     {
         public FakeHealthService Service { get; } = new();
 
         public FakeDialogs Dialogs { get; } = new();
-
-        public FakeTimer Timer { get; } = new();
 
         public DateTimeOffset Clock { get; set; } = Now;
 
@@ -61,7 +36,6 @@ public class HealthViewModelTests
         public HealthViewModel Build() => new(Service, Dialogs, new HealthViewModelOptions
         {
             RunInBackground = a => Runner(a),
-            StartTimer = Timer.Start,
             Now = () => Clock,
             Culture = CultureInfo.GetCultureInfo("en-US"),
             Zone = TimeZoneInfo.Utc,
@@ -302,114 +276,169 @@ public class HealthViewModelTests
     });
 
     [Fact]
-    public void ActivityTab_LoadsTheDefaultRange_AndStartsTheSessionTimer() => Sta(() =>
+    public void ActivityTab_ReadsOnShow_ActivityCards_FourCharts() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = days => HealthSamples.Activity(Now, days);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
-        Assert.False(vm.IsTimerRunning);
+        Assert.Equal(0, h.Service.ActivityCalls);
 
         vm.SelectedTab = HealthViewModel.ActivityTab;
-        Assert.Equal([7], h.Service.ActivityCalls);
-        Assert.True(h.Timer.Running);
-        Assert.True(vm.IsTimerRunning);
-        Assert.Equal(TimeSpan.FromSeconds(1), h.Timer.Started[^1].Interval);
-        Assert.Equal("02:14:09", vm.SessionTimer.Value);
-        Assert.Equal("file open 01:03:41", vm.SessionTimer.Sub);
+        Assert.Equal(1, h.Service.ActivityCalls);
 
-        h.Clock = Now.AddSeconds(5);
-        h.Timer.Tick();
-        Assert.Equal("02:14:14", vm.SessionTimer.Value);
-
-        Assert.Equal(["Session Timer", "Session Total", "Longest Sync", "Longest Open Time", "Warning Count", "File Size"],
+        Assert.Equal(["Activity (Session)", "Activity (Total)", "Longest Sync", "Longest Open Time", "Warning Count", "File Size"],
             vm.StatCards.Select(c => c.Label));
-        Assert.Equal("26h", vm.SessionTotal.Value);
-        Assert.Equal("64s", vm.LongestSync.Value);
-        Assert.Equal("1m 35s", vm.LongestOpen.Value);
-        Assert.Equal("612", vm.WarningCount.Value);
-        Assert.Equal("1.7 GB", vm.FileSize.Value);
-        Assert.Equal("collection on · 23 files · 1.4 MB · since 9/19/2026", vm.TelemetryStatusLine);
+        var a = vm.Activity;
+        Assert.Equal("47m", a.ActivitySession!.Value);       // active since the model was opened in this session
+        Assert.Equal("opened 12:56 PM", a.ActivitySession.Sub);
+        Assert.Equal("10h 48m", a.ActivityTotal.Value);      // active time over 7D, today's live session included
+        Assert.Equal("62s", a.LongestSync.Value);
+        Assert.Equal("1m 40s", a.LongestOpen.Value);
+        Assert.Equal("612", a.WarningCount.Value);
+        Assert.Equal("1.7 GB", a.FileSize.Value);
+        Assert.Equal("collection on · 23 files · 1.4 MB · since 4/24/2026", vm.TelemetryStatusLine); // the model's oldest day
         Assert.True(vm.TelemetryEnabled);
-        Assert.All(vm.Charts, c => Assert.Equal(ChartMode.Curve, c.Chart!.Mode));
+
+        Assert.Equal(["Active time — this file", "Opening time — this file", "Sync history — this file", "Health — this file"],
+            vm.Charts.Select(c => c.Title));
+        // Active time: one point per day, zeros included.
+        Assert.Equal(7, a.ActiveChart.Chart!.Dots.Count);
+        Assert.Equal("2026-10-30 — 47m", a.ActiveChart.Chart.Dots[^1].Label);
+        Assert.Equal("2026-10-27 — 0m", a.ActiveChart.Chart.Dots[3].Label);
+        Assert.Equal(ChartMode.Curve, a.OpenChart.Chart!.Mode);
+        Assert.Equal(ChartMode.Curve, a.SyncChart.Chart!.Mode);
+        Assert.Equal(8, a.OpenChart.Chart.Dots.Count);        // per event
+        // Health: one dot per day used, coloured by band, the tooltip the date and the colour only.
+        var trend = a.HealthChart.Chart!;
+        Assert.Null(trend.Curve);
+        Assert.All(trend.GridLines, g => Assert.Equal("", g.Label));
+        Assert.Equal([HealthSeverity.WarnSoft, HealthSeverity.Danger, HealthSeverity.Warn, HealthSeverity.None, HealthSeverity.WarnSoft, HealthSeverity.Ok],
+            trend.Dots.Select(d => d.Tone));
+        Assert.Equal(["2026-10-24 — Yellow", "2026-10-25 — Red", "2026-10-26 — Amber", "2026-10-28 — Not enough data", "2026-10-29 — Yellow", "2026-10-30 — Green"],
+            trend.Dots.Select(d => d.Label));
+        Assert.True(trend.Dots[^1].Y < trend.Dots[1].Y, "green sits above red");
     });
 
     [Fact]
-    public void LeavingTheActivityTab_StopsTheTimer() => Sta(() =>
+    public void ActivityTab_DoesNotTick_AndRefreshesOnEveryShow() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = days => HealthSamples.Activity(Now, days);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
         vm.SelectedTab = HealthViewModel.ActivityTab;
-        Assert.True(h.Timer.Running);
-        vm.SelectedTab = HealthViewModel.HealthTab;
-        Assert.False(h.Timer.Running);
-        Assert.False(vm.IsTimerRunning);
+        h.Clock = Now.AddMinutes(5);
+        Assert.Equal("47m", vm.Activity.ActivitySession!.Value); // nothing ticks between reads
 
-        // Coming back starts a fresh one; closing the window stops it.
+        vm.SelectedTab = HealthViewModel.HealthTab;
+        Assert.Equal(1, h.Service.ActivityCalls);
         vm.SelectedTab = HealthViewModel.ActivityTab;
-        Assert.True(h.Timer.Running);
-        Assert.Equal(2, h.Timer.Started.Count);
-        vm.Dispose();
-        Assert.False(h.Timer.Running);
+        Assert.Equal(2, h.Service.ActivityCalls);
     });
 
     [Fact]
-    public void RangeSwitch_ReloadsWithTheNewRange_AndSelectsOnlyThatPill() => Sta(() =>
+    public void ScanSystem_RefreshesTheActivity_OnceTheTabHasBeenShown() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = days => HealthSamples.Activity(Now, days);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
+        var vm = h.Build();
+        vm.ScanAsync().GetAwaiter().GetResult();
+        Assert.Equal(0, h.Service.ActivityCalls); // never shown: read when it is
+
+        vm.SelectedTab = HealthViewModel.ActivityTab;
+        vm.SelectedTab = HealthViewModel.HealthTab;
+        vm.ScanAsync().GetAwaiter().GetResult();
+        Assert.Equal(2, h.Service.ActivityCalls);
+    });
+
+    [Fact]
+    public void RangeSwitch_ReReads_AndSelectsOnlyThatPill() => Sta(() =>
+    {
+        var h = new Harness();
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
         Assert.Equal(["7D", "1M", "3M", "6M"], vm.Ranges.Select(r => r.Label));
+        Assert.Equal(["Health.Range.7D", "Health.Range.1M", "Health.Range.3M", "Health.Range.6M"], vm.Ranges.Select(r => r.AutomationKey));
         Assert.True(vm.Ranges[0].IsSelected);
         vm.SelectedTab = HealthViewModel.ActivityTab;
 
         vm.Ranges[2].IsSelected = true; // the user checks 3M
-        Assert.Equal([7, 90], h.Service.ActivityCalls);
+        Assert.Equal(2, h.Service.ActivityCalls);
         Assert.Equal(90, vm.RangeDays);
         Assert.Equal([false, false, true, false], vm.Ranges.Select(r => r.IsSelected));
+        Assert.Equal(90, vm.Activity.ActiveChart.Chart!.Dots.Count);
 
         vm.SelectRange(30);
-        Assert.Equal([7, 90, 30], h.Service.ActivityCalls);
+        Assert.Equal(3, h.Service.ActivityCalls);
         Assert.Equal([false, true, false, false], vm.Ranges.Select(r => r.IsSelected));
+        Assert.Equal(30, vm.Activity.ActiveChart.Chart!.Dots.Count);
     });
 
     [Fact]
-    public void Activity_SparseStates_SingleDot_NoTime_NotWorkshared_NoTimer() => Sta(() =>
+    public void SixMonths_PlotsIsoWeeks_ActiveSummed_OpensAndSyncsAveraged() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = _ => HealthSamples.SparseActivity(Now);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
         vm.SelectedTab = HealthViewModel.ActivityTab;
+        vm.SelectRange(180);
 
-        Assert.Null(vm.SessionChart.Chart);
-        Assert.Equal("No time recorded in this range", vm.SessionChart.EmptyTitle);
-        Assert.Equal("This model has no usable identity key yet — save it first.", vm.SessionChart.EmptyHint);
-
-        Assert.Equal(ChartMode.Dots, vm.OpenChart.Chart!.Mode);
-        Assert.Null(vm.OpenChart.Chart.Curve);
-        Assert.Equal("", vm.OpenChart.EmptyTitle);
-        Assert.Equal("not enough history yet", vm.OpenChart.EmptyHint);
-
-        Assert.Null(vm.SyncChart.Chart);
-        Assert.Equal("Not a workshared model", vm.SyncChart.EmptyTitle);
-        Assert.Equal("Sync history appears for workshared and cloud models.", vm.SyncChart.EmptyHint);
-
-        Assert.Equal("—", vm.SessionTimer.Value);
-        Assert.Equal("", vm.SessionTimer.Sub);
-        Assert.False(h.Timer.Running);
-        Assert.Equal("collection off · 0 files · 0 B", vm.TelemetryStatusLine);
-        Assert.False(vm.TelemetryEnabled);
-        Assert.Equal("0h", vm.SessionTotal.Value);
-        Assert.Equal("—", vm.LongestSync.Value);
-        Assert.Equal("6.4s", vm.LongestOpen.Value);
-        Assert.Equal("18 MB", vm.FileSize.Value);
+        var a = vm.Activity;
+        Assert.Equal("133h 36m", a.ActivityTotal.Value);     // the 26 ISO weeks from Monday 2026-05-04
+        var active = a.ActiveChart.Chart!;
+        Assert.Equal(26, active.Dots.Count);
+        Assert.StartsWith("Week of 2026-05-04 — ", active.Dots[0].Label, StringComparison.Ordinal);
+        Assert.StartsWith("Week of 2026-10-26 — ", active.Dots[^1].Label, StringComparison.Ordinal);
+        Assert.All(a.OpenChart.Chart!.Dots, d => Assert.Contains(" average of ", d.Label, StringComparison.Ordinal));
+        Assert.All(a.SyncChart.Chart!.Dots, d => Assert.StartsWith("Week of ", d.Label, StringComparison.Ordinal));
+        Assert.Equal(26, a.OpenChart.Chart.Dots.Count);      // every week of this sample has opens
+        // Health: one dot per week (its last day used), red months ago, green now.
+        var trend = a.HealthChart.Chart!;
+        Assert.Equal(26, trend.Dots.Count);
+        Assert.Equal(HealthSeverity.Danger, trend.Dots[0].Tone);
+        Assert.Equal(HealthSeverity.Ok, trend.Dots[^1].Tone);
+        Assert.Equal("2026-10-30 — Green", trend.Dots[^1].Label);
     });
 
     [Fact]
-    public void Activity_NoModelOpen_AndNoOpensOrSyncs() => Sta(() =>
+    public void Activity_SparseStates_SingleDot_NoTime_NotWorkshared_NoSession() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = _ => new ActivityData { Status = new TelemetryStatus(true, 1, 2048, null) };
+        h.Service.Activity = () => HealthSamples.SparseActivity(Now);
+        var vm = h.Build();
+        vm.SelectedTab = HealthViewModel.ActivityTab;
+        var a = vm.Activity;
+
+        Assert.Null(a.ActiveChart.Chart);
+        Assert.Equal("No time recorded in this range", a.ActiveChart.EmptyTitle);
+        Assert.Equal("", a.ActiveChart.EmptyHint);
+
+        Assert.Equal(ChartMode.Dots, a.OpenChart.Chart!.Mode);
+        Assert.Null(a.OpenChart.Chart.Curve);
+        Assert.Equal("", a.OpenChart.EmptyTitle);
+        Assert.Equal("not enough history yet", a.OpenChart.EmptyHint);
+
+        Assert.Null(a.SyncChart.Chart);
+        Assert.Equal("Not a workshared model", a.SyncChart.EmptyTitle);
+        Assert.Equal("Sync history appears for workshared and cloud models.", a.SyncChart.EmptyHint);
+
+        Assert.Equal(HealthSeverity.Ok, Assert.Single(a.HealthChart.Chart!.Dots).Tone);
+        Assert.Equal("not enough history yet", a.HealthChart.EmptyHint);
+
+        Assert.Equal("—", a.ActivitySession!.Value);         // collection off: no live session
+        Assert.Equal("", a.ActivitySession.Sub);
+        Assert.Equal("collection off · 0 files · 0 B · since 10/30/2026", vm.TelemetryStatusLine);
+        Assert.False(vm.TelemetryEnabled);
+        Assert.Equal("0m", a.ActivityTotal.Value);
+        Assert.Equal("—", a.LongestSync.Value);
+        Assert.Equal("6.4s", a.LongestOpen.Value);
+        Assert.Equal("18 MB", a.FileSize.Value);
+    });
+
+    [Fact]
+    public void Activity_NoModelOpen_NoKey_AndNoOpensOrSyncs() => Sta(() =>
+    {
+        var h = new Harness();
+        h.Service.Activity = HealthSamples.NoModel;
         var vm = h.Build();
         vm.SelectedTab = HealthViewModel.ActivityTab;
         Assert.All(vm.Charts, c =>
@@ -418,53 +447,52 @@ public class HealthViewModelTests
             Assert.Equal("No model open", c.EmptyTitle);
             Assert.Equal("Open a model to see its activity history.", c.EmptyHint);
         });
-        Assert.All(vm.StatCards.Skip(1), c => Assert.Equal("—", c.Value));
+        Assert.All(vm.StatCards, c => Assert.Equal("—", c.Value));
+        Assert.Equal("collection on · 23 files · 1.4 MB", vm.TelemetryStatusLine); // no model, no "since"
 
-        h.Service.Activity = _ => new ActivityData
-        {
-            File = new ActivityFile { MatchedKeys = "central", IsWorkshared = true },
-            Status = new TelemetryStatus(true, 1, 2048, null),
-        };
+        // A model whose identity keys could not be captured: the reader matches nothing.
+        h.Service.Activity = () => new ActivityData { Model = RST.Core.Telemetry.Rollups.ModelActivity.Empty, IsWorkshared = true };
         vm.LoadActivity();
-        Assert.Equal("No time recorded in this range", vm.SessionChart.EmptyTitle);
-        Assert.Equal("", vm.SessionChart.EmptyHint);
-        Assert.Equal("No opens in this range", vm.OpenChart.EmptyTitle);
-        Assert.Equal("No syncs in this range", vm.SyncChart.EmptyTitle);
+        Assert.Equal("No time recorded in this range", vm.Activity.ActiveChart.EmptyTitle);
+        Assert.Equal("This model has no usable identity key yet — save it first.", vm.Activity.ActiveChart.EmptyHint);
+        Assert.Equal("No opens in this range", vm.Activity.OpenChart.EmptyTitle);
+        Assert.Equal("No syncs in this range", vm.Activity.SyncChart.EmptyTitle);
+        Assert.Equal("No time recorded in this range", vm.Activity.HealthChart.EmptyTitle);
+        Assert.Equal("0m", vm.Activity.ActivityTotal.Value);
+        Assert.Equal("—", vm.Activity.ActivitySession!.Value);
     });
 
     [Fact]
-    public void Activity_Failure_ShowsCouldNotLoad_AndStopsTheTimer() => Sta(() =>
+    public void Activity_Failure_ShowsCouldNotLoad() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = days => HealthSamples.Activity(Now, days);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
         vm.SelectedTab = HealthViewModel.ActivityTab;
-        Assert.True(h.Timer.Running);
 
         h.Service.ActivityError = new IOException("outbox locked");
         vm.SelectRange(30);
-        Assert.False(h.Timer.Running);
         Assert.All(vm.Charts, c =>
         {
             Assert.Equal("Could not load activity", c.EmptyTitle);
             Assert.Equal("outbox locked", c.EmptyHint);
         });
-        Assert.All(vm.StatCards.Skip(1), c => Assert.Equal("—", c.Value));
+        Assert.All(vm.StatCards, c => Assert.Equal("—", c.Value));
     });
 
     [Fact]
     public void TelemetryToggle_Success_SavesAndReloads() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = days => HealthSamples.Activity(Now, days);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
         vm.SelectedTab = HealthViewModel.ActivityTab;
         Assert.True(vm.TelemetryEnabled);
 
-        h.Service.Activity = _ => HealthSamples.SparseActivity(Now); // collection now off on disk
+        h.Service.Activity = () => HealthSamples.SparseActivity(Now); // collection now off on disk
         vm.TelemetryEnabled = false;
         Assert.Equal([false], h.Service.ToggleCalls);
-        Assert.Equal(2, h.Service.ActivityCalls.Count);
+        Assert.Equal(2, h.Service.ActivityCalls);
         Assert.False(vm.TelemetryEnabled);
         Assert.StartsWith("collection off", vm.TelemetryStatusLine, StringComparison.Ordinal);
         Assert.False(vm.Toast.IsOpen);
@@ -474,7 +502,7 @@ public class HealthViewModelTests
     public void TelemetryToggle_Failure_RevertsAndToasts() => Sta(() =>
     {
         var h = new Harness();
-        h.Service.Activity = days => HealthSamples.Activity(Now, days);
+        h.Service.Activity = () => HealthSamples.Activity(Now);
         var vm = h.Build();
         vm.SelectedTab = HealthViewModel.ActivityTab;
 
@@ -483,7 +511,7 @@ public class HealthViewModelTests
         Assert.True(vm.TelemetryEnabled);
         Assert.Equal("Could not change collection", vm.Toast.Title);
         Assert.Equal("failed to save preference", vm.Toast.Text);
-        Assert.Single(h.Service.ActivityCalls);
+        Assert.Equal(1, h.Service.ActivityCalls);
 
         // A throw reverts to the state before the click.
         h.Service.ToggleError = new UnauthorizedAccessException("access denied");
