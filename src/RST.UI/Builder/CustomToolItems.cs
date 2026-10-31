@@ -133,7 +133,7 @@ public sealed class CustomToolItemViewModel : ObservableObject
     public string KindText => Tool.Kind == CustomToolKind.Email ? UiStrings.Builder_KindEmail : UiStrings.Builder_KindUrl;
 
     /// <summary>The link, then "Used in: Architecture, Structure".</summary>
-    public string ToolTip => UiStrings.Builder_CustomToolTip(Tool.Link, string.Join(", ", Tool.UsedIn));
+    public string ToolTip => Tool.Link + "\n" + UiStrings.Builder_CustomToolUsedIn(string.Join(", ", Tool.UsedIn));
 
     /// <summary>The 16 px pack icon (the ribbon's default_16.png when it has none, as a stack row).</summary>
     public BitmapSource? Icon => IconPack.TryParseValue(Tool.IconFile, out var value)
@@ -217,7 +217,7 @@ public sealed class CustomToolDialogModel : ObservableObject
     public string Title => IsEdit ? UiStrings.Builder_EditToolTitle : UiStrings.Builder_CreateToolTitle;
 
     /// <summary>"Create", or "Update in N profiles" (N: the profiles that will actually change).</summary>
-    public string ConfirmText => IsEdit ? UiStrings.Builder_UpdateIn(UiStrings.Builder_ProfileCount(Plan!.Count)) : UiStrings.Builder_Create;
+    public string ConfirmText => IsEdit ? UiStrings.Builder_UpdateIn(ProfileCount(Plan!.Count)) : UiStrings.Builder_Create;
 
     /// <summary>An edit that would change no profile (every holder is refused) cannot be confirmed.</summary>
     public bool CanConfirm => !IsEdit || Plan!.Count > 0;
@@ -356,6 +356,9 @@ public sealed class CustomToolDialogModel : ObservableObject
         };
         return Error is null;
     }
+
+    /// <summary>"1 profile", "3 profiles" (the Custom Tool confirmations and toasts).</summary>
+    internal static string ProfileCount(int count) => count == 1 ? UiStrings.Builder_ProfileCountOne : UiStrings.Builder_ProfileCountMany(count);
 
     /// <summary>A profile in the confirmation: its name; the open, unsaved working copy marked (a blank name is "New profile").</summary>
     internal static string TargetName(CustomToolTarget target)

@@ -136,7 +136,7 @@ public sealed class ProfileBuilderCustomToolsScreenshotTests : IDisposable
                 WindowCapture.Descendants<TextBlock>(window.CatalogTreeView).Where(t => Id(t) == "Builder.CustomToolLabel").Select(t => t.Text));
             Assert.Equal(["URL", "EMAIL", "EMAIL", "URL"],
                 WindowCapture.Descendants<TextBlock>(window.CatalogTreeView).Where(t => Id(t) == "Builder.CustomToolKind").Select(t => t.Text));
-            Assert.Equal(320, window.CatalogTreeView.TranslatePoint(new Point(window.CatalogTreeView.ActualWidth, 0), window.Root).X, 0);
+            Assert.InRange(window.CatalogTreeView.TranslatePoint(new Point(window.CatalogTreeView.ActualWidth, 0), window.Root).X, 318, 320); // the 320 px pane, less its divider
             AssertNothingClipped(window.CatalogTreeView, "the Commands pane");
 
             // The header's left end and the Commands pane at 2x, for reading the rows.

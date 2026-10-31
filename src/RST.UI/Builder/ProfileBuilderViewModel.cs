@@ -1265,7 +1265,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         }
         var names = plan.Changing.Select(CustomToolDialogModel.TargetName).ToList();
         if (!_dialogs.Confirm(UiStrings.Builder_RemoveToolTitle, text, names,
-                UiStrings.Builder_RemoveFrom(UiStrings.Builder_ProfileCount(plan.Count)), danger: true, RemoveCustomToolDialogId))
+                UiStrings.Builder_RemoveFrom(CustomToolDialogModel.ProfileCount(plan.Count)), danger: true, RemoveCustomToolDialogId))
             return;
         Log.Information("Builder: remove custom tool {Link} everywhere ({Count} profiles)", tool.Link, plan.Count);
         var update = Safe<CustomToolUpdate?>(() => _backend.RemoveCustomTool(tool.Link, _profile, _activeId), null, "remove_custom_tool");
@@ -1318,7 +1318,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             _dialogs.ShowMessage(UiStrings.Builder_ToolsPartialTitle, UiStrings.Builder_ToolsPartialText(string.Join(Environment.NewLine, lines)), CustomToolsPartialDialogId);
         }
 
-        var message = done(UiStrings.Builder_ProfileCount(changed));
+        var message = done(CustomToolDialogModel.ProfileCount(changed));
         if (!update.ActiveProfileChanged)
         {
             if (update.Failed.Count == 0) ShowToast(message, BannerKind.Success);

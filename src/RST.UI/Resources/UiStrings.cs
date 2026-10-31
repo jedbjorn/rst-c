@@ -762,7 +762,7 @@ public static class UiStrings
 
     public static string Builder_KindEmail => Get(nameof(Builder_KindEmail));
 
-    public static string Builder_CustomToolTip(object? arg0, object? arg1) => Format(nameof(Builder_CustomToolTip), arg0, arg1);
+    public static string Builder_CustomToolUsedIn(object? arg0) => Format(nameof(Builder_CustomToolUsedIn), arg0);
 
     public static string Builder_EditToolEverywhereTip => Get(nameof(Builder_EditToolEverywhereTip));
 
@@ -849,7 +849,4 @@ public static class UiStrings
     public static string Builder_ToolsPartialText(object? arg0) => Format(nameof(Builder_ToolsPartialText), arg0);
 
     public static string Builder_ToolFailedLine(object? arg0, object? arg1, object? arg2) => Format(nameof(Builder_ToolFailedLine), arg0, arg1, arg2);
-
-    /// <summary>"1 profile", "3 profiles" (the Custom Tool confirmations and toasts).</summary>
-    public static string Builder_ProfileCount(int count) => count == 1 ? Builder_ProfileCountOne : Builder_ProfileCountMany(count);
 }

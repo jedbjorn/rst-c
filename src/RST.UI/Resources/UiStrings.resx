@@ -1175,10 +1175,9 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>EMAIL</value>
     <comment>The kind tag on a Custom Tools row.</comment>
   </data>
-  <data name="Builder_CustomToolTip" xml:space="preserve">
-    <value>{0}
-Used in: {1}</value>
-    <comment>{0} the link; {1} the profiles that hold the tool.</comment>
+  <data name="Builder_CustomToolUsedIn" xml:space="preserve">
+    <value>Used in: {0}</value>
+    <comment>{0} the profiles that hold the tool (the second line of a Custom Tools row's tooltip, under the link).</comment>
   </data>
   <data name="Builder_EditToolEverywhereTip" xml:space="preserve">
     <value>Edit this tool everywhere it is used</value>
