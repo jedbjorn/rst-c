@@ -5,6 +5,7 @@
 
 using System.Windows;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Builder;
@@ -17,11 +18,11 @@ public partial class CustomToolDialog : Window
         DarkTitleBar.Attach(this);
         Model = model ?? throw new ArgumentNullException(nameof(model));
         DataContext = model;
-        Loaded += (_, _) =>
+        Loaded += (_, _) => UiGuard.Run("Custom tool dialog: loaded", () =>
         {
             LabelBox.Focus();
             LabelBox.SelectAll();
-        };
+        });
     }
 
     public CustomToolDialogModel Model { get; }
@@ -29,17 +30,17 @@ public partial class CustomToolDialog : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        WindowPlacement.CapToWorkArea(this);
+        UiGuard.Run("Custom tool dialog: place", () => WindowPlacement.CapToWorkArea(this));
     }
 
-    private void OnConfirm(object sender, RoutedEventArgs e)
+    private void OnConfirm(object sender, RoutedEventArgs e) => UiGuard.Run("Custom tool dialog: confirm", () =>
     {
         if (Model.TryConfirm()) DialogResult = true;
-    }
+    });
 
-    private void OnPickIcon(object sender, RoutedEventArgs e)
+    private void OnPickIcon(object sender, RoutedEventArgs e) => UiGuard.Run("Custom tool dialog: pick an icon", () =>
     {
         var picked = IconPickerWindow.Pick(this, Model.CreatePicker);
         if (picked.Committed) Model.IconFile = picked.Value;
-    }
+    });
 }

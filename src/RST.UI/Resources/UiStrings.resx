@@ -29,6 +29,10 @@
   <data name="Common_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
+  <data name="Window_ActionFailed" xml:space="preserve">
+    <value>That did not work: RST hit an unexpected error. The details are in the RST log.</value>
+    <comment>The window's toast when a button or menu command failed unexpectedly (SC-046). The window stays open.</comment>
+  </data>
   <data name="Dialog_Items" xml:space="preserve">
     <value>Items</value>
   </data>

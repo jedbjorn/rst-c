@@ -97,9 +97,9 @@ internal sealed class AddInsViewModel : ObservableObject
         _messages = messages ?? throw new ArgumentNullException(nameof(messages));
         _work = work;
         _inline = runInline;
-        ApplyCommand = new RelayCommand(() => _ = ApplyAsync(), () => CanApply);
-        RestoreAllCommand = new RelayCommand(() => _ = RestoreAllAsync(), () => IsIdle && _isLoaded);
-        RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => IsIdle);
+        ApplyCommand = new AsyncRelayCommand(ApplyAsync, () => CanApply);
+        RestoreAllCommand = new AsyncRelayCommand(RestoreAllAsync, () => IsIdle && _isLoaded);
+        RefreshCommand = new AsyncRelayCommand(() => RefreshAsync(), () => IsIdle);
     }
 
     public ICommand ApplyCommand { get; }

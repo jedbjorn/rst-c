@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using RST.Core.Builder;
+using RST.UI.Mvvm;
 
 namespace RST.UI.Controls;
 
@@ -19,25 +20,28 @@ public partial class IconPicker : UserControl
     public IconPicker()
     {
         InitializeComponent();
-        DataContextChanged += (_, e) =>
+        DataContextChanged += (_, e) => UiGuard.Run("Icon picker: open", () =>
         {
             if (_model is not null) _model.Changed -= PlaceFocus;
             _model = e.NewValue as IconPickerViewModel;
             if (_model is null) return;
             _model.Changed += PlaceFocus;
             // Opening: focus the selected tile (or the first one).
-            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => FocusTile(_model?.Model.SelectedDesign, fallbackFirst: true));
-        };
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+                UiGuard.Run("Icon picker: focus", () => FocusTile(_model?.Model.SelectedDesign, fallbackFirst: true)));
+        });
         PreviewKeyDown += OnKey;
     }
 
-    private void OnScrimDown(object sender, MouseButtonEventArgs e)
+    private void OnScrimDown(object sender, MouseButtonEventArgs e) => UiGuard.Run("Icon picker: click outside", () =>
     {
         _model?.OutsideClick();
         e.Handled = true;
-    }
+    });
 
-    private void OnKey(object sender, KeyEventArgs e)
+    private void OnKey(object sender, KeyEventArgs e) => UiGuard.Run("Icon picker: key", () => HandleKey(e));
+
+    private void HandleKey(KeyEventArgs e)
     {
         if (_model is null) return;
         if (e.Key == Key.Escape)
@@ -63,12 +67,12 @@ public partial class IconPicker : UserControl
         e.Handled = true;
     }
 
-    private void PlaceFocus() => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+    private void PlaceFocus() => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => UiGuard.Run("Icon picker: move focus", () =>
     {
         if (_model is null) return;
         if (_model.Model.FocusedColor is { } color) FocusVariant(color);
         else if (_model.Model.FocusedTile is { } tile) FocusTile(tile, fallbackFirst: false);
-    });
+    }));
 
     private void FocusVariant(string color) =>
         Buttons().FirstOrDefault(b => b.DataContext is IconVariantViewModel v && v.Color == color)?.Focus();

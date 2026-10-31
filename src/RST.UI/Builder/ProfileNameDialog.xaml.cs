@@ -5,6 +5,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Builder;
@@ -17,7 +18,8 @@ public partial class ProfileNameDialog : Window
         DarkTitleBar.Attach(this);
         Model = model ?? throw new ArgumentNullException(nameof(model));
         DataContext = model;
-        Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusName);
+        Loaded += (_, _) => UiGuard.Run("Profile name dialog: loaded", () =>
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UiGuard.Run("Profile name dialog: focus", FocusName)));
     }
 
     public ProfileNameDialogModel Model { get; }
@@ -25,7 +27,7 @@ public partial class ProfileNameDialog : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        WindowPlacement.CapToWorkArea(this);
+        UiGuard.Run("Profile name dialog: place", () => WindowPlacement.CapToWorkArea(this));
     }
 
     private void FocusName()
@@ -34,7 +36,7 @@ public partial class ProfileNameDialog : Window
         NameBox.SelectAll();
     }
 
-    private void OnConfirm(object sender, RoutedEventArgs e)
+    private void OnConfirm(object sender, RoutedEventArgs e) => UiGuard.Run("Profile name dialog: confirm", () =>
     {
         if (Model.TryConfirm())
         {
@@ -42,5 +44,5 @@ public partial class ProfileNameDialog : Window
             return;
         }
         FocusName();
-    }
+    });
 }

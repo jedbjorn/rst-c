@@ -6,6 +6,7 @@ using System.Windows;
 using RST.Core.Builder;
 using RST.UI.Controls;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Builder;
@@ -39,6 +40,6 @@ public partial class IconPickerWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        WindowPlacement.CapToWorkArea(this);
+        UiGuard.Run("Icon picker window: place", () => WindowPlacement.CapToWorkArea(this));
     }
 }
