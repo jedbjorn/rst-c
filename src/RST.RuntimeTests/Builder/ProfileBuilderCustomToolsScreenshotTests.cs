@@ -123,6 +123,10 @@ public sealed class ProfileBuilderCustomToolsScreenshotTests : IDisposable
                 .Single(b => Id(b) == "Builder.CustomTool" && ((CustomToolItemViewModel)b.DataContext).Label == "Help");
             WindowCapture.Descendants<StackPanel>(help).Single(sp => sp.Name == "Acts").Visibility = Visibility.Visible;
             help.Background = (Brush)window.FindResource("HoverBrush");
+            // And the Review stack's Issues row (a custom tool in a stack, review N3) with its ✎ × shown.
+            var issues = WindowCapture.Descendants<Grid>(window.PanelCards).Single(g => g.Name == "StackRow" && g.DataContext is ToolTileViewModel { Name: "Issues" });
+            WindowCapture.Descendants<StackPanel>(issues).Single(sp => sp.Name == "Corner").Opacity = 1;
+            Assert.Equal(Visibility.Visible, WindowCapture.Descendants<Button>(issues).Single(b => Id(b) == "Builder.EditCustomTool").Visibility);
             WindowCapture.DoEvents();
 
             var bitmap = WindowCapture.Content(window, BuilderSize);
@@ -132,9 +136,9 @@ public sealed class ProfileBuilderCustomToolsScreenshotTests : IDisposable
             var group = WindowCapture.Descendants<Border>(window.CatalogTreeView).Single(b => Id(b) == "Builder.CustomToolsGroup");
             var p = group.TranslatePoint(new Point(6, group.ActualHeight - 3), window.Root);
             AssertColor(Palette(theme, UiPalette.InfoSoft), Screenshots.PixelAt(bitmap, (int)p.X, (int)p.Y), "the group is set apart (InfoSoft)");
-            Assert.Equal(["BIM Standards", "Help", "Support", "Wiki"],
+            Assert.Equal(["BIM Standards", "Help", "Issues", "Support", "Wiki"],
                 WindowCapture.Descendants<TextBlock>(window.CatalogTreeView).Where(t => Id(t) == "Builder.CustomToolLabel").Select(t => t.Text));
-            Assert.Equal(["URL", "EMAIL", "EMAIL", "URL"],
+            Assert.Equal(["URL", "EMAIL", "URL", "EMAIL", "URL"],
                 WindowCapture.Descendants<TextBlock>(window.CatalogTreeView).Where(t => Id(t) == "Builder.CustomToolKind").Select(t => t.Text));
             Assert.InRange(window.CatalogTreeView.TranslatePoint(new Point(window.CatalogTreeView.ActualWidth, 0), window.Root).X, 318, 320); // the 320 px pane, less its divider
             AssertNothingClipped(window.CatalogTreeView, "the Commands pane");

@@ -15,6 +15,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using RST.Core.Builder;
+using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Theming;
 using RST.RuntimeTests.Loader;
@@ -29,8 +30,9 @@ namespace RST.RuntimeTests.Builder;
 
 /// <summary>
 /// The Custom Tools fixture: Architecture and Structure (loaded) on disk, with URL and email tools.
-/// Architecture's Links: BIM Standards, Support, Help; Structure's Links: Wiki, Help. So the list is
-/// BIM Standards, Help (in both), Support, Wiki.
+/// Architecture's Links: BIM Standards, Support, Help; Structure's Links: Wiki, Help, and its Review
+/// stack holds the Issues tool (review N3: a custom tool in a stack row). So the list is BIM
+/// Standards, Help (in both), Issues, Support, Wiki.
 /// </summary>
 public static class CustomToolFixtures
 {
@@ -38,6 +40,7 @@ public static class CustomToolFixtures
     public const string Help = "mailto:bim@studio.example";
     public const string Support = "mailto:support@studio.example";
     public const string Standards = "https://bim.studio.example/standards";
+    public const string Issues = "https://issues.studio.example";
 
     private static Slot Url(string name, string link, string icon) =>
         new() { SlotType = "tool", Name = name, BaseName = name, CommandId = "URL:" + link, IconFile = icon };
@@ -57,6 +60,7 @@ public static class CustomToolFixtures
     {
         var p = LoaderFixtures.Structure();
         p.Panels[2].Slots = [Url("Wiki", Wiki, "pack:link_external_blue"), Url("Help", Help, "pack:question_light_grey")];
+        p.Stacks["Checks"].Tools[2] = Url("Issues", Issues, "pack:checklist_orange");
         return p;
     }
 
@@ -203,11 +207,11 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
         var (window, h) = Open();
         try
         {
-            Assert.Equal(["BIM Standards", "Help", "Support", "Wiki"], Labels(window));
+            Assert.Equal(["BIM Standards", "Help", "Issues", "Support", "Wiki"], Labels(window));
             var group = h.Model.CustomToolsGroup;
-            Assert.Equal(4, group.Count);
-            Assert.Equal(15 + 4, h.Model.CommandsCount);
-            Assert.Equal("19", WindowCapture.Descendants<ContentControl>(window.Root).Single(c => Id(c) == "Builder.CatalogCount").Content?.ToString());
+            Assert.Equal(5, group.Count);
+            Assert.Equal(15 + 5, h.Model.CommandsCount);
+            Assert.Equal("20", WindowCapture.Descendants<ContentControl>(window.Root).Single(c => Id(c) == "Builder.CatalogCount").Content?.ToString());
             Assert.Same(group, window.CatalogTreeView.Items[0]);
             Assert.Equal(CustomTools.ListNote, WindowCapture.Descendants<TextBlock>(window.CatalogTreeView).Single(t => Id(t) == "Builder.CustomToolsNote").Text);
 
@@ -227,7 +231,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Assert.Empty(Rows(window));
             group.ToggleCommand.Execute(null);
             WindowCapture.DoEvents();
-            Assert.Equal(4, Rows(window).Count);
+            Assert.Equal(5, Rows(window).Count);
         }
         finally
         {
@@ -301,11 +305,11 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             var create = WindowCapture.Descendants<Button>(window.Root).Single(b => Id(b) == "Builder.CreateNew");
             Click(create);
 
-            Assert.Equal("Kinship,[Warnings Audit Purge],Notes,Studio desk", Shape(h, 1));
+            Assert.Equal("Kinship,[Warnings Audit Issues],Notes,Studio desk", Shape(h, 1));
             var slot = h.Model.Profile.Panels[1].Slots[^1];
             Assert.Equal(("URL:mailto:desk@studio.example", "Studio desk", "pack:at_orange"), (slot.CommandId, slot.BaseName, slot.IconFile));
             Assert.Contains("Studio desk", Labels(window));
-            Assert.Equal(5, h.Model.CustomToolsGroup.Count);
+            Assert.Equal(6, h.Model.CustomToolsGroup.Count);
             Assert.Equal("Added to “Review”.", h.Model.Toast.Text);
             Assert.True(h.Model.IsDirty, "a placement is an unsaved change");
             Assert.Equal(0, CustomToolFixtures.Holding(Disk(LoaderFixtures.StructId), "mailto:desk@studio.example"));
@@ -329,7 +333,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             });
             Click(create);
             Assert.Equal("A label is required.", h.Modals.CustomToolDialogs[^1].Error);
-            Assert.Equal(5, h.Model.CustomToolsGroup.Count); // nothing was added
+            Assert.Equal(6, h.Model.CustomToolsGroup.Count); // nothing was added
         }
         finally
         {
@@ -700,5 +704,153 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
         Assert.Equal("No profile can be changed.", none.Warning);
         Assert.False(none.CanConfirm);
         Assert.Equal(["Struct (Struct_2026-01-01.json): files share this profile's id. Remove the stale copy."], none.Refusals);
+    });
+
+    // ── review N2: the reload in flight; N3: ✎ on a stack row ──
+
+    [Fact]
+    public void While_the_ribbon_reloads_after_an_edit_everywhere_the_commands_wait_and_the_cards_are_already_new() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var pending = new TaskCompletionSource<LoadResult>();
+            h.Backend.OnLoad = _ => pending.Task;
+            var before = h.Model.Panels.ToList();
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                d.Label = "Studio wiki";
+                return true;
+            });
+            var row = (CustomToolItemViewModel)Row(window, "Wiki").DataContext;
+            row.EditCommand.Execute(null);
+            WindowCapture.DoEvents();
+
+            // The reload is in flight: every command waits, the window stays open, the cards are rebuilt.
+            Assert.Single(h.Backend.Loads);
+            Assert.True(h.Model.IsWorking);
+            Assert.False(h.Model.IsIdle);
+            var current = (CustomToolItemViewModel)Row(window, "Help").DataContext;
+            Assert.False(current.EditCommand.CanExecute(null));
+            Assert.False(current.RemoveCommand.CanExecute(null));
+            Assert.False(current.AddCommand.CanExecute(null));
+            Assert.False(h.Model.CreateCustomToolCommand.CanExecute(null));
+            var tile = h.Model.Panels[2].Tile(0);
+            Assert.False(h.Model.EditCustomToolCommand!.CanExecute(tile));
+            Assert.False(h.Model.Panels[2].MoveUpCommand.CanExecute(null));
+            Assert.False(h.Model.SaveCommand.CanExecute(null));
+            Assert.False(h.Model.CanClose(), "the window stays open while the reload runs");
+            Assert.All(h.Model.Panels, card => Assert.DoesNotContain(card, before));
+            Assert.Equal("Studio wiki", tile.Name);
+
+            pending.SetResult(new LoadResult(true, [], false, [], QaCheck.Clear));
+            WindowCapture.DoEvents();
+            Assert.False(h.Model.IsWorking);
+            Assert.True(current.EditCommand.CanExecute(null));
+            Assert.Equal("Updated in 1 profile. Ribbon reloaded.", h.Model.Toast.Text);
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void Edit_from_a_custom_tool_in_a_stack_row_changes_it_everywhere() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            // Review › the Checks stack holds the Issues tool (a URL tool in a stack row).
+            var stackRow = WindowCapture.Descendants<Grid>(window.PanelCards)
+                .Single(g => g.Name == "StackRow" && g.DataContext is ToolTileViewModel { Name: "Issues" });
+            var tile = (ToolTileViewModel)stackRow.DataContext;
+            Assert.True(tile.InStack);
+            Assert.True(tile.ShowsEditCustom);
+            var edit = WindowCapture.Descendants<Button>(stackRow).Single(b => Id(b) == "Builder.EditCustomTool");
+            Assert.Equal(Visibility.Visible, edit.Visibility);
+            Assert.Same(tile, edit.CommandParameter);
+
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                Assert.Equal(("Issues", CustomToolFixtures.Issues, "Update in 1 profile"), (d.Label, d.Address, d.ConfirmText));
+                d.Label = "Issue tracker";
+                d.Address = "tracker.studio.example";
+                return true;
+            });
+            Click(edit);
+
+            const string newLink = "https://tracker.studio.example";
+            var disk = Disk(LoaderFixtures.StructId);
+            var onDisk = Assert.Single(CustomToolFixtures.Tools(disk), s => CustomTools.LinkOf(s) == newLink);
+            Assert.Equal(("Issue tracker", "Issue tracker"), (onDisk.Name, onDisk.BaseName));
+            Assert.Equal(1, disk.Panels[1].Slots.Count(PanelStacks.IsStack));
+            Assert.Equal("Kinship,[Warnings Audit Issue tracker],Notes", Shape(h, 1));
+            Assert.Equal(0, CustomToolFixtures.Holding(h.Model.Profile, CustomToolFixtures.Issues));
+            Assert.Single(h.Backend.Loads);
+            Assert.False(h.Model.IsDirty);
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    // ── review F7: the rows by keyboard ──
+
+    private static void Key(UIElement on, System.Windows.Input.Key key)
+    {
+        var source = PresentationSource.FromVisual(on)!;
+        var preview = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent };
+        on.RaiseEvent(preview);
+        if (!preview.Handled)
+            on.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = System.Windows.Input.Keyboard.KeyDownEvent });
+        WindowCapture.DoEvents();
+    }
+
+    private static UIElement? Focused(Window w) => System.Windows.Input.Keyboard.FocusedElement as UIElement ?? System.Windows.Input.FocusManager.GetFocusedElement(w) as UIElement;
+
+    [Fact]
+    public void The_rows_are_keyboard_stops_that_show_their_buttons_and_Delete_removes_everywhere() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            window.Activate();
+            WindowCapture.DoEvents();
+            var filter = window.FilterBox;
+            Assert.True(filter.Focus());
+
+            // ↓ in Filter… enters the list; ↓ ↑ move between rows.
+            Key(filter, System.Windows.Input.Key.Down);
+            Assert.Same(Row(window, "BIM Standards"), Focused(window));
+            Key(Row(window, "BIM Standards"), System.Windows.Input.Key.Down);
+            var help = Row(window, "Help");
+            Assert.Same(help, Focused(window));
+            Assert.True(help.Focusable);
+            Assert.True(help.IsKeyboardFocusWithin);
+
+            // Focus shows ✎ × (the trigger the review found dead, now live), as WU3's cards do.
+            var acts = WindowCapture.Descendants<StackPanel>(help).Single(sp => sp.Name == "Acts");
+            Assert.Equal(Visibility.Visible, acts.Visibility);
+            Assert.Equal(Visibility.Collapsed, WindowCapture.Descendants<StackPanel>(Row(window, "Wiki")).Single(sp => sp.Name == "Acts").Visibility);
+            Key(help, System.Windows.Input.Key.Up);
+            Assert.Same(Row(window, "BIM Standards"), Focused(window));
+
+            // Delete on a focused row: Remove everywhere, through its confirmation.
+            h.Dialogs.ConfirmResult = false;
+            Key(Row(window, "Help"), System.Windows.Input.Key.Delete);
+            var confirm = Assert.Single(h.Dialogs.ConfirmCalls);
+            Assert.Equal(("Remove custom tool", "Remove from 2 profiles"), (confirm.Title, confirm.ConfirmText));
+            Assert.Empty(h.Backend.CustomToolChanges);
+            h.Dialogs.ConfirmResult = true;
+            Key(Row(window, "Help"), System.Windows.Input.Key.Delete);
+            Assert.Single(h.Backend.CustomToolChanges);
+            Assert.DoesNotContain("Help", Labels(window));
+        }
+        finally
+        {
+            Close(window, h);
+        }
     });
 }
