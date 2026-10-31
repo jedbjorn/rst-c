@@ -21,7 +21,7 @@ public class ActivationPlannerTests
     /// <summary>The same add-ins in 2026 and 2027.</summary>
     private static InventoryItem[] Machine(int y) =>
     [
-        Item(y, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "RSTC"),
+        Item(y, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "DSOS"),
         Item(y, "Batch Print", AddinScope.Machine, vendor: "ADSK"),
         Item(y, "Add-Ins Manager", AddinScope.RevitInstall, vendor: "ADSK"),
         Item(y, "Kinship"),

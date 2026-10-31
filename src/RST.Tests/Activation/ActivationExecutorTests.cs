@@ -39,7 +39,7 @@ public sealed class ActivationExecutorTests : IDisposable
     {
         _tree.Manifest(_tree.UserAddins(2026), "Kinship.addin", "Kinship", Kinship, "ANDK");
         _tree.Manifest(_tree.MachineAddins(2026), "DiRoots.One.addin", "DiRoots.One", DiRoots, "www.diroots.com");
-        _tree.Manifest(_tree.UserAddins(2026), "RST.addin", "RST", InventoryItem.RstClientId, "RSTC");
+        _tree.Manifest(_tree.UserAddins(2026), "RST.addin", "RST", InventoryItem.RstClientId, "DSOS");
         _tree.Manifest(_tree.MachineAddins(2026), "Autodesk.BatchPrint.addin", "Batch Print", "9d508589-48b6-4ff6-a50d-d16d77c585a1", "ADSK");
         _tree.Settings(2026, FakeAddinTree.Fixture("orig-2026.json"));
     }

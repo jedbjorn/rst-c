@@ -24,7 +24,7 @@
     <Assembly>RST.Bootstrap.dll</Assembly>
     <FullClassName>RST.Bootstrap.RstBootstrap</FullClassName>
     <ClientId>4f8ef7a0-0001-4000-8000-525354000001</ClientId>
-    <VendorId>RSTC</VendorId>
-    <VendorDescription>Designs/OS — https://github.com/jedbjorn/RST-C</VendorDescription>
+    <VendorId>DSOS</VendorId>
+    <VendorDescription>Designs/OS</VendorDescription>
   </AddIn>
 </RevitAddIns>

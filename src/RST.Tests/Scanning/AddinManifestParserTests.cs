@@ -1,6 +1,8 @@
+using System;
 using System.IO;
 using System.Linq;
 using FluentAssertions;
+using RST.Core.Activation;
 using RST.Core.Scanning;
 using Xunit;
 
@@ -72,5 +74,33 @@ public sealed class AddinManifestParserTests
     public void ParseDirectory_NonExistent_ReturnsEmpty()
     {
         AddinManifestParser.ParseDirectory("/no/such/path/here").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ShippedRstManifest_ListsDesignsOsAsVendor_AndKeepsItsClientId()
+    {
+        // SC-050: rst-c names the same publisher as its sister apps splash-it and gantt-it
+        // (VendorId DSOS, VendorDescription "Designs/OS"). The ClientId is how Revit knows RST
+        // across upgrades and must never change.
+        var m = AddinManifestParser.ParseFile(Path.Combine(RepoRoot(), "src", "RST.Bootstrap", "RST.addin"));
+
+        m.Should().NotBeNull();
+        m!.Entries.Should().HaveCount(1);
+
+        var e = m.Entries[0];
+        e.Name.Should().Be("RST");
+        e.AddinId.Should().Be("4f8ef7a0-0001-4000-8000-525354000001");
+        e.AddinId.Should().Be(InventoryItem.RstClientId);
+        e.VendorId.Should().Be("DSOS");
+        e.VendorDescription.Should().Be("Designs/OS");
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "RST-C.sln")))
+            dir = dir.Parent;
+        dir.Should().NotBeNull($"repo root (RST-C.sln) must be discoverable from {AppContext.BaseDirectory}");
+        return dir!.FullName;
     }
 }
