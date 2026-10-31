@@ -15,6 +15,7 @@ public static class ProfileLoaderLauncher
     /// <summary>
     /// Shows the Profile Loader modally, owned by <paramref name="owner"/> and centred on it, and
     /// returns when it closes. Call on Revit's UI thread, after RevitThemeDetector.ApplyToWindows().
+    /// Returns false when <see cref="WindowGuard"/> closed it after an unhandled UI exception (logged).
     /// </summary>
     /// <param name="owner">Revit's main window (<c>UIApplication.MainWindowHandle</c>); zero opens it unowned, centred on the screen.</param>
     /// <param name="revitVersion">Revit's version number (e.g. "2026").</param>
@@ -22,7 +23,7 @@ public static class ProfileLoaderLauncher
     /// the command still builds (and caches) the catalogue as before.</param>
     /// <param name="switchScheduler">The live profile switch; null falls back to "restart Revit".</param>
     /// <param name="allTabs">The ribbon's tab titles (RibbonTabEnumerator), for RSTify and the add-in matcher.</param>
-    public static void Show(IntPtr owner,
+    public static bool Show(IntPtr owner,
                             string revitVersion,
                             IReadOnlyList<ScannedCommand>? catalog = null,
                             IProfileSwitchScheduler? switchScheduler = null,
@@ -43,6 +44,6 @@ public static class ProfileLoaderLauncher
         dialogs.Owner = window;
         loaderDialogs.Owner = window;
         WindowPlacement.Own(window, owner);
-        window.ShowDialog();
+        return WindowGuard.ShowDialog(window, "Loader");
     }
 }

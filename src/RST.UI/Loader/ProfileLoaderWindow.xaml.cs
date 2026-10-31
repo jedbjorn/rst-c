@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using RST.Core.Logging;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
 
@@ -49,6 +50,13 @@ public partial class ProfileLoaderWindow : Window
     /// <summary>The window stays open while the load's add-in pass runs (its result is still to show).</summary>
     protected override void OnClosing(CancelEventArgs e)
     {
+        // SC-045: closed by the window safety net after an error, the window goes, working or not.
+        if (WindowGuard.IsClosingAfterFault(this))
+        {
+            if (Model.IsWorking) Log.Warning("Loader: closed after an unexpected error while it was working; its result is not shown");
+            base.OnClosing(e);
+            return;
+        }
         if (Model.IsWorking) e.Cancel = true;
         base.OnClosing(e);
     }

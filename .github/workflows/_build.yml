@@ -9,7 +9,7 @@ name: _build (reusable)
 #                    build/check-revit-api-floor.py fails on any
 #                    Nice3point.Revit.Api pin above the year's earliest
 #                    update), then xunit on RST.Tests (configuration-agnostic)
-#   • test-runtime — matrix R25/R27: xunit on RST.RuntimeTests (Windows-
+#   • test-runtime — matrix R25/R26/R27: xunit on RST.RuntimeTests (Windows-
 #                    only WPF paths: bridge + resolver production
 #                    contracts) on net8.0-windows and net10.0-windows.
 #   • serilog-probe — builds the AAA/ZZZ Serilog probe add-ins (VM step V3,
@@ -103,13 +103,15 @@ jobs:
   # — it can only RUN on Windows. No Revit needed, so windows-latest
   # suffices and the self-hosted Revit runner stays out of the PR gate.
   # R27 leg (feature #11, D5): the same contracts on net10.0-windows.
+  # R26 leg (SC-045): the 2026 build (net8.0-windows, its own Revit API
+  # pins) runs the same contracts, since Revit 2026 is a shipped year.
   test-runtime:
     name: Test (runtime, Windows)
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        major: [R25, R27]
+        major: [R25, R26, R27]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -126,11 +128,11 @@ jobs:
       # run: this job is a per-major matrix (feature #11) and only the R25
       # leg uploads, so the fixed artifact name never collides.
       - name: List screenshots
-        if: always() && matrix.major != 'R27'
+        if: always() && matrix.major == 'R25'
         shell: bash
         run: find TestResults/screenshots -type f -exec ls -l {} + || true
       - uses: actions/upload-artifact@v4
-        if: always() && matrix.major != 'R27'
+        if: always() && matrix.major == 'R25'
         with:
           name: RST-screenshots
           path: |

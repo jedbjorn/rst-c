@@ -108,6 +108,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private bool _isWorking;
     private bool _closeApproved;
 
+    // SC-045: set when the window safety net closed the Builder after an error (Abandon).
+    private bool _abandoned;
+
     /// <param name="backend">The Builder's data and writes (a fake in tests).</param>
     /// <param name="dialogs">The family dialogs: confirm, the three-way prompt, the color picker, the file dialogs.</param>
     /// <param name="schedule">Runs an action once after a delay (the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
@@ -151,6 +154,22 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     /// <summary>Raised when the window should close (Exit, or after the unsaved-changes prompt allowed it).</summary>
     public event Action? CloseRequested;
+
+    /// <summary>True once <see cref="Abandon"/> ran: the Builder is gone after an error.</summary>
+    public bool IsAbandoned => _abandoned;
+
+    /// <summary>
+    /// SC-045: the window safety net closed the Builder after an error. Unsaved edits are discarded and
+    /// nothing more is done from this faulted state: a save, switch or reload that was queued (Save &amp;
+    /// Switch, Save &amp; Exit) returns at entry without side effects, and one already in flight stops after
+    /// its current await. What already reached disk before the fault stays.
+    /// </summary>
+    public void Abandon()
+    {
+        if (_abandoned) return;
+        _abandoned = true;
+        Log.Information("Builder: abandoned after an error; queued and in-flight saves, switches and reloads stop here");
+    }
 
     public TransientMessage Toast { get; }
 
@@ -264,7 +283,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private void RequestSwitch(ProfileOptionViewModel target)
     {
-        if (IsWorking) return;
+        if (_abandoned || IsWorking) return;
         if (!IsDirty)
         {
             ApplySwitch(target);
@@ -287,7 +306,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private async Task SaveThenSwitchAsync(string targetKey)
     {
-        if (!await SaveAsync()) return;
+        if (_abandoned) return;
+        if (!await SaveAsync() || _abandoned) return;
         var target = ProfileOptions.FirstOrDefault(o => o.Key == targetKey) ?? ProfileOptionViewModel.New();
         ApplySwitch(target);
     }
@@ -295,6 +315,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <summary>onProfileSelectChange: "+ New profile" starts fresh; a profile loads into the editor.</summary>
     private void ApplySwitch(ProfileOptionViewModel target)
     {
+        if (_abandoned) return;
         SetCurrent(target);
         if (target.Entry is null)
         {
@@ -1224,7 +1245,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     internal async Task EditCustomToolAsync(CustomTool tool)
     {
-        if (IsWorking) return;
+        if (_abandoned || IsWorking) return;
         RefreshProfiles(); // another Revit session may have saved since
         tool = _customTools.Find(tool.Link) ?? tool;
         if (Safe<CustomToolPreview?>(() => _backend.PreviewCustomTool(tool.Link, _profile), null, "plan_custom_tool") is not { } preview)
@@ -1249,7 +1270,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     internal async Task RemoveCustomToolAsync(CustomTool tool)
     {
-        if (IsWorking) return;
+        if (_abandoned || IsWorking) return;
         RefreshProfiles();
         if (Safe(() => _backend.PreviewCustomTool(tool.Link, _profile).Plan, null, "plan_custom_tool") is not { } plan)
         {
@@ -1283,6 +1304,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     private async Task AfterCustomToolUpdateAsync(CustomToolUpdate? update, Action<Profile> change, Func<object?, string> done)
     {
+        if (_abandoned) return;
         if (update is null)
         {
             // The backend threw (logged): the files may be partly written; show what is there now.
@@ -1332,6 +1354,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         try
         {
             var load = await ReloadActiveAsync(active?.ProfileName ?? "", _activeId);
+            if (_abandoned) return;
             if (load.Ok) ShowToast(message + " " + UiStrings.Builder_ToolRibbonReloaded, BannerKind.Success);
             else ShowToast(UiStrings.Builder_ToolReloadFailed, BannerKind.Error);
         }
@@ -1348,6 +1371,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     private async Task<LoadResult> ReloadActiveAsync(string name, string? id)
     {
+        if (_abandoned) return LoadResult.Fail("abandoned after an error");
         try
         {
             return await _backend.LoadAsync(new LoadRequest(name, id, _activeDisable, _activeHiddenTabs));
@@ -1399,7 +1423,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </remarks>
     public async Task<bool> SaveAsync()
     {
-        if (IsWorking) return false;
+        if (_abandoned || IsWorking) return false;
         RefreshProfiles();
         var library = SavedProfiles();
         var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, library);
@@ -1484,6 +1508,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         try
         {
             var load = await ReloadActiveAsync(_profile.ProfileName ?? "", _profile.Id);
+            if (_abandoned)
+            {
+                Log.Information("Builder: abandoned during the reload after a save; nothing more is done");
+                return false;
+            }
             if (!load.Ok)
             {
                 if (wasActiveIdless && _supersededFile is { } old)
@@ -1541,7 +1570,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <summary>Exit: clean closes; dirty asks Save &amp; Exit / Discard &amp; Exit / Cancel (Save &amp; Exit closes only when the save succeeds).</summary>
     public async Task ExitAsync()
     {
-        if (IsWorking) return;
+        if (_abandoned || IsWorking) return;
         if (!IsDirty)
         {
             Close();
@@ -1550,7 +1579,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         switch (AskUnsaved())
         {
             case DialogChoice.Primary:
-                if (await SaveAsync()) Close();
+                if (await SaveAsync() && !_abandoned) Close();
                 break;
             case DialogChoice.Secondary:
                 Close();
@@ -1604,7 +1633,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private async Task SaveThenCloseAsync()
     {
-        if (await SaveAsync()) Close();
+        if (_abandoned) return;
+        if (await SaveAsync() && !_abandoned) Close();
     }
 
     private DialogChoice AskUnsaved() => _dialogs.Choose(UiStrings.Builder_UnsavedTitle, UiStrings.Builder_UnsavedText,
