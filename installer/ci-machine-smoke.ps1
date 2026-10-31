@@ -504,9 +504,9 @@ foreach ($y in '2025', '2026', '2027') { Assert (-not (Test-Path (Join-Path $App
 Assert (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\RST'))) '(a) nothing under %LocalAppData%\Programs\RST'
 # SC-044: this administrator's install, from an elevated session, started the tray for them through their own Explorer:
 # one, hidden, as this user, never elevated (N8), not msiexec's child.
+$linesA = Get-StartTrayLines $sinceA '(a)'   # printed first: it says why, if no tray started
 $trayA = Wait-SettledTray '(a) after install'
 Assert-StartedTray $trayA $MachineTrayExe '(a) after install'
-$linesA = Get-StartTrayLines $sinceA '(a)'
 Assert (@($linesA | Where-Object { $_ -match "started RST\.Tray pid $($trayA.Id) through the desktop shell" }).Count -eq 1) "(a) RstStartTray started it through this user's Explorer (its log names pid $($trayA.Id))"
 Assert-AclsUnchanged $acl '(a)'
 Assert-OnlyInherited (Get-CreatedRoots @('2026', '2027') $acl) '(a)'

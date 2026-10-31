@@ -575,9 +575,9 @@ if ($Mode -eq 'Install') {
   Assert-TrayInstalled '(a)'
   # SC-044: the install started the tray for this user: one, hidden, unelevated, by RstStartTray.
   Show-LogLines $logA @('RstStartTray')
+  $linesA = Get-StartTrayLines $sinceA '(a)'   # printed first: it says why, if no tray started
   $startedA = Wait-SettledTray '(a) after install'
   Assert-StartedTray $startedA $TrayExe '(a) after install'
-  $linesA = Get-StartTrayLines $sinceA '(a)'
   Assert (@($linesA | Where-Object { $_ -match "started RST\.Tray pid $($startedA.Id) " }).Count -eq 1) "(a) RstStartTray started it (its log names pid $($startedA.Id))"
   Stop-Trays
   $trayA = Test-TraySingleInstance '(t)'

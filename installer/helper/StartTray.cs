@@ -21,7 +21,7 @@
 //      starting none. So a reinstall over a running tray, and a self-update, never start a second tray.
 //   3. The user's desktop shell: the Explorer that owns this desktop's shell window (GetShellWindow), or else an
 //      explorer.exe in this session, running as this same user (under runas the desktop belongs to someone else: that
-//      one is never used), and not elevated (with UAC on; review N2). The tray is created with that Explorer as its
+//      one is never used), and not one elevated through UAC (a full split token; review N2). The tray is created with that Explorer as its
 //      parent (PROC_THREAD_ATTRIBUTE_PARENT_PROCESS): Windows then gives it Explorer's token, session and job, so it
 //      runs as the user, at Explorer's own (normal, unelevated) rights, outside the installer's process tree, exactly
 //      as it does when the Run value starts it at sign-in. The handle opened for that is checked again (user, session,
@@ -334,7 +334,7 @@ internal static class StartTray
                 log("desktop shell: pid " + pid + " (this desktop's shell window): " + f);
                 return pid;
             }
-            log("this desktop's shell window belongs to pid " + pid + " (" + f + "): not this user's unelevated shell in this session");
+            log("this desktop's shell window belongs to pid " + pid + " (" + f + "): not this user's shell in this session, or one elevated through UAC");
         }
         Process[] explorers = Process.GetProcessesByName("explorer");
         try
@@ -348,7 +348,7 @@ internal static class StartTray
                     log("desktop shell: explorer.exe pid " + p.Id + " in session " + me.Session + ": " + f);
                     return p.Id;
                 }
-                log("explorer.exe pid " + p.Id + " in session " + me.Session + " runs as another user, elevated, or could not be read (" + f + "): not used");
+                log("explorer.exe pid " + p.Id + " in session " + me.Session + " runs as another user, elevated through UAC, or could not be read (" + f + "): not used");
             }
         }
         finally
@@ -360,13 +360,16 @@ internal static class StartTray
     }
 
     /// <summary>
-    /// This user's shell in this session, and not elevated (review N2: an elevated Explorer would give the tray its
-    /// elevated token), unless UAC is off, where every administrator's Explorer has the full token.
+    /// This user's shell in this session, and not one elevated through UAC (review N2): an Explorer with a full split
+    /// token (TokenElevationTypeFull, e.g. one started "as administrator") would give the tray that elevated token, and
+    /// one whose token cannot be read is not trusted. An Explorer with a default (unsplit) token is the user's normal
+    /// shell, elevated or not: an account that never gets a split token (UAC off, or the built-in Administrator) signs in
+    /// with it, and the Run value starts the tray with that same token.
     /// </summary>
     private static bool IsUsersShell(TokenFacts shell, TokenFacts me, bool uacOff)
     {
         return shell.Sid != null && string.Equals(shell.Sid, me.Sid, StringComparison.OrdinalIgnoreCase) && shell.Session == me.Session
-            && (uacOff || (shell.ElevationType != 0 && !shell.Elevated && shell.ElevationType != TokenElevationTypeFull));
+            && (uacOff || (shell.ElevationType != 0 && shell.ElevationType != TokenElevationTypeFull));
     }
 
     /// <summary>UAC is off: EnableLUA is 0 (HKLM\...\Policies\System). Missing or unreadable counts as on.</summary>
@@ -416,7 +419,7 @@ internal static class StartTray
                 string image = ImagePath(parent);
                 if (!IsUsersShell(now, me, uacOff) || image == null || !string.Equals(Path.GetFileName(image), "explorer.exe", StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "pid " + parentPid + " is no longer this user's unelevated explorer.exe (" + (image ?? "(path unknown)") + "; " + now + ")";
+                    error = "pid " + parentPid + " is no longer this user's explorer.exe (" + (image ?? "(path unknown)") + "; " + now + ")";
                     return false;
                 }
                 // The user's own environment, from Explorer's token: not the installer's.

@@ -177,8 +177,9 @@ function Assert-StartedTray($Proc, [string]$Exe, [string]$Label) {
   if ($shell -and -not $shell.Facts.Elevated) {
     $checks += , @((-not $f.Elevated -and $f.ElevationType -ne 'full' -and $f.Integrity -le 8192), "[$Label] it is not elevated (token $($f.ElevationType), integrity $($f.Integrity)), like this user's Explorer")
   } elseif ($shell) {
-    # UAC off: every process of an administrator has the full token, Explorer too, and there is no UIPI to lose to.
-    Write-Host "OBSERVE: [$Label] this user's Explorer itself runs elevated (UAC off on this runner)"
+    # No split token for this user (UAC off, or the built-in Administrator): Explorer itself has the full token, and the
+    # tray at sign-in gets that same token; there is no UIPI to lose to.
+    Write-Host "OBSERVE: [$Label] this user's Explorer itself has a full, unsplit token (no UAC split token for this account)"
     $checks += , @(($f.Integrity -le $shell.Facts.Integrity), "[$Label] it has no more rights than this user's Explorer (integrity $($f.Integrity) <= $($shell.Facts.Integrity))")
   } else {
     $checks += , @((-not $f.Elevated), "[$Label] it is not elevated (no Explorer of this user to compare with)")
