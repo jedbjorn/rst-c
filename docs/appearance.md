@@ -1,7 +1,7 @@
 ---
 title: Appearance
 tags: [rst-c, branding, colours, panels, appearance]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: Guide to branding and coloured panels on a profile tab
 ---
@@ -24,7 +24,7 @@ Every profile tab can display an 85×85 pixel square branding image with rounded
 
 The branding panel sits at the leading edge of the tab so the curated ribbon is visibly associated with the organisation that built it. This is intentional: a shared ribbon that carries no identity makes it harder for users to know they are working from a curated environment.
 
-![A profile tab on the Revit ribbon showing branding and panel colours together: the logo at the leading edge, followed by panels each tinted a different colour](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
+![A profile tab on the Revit ribbon showing branding and panel colours together: the logo at the leading edge, followed by panels each tinted a different colour, several of them holding stacked buttons beside large ones](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
 
 ### Setting a logo
 
@@ -51,7 +51,7 @@ Each panel on a profile tab can carry its own background colour, and the profile
 
 ### Setting panel colours
 
-In the Builder, select a panel and set its **Color** under **Selected Panel**: click the swatch to open the colour picker (palette, recent colours, a hex box, or pick a colour from anywhere on screen), or type a hex code (`#RRGGBB`) in the box beside it. The profile's **Panel Opacity** (under **Profile**) runs from 10 to 100 in steps of 5. Users can override the opacity for themselves in the Loader with **Override Panel Opacity**.
+In the Builder, click the colour swatch in a panel card's header to open the colour picker: a palette, recent colours, a hex box (`#RRGGBB`), or pick a colour from anywhere on screen. The panel's stripe and swatch take the new colour. The profile's **Panel colour strength** (the Profile pane's **General** tab) runs from 10% to 100% in steps of 5 and applies to every panel. Users can override it for themselves in the Loader with **Override Panel Opacity**.
 
 The Builder's Live Preview and the Loader's Tab Preview draw the panels with these colours, on a light or dark background to match Revit's theme.
 
@@ -63,7 +63,7 @@ description: Square pixels, rendered with rounded corners
 :::class2
 value: 10–100%
 label: Panel opacity range
-description: Per profile, set in the Builder; users can override it in the Loader
+description: Per profile (Panel colour strength in the Builder); users can override it in the Loader
 :::class3
 value: 5px
 label: Corner radius

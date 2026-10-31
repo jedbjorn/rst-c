@@ -1,7 +1,7 @@
 ---
 title: Logging
 tags: [rst-c, logging, diagnostics]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: Where rst-c logs live and what they contain
 ---
@@ -52,7 +52,7 @@ The engine logs at structured information and warning level throughout its lifec
 The Loader, the Builder and Health are native windows in the same process, so they log directly to the session log, interleaved with the engine's own lines. Each session of a window is bracketed (`=== Loader session opened: … ===` and `=== Loader session closed: duration=…ms ===`), and the window logs:
 
 - **Opening:** what it read from Revit (for example `ProfileLoader ready: revit=2026, catalog=587 commands, tabs=16, …` or `Health window opening (owner Revit)`) and the Revit theme it opened in (`RevitThemeDetector`, at debug level).
-- **User actions and their results:** loading, unloading, deleting and importing profiles (`UI: selector: Load attempt …`, `Loader.load_profile OK`), saving and exporting in the Builder (`Builder.save_profile OK: name=… → <file>`, `Builder.export_profile OK`), presets, cleanup targets and icon changes, scans and cleanups (`HealthCleaner.Run done`).
+- **User actions and their results:** loading, unloading, deleting and importing profiles (`UI: selector: Load attempt …`, `Loader.load_profile OK`), saving and exporting in the Builder (`Builder.save_profile OK: name=… → <file>`, `Builder.export_profile OK`), Custom Tools edited or removed everywhere (`Builder.custom_tools: edit <link>: written=… failed=… working=… active=…`), stack repairs on open (`Builder.normalize_stacks`), presets, cleanup targets and icon changes, scans and cleanups (`HealthCleaner.Run done`).
 - **Failures:** every error the window shows you is also logged, with the exception's stack trace.
 
 ### Bootstrap log

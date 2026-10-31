@@ -22,7 +22,7 @@ purpose: Native Revit add-in for curated ribbon profiles
 
 **Topics:** `revit` · `revit-addin` · `bim` · `ribbon` · `wpf` · `dotnet` · `wix` · `autodesk`
 
-![A loaded rst-c profile on the Revit ribbon: company branding at the leading edge of the tab, followed by coloured panels grouping the profile's tools](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
+![A loaded rst-c profile on the Revit ribbon: branding at the leading edge of the tab, followed by coloured panels grouping the profile's tools, with large buttons and stacks of small ones](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
 
 ## Overview
 
@@ -62,27 +62,27 @@ The Loader is the end-user face of rst-c. It is a native window over Revit that 
 
 ### Profile Builder, Live Switching & Export
 
-The Builder is the admin counterpart to the Loader. It scans the live Revit session for every command on every tab and presents them as a searchable catalogue you can drag into panels on a new profile tab. Each tool gets a name, an icon from rst-c's built-in icon pack, and a panel assignment. The Builder also sets panel colours, RSTify presets, junk cleanup targets and the machine's company branding, works out the profile's required add-ins, and exports the finished profile as a self-contained `.zip` that any rst-c install can import. Editing a profile and renaming it creates a copy, enabling flavours of the same profile, and it asks before discarding unsaved changes.
+The Builder is the admin counterpart to the Loader. It scans the live Revit session for every command on every tab and presents them as a searchable catalogue you can drag onto panel cards on a new profile tab, beside your reusable URL and email Custom Tools. Each tool is a tile with a name and an icon from rst-c's built-in icon pack; drop one tool onto another to stack them, as Revit stacks its small buttons. A Profile pane sets the tab name, panel colour strength, the Loader defaults (RSTify tabs and unused add-ins) and junk cleanup targets; ⚙ sets the machine's branding. The Builder works out the profile's required add-ins and exports the finished profile as a self-contained `.zip` that any rst-c install can import. **Rename…** keeps a profile's id, so users who have it loaded keep it; **Duplicate…** makes a new profile to start a variant. It asks before discarding unsaved changes.
 
-![The Profile Builder: the searchable Revit command catalogue on the left, the profile's panels and their tools in the centre, properties on the right, and a live preview of the resulting tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
+![The Profile Builder: Custom Tools and the searchable Revit command catalogue on the left, the profile's panels as cards of tool tiles and stacks in the centre, the Profile pane on the right, and a live preview of the resulting tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
 
 **[Profile Builder docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/profile-builder.md)**
 
-### Custom URL Slots
+### Custom Tools
 
-A profile button can point at a URL, a `mailto:` address or a `file://` path, in addition to a Revit command. Bare hostnames and bare email addresses are normalised so they resolve cleanly through the user's default browser or mail client. This lets admins fold company resources — the wiki, the SharePoint library, the BIM standards PDF, the helpdesk inbox — into the same ribbon people already use.
+A profile button can point at a URL, a `mailto:` address or a `file://` path, in addition to a Revit command. Bare hostnames and bare email addresses are normalised so they resolve cleanly through the user's default browser or mail client. This lets admins fold company resources — the wiki, the SharePoint library, the BIM standards PDF, the helpdesk inbox — into the same ribbon people already use. The Builder lists every such button in your profiles as a Custom Tool: create one once, place it in any profile, and when a link moves, edit it once to update every profile that uses it.
 
-**[Custom URL Slots docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/custom-url-slots.md)**
+**[Custom Tools docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/custom-url-slots.md)**
 
 ### Appearance — Branding & Coloured Panels
 
-Every profile tab can display an 85×85 branding image with rounded corners at the leading edge — typically a company logo, set once per machine in the Builder and shown on every profile tab. Each panel can carry its own colour, drawn at the profile's opacity (10% to 100%) with ~5px rounded corners over Revit's native panel chrome. Logos travel inside the profile zip so a shared profile keeps its branding on any machine.
+Every profile tab can display an 85×85 branding image with rounded corners at the leading edge — typically a company logo, set once per machine in the Builder (⚙ → Branding…) and shown on every profile tab. Each panel can carry its own colour, drawn at the profile's opacity (10% to 100%) with ~5px rounded corners over Revit's native panel chrome. Logos travel inside the profile zip so a shared profile keeps its branding on any machine.
 
 **[Appearance docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/appearance.md)**
 
 ### Ribbon Tools — RSTify & Required Add-ins
 
-RSTify is a tab-hiding mode: when enabled, rst-c hides the Revit and add-in tabs chosen for the active profile, from those it does not draw commands from, so the ribbon narrows to the profile's tab and the tabs it needs. It is per-profile and per-user — the admin sets defaults in the Builder, the user adopts or changes them in the Loader, and the ribbon icon shows the current state. Required Add-ins lets profiles declare the add-ins they depend on; when a profile is loaded, rst-c re-enables disabled ones and shows download links for missing ones.
+RSTify is a tab-hiding mode: when enabled, rst-c hides the Revit and add-in tabs chosen for the active profile, from those it does not draw commands from, so the ribbon narrows to the profile's tab and the tabs it needs. It is per-profile and per-user — the admin sets defaults on the Builder's Loader defaults tab, the user adopts or changes them in the Loader, and the ribbon icon shows the current state. Required Add-ins lets profiles declare the add-ins they depend on; when a profile is loaded, rst-c re-enables disabled ones and shows download links for missing ones.
 
 **[Ribbon Tools docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/ribbon-tools.md)**
 
