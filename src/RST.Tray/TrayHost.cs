@@ -521,7 +521,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void OpenMenu(Point screenPixels)
     {
         if (_quitting || _icon is null) return;
-        var menu = TrayMenu.Build(new TrayMenuActions(
+        // SC-043: the native menu; Open returns once the user picked an item (its action has run) or dismissed it.
+        TrayMenu.Open(new TrayMenuActions(
             Open: () => OpenWindow(TrayPage.Updates),
             CheckForUpdates: () =>
             {
@@ -529,8 +530,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
                 OpenWindow(TrayPage.Updates);
             },
             Settings: () => OpenWindow(TrayPage.Settings),
-            Quit: () => Quit("menu")));
-        TrayMenu.Open(menu, screenPixels, _icon.Source);
+            Quit: () => Quit("menu")), screenPixels, _icon.Source);
     }
 
     private void OnWindowsThemeChanged()

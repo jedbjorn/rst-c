@@ -1,15 +1,21 @@
 // rst-c's own (not vendored): the tray icon's menu (spec #20 §1; F17 WU1): Open RST, Check for updates (checks
-// now and opens the Updates page, F17 WU3), Settings, Quit. A WPF ContextMenu in the family look: each open builds it afresh on a new
-// Theme.xaml, so it always matches the current theme. Opened at the icon's anchor point; it takes the
-// foreground (the classic notification-menu rule) so a click anywhere else dismisses it.
+// now and opens the Updates page, F17 WU3), Settings, Quit.
+//
+// SC-043: a native Win32 popup menu (CreatePopupMenu + TrackPopupMenuEx), the documented notification-icon pattern.
+// It replaced a WPF ContextMenu in the family look, which opened and closed again within tens of milliseconds on
+// real desktops: a WPF popup is a no-activate window with no owner here, so it never got the foreground (the field
+// log said "menu False"), and a StaysOpen=false popup closes as soon as the app loses activation or mouse capture.
+// The native menu runs its own modal loop and stays open until the user picks an item or dismisses it (a click
+// elsewhere or Escape), whatever the activation. The rules it follows (Shell_NotifyIcon's documentation, KB135788):
+// the owner window takes the foreground first, so a click elsewhere dismisses the menu, and WM_NULL is posted to
+// it afterwards. The look is Windows' own menu, not the family palette (the trade-off SC-043 accepted).
 
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using RST.Core.Logging;
+using RST.Core.Tray;
 using RST.Tray.Resources;
 
 namespace RST.Tray.Windows;
@@ -23,71 +29,202 @@ internal sealed record TrayMenuActions(Action Open, Action CheckForUpdates, Acti
 
 internal static class TrayMenu
 {
-    public const string OpenId = "Tray.Menu.Open";
-    public const string CheckForUpdatesId = "Tray.Menu.CheckForUpdates";
-    public const string SettingsId = "Tray.Menu.Settings";
-    public const string QuitId = "Tray.Menu.Quit";
+    private const uint MF_STRING = 0x0000;
+    private const uint MF_GRAYED = 0x0001;
+    private const uint MF_SEPARATOR = 0x0800;
+    private const uint TPM_LEFTALIGN = 0x0000;
+    private const uint TPM_RIGHTALIGN = 0x0008;
+    private const uint TPM_TOPALIGN = 0x0000;
+    private const uint TPM_BOTTOMALIGN = 0x0020;
+    private const uint TPM_RIGHTBUTTON = 0x0002;
+    private const uint TPM_RETURNCMD = 0x0100;
+    private const int WM_NULL = 0x0000;
+    private const int WM_INITMENUPOPUP = 0x0117;
+    private const int WM_ENTERMENULOOP = 0x0211;
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
 
-    /// <summary>The menu, styled by a fresh Theme.xaml for the current theme.</summary>
-    public static ContextMenu Build(TrayMenuActions actions)
+    private static bool _open;
+
+    /// <summary>The menu's entries, in the tray's strings.</summary>
+    public static IReadOnlyList<TrayMenuEntry> Entries(TrayMenuActions actions)
     {
         ArgumentNullException.ThrowIfNull(actions);
-        var theme = new ResourceDictionary { Source = new Uri("/RST.UI;component/Theme.xaml", UriKind.Relative) };
-        var menu = new ContextMenu { StaysOpen = false };
-        menu.Resources.MergedDictionaries.Add(theme);
-        // An element's own Resources do not supply its implicit style, so the menu's is set directly; its items
-        // and separators find theirs in the menu's Resources.
-        if (theme[typeof(ContextMenu)] is Style menuStyle) menu.Style = menuStyle;
-        AutomationIds(menu, "Tray.Menu");
+        return TrayMenuModel.Entries(
+            new TrayMenuTexts(TrayStrings.Menu_Open, TrayStrings.Menu_CheckForUpdates, TrayStrings.Menu_Settings, TrayStrings.Menu_Quit),
+            actions.CanCheckForUpdates);
+    }
 
-        menu.Items.Add(Item(TrayStrings.Menu_Open, OpenId, actions.Open, isDefault: true));
-        menu.Items.Add(Item(TrayStrings.Menu_CheckForUpdates, CheckForUpdatesId, actions.CheckForUpdates, enabled: actions.CanCheckForUpdates));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(Item(TrayStrings.Menu_Settings, SettingsId, actions.Settings));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(Item(TrayStrings.Menu_Quit, QuitId, actions.Quit));
+    /// <summary>
+    /// Shows the menu at <paramref name="screenPixels"/> (the icon's anchor), owned by <paramref name="owner"/> (the
+    /// icon's hidden window), and returns once the user picked an item or dismissed it, after running the item's
+    /// action. Call it while handling the icon's WM_CONTEXTMENU, when Explorer lets this process take the foreground.
+    /// UI thread only; a request while the menu is already open is ignored.
+    /// </summary>
+    public static TrayMenuCommand Open(TrayMenuActions actions, Point screenPixels, HwndSource owner)
+    {
+        ArgumentNullException.ThrowIfNull(actions);
+        ArgumentNullException.ThrowIfNull(owner);
+        if (_open)
+        {
+            Log.Information("tray menu: already open; request ignored");
+            return TrayMenuCommand.None;
+        }
+
+        var entries = Entries(actions);
+        var menu = Create(entries);
+        if (menu == IntPtr.Zero) return TrayMenuCommand.None;
+
+        var x = (int)Math.Round(screenPixels.X);
+        var y = (int)Math.Round(screenPixels.Y);
+        var ownerForeground = false;
+        var opened = false;
+        var shown = new Stopwatch();
+        HwndSourceHook hook = (IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+        {
+            // The menu's own loop is running: it is on screen. SC-020's line, so a field log tells a menu that opened
+            // from one that never did.
+            if ((msg == WM_ENTERMENULOOP || msg == WM_INITMENUPOPUP) && !opened)
+            {
+                opened = true;
+                shown.Restart();
+                Log.Information("tray menu opened at {X},{Y} (foreground: owner {Owner})", x, y, ownerForeground);
+            }
+            return IntPtr.Zero;
+        };
+
+        int command;
+        long openMs;
+        _open = true;
+        owner.AddHook(hook);
+        try
+        {
+            // The notification-menu rule: the owner takes the foreground first, so a click anywhere else dismisses
+            // the menu. Explorer lets the icon's process do this while it handles the icon's message.
+            ownerForeground = SetForegroundWindow(owner.Handle);
+            shown.Start();
+            command = TrackPopupMenuEx(menu, Alignment(x, y) | TPM_RIGHTBUTTON | TPM_RETURNCMD, x, y, owner.Handle, IntPtr.Zero);
+            openMs = shown.ElapsedMilliseconds;
+            var error = command == 0 ? Marshal.GetLastWin32Error() : 0;
+            if (!opened)
+                Log.Warning("tray menu: did not open at {X},{Y} (foreground: owner {Owner}; error {Error})", x, y, ownerForeground, error);
+            // ...and WM_NULL afterwards, so the owner's next menu works (KB135788).
+            PostMessageW(owner.Handle, WM_NULL, IntPtr.Zero, IntPtr.Zero);
+        }
+        finally
+        {
+            owner.RemoveHook(hook);
+            DestroyMenu(menu);
+            _open = false;
+        }
+
+        var chosen = TrayMenuModel.Chosen(entries, command);
+        Log.Information("tray menu closed after {Ms} ms: {Choice}", openMs,
+                        chosen == TrayMenuCommand.None ? "dismissed" : chosen.ToString());
+        Run(actions, chosen);
+        return chosen;
+    }
+
+    /// <summary>The native menu for <paramref name="entries"/>, Open shown bold as the default; zero (logged) on failure. The caller destroys it.</summary>
+    internal static IntPtr Create(IReadOnlyList<TrayMenuEntry> entries)
+    {
+        var menu = CreatePopupMenu();
+        if (menu == IntPtr.Zero)
+        {
+            Log.Warning("tray menu: CreatePopupMenu failed (error {Error})", Marshal.GetLastWin32Error());
+            return IntPtr.Zero;
+        }
+        foreach (var entry in entries)
+        {
+            var ok = entry.IsSeparator
+                ? AppendMenuW(menu, MF_SEPARATOR, UIntPtr.Zero, null)
+                : AppendMenuW(menu, MF_STRING | (entry.Enabled ? 0u : MF_GRAYED), (UIntPtr)(uint)entry.Command, entry.Text);
+            if (!ok) Log.Warning("tray menu: AppendMenu {Item} failed (error {Error})", entry.Command, Marshal.GetLastWin32Error());
+            if (entry.IsDefault) SetMenuDefaultItem(menu, (uint)entry.Command, 0);
+        }
         return menu;
     }
 
-    /// <summary>Opens <paramref name="menu"/> at <paramref name="screenPixels"/> (the icon's anchor), converted through <paramref name="anchor"/>.</summary>
-    public static void Open(ContextMenu menu, Point screenPixels, HwndSource anchor)
+    /// <summary>Runs the action of <paramref name="command"/>; nothing for None.</summary>
+    internal static void Run(TrayMenuActions actions, TrayMenuCommand command)
     {
-        ArgumentNullException.ThrowIfNull(menu);
-        ArgumentNullException.ThrowIfNull(anchor);
-        var dips = anchor.CompositionTarget?.TransformFromDevice.Transform(screenPixels) ?? screenPixels;
-        menu.Placement = PlacementMode.AbsolutePoint;
-        menu.HorizontalOffset = dips.X;
-        menu.VerticalOffset = dips.Y;
-        // The notification-menu rule: the owner takes the foreground first, so the menu gets the input and a click
-        // anywhere else dismisses it. Explorer lets the icon's process do this while it handles the icon's message.
-        var anchorForeground = SetForegroundWindow(anchor.Handle);
-        var shown = Stopwatch.StartNew();
-        menu.Opened += (_, _) =>
+        switch (command)
         {
-            var popupForeground = PresentationSource.FromVisual(menu) is HwndSource popup && SetForegroundWindow(popup.Handle);
-            menu.Focus();
-            // SC-020: with the "menu requested" line, the tray log tells a menu that opened from one that never did.
-            Log.Information("tray menu opened at {X},{Y} (foreground: owner {Owner}, menu {Menu})",
-                Math.Round(dips.X), Math.Round(dips.Y), anchorForeground, popupForeground);
-            shown.Restart();
-        };
-        menu.Closed += (_, _) => Log.Information("tray menu closed after {Ms} ms", shown.ElapsedMilliseconds);
-        menu.IsOpen = true;
+            case TrayMenuCommand.Open: actions.Open(); break;
+            case TrayMenuCommand.CheckForUpdates: actions.CheckForUpdates(); break;
+            case TrayMenuCommand.Settings: actions.Settings(); break;
+            case TrayMenuCommand.Quit: actions.Quit(); break;
+        }
     }
 
-    private static MenuItem Item(string header, string automationId, Action action, bool enabled = true, bool isDefault = false)
+    /// <summary>
+    /// Opens the menu away from the nearest screen edge: above the anchor in the lower half of its monitor (a bottom
+    /// taskbar), left of it in the right half, so it stays beside the notification area wherever the taskbar is.
+    /// </summary>
+    private static uint Alignment(int x, int y)
     {
-        var item = new MenuItem { Header = header, IsEnabled = enabled };
-        if (isDefault) item.FontWeight = FontWeights.SemiBold;
-        AutomationIds(item, automationId);
-        item.Click += (_, _) => action();
-        return item;
+        var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+        var monitor = MonitorFromPoint(new Point32 { X = x, Y = y }, MONITOR_DEFAULTTONEAREST);
+        if (monitor == IntPtr.Zero || !GetMonitorInfoW(monitor, ref info)) return TPM_RIGHTALIGN | TPM_BOTTOMALIGN;
+        var horizontal = x > (info.rcMonitor.Left + info.rcMonitor.Right) / 2 ? TPM_RIGHTALIGN : TPM_LEFTALIGN;
+        var vertical = y > (info.rcMonitor.Top + info.rcMonitor.Bottom) / 2 ? TPM_BOTTOMALIGN : TPM_TOPALIGN;
+        return horizontal | vertical;
     }
 
-    private static void AutomationIds(DependencyObject element, string id) =>
-        System.Windows.Automation.AutomationProperties.SetAutomationId(element, id);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point32
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect32
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public Rect32 rcMonitor;
+        public Rect32 rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr CreatePopupMenu();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AppendMenuW(IntPtr menu, uint flags, UIntPtr id, string? text);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetMenuDefaultItem(IntPtr menu, uint item, uint byPosition);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr hwnd, IntPtr tpmParams);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyMenu(IntPtr menu);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessageW(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(Point32 point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfoW(IntPtr monitor, ref MonitorInfo info);
 }
