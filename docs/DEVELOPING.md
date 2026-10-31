@@ -397,7 +397,19 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   `SessionReplay`'s join-rule tests.
 - **Opening it:** `HealthLauncher.Show(ownerHwnd, context, telemetryToggled)`, after
   `RevitThemeDetector.ApplyToWindows()`. Scan and Clean run off the UI thread (`HealthViewModelOptions.RunInBackground`);
-  while either runs, every command and input is disabled.
+  while either runs, every command and input is disabled. Nothing is read before the window shows (SC-011): the
+  launcher calls `HealthViewModel.BeginLoading()`, so the first frame is the themed chrome and a spinner with no section
+  to lay out; on that frame (`ContentRendered`) the window starts `LoadAsync`, which reads `health_scan.json` off the UI
+  thread, and Scan and Clean wait for it. In the dark theme `FirstFrame.Attach` (RST.UI/Theming) keeps the window
+  cloaked until its first frame is drawn, so it never shows white (a 2 s fallback uncloaks it regardless). The log
+  times both: `Health window: first frame drawn <ms> ms after it was built` and `Health window: snapshot shown <ms> ms
+  after it was built` (`HealthFirstOpenTests`). Synchronous `Load()` stays for the tray and the tests.
+- **Junk rows in Revit** (SC-018): `HealthService.RunScan` passes the running Revit's year
+  (`CleanupYears.RunningYear(HealthContext.RevitVersion)`) to `HealthScanner.MeasureCleanup`, so a `{revit-version}`
+  target (Journals, Collaboration Cache, Recent File List) is measured and shown in that year's folder only
+  (`CleanupPathResolver.ResolveForYear`, no scan). Without a year (the tray) every `Autodesk Revit YYYY` folder is
+  measured, as before. Clean Junk Files is unchanged: in Revit it still empties every year's folder
+  (`HealthRunningYearJunkTests`).
 - **Shared with the tray** (spec #25, F19 WU2): the severity dot, the row and section templates, the Junk modal's content
   and Scan System's content live in `Health/HealthResources.xaml`, which the Health window and the tray's Health → Device
   page (`RST.Tray/Windows/HealthPageView`) both merge after Theme.xaml. The tray runs the same `HealthViewModel` over

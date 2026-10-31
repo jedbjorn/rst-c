@@ -1,15 +1,20 @@
 // rst-c's own (not vendored): the Health window's code-behind (spec #16, WU2). The window binds to a
 // HealthViewModel; HealthLauncher builds both, owns the window to Revit and shows it modally. Escape
 // closes the window as Close does (SC-010, feature #18 WU6), and the Junk modal as its Cancel does
-// while it is open (decision #62).
+// while it is open (decision #62). On the open in Revit (SC-011) nothing heavy runs before the first frame: in the
+// dark theme the window stays cloaked until that frame is drawn (FirstFrame, so it never flashes white), the frame
+// is the chrome and the spinner (HealthViewModel.BeginLoading), and only then is the snapshot read, off the UI
+// thread. Both moments are logged ("first frame drawn", "snapshot shown"), timed from when the window was built.
 
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using RST.UI.Dialogs;
 using RST.UI.Mvvm;
 using RST.UI.Theming;
+using RST.Core.Logging;
 
 namespace RST.UI.Health;
 
@@ -22,6 +27,8 @@ public partial class HealthWindow : Window
         _junkFocus = new OverlayFocus(this);
         InitializeComponent();
         DarkTitleBar.Attach(this);
+        FirstFrame.Attach(this);
+        ContentRendered += OnFirstFrame;
         DataContext = viewModel;
         viewModel.RequestClose += OnRequestClose;
         viewModel.PropertyChanged += OnViewModelChanged;
@@ -34,6 +41,31 @@ public partial class HealthWindow : Window
     }
 
     public HealthViewModel ViewModel { get; }
+
+    private readonly Stopwatch _built = Stopwatch.StartNew();
+
+    /// <summary>WPF has drawn the window's first frame (ContentRendered).</summary>
+    internal bool FirstFrameDrawn { get; private set; }
+
+    /// <summary>
+    /// The first frame is on screen: log it, then start the open's snapshot read when the launcher asked for one
+    /// (<see cref="HealthViewModel.BeginLoading"/>). The read runs off the UI thread; its render comes back here.
+    /// </summary>
+    private void OnFirstFrame(object? sender, EventArgs e) => UiGuard.Run("Health window: first frame", () =>
+    {
+        ContentRendered -= OnFirstFrame;
+        FirstFrameDrawn = true;
+        Log.Information("Health window: first frame drawn {Ms} ms after it was built", _built.ElapsedMilliseconds);
+        if (ViewModel.IsLoading) UiGuard.Start("Health window: open", LoadAfterFirstFrame, ViewModel);
+    });
+
+    private async Task LoadAfterFirstFrame()
+    {
+        await ViewModel.LoadAsync();
+        // Logged once the sections are laid out and drawn (ContextIdle runs after layout and render).
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => UiGuard.Run("Health window: snapshot shown", () =>
+            Log.Information("Health window: snapshot shown {Ms} ms after it was built", _built.ElapsedMilliseconds)));
+    }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
