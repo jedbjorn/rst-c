@@ -126,7 +126,7 @@ public class CrashPathHardeningTests
         Assert.Contains("the command failed", fault.Exception!.Message);
         Assert.True(host.Toast.IsOpen);
         Assert.Equal(BannerKind.Error, host.Toast.Kind);
-        Assert.Equal(UiStrings.Window_ActionFailed, host.Toast.Text);
+        Assert.Equal(UiStrings.Common_ActionFailed, host.Toast.Text);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class CrashPathHardeningTests
         var fault = Assert.Single(Faults(events));
         Assert.Equal("ToastHost: host.FailLaterAsync", SiteOf(fault));
         Assert.True(host.Toast.IsOpen);
-        Assert.Equal(UiStrings.Window_ActionFailed, host.Toast.Text);
+        Assert.Equal(UiStrings.Common_ActionFailed, host.Toast.Text);
     }
 
     [Fact]

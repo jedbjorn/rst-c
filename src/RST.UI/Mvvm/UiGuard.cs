@@ -74,7 +74,7 @@ public static class UiGuard
                 return;
             }
             Log.Error(exception, FaultTemplate, site);
-            if (toast) ToastHostFor(owner)?.Toast.Show(UiStrings.Window_ActionFailed, BannerKind.Error);
+            if (toast) ToastHostFor(owner)?.Toast.Show(UiStrings.Common_ActionFailed, BannerKind.Error);
         }
         catch (Exception ex)
         {

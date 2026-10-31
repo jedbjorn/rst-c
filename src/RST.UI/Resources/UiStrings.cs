@@ -29,7 +29,7 @@ public static class UiStrings
     public static string Common_Cancel => Get(nameof(Common_Cancel));
 
     /// <summary>The window's toast when a command failed unexpectedly (SC-046, UiGuard); the details are logged.</summary>
-    public static string Window_ActionFailed => Get(nameof(Window_ActionFailed));
+    public static string Common_ActionFailed => Get(nameof(Common_ActionFailed));
 
     public static string Dialog_Items => Get(nameof(Dialog_Items));
 
