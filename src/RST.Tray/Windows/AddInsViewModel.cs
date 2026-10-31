@@ -300,22 +300,28 @@ internal sealed class AddInsViewModel : ObservableObject
         IsLoaded = true;
         Years = status.Years.Select(y => new AddInsYearViewModel(y)).ToList();
 
-        // SC-019: every read makes new options (Profile is a class), so the picker cannot find its selected item in
-        // the new list: it clears its selection and writes null back through its two-way binding. Taken as a pick,
-        // that null re-seeded "Disable unused add-ins" to off, and the switch stayed off once the profile came back.
-        // The swap is the page's own, not the user's: the pick is in place before the picker sees the new list, and
-        // whatever the picker writes meanwhile is ignored.
+        // Every read makes new options (Profile is a class), so the picker's selected item is never in the new list.
+        // Left to itself, the picker clears its selection when the list is swapped and writes null back through its
+        // two-way binding. SC-019: taken as a pick, that null re-seeded "Disable unused add-ins" to off. SC-048:
+        // ignored, the binding read the pick back into SelectedItem while the ComboBox was still inside its own
+        // selection change, so SelectedItem was right but the box showed nothing, and the later SelectedProfile
+        // change, the same value, changed nothing.
+        // So the page swaps the list in three steps the picker follows: it lets go of its item first, then gets the
+        // new list, then the pick, which is in that list. The picker never holds an item the list lacks, and none of
+        // these is a pick (the switch is not re-seeded).
         _replacingProfiles = true;
         try
         {
-            _selected = pick;
+            _selected = null;
+            OnPropertyChanged(nameof(SelectedProfile));
             Profiles = options;
+            _selected = pick;
+            OnPropertyChanged(nameof(SelectedProfile));
         }
         finally
         {
             _replacingProfiles = false;
         }
-        OnPropertyChanged(nameof(SelectedProfile));
         // The same profile keeps the page's switch (after Apply it is what was just saved); a different one is
         // seeded from its saved choice, as picking it does.
         if (!kept) DisableUnused = pick is not null && TrayAddinService.Choices(pick.Entry, _prefs).DisableUnused;
