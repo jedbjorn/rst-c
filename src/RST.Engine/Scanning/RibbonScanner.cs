@@ -138,7 +138,6 @@ internal static class RibbonScanner
             {
                 tabTitle = tab.Title;
                 tabId = tab.Id;
-                if (tab.IsContextualTab) continue;
                 if (ModeRestrictedTabs.Contains(tabTitle) || ModeRestrictedTabs.ContainsId(tabId)) { tabsSkippedRestricted++; continue; }
                 // The active profile's tab, if any. RST built those buttons this
                 // session, so reading them back would surface circular entries.

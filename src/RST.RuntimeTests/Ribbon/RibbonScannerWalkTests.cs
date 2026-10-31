@@ -127,9 +127,9 @@ public sealed class RibbonScannerWalkTests
 
         var hits = RibbonScanner.EnumerateTabs([family, second, modify, contextual], _ => true, counts);
 
-        hits.Select(h => h.Id).Should().Equal("ID_PROPERTIES");
-        hits.Single().TabId.Should().Be("Modify");
-        counts.TabsWalked.Should().Be(1);
+        hits.Select(h => h.Id).Should().Equal("ID_PROPERTIES", "ID_CONTEXT");
+        hits.Select(h => h.TabId).Should().Equal("Modify", "Modify | Walls");
+        counts.TabsWalked.Should().Be(2);
     });
 
     [Fact]

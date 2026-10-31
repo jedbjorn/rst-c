@@ -13,6 +13,7 @@
 // the ribbon. Cheap — re-walked on every call (~30-60 tabs); no caching
 // needed because the picker only opens via the modal Loader.
 
+using System;
 using System.Collections.Generic;
 using Autodesk.Windows;
 using RST.Core.Scanning;
@@ -32,20 +33,40 @@ internal static class RibbonTabEnumerator
             return System.Array.Empty<string>();
         }
 
-        var seen = new HashSet<string>(System.StringComparer.Ordinal);
+        return EnumerateTabs(ribbon.Tabs);
+    }
+
+    internal static IReadOnlyList<string> EnumerateTabs(IEnumerable<RibbonTab?> tabs)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var ordered = new List<string>();
         var skippedContextual = 0;
         var skippedRst = 0;
         var skippedRestricted = 0;
 
-        foreach (var tab in ribbon.Tabs)
+        foreach (var tab in tabs)
         {
             if (tab is null) continue;
-            var title = tab.Title;
-            if (string.IsNullOrEmpty(title)) continue;
-            if (tab.IsContextualTab) { skippedContextual++; continue; }
+            string? title;
+            try
+            {
+                title = tab.Title;
+                if (string.IsNullOrEmpty(title)) continue;
+                if (tab.IsContextualTab) { skippedContextual++; continue; }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "RibbonTabEnumerator: skipped unreadable tab");
+                continue;
+            }
+            string? id = null;
+            try { id = tab.Id; }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "RibbonTabEnumerator: could not read id for tab {Tab}", title);
+            }
             if (RstManagedTabs.Contains(title)) { skippedRst++; continue; }
-            if (ModeRestrictedTabs.Contains(title) || ModeRestrictedTabs.ContainsId(tab.Id)) { skippedRestricted++; continue; }
+            if (ModeRestrictedTabs.Contains(title) || ModeRestrictedTabs.ContainsId(id)) { skippedRestricted++; continue; }
             if (!seen.Add(title!)) continue;
             ordered.Add(title!);
         }

@@ -57,6 +57,7 @@ public sealed class ProfileCardViewModel : ObservableObject
 public sealed class TabToggleViewModel : ObservableObject
 {
     private bool _isHidden;
+    private bool _isBlocked;
     private string? _blockingTool;
 
     public TabToggleViewModel(string tab, bool isHidden)
@@ -77,13 +78,14 @@ public sealed class TabToggleViewModel : ObservableObject
         }
     }
 
-    public bool IsEnabled => _blockingTool is null;
+    public bool IsEnabled => !_isBlocked;
 
     public string? Tooltip => _blockingTool is null ? null : UiStrings.Loader_RstifyLastHome(_blockingTool);
 
-    public void SetLock(string? tool)
+    public void SetLock(bool blocked, string? tool)
     {
-        if (_blockingTool == tool) return;
+        if (_isBlocked == blocked && _blockingTool == tool) return;
+        _isBlocked = blocked;
         _blockingTool = tool;
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(Tooltip));

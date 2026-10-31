@@ -96,7 +96,7 @@ public class RstifyRulesTests
         ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure"), Command("Beam", "Structure")];
         RstifyRules.TabsToOffer(profile, ["Architecture", "Structure", "Modify"], catalog)
             .Tabs.Should().Equal("Architecture");
-        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Architecture").Should().BeNull();
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Architecture", out _).Should().BeFalse();
     }
 
     [Fact]
@@ -106,8 +106,54 @@ public class RstifyRulesTests
         ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure")];
         RstifyRules.TabsToOffer(profile, ["Architecture", "Structure"], catalog)
             .Tabs.Should().Equal("Architecture", "Structure");
-        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture"], "Structure").Should().Be("Wall");
-        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Structure").Should().BeNull();
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture"], "Structure", out var label).Should().BeTrue();
+        label.Should().Be("Wall");
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Structure", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Catalog_lookup_skips_null_entries_and_keeps_the_first_duplicate()
+    {
+        var profile = Tools(Tool("Wall"));
+        ScannedCommand[] catalog = [null!, Command("Wall", "Architecture", "Structure"), Command("Wall", "Structure")];
+
+        RstifyRules.TabsToOffer(profile, Ribbon, catalog).Tabs.Should().Contain(["Architecture", "Structure"]);
+        RstifyRules.ReconcileHiddenTabs(profile, Ribbon, catalog, ["Structure", "Architecture"])
+            .Should().Equal("Architecture");
+    }
+
+    [Theory]
+    [InlineData(null, "Wall: Architectural", false, "Wall: Architectural")]
+    [InlineData("", "Wall: Architectural", false, "Wall: Architectural")]
+    [InlineData(null, null, false, "ID_OBJECTS_WALL")]
+    [InlineData("", "", false, "ID_OBJECTS_WALL")]
+    [InlineData(null, "Wall: Architectural", true, "Wall: Architectural")]
+    [InlineData("", "Wall: Architectural", true, "Wall: Architectural")]
+    public void Missing_names_still_block_the_last_home_and_reconcile_saved_ticks(
+        string? name, string? primaryLabel, bool stacked, string expectedLabel)
+    {
+        var tool = Tool("ID_OBJECTS_WALL");
+        tool.Name = name!;
+        var profile = stacked ? Tools(new Slot { SlotType = "stack", Name = "Walls" }) : Tools(tool);
+        if (stacked) profile.Stacks["Walls"] = new Stack { Tools = [tool] };
+        ScannedCommand[] catalog = [Command(tool.CommandId!, "Architecture", "Structure") with { DisplayName = primaryLabel! }];
+
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Architecture", out _).Should().BeFalse();
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture"], "Structure", out var label).Should().BeTrue();
+        label.Should().Be(expectedLabel);
+        RstifyRules.ReconcileHiddenTabs(profile, Ribbon, catalog, ["Structure", "Architecture"])
+            .Should().Equal("Architecture");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Missing_names_on_unknown_tools_use_the_command_id(string? name)
+    {
+        var tool = Tool("Unknown");
+        tool.Name = name!;
+        RstifyRules.BlockingTool(Tools(tool), Ribbon, [], [], "Architecture", out var label).Should().BeTrue();
+        label.Should().Be("Unknown");
     }
 
     [Fact]
@@ -125,7 +171,7 @@ public class RstifyRulesTests
         profile.Stacks["Select"] = new Stack { Tools = [Tool("Select"), Tool("Unknown", "Enscape")] };
         ScannedCommand[] catalog = [Command("Select", "Architecture", "Structure", "Modify")];
         RstifyRules.TabsToOffer(profile, Ribbon, catalog).Tabs.Should().Contain(["Architecture", "Structure"]).And.NotContain("Enscape");
-        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture", "Modify"], "Structure").Should().BeNull();
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture", "Modify"], "Structure", out _).Should().BeFalse();
         RstifyRules.ReconcileHiddenTabs(profile, Ribbon, catalog, ["Structure", "Modify", "Architecture"])
             .Should().Equal("Architecture", "Structure");
     }
@@ -136,7 +182,8 @@ public class RstifyRulesTests
         var profile = Tools(Tool("Wall"));
         ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure")];
         RstifyRules.TabsToOffer(profile, ["Architecture"], catalog).Tabs.Should().Equal("Architecture");
-        RstifyRules.BlockingTool(profile, ["Architecture"], catalog, [], "Architecture").Should().Be("Wall");
+        RstifyRules.BlockingTool(profile, ["Architecture"], catalog, [], "Architecture", out var label).Should().BeTrue();
+        label.Should().Be("Wall");
         RstifyRules.ReconcileHiddenTabs(profile, ["Architecture"], catalog, ["Architecture"]).Should().BeEmpty();
     }
 

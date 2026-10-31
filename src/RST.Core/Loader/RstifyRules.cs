@@ -42,16 +42,20 @@ public static class RstifyRules
         return new RstifyTabList(false, tabs);
     }
 
-    /// <summary>The name of a tool that would lose its last visible home if this tab were hidden.</summary>
-    public static string? BlockingTool(Profile profile, IReadOnlyList<string> allTabs,
-                                      IReadOnlyList<ScannedCommand>? catalog,
-                                      IReadOnlyCollection<string> hiddenTabs, string tab)
+    /// <summary>Whether hiding this tab would leave a tool without a visible home, and its label.</summary>
+    public static bool BlockingTool(Profile profile, IReadOnlyList<string> allTabs,
+                                    IReadOnlyList<ScannedCommand>? catalog,
+                                    IReadOnlyCollection<string> hiddenTabs, string tab, out string? label)
     {
         foreach (var tool in ToolHomes(profile, catalog))
             if (tool.Homes.Contains(tab) && !tool.Homes.Any(home =>
                     allTabs.Contains(home) && (CoreTabs.Contains(home) || (home != tab && !hiddenTabs.Contains(home)))))
-                return tool.Name;
-        return null;
+            {
+                label = tool.Name;
+                return true;
+            }
+        label = null;
+        return false;
     }
 
     /// <summary>Apply saved ticks in ribbon order, dropping ticks that would leave a tool homeless.</summary>
@@ -61,28 +65,32 @@ public static class RstifyRules
     {
         var hidden = new List<string>();
         foreach (var tab in TabsToOffer(profile, allTabs, catalog).Tabs)
-            if (savedTabs.Contains(tab) && BlockingTool(profile, allTabs, catalog, hidden, tab) is null)
+            if (savedTabs.Contains(tab) && !BlockingTool(profile, allTabs, catalog, hidden, tab, out _))
                 hidden.Add(tab);
         return hidden;
     }
 
-    private static IEnumerable<(string Name, HashSet<string> Homes)> ToolHomes(
+    private static IEnumerable<(string? Name, HashSet<string> Homes)> ToolHomes(
         Profile? profile, IReadOnlyList<ScannedCommand>? catalog)
     {
         if (profile is null) yield break;
-        var byId = (catalog ?? []).ToDictionary(c => c.Id, StringComparer.Ordinal);
+        var byId = new Dictionary<string, ScannedCommand>(StringComparer.Ordinal);
+        foreach (var c in catalog ?? [])
+            if (c is not null && !string.IsNullOrEmpty(c.Id)) byId.TryAdd(c.Id, c);
         foreach (var slot in profile.Panels.SelectMany(p => p.Slots))
         {
             var tools = PanelStacks.IsStack(slot) ? PanelStacks.ToolsOf(profile, slot) : [slot];
             foreach (var tool in tools)
             {
                 if (!PanelStacks.IsTool(tool) || CustomTools.IsCustom(tool)) continue;
-                var homes = tool.CommandId is { } id && byId.TryGetValue(id, out var command)
-                            && command.Placements is { Count: > 0 } placements
+                var command = tool.CommandId is { } id ? byId.GetValueOrDefault(id) : null;
+                var homes = command?.Placements is { Count: > 0 } placements
                     ? placements.Select(p => p.Tab).ToHashSet(StringComparer.Ordinal)
                     : new HashSet<string>(StringComparer.Ordinal) { tool.SourceTab == "Custom" ? "" : tool.SourceTab ?? "" };
                 homes.Remove("");
-                yield return (tool.Name, homes);
+                var label = !string.IsNullOrWhiteSpace(tool.Name) ? tool.Name
+                    : !string.IsNullOrWhiteSpace(command?.DisplayName) ? command.DisplayName : tool.CommandId;
+                yield return (label, homes);
             }
         }
     }

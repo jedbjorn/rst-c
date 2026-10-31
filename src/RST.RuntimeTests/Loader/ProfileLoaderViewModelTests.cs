@@ -294,16 +294,20 @@ public class ProfileLoaderViewModelTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Catalog_homes_reconcile_saved_ticks_and_update_disabled_switches(bool adoptPresets)
+    [InlineData(false, "ArchitecturalWall", "ArchitecturalWall")]
+    [InlineData(true, "ArchitecturalWall", "ArchitecturalWall")]
+    [InlineData(false, null, "Wall: Architectural")]
+    [InlineData(true, null, "Wall: Architectural")]
+    [InlineData(false, "", "Wall: Architectural")]
+    [InlineData(true, "", "Wall: Architectural")]
+    public async Task Catalog_homes_reconcile_saved_ticks_and_update_disabled_switches(bool adoptPresets, string? name, string label)
     {
         var profile = new Profile
         {
             Id = LoaderFixtures.ArchId, ProfileName = "Walls", Tab = "Studio",
             Panels = [new Panel { Slots = [new Slot
             {
-                CommandId = "ID_OBJECTS_WALL", Name = "ArchitecturalWall", SourceTab = "Architecture", SourcePanel = "Build",
+                CommandId = "ID_OBJECTS_WALL", Name = name!, SourceTab = "Architecture", SourcePanel = "Build",
             }] }],
         };
         var backend = new FakeLoaderBackend { AllTabs = ["Architecture", "Structure", "Modify"] }.With(profile);
@@ -324,7 +328,7 @@ public class ProfileLoaderViewModelTests
         var architecture = vm.TabToggles.Single(t => t.Tab == "Architecture");
         var structure = vm.TabToggles.Single(t => t.Tab == "Structure");
         structure.IsEnabled.Should().BeFalse();
-        structure.Tooltip.Should().Contain("ArchitecturalWall");
+        structure.Tooltip.Should().Contain(label);
         architecture.IsEnabled.Should().BeTrue("a ticked switch can always be unticked");
         structure.IsHidden = true;
         structure.IsHidden.Should().BeFalse("a disabled switch cannot hide the last home");
@@ -335,7 +339,7 @@ public class ProfileLoaderViewModelTests
         architecture.IsEnabled.Should().BeFalse();
         await vm.LoadAsync();
         backend.LoadRequests.Should().ContainSingle().Which.HiddenTabs.Should().Equal("Structure");
-        profile.Panels[0].Slots[0].Name.Should().Be("ArchitecturalWall", "the Loader never refreshes labels");
+        profile.Panels[0].Slots[0].Name.Should().Be(name, "the Loader never refreshes labels");
         profile.Panels[0].Slots[0].SourceTab.Should().Be("Architecture");
     }
 
