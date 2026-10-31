@@ -29,6 +29,10 @@
   <data name="Common_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
+  <data name="Window_ClosedAfterError" xml:space="preserve">
+    <value>{0} hit an unexpected error and was closed. Revit is fine; the details are in the RST log.</value>
+    <comment>{0} the window title (Health_WindowTitle, Loader_WindowTitle, Builder_WindowTitle). Revit shows it after the command (SC-045).</comment>
+  </data>
   <data name="Dialog_Items" xml:space="preserve">
     <value>Items</value>
   </data>
