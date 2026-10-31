@@ -121,6 +121,18 @@ internal sealed class SessionBuilder
         return this;
     }
 
+    /// <summary>The <paramref name="n"/>th closing_id this builder handed out ("c1", "c2", …).</summary>
+    public static string ClosingIdOf(int n) => "c" + n;
+
+    /// <summary>A doc_closed alone, for a doc_closing written earlier.</summary>
+    public SessionBuilder ClosedOnly(DateTimeOffset ts, string closingId, string? status = null)
+    {
+        var e = Add(TelemetryEventTypes.DocClosed, ts);
+        e.SetField(TelemetryFields.ClosingId, closingId);
+        if (status is not null) e.SetField(TelemetryFields.Status, status);
+        return this;
+    }
+
     /// <summary>doc_opened with no doc_opening before it: open, but no timed open.</summary>
     public SessionBuilder OpenedOnly(DateTimeOffset ts, DocumentIdentity id)
     {
