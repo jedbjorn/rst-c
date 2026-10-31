@@ -14,6 +14,8 @@ using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using RST.Core.Colors;
+using RST.Core.Loader;
 using RST.Core.Theming;
 using RST.RuntimeTests.Builder;
 using RST.RuntimeTests.Health;
@@ -22,6 +24,7 @@ using RST.RuntimeTests.Support;
 using RST.UI.Builder;
 using RST.UI.Dialogs;
 using RST.UI.Health;
+using RST.UI.Loader;
 using RST.UI.Theming;
 using Xunit;
 
@@ -254,6 +257,129 @@ public sealed class FocusReturnTests : IDisposable
         }
     });
 
+    /// <summary>
+    /// The model's family dialogs: the real Confirm (a MessageDialog owned by the Builder, as
+    /// ProfileBuilderLauncher's DialogService opens it), the fakes for the rest.
+    /// </summary>
+    private sealed class RealConfirm(FakeDialogs fake) : IDialogService
+    {
+        public DialogService Real { get; } = new() { EscapeCancels = true, ReturnsFocus = true };
+
+        public void ShowMessage(string title, string message, string automationId = MessageDialog.MessageId) => fake.ShowMessage(title, message, automationId);
+
+        public bool Confirm(string title, string message, IReadOnlyList<string> items, string confirmText, bool danger, string automationId) =>
+            Real.Confirm(title, message, items, confirmText, danger, automationId);
+
+        public DialogChoice Choose(string title, string message, string primaryText, string secondaryText, string automationId) =>
+            fake.Choose(title, message, primaryText, secondaryText, automationId);
+
+        public Rgb? PickColor(Rgb current, IReadOnlyList<Rgb> palette, string title) => fake.PickColor(current, palette, title);
+
+        public string? OpenFile(string title, string filter) => fake.OpenFile(title, filter);
+
+        public string? SaveFile(string title, string filter, string fileName) => fake.SaveFile(title, filter, fileName);
+    }
+
+    /// <summary>
+    /// × on a Custom Tools row asks first (the real Confirm); Escape cancels it. The × is hidden while
+    /// the confirm shows, as the ✎ is in F2; focus comes back on it, and the next Escape closes the Builder.
+    /// </summary>
+    [Fact]
+    public void Escape_on_a_Builder_confirm_returns_focus_and_the_next_Escape_reaches_the_Builder() => Sta(() =>
+    {
+        var fake = new FakeDialogs();
+        var dialogs = new RealConfirm(fake);
+        var b = OpenBuilder(dialogs);
+        dialogs.Real.Owner = b.Window;
+        try
+        {
+            var remove = FocusRowButton(b.Window, "Wiki", "Builder.RemoveCustomToolEverywhere");
+
+            var seen = WhileModal<MessageDialog>(b.Window, remove, dialog => PressKey(dialog, Key.Escape),
+                () => remove.Command.Execute(remove.CommandParameter));
+            Settle();
+
+            Assert.True(seen.Found, "the confirm did not show among the Builder's owned windows within 5 s");
+            Assert.True(seen.FocusInDialog, "the confirm had the keyboard while it showed");
+            Assert.True(seen.OpenerHidden, "the × was hidden while the confirm showed");
+            Assert.Contains("Wiki", WindowCapture.Descendants<Border>(b.Window.CatalogTreeView)
+                .Where(x => Id(x) == "Builder.CustomTool").Select(x => ((CustomToolItemViewModel)x.DataContext).Label));
+            Assert.True(b.Window.IsKeyboardFocusWithin, $"focus is back in the Builder; it is on {Describe(Keyboard.FocusedElement)}");
+            Assert.Same(remove, Keyboard.FocusedElement);
+
+            PressKey(b.Window, Key.Escape);
+            Assert.True(b.Closed, "the next Escape reached the Builder");
+            Assert.Empty(fake.ChooseCalls);
+        }
+        finally
+        {
+            CloseBuilder(b);
+        }
+    });
+
+    // ── the Loader ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Load Profile, with "Disable unused" on, asks Confirm Add-in Changes first (the real dialog, owned
+    /// by the Loader through LoaderDialogs as ProfileLoaderLauncher wires it); Cancel closes it. Focus
+    /// comes back on Load Profile, and the next Escape closes the Loader.
+    /// </summary>
+    [Fact]
+    public void Cancel_in_Confirm_Add_in_Changes_returns_focus_and_the_next_Escape_closes_the_Loader() => Sta(() =>
+    {
+        var backend = LoaderFixtures.Backend();
+        var dialogs = new LoaderTestDialogs();
+        var loaderDialogs = new LoaderDialogs { EscapeCancels = true, ReturnsFocus = true };
+        var model = new ProfileLoaderViewModel(backend, dialogs, loaderDialogs, new ManualClock().Schedule, _ => { });
+        model.Initialize();
+        var window = new ProfileLoaderWindow(model);
+        loaderDialogs.Owner = window;
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        WindowCapture.ShowOffScreen(window);
+        try
+        {
+            window.Activate();
+            Settle();
+            model.SelectedCard = model.Profiles.Single(c => c.Name == "Structure");
+            model.DisableUnused = true;
+            Settle();
+            var load = WindowCapture.Descendants<Button>(window).Single(x => Id(x) == "Loader.Load");
+            Assert.True(load.Focus(), "Load Profile takes keyboard focus (the window is active)");
+
+            Task? loading = null;
+            var seen = WhileModal<ConfirmAddinChangesWindow>(window, null,
+                dialog => Invoke(dialog.CancelButton),
+                () => loading = model.LoadAsync());
+            Settle();
+            Assert.True(loading!.IsCompleted, "a cancelled confirm ends the load before it starts");
+
+            Assert.True(seen.Found, "Confirm Add-in Changes did not show among the Loader's owned windows within 5 s");
+            Assert.True(seen.FocusInDialog, "the dialog had the keyboard while it showed");
+            Assert.DoesNotContain("Load", backend.Calls);
+            Assert.True(window.IsKeyboardFocusWithin, $"focus is back in the Loader; it is on {Describe(Keyboard.FocusedElement)}");
+            Assert.Same(load, Keyboard.FocusedElement);
+
+            PressKey(window, Key.Escape);
+            Assert.True(closed, "the next Escape reached the Loader and closed it, as Close does");
+        }
+        finally
+        {
+            if (!closed) window.Close();
+        }
+    });
+
+    /// <summary>
+    /// The tray app shares DialogService and LoaderDialogs; decision #62 leaves it out, so by default
+    /// neither returns focus itself (WPF's own restore stays, as before).
+    /// </summary>
+    [Fact]
+    public void The_shared_dialog_services_leave_focus_to_WPF_by_default()
+    {
+        Assert.False(new DialogService().ReturnsFocus);
+        Assert.False(new LoaderDialogs().ReturnsFocus);
+    }
+
     // ── Health ───────────────────────────────────────────────────────────
 
     private static readonly DateTimeOffset Now = new(2026, 10, 30, 14, 0, 0, TimeSpan.Zero);
@@ -265,20 +391,20 @@ public sealed class FocusReturnTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Clean junk files… opens the Junk modal (the content behind it is disabled); Escape cancels it.
-    /// Focus goes back on Clean junk files…, where it was (#169's note: Health left it on the window), and
-    /// the next Escape closes Health.
-    /// </summary>
-    [Fact]
-    public void Escape_on_the_Junk_modal_returns_focus_to_Clean_and_the_next_Escape_closes_Health() => Sta(() =>
+    private sealed record Health(HealthWindow Window, HealthViewModel Model, FakeHealthService Service)
+    {
+        public bool Closed { get; set; }
+    }
+
+    /// <summary>Health over the fake service with cleanup targets, shown off-screen and activated.</summary>
+    private static Health OpenHealth(IDialogService dialogs)
     {
         var culture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
         Thread.CurrentThread.CurrentCulture = culture;
         Thread.CurrentThread.CurrentUICulture = culture;
         SynchronizationContext.SetSynchronizationContext(null);
         var service = new FakeHealthService { Snapshot = HealthSamples.Snapshot(), Targets = HealthSamples.Targets() };
-        var vm = new HealthViewModel(service, new FakeDialogs(), new HealthViewModelOptions
+        var vm = new HealthViewModel(service, dialogs, new HealthViewModelOptions
         {
             RunInBackground = work =>
             {
@@ -293,34 +419,89 @@ public sealed class FocusReturnTests : IDisposable
         });
         vm.Load();
         var window = new HealthWindow(vm);
-        var closed = false;
-        window.Closed += (_, _) => closed = true;
+        var opened = new Health(window, vm, service);
+        window.Closed += (_, _) => opened.Closed = true;
         WindowCapture.ShowOffScreen(window);
+        window.Activate();
+        Settle();
+        return opened;
+    }
+
+    /// <summary>Clean junk files… focused, then clicked: the Junk modal opens and takes the keyboard.</summary>
+    private static Button OpenJunkFromClean(Health h)
+    {
+        var clean = h.Window.CleanButton;
+        Assert.True(clean.Focus(), "Clean junk files… takes keyboard focus (the window is active)");
+        clean.Command.Execute(null);
+        Settle();
+        Assert.True(h.Model.IsJunkOpen);
+        Assert.True(h.Window.JunkCard.IsKeyboardFocusWithin, "the modal takes the keyboard when it opens");
+        Assert.False(clean.IsEnabled, "the content behind the modal is disabled");
+        return clean;
+    }
+
+    /// <summary>
+    /// Clean junk files… opens the Junk modal (the content behind it is disabled); Escape cancels it.
+    /// Focus goes back on Clean junk files…, where it was (#169's note: Health left it on the window), and
+    /// the next Escape closes Health.
+    /// </summary>
+    [Fact]
+    public void Escape_on_the_Junk_modal_returns_focus_to_Clean_and_the_next_Escape_closes_Health() => Sta(() =>
+    {
+        var h = OpenHealth(new FakeDialogs());
         try
         {
-            window.Activate();
-            Settle();
-            var clean = window.CleanButton;
-            Assert.True(clean.Focus(), "Clean junk files… takes keyboard focus (the window is active)");
-            clean.Command.Execute(null);
-            Settle();
-            Assert.True(vm.IsJunkOpen);
-            Assert.True(window.JunkCard.IsKeyboardFocusWithin, "the modal takes the keyboard when it opens");
-            Assert.False(clean.IsEnabled, "the content behind the modal is disabled");
+            var clean = OpenJunkFromClean(h);
 
-            PressKey(window, Key.Escape);
+            PressKey(h.Window, Key.Escape);
             Settle();
-            Assert.False(vm.IsJunkOpen, "Escape cancels the Junk modal");
-            Assert.False(closed, "one press closes the innermost modal only");
-            Assert.Empty(service.CleanCalls);
+            Assert.False(h.Model.IsJunkOpen, "Escape cancels the Junk modal");
+            Assert.False(h.Closed, "one press closes the innermost modal only");
+            Assert.Empty(h.Service.CleanCalls);
             Assert.Same(clean, Keyboard.FocusedElement);
 
-            PressKey(window, Key.Escape);
-            Assert.True(closed, "the next Escape reached Health and closed it");
+            PressKey(h.Window, Key.Escape);
+            Assert.True(h.Closed, "the next Escape reached Health and closed it");
         }
         finally
         {
-            if (!closed) window.Close();
+            if (!h.Closed) h.Window.Close();
+        }
+    });
+
+    /// <summary>
+    /// Clean Selected closes the Junk modal and asks "Delete selected junk?" (the real Confirm, owned by
+    /// Health as HealthLauncher's DialogService opens it); Escape cancels it. Focus goes back on Clean
+    /// junk files… once the confirm has closed too, and the next Escape closes Health.
+    /// </summary>
+    [Fact]
+    public void Escape_on_the_clean_confirm_returns_focus_to_Clean_and_the_next_Escape_closes_Health() => Sta(() =>
+    {
+        var dialogs = new RealConfirm(new FakeDialogs());
+        var h = OpenHealth(dialogs);
+        dialogs.Real.Owner = h.Window;
+        try
+        {
+            var clean = OpenJunkFromClean(h);
+            var run = WindowCapture.Descendants<Button>(h.Window).Single(x => Id(x) == "Health.JunkRun");
+
+            var seen = WhileModal<MessageDialog>(h.Window, null, dialog => PressKey(dialog, Key.Escape),
+                () => run.Command.Execute(null));
+            Settle();
+
+            Assert.True(seen.Found, "the clean confirm did not show among Health's owned windows within 5 s");
+            Assert.True(seen.FocusInDialog, "the confirm had the keyboard while it showed");
+            Assert.False(h.Model.IsJunkOpen);
+            Assert.Empty(h.Service.CleanCalls);
+            Assert.True(h.Window.IsKeyboardFocusWithin, $"focus is back in Health; it is on {Describe(Keyboard.FocusedElement)}");
+            Assert.Same(clean, Keyboard.FocusedElement);
+
+            PressKey(h.Window, Key.Escape);
+            Assert.True(h.Closed, "the next Escape reached Health and closed it");
+        }
+        finally
+        {
+            if (!h.Closed) h.Window.Close();
         }
     });
 }
