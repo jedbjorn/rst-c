@@ -1,6 +1,7 @@
 // rst-c's own (not vendored): the Builder's editing rules (spec #16, WU4, AC5): startFresh,
-// loadIntoProfile, the dirty snapshot and rename-as-copy, and the save service (save_profile's
-// checks and write, export_profile's package), against profile_builder.html and LoaderBridge.
+// loadIntoProfile, the dirty snapshot and the save plan (a rename keeps the id since spec #19), and
+// the save service (save_profile's checks and write, export_profile's package), against
+// profile_builder.html and LoaderBridge.
 
 using System.IO;
 using System.IO.Compression;
@@ -122,13 +123,14 @@ public sealed class ProfileEditingTests : IDisposable
     }
 
     [Fact]
-    public void A_rename_in_edit_mode_saves_as_a_copy()
+    public void A_rename_in_edit_mode_saves_in_place_under_its_own_id()
     {
+        // Spec #19: rename-as-copy is retired; the id and export date are kept.
         var p = Named("Arch 2", "1");
         p.ExportDate = "2026-01-01";
-        ProfileEditing.PlanSave(p, editMode: true, "Arch", [Named("Arch", "1"), Named("Struct", "2")]).Should().Be(SavePlanKind.AsCopy);
-        p.Id.Should().BeNull();
-        p.ExportDate.Should().Be("");
+        ProfileEditing.PlanSave(p, editMode: true, "Arch", [Named("Arch", "1"), Named("Struct", "2")]).Should().Be(SavePlanKind.InPlace);
+        p.Id.Should().Be("1");
+        p.ExportDate.Should().Be("2026-01-01");
     }
 
     [Fact]
@@ -138,7 +140,7 @@ public sealed class ProfileEditingTests : IDisposable
         ProfileEditing.PlanSave(p, editMode: true, "Arch", [Named("Arch", "1"), Named("struct", "2")]).Should().Be(SavePlanKind.NameCollision);
         p.Id.Should().Be("1", "nothing changes on a collision");
         // The profile's own id never collides, nor a profile without an id.
-        ProfileEditing.PlanSave(Named("Struct", "1"), true, "Arch", [Named("struct", "1"), Named("Struct", null)]).Should().Be(SavePlanKind.AsCopy);
+        ProfileEditing.PlanSave(Named("Struct", "1"), true, "Arch", [Named("struct", "1"), Named("Struct", null)]).Should().Be(SavePlanKind.InPlace);
     }
 
     [Fact]

@@ -927,10 +927,6 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <value>Save failed: {0}</value>
     <comment>{0} the error.</comment>
   </data>
-  <data name="Builder_SavedAsCopy" xml:space="preserve">
-    <value>Saved as new profile "{0}" — original kept.</value>
-    <comment>{0} the new profile name.</comment>
-  </data>
   <data name="Builder_SavedAs" xml:space="preserve">
     <value>Saved as {0}</value>
     <comment>{0} the profile's file name.</comment>

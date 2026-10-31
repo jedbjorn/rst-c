@@ -60,6 +60,13 @@ public sealed class ProfileSaveService
         foreach (var orphan in ProfileEditing.RemoveOrphanStacks(profile))
             _log.Warning(null, "Builder.save_profile: stack {Stack} is not on any panel; removed from {Name}", orphan, profile.ProfileName);
 
+        // Feature #18 (decision #28): a placed stack of 4+ tools refuses the save, naming its panel.
+        if (PanelStacks.SaveBlocker(profile) is { } blocker)
+        {
+            _log.Warning(null, "Builder.save_profile: {Name} refused: {Blocker}", profile.ProfileName, blocker);
+            return SaveOutcome.Fail(blocker);
+        }
+
         var errors = ProfileSerializer.Validate(profile);
         if (errors.Count > 0)
         {

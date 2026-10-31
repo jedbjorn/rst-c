@@ -180,7 +180,7 @@ New profile :::class1 -> Name + assemble panels :::class2 -> Presets + cleanup t
 
 - A new profile is saved under a new file ("Saved as <file>").
 - An existing profile saved with the same name is overwritten.
-- An existing profile saved with a **new name** becomes a new copy with its own id, and the original is kept ("Saved as new profile "<name>" — original kept."). Use this to keep flavours of one profile side by side. If another profile already has that name, the save stops and asks you to choose a different one.
+- An existing profile saved with a **new name** is renamed: it keeps its id, the file under the old name is replaced, and users who have it loaded keep it. If another profile already has that name, the save stops and asks you to choose a different one. (Saving under a new name no longer makes a copy; a Duplicate action arrives with the Builder redesign, feature #18.)
 - If the profile you saved is the loaded one, rst-c reloads it on the ribbon straight away ("Saved & ribbon reloaded.").
 
 ### Editing an existing profile

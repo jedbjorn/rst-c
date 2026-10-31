@@ -4,8 +4,8 @@
 // the panels list (add, select, rename, ▲ ▼ ×), the slot rows (rename, ▲ ▼ ×), drag and drop (the
 // four kinds, WU5), the icon picker (WU5), the Properties pane (Min Revit, opacity, the selected
 // panel's name and color, the URL button editor, RST Presets and Junk Cleanup with their Configure
-// modals, WU5), the live preview, Save (rename-as-copy, required add-ins, the auto-reload of the
-// active profile), Export ZIP and Exit. Every toast keeps its text.
+// modals, WU5), the live preview, Save (a rename keeps the id since spec #19, required add-ins, the
+// auto-reload of the active profile), Export ZIP and Exit. Every toast keeps its text.
 // Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
 // (Planner default 3), the panel delete confirm is the family's destructive MessageDialog, and the
 // Cleanup modal's Cancel reverts (Planner default 4).
@@ -855,10 +855,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     public ICommand ExitCommand { get; }
 
     /// <summary>
-    /// saveAndMaybeReload: name and tab required; rename-as-copy in edit mode (a name collision
-    /// aborts); the required add-ins recomputed; the save; the dropdown refreshed; a clean baseline;
-    /// then, when the saved profile is the active one, the ribbon reloaded with the active hidden
-    /// tabs and disable flag. True when the profile was saved.
+    /// saveAndMaybeReload: name and tab required; a changed name in edit mode is a rename under the
+    /// same id (a name collision aborts; rename-as-copy is retired, spec #19); the required add-ins
+    /// recomputed; the save; the dropdown refreshed; a clean baseline; then, when the saved profile
+    /// is the active one, the ribbon reloaded with the active hidden tabs and disable flag. True
+    /// when the profile was saved.
     /// </summary>
     public async Task<bool> SaveAsync()
     {
@@ -873,15 +874,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 ShowToast(UiStrings.Builder_TabRequired, BannerKind.Error);
                 return false;
             case SavePlanKind.NameCollision:
-                Log.Warning("Builder: rename-as-copy aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
+                Log.Warning("Builder: rename aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
                 ShowToast(UiStrings.Builder_NameCollision(_profile.ProfileName), BannerKind.Error);
                 return false;
         }
-        var savedAsCopy = plan == SavePlanKind.AsCopy;
 
         _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup);
-        Log.Information("Builder: save {Name} (edit={Edit}, copy={Copy}, requiredAddins={Required})",
-            _profile.ProfileName, _editMode, savedAsCopy, _profile.RequiredAddins.Count);
+        Log.Information("Builder: save {Name} (edit={Edit}, requiredAddins={Required})",
+            _profile.ProfileName, _editMode, _profile.RequiredAddins.Count);
         var result = Safe(() => _backend.Save(_profile), SaveOutcome.Fail("unknown"), "save_profile");
         if (!result.Ok)
         {
@@ -907,7 +907,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
         if (!savedIsActive)
         {
-            ShowToast(savedAsCopy ? UiStrings.Builder_SavedAsCopy(_profile.ProfileName) : UiStrings.Builder_SavedAs(result.FileName), BannerKind.Success);
+            ShowToast(UiStrings.Builder_SavedAs(result.FileName), BannerKind.Success);
             return true;
         }
 

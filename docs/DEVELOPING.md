@@ -332,7 +332,11 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
   (computeRequiredAddins, the port of `tests/ui/required-addins.test.mjs` is
   `RequiredAddinDetectorTests`), `BuilderRules` (shortId, normalizeUrl via `UrlNormalizer`,
   normalizeHex, the slot shapes and summaries), `ProfileEditing` (startFresh, loadIntoProfile, the
-  dirty snapshot, rename-as-copy) and `ProfileSaveService` (save_profile and export_profile's writes).
+  dirty snapshot, the save plan) and `ProfileSaveService` (save_profile and export_profile's writes).
+  Feature #18 (spec #19) adds `CustomTools` / `CustomToolEditor` (the derived Custom Tools list, and
+  edit / remove everywhere with per-profile results), `PanelStacks` (stack authoring on the panel
+  cards, the load normaliser and the 4+ Save refusal) and `ProfileNaming` (Rename keeps the id;
+  Duplicate writes a new one; rename-as-copy is retired).
 - **The window:** `ProfileBuilderWindow` → `ProfileBuilderViewModel`, which talks to
   `IProfileBuilderBackend` and `IDialogService`. The catalogue tree is a virtualizing `TreeView`
   over `CatalogNodeViewModel`s built once; a filter updates counts and each node's
