@@ -1,15 +1,19 @@
 // rst-c's own (not vendored). SC-010 (feature #18, spec #19, WU6): Escape closes the Profile Loader the
 // way Close does, and does nothing while Close could not (a load in progress), while a dialog the
-// Loader opened is showing, or while a menu is open in it.
+// Loader opened is showing, or while a menu is open in it. WU6 review: a key-repeat never closes a
+// window (N1; the Builder and Health share the check), Escape bubbles up from the controls that hold
+// the focus, and a drag of the opacity slider (the mouse captured) holds it (F2).
 
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
 using RST.Core.Activation;
 using RST.Core.Loader;
 using RST.Core.Theming;
 using RST.RuntimeTests.Support;
+using RST.UI.Dialogs;
 using RST.UI.Loader;
 using RST.UI.Theming;
 using Xunit;
@@ -228,6 +232,95 @@ public class ProfileLoaderEscapeTests
         finally
         {
             if (!closed) window.Close();
+        }
+    });
+
+    // ── WU6 review N1 and F2 ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// N1: only a fresh press closes. Holding Escape on a dialog closes the dialog with the first press;
+    /// the repeats then reach the window behind it and must do nothing. The Builder, the Loader and
+    /// Health all gate on this one predicate (KeyEventArgs.IsRepeat cannot be set from a test).
+    /// </summary>
+    [Theory]
+    [InlineData(Key.Escape, false, false, true)]
+    [InlineData(Key.Escape, true, false, false)]
+    [InlineData(Key.Escape, false, true, false)]
+    [InlineData(Key.Escape, true, true, false)]
+    [InlineData(Key.Enter, false, false, false)]
+    public void Only_a_fresh_unhandled_Escape_press_closes(Key key, bool isRepeat, bool handled, bool closes) =>
+        Assert.Equal(closes, EscapeGuard.IsFreshEscape(key, isRepeat, handled));
+
+    /// <summary>Raises Escape on <paramref name="source"/>, from where it bubbles to the window; returns whether it was handled.</summary>
+    private static bool PressEscapeOn(UIElement source, Window w)
+    {
+        var args = Escape(w);
+        source.RaiseEvent(args);
+        WindowCapture.DoEvents();
+        Assert.Same(source, args.Source);
+        return args.Handled;
+    }
+
+    private static Slider OpacitySlider(ProfileLoaderWindow window) =>
+        WindowCapture.Descendants<Slider>(window)
+            .Single(s => System.Windows.Automation.AutomationProperties.GetAutomationId(s) == "Loader.OpacityOverride");
+
+    [Fact]
+    public void Escape_from_a_focused_card_bubbles_up_and_closes_the_Loader() => Sta(() =>
+    {
+        var o = Open(LoaderFixtures.Backend());
+        try
+        {
+            var card = (ListBoxItem)o.Window.Cards.ItemContainerGenerator.ContainerFromItem(o.Model.Profiles[1]);
+            Assert.NotNull(card);
+            card.Focus();
+            Assert.True(PressEscapeOn(card, o.Window));
+            Assert.True(o.Closed, "Escape from a card reaches the Loader");
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_from_the_opacity_slider_bubbles_up_and_closes_the_Loader() => Sta(() =>
+    {
+        var o = Open(LoaderFixtures.Backend());
+        try
+        {
+            var slider = OpacitySlider(o.Window);
+            slider.Focus();
+            Assert.True(PressEscapeOn(slider, o.Window));
+            Assert.True(o.Closed, "Escape from the slider reaches the Loader");
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_while_the_opacity_slider_is_dragged_leaves_the_Loader() => Sta(() =>
+    {
+        var o = Open(LoaderFixtures.Backend());
+        try
+        {
+            var thumb = ((Track)OpacitySlider(o.Window).Template.FindName("PART_Track", OpacitySlider(o.Window))).Thumb;
+            var captured = thumb.CaptureMouse();
+            Assert.True(captured, "the runner granted the capture, so the test is not vacuous");
+            Assert.False(PressEscapeOn(thumb, o.Window));
+            Assert.False(o.Closed, "a drag in progress holds Escape");
+
+            thumb.ReleaseMouseCapture();
+            WindowCapture.DoEvents();
+            Assert.True(PressEscapeOn(thumb, o.Window));
+            Assert.True(o.Closed, "with the drag over, Escape closes the Loader");
+        }
+        finally
+        {
+            if (Mouse.Captured is not null) Mouse.Capture(null);
+            CloseIfOpen(o);
         }
     });
 }
