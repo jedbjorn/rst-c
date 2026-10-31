@@ -23,6 +23,14 @@
 // the user keeps their own RST. The preview goes first, then RST.msi, so a failure midway still leaves RST.msi in
 // place (and RST-Machine.msi is rolled back too).
 //
+// Its prompts belong to the setup window (SC-029, VM Pass B N2: an unowned box opened behind Revit and setup, so
+// setup looked hung). Burn runs the helper from its engine process and the setup window belongs to the bootstrapper
+// application, another child of that engine; so the owner is the visible top-level window of the engine or of a
+// sibling process (or, failing that, the window titled "RST Setup" in this session). Owned, the box stays above setup
+// and keeps setup disabled while it is open. Windows only lets the foreground process take the foreground, so once
+// the box is up the helper briefly attaches to the foreground window's input and brings the box to the front. The log
+// says which owner it found and whether the box reached the front.
+//
 // Arguments: the log path (Burn passes [WixBundleLog_RemoveUserRst]; empty -> %TEMP%) and the bundle's UI level
 // ([WixBundleUILevel]: 4 = full UI). Each removal's Windows Installer log goes beside the log. Exit codes: 0 nothing
 // to remove or all removed; 3010 removed, a restart is needed; 32 Revit is running; 1602 cancelled; 1612 a product
@@ -89,8 +97,100 @@ internal static class RemoveUserRst
     [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiConfigureProductExW")]
     private static extern uint MsiConfigureProductEx(string productCode, int installLevel, int installState, string commandLine);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW", SetLastError = true)]
     private static extern int MessageBox(IntPtr owner, string text, string caption, uint type);
+
+    // SC-029: the prompt's owner and foreground.
+    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+    private delegate void TimerProc(IntPtr hwnd, uint msg, UIntPtr id, uint time);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumThreadWindows(uint threadId, EnumWindowsProc proc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hwnd, int command);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextW")]
+    private static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetClassNameW")]
+    private static extern int GetClassName(IntPtr hwnd, StringBuilder name, int max);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint attach, uint attachTo, bool doAttach);
+
+    [DllImport("user32.dll")]
+    private static extern UIntPtr SetTimer(IntPtr hwnd, UIntPtr id, uint milliseconds, TimerProc proc);
+
+    [DllImport("user32.dll")]
+    private static extern bool KillTimer(IntPtr hwnd, UIntPtr id);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "Process32FirstW")]
+    private static extern bool Process32First(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "Process32NextW")]
+    private static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32
+    {
+        public uint Size;
+        public uint Usage;
+        public uint ProcessId;
+        public IntPtr DefaultHeapId;
+        public uint ModuleId;
+        public uint Threads;
+        public uint ParentProcessId;
+        public int PriorityClassBase;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+    }
+
+    private const uint GwOwner = 4;
+    private const int SwRestore = 9;
+    private const uint Th32csSnapProcess = 0x2;
+    private const string SetupCaption = "RST Setup";
+
+    // The prompt's state while it is open (one at a time, on this thread).
+    private static string promptLog;
+    private static int promptTicks;
+    private static TimerProc promptTimer;   // kept alive while the timer can fire
+    private static EnumWindowsProc promptFinder;
+    private static IntPtr promptBox;
+    private static int promptError;          // GetLastError when MessageBox returned 0
 
     private sealed class Found
     {
@@ -123,9 +223,15 @@ internal static class RemoveUserRst
                     Write(log, "stopped before removing anything: close Revit, then run RST-Setup.exe again (exit " + ExitRevitRunning + ")");
                     return ExitRevitRunning;
                 }
-                int answer = MessageBox(IntPtr.Zero,
+                int answer = Prompt(log,
                     "Revit is running. Close Revit, then click Retry.\n\nYour own RST has not been changed. Click Cancel to stop setup: everything is put back as it was.",
-                    "RST Setup", MbRetryCancel | MbIconWarning | MbSetForeground | MbTopmost);
+                    MbRetryCancel | MbIconWarning);
+                if (answer == 0)
+                {
+                    // Review N5: MessageBox failed (the setup window may have closed under it); not the user's Cancel.
+                    Write(log, "the prompt could not be shown (MessageBox failed with error " + promptError + "; the setup window may have closed); stopping, nothing removed (exit " + ExitCancelled + ")");
+                    return ExitCancelled;
+                }
                 if (answer != IdRetry)
                 {
                     Write(log, "cancelled by the user while Revit was running; nothing removed (exit " + ExitCancelled + ")");
@@ -177,7 +283,7 @@ internal static class RemoveUserRst
                     string message = f.Name + " " + f.Version + " is installed for your Windows account, but Windows can't remove it: its installer cache is missing. "
                         + "Setup will put everything back as it was. Remove it in Settings > Apps (or repair it from its original MSI), then run RST-Setup.exe again.";
                     Write(log, "stopped before removing anything: " + message + " (exit " + ExitNotRemovable + ")");
-                    if (fullUi) MessageBox(IntPtr.Zero, message, "RST Setup", MbOk | MbIconWarning | MbSetForeground | MbTopmost);
+                    if (fullUi) Prompt(log, message, MbOk | MbIconWarning);
                     return ExitNotRemovable;
                 }
             }
@@ -210,6 +316,154 @@ internal static class RemoveUserRst
             Write(log, "failed: " + ex);
             return ExitInstallFailure;
         }
+    }
+
+    /// <summary>
+    /// A message box owned by the setup window and brought to the front (SC-029). Returns MessageBox's answer.
+    /// </summary>
+    private static int Prompt(string log, string text, uint type)
+    {
+        IntPtr owner = SetupWindow(log);
+        if (owner != IntPtr.Zero && IsIconic(owner)) ShowWindow(owner, SwRestore);
+        promptLog = log;
+        promptTicks = 0;
+        promptBox = IntPtr.Zero;
+        promptTimer = OnPromptTimer;
+        UIntPtr timer = SetTimer(IntPtr.Zero, UIntPtr.Zero, 100, promptTimer);
+        try
+        {
+            int answer = MessageBox(owner, text, SetupCaption, type | MbSetForeground | MbTopmost);
+            promptError = answer == 0 ? Marshal.GetLastWin32Error() : 0;
+            Write(log, answer == 0 ? "the prompt failed (MessageBox returned 0, error " + promptError + ")" : "the prompt was answered (" + answer + ")");
+            return answer;
+        }
+        finally
+        {
+            if (timer != UIntPtr.Zero) KillTimer(IntPtr.Zero, timer);
+        }
+    }
+
+    /// <summary>
+    /// The setup window: the first visible, unowned top-level window (in z-order) of the process that started this
+    /// helper (Burn's engine) or of another process it started (the bootstrapper application); else the visible
+    /// window titled "RST Setup" in this session; else none.
+    /// </summary>
+    private static IntPtr SetupWindow(string log)
+    {
+        int me = Process.GetCurrentProcess().Id;
+        Dictionary<int, int> parents = ParentProcessIds();
+        int engine;
+        if (!parents.TryGetValue(me, out engine)) engine = -1;
+        IntPtr found = IntPtr.Zero, byCaption = IntPtr.Zero;
+        uint foundPid = 0;
+        EnumWindowsProc visit = delegate(IntPtr hwnd, IntPtr unused)
+        {
+            if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GwOwner) != IntPtr.Zero) return true;
+            uint pid;
+            GetWindowThreadProcessId(hwnd, out pid);
+            if ((int)pid == me) return true;
+            int parent;
+            if (engine > 0 && ((int)pid == engine || (parents.TryGetValue((int)pid, out parent) && parent == engine)))
+            {
+                found = hwnd;
+                foundPid = pid;
+                return false;
+            }
+            if (byCaption == IntPtr.Zero && WindowText(hwnd) == SetupCaption)
+            {
+                try
+                {
+                    if (Process.GetProcessById((int)pid).SessionId == Process.GetCurrentProcess().SessionId) byCaption = hwnd;
+                }
+                catch
+                {
+                    // A process that ended while we looked owns no window.
+                }
+            }
+            return true;
+        };
+        EnumWindows(visit, IntPtr.Zero);
+        GC.KeepAlive(visit);
+        if (found != IntPtr.Zero)
+        {
+            Write(log, "the prompt's owner is the setup window 0x" + found.ToString("X") + " '" + WindowText(found) + "' (pid " + foundPid + "; this helper's parent is pid " + engine + ")");
+            return found;
+        }
+        if (byCaption != IntPtr.Zero)
+        {
+            Write(log, "the prompt's owner is the window titled '" + SetupCaption + "' (0x" + byCaption.ToString("X") + "); none found beside this helper (parent pid " + engine + ")");
+            return byCaption;
+        }
+        Write(log, "no setup window found (parent pid " + engine + "); the prompt has no owner");
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Runs inside MessageBox's loop: finds the box once it is shown and brings it to the front.</summary>
+    private static void OnPromptTimer(IntPtr hwnd, uint msg, UIntPtr id, uint time)
+    {
+        if (promptBox != IntPtr.Zero || ++promptTicks > 50) return;
+        IntPtr box = IntPtr.Zero;
+        promptFinder = delegate(IntPtr w, IntPtr unused)
+        {
+            StringBuilder cls = new StringBuilder(32);
+            GetClassName(w, cls, cls.Capacity);
+            if (cls.ToString() == "#32770" && IsWindowVisible(w))
+            {
+                box = w;
+                return false;
+            }
+            return true;
+        };
+        EnumThreadWindows(GetCurrentThreadId(), promptFinder, IntPtr.Zero);
+        if (box == IntPtr.Zero) return;
+        promptBox = box;
+        IntPtr front = GetForegroundWindow();
+        if (front != box)
+        {
+            uint unusedPid;
+            uint frontThread = front == IntPtr.Zero ? 0 : GetWindowThreadProcessId(front, out unusedPid);
+            uint thisThread = GetCurrentThreadId();
+            bool attached = frontThread != 0 && frontThread != thisThread && AttachThreadInput(thisThread, frontThread, true);
+            try
+            {
+                BringWindowToTop(box);
+                SetForegroundWindow(box);
+            }
+            finally
+            {
+                if (attached) AttachThreadInput(thisThread, frontThread, false);
+            }
+        }
+        Write(promptLog, GetForegroundWindow() == box
+            ? "the prompt is shown in front (0x" + box.ToString("X") + ")"
+            : "the prompt is shown (0x" + box.ToString("X") + "), but Windows kept another window in front");
+    }
+
+    private static string WindowText(IntPtr hwnd)
+    {
+        StringBuilder text = new StringBuilder(256);
+        GetWindowText(hwnd, text, text.Capacity);
+        return text.ToString();
+    }
+
+    /// <summary>Every running process's parent process id.</summary>
+    private static Dictionary<int, int> ParentProcessIds()
+    {
+        Dictionary<int, int> parents = new Dictionary<int, int>();
+        IntPtr snapshot = CreateToolhelp32Snapshot(Th32csSnapProcess, 0);
+        if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1)) return parents;
+        try
+        {
+            ProcessEntry32 entry = new ProcessEntry32();
+            entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry32));
+            for (bool more = Process32First(snapshot, ref entry); more; more = Process32Next(snapshot, ref entry))
+                parents[(int)entry.ProcessId] = (int)entry.ParentProcessId;
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+        return parents;
     }
 
     /// <summary>A product property in the current user's per-user context, or null.</summary>

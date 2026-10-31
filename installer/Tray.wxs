@@ -26,7 +26,9 @@
   and waits up to Timeout seconds. It never terminates the process and never
   asks for a reboot: CloseApplication matches RST.Tray.exe by name across
   every session, so a forced end would reach other users' trays (and WU4's
-  updater, which therefore runs as RST.TrayUpdater.exe: F17 WU4). The tray
+  updater, which therefore runs as RST.TrayUpdater.exe: F17 WU4). The
+  per-machine package adds its own path-exact end for trays in other
+  sessions (RstEndTrays, below). The tray
   registers with Restart Manager (RegisterApplicationRestart, startup switch), so
   after an installer closes it Windows starts it again. ci-smoke.ps1 checks
   both paths. util:RemoveFolderEx removes the tray's
@@ -53,6 +55,23 @@
       restart it (Product.wxs, MSIRESTARTMANAGERCONTROL=Disable), so it
       never runs elevated (WU1 review N8). It starts at each user's next
       sign-in, or when Revit starts it.
+    - Every signed-in user's tray is ended before the files go (SC-028).
+      CloseApplication's WM_CLOSE reaches only trays on the installer's own
+      desktop, so an uninstall, repair or upgrade run as SYSTEM in session 0
+      (SCCM, Intune) closed none: Windows Installer renamed the in-use files,
+      the trays ran on, and msiexec exited 0. CloseApplication's
+      TerminateProcess is no answer: it matches by file name, so it would end
+      per-user trays (%LocalAppData%\Programs\RST\Tray\) too. RstEndTrays
+      (helper\EndTrays.cs, deferred, as SYSTEM, before RemoveFiles) ends
+      exactly the RST.Tray processes whose image is [TrayDir]RST.Tray.exe, in
+      every session. On a full uninstall it then asks Restart Manager
+      whether anything else (Revit with the engine loaded) still uses a file
+      under [RstFolder]. If so it
+      sets WiX's restart marker, and Wix4CheckRebootRequired, which this
+      package also runs on uninstall, makes msiexec return 3010. The upgrade
+      path is the same: RemoveExistingProducts runs the old package's own
+      uninstall, RstEndTrays included. CloseApplication stays first: a tray
+      on the installer's desktop still exits cleanly on WM_CLOSE.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
@@ -115,6 +134,32 @@
       </Component>
       <?endif?>
     </ComponentGroup>
+
+    <?if $(var.Scope) = "machine" ?>
+    <!-- SC-028: end every signed-in user's tray from this package's folder,
+         in any session, then ask for a restart (3010) if anything else still
+         uses the package's files. See the header and helper\EndTrays.cs.
+         Deferred and not impersonated: it runs as SYSTEM, which can end a
+         process in any session. Return="ignore": it never stops an uninstall.
+         The same condition as CloseRstTray, so a no-op reinstall leaves the
+         trays alone. "[RstFolder]." keeps the quoted argument from ending in
+         a backslash. [REMOVE] is ALL only on a full uninstall, the one
+         case it checks for files still in use (review N2). Each run writes
+         its own log, [TempFolder]RST-Machine-EndTrays-<time>-<pid>.log (as
+         SYSTEM: C:\Windows\Temp, or C:\Windows\SystemTemp). -->
+    <Binary Id="RstEndTraysExe" SourceFile="$(var.RstEndTraysExe)" />
+    <CustomAction Id="RstEndTrays" BinaryRef="RstEndTraysExe"
+                  ExeCommand="&quot;[TrayDir]RST.Tray.exe&quot; &quot;[RstFolder].&quot; &quot;[TempFolder]RST-Machine-EndTrays.log&quot; &quot;[REMOVE]&quot;"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="RstEndTrays" Before="RemoveFiles"
+              Condition="NOT Installed OR REINSTALL OR REMOVE OR UPGRADINGPRODUCTCODE" />
+      <!-- WiX schedules its CheckRebootRequired for install and repair only
+           (NOT REMOVE~="ALL"); an uninstall that leaves files in use must say
+           so too. -->
+      <Custom Action="override Wix4CheckRebootRequired_X64" After="InstallFinalize" Condition="VersionNT &gt; 400" />
+    </InstallExecuteSequence>
+    <?endif?>
   </Fragment>
 
 </Wix>
