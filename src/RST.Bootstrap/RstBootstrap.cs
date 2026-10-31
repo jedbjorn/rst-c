@@ -41,8 +41,8 @@ public sealed class RstBootstrap : IExternalApplication
                 File.Exists);
 
             // SC-054: the release version (and its commit) and the runtime, before anything can fail.
-            var bootBuild = BuildText(typeof(RstBootstrap).Assembly);
-            BootLog.Info($"RST.Bootstrap {ProductText(bootBuild)} ({bootBuild}) loading, {RuntimeInformation.FrameworkDescription}");
+            var bootBuild = BootVersion.BuildText(typeof(RstBootstrap).Assembly);
+            BootLog.Info($"RST.Bootstrap {BootVersion.ProductText(bootBuild)} ({bootBuild}) loading, {RuntimeInformation.FrameworkDescription}");
             BootLog.Info($"  bootstrapDll={bootstrapDll}");
             BootLog.Info($"  revitVersion={revitVersion} major={major}");
             BootLog.Info($"  appDir={appDir} (exists={Directory.Exists(appDir)}, layout: {layout})");
@@ -93,7 +93,7 @@ public sealed class RstBootstrap : IExternalApplication
             BootLog.Info("AssemblyDependencyResolver registered");
 
             var engineAsm = AssemblyLoadContext.Default.LoadFromAssemblyPath(enginePath);
-            BootLog.Info($"Engine loaded: {engineAsm.FullName}, build {BuildText(engineAsm)}");
+            BootLog.Info($"Engine loaded: {engineAsm.FullName}, build {BootVersion.BuildText(engineAsm)}");
 
             const string typeName = "RST.Engine.RstApplication";
             var engineType = engineAsm.GetType(typeName, throwOnError: false);
@@ -133,31 +133,6 @@ public sealed class RstBootstrap : IExternalApplication
         }
     }
 
-    /// <summary>
-    /// An assembly's informational version (<c>3.2.0+abc1234</c>; RST.Core's <c>BuildVersion.Informational</c>, which
-    /// the bootstrap cannot reference: it stays dependency-free). Never throws.
-    /// </summary>
-    internal static string BuildText(Assembly assembly)
-    {
-        try
-        {
-            var info = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            if (!string.IsNullOrWhiteSpace(info)) return info.Trim();
-            return assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        }
-        catch
-        {
-            return "0.0.0";
-        }
-    }
-
-    /// <summary>The product version: the informational version without its <c>+commit</c>.</summary>
-    internal static string ProductText(string build)
-    {
-        var plus = build.IndexOf('+');
-        return plus >= 0 ? build.Substring(0, plus) : build;
-    }
-
     private static void LogShippedDlls(string appDir)
     {
         try
@@ -192,6 +167,35 @@ public sealed class RstBootstrap : IExternalApplication
             BootLog.Error("OnShutdown threw", ex);
             return Result.Failed;
         }
+    }
+}
+
+/// <summary>
+/// The boot log's version text (SC-054): RST.Core's <c>BuildVersion</c>, which the bootstrap cannot reference (it
+/// stays dependency-free). Free of Revit types, so RST.RuntimeTests can call it without Revit.
+/// </summary>
+internal static class BootVersion
+{
+    /// <summary>An assembly's informational version (<c>3.2.0+abc1234</c>); its assembly version when it has none. Never throws.</summary>
+    public static string BuildText(Assembly assembly)
+    {
+        try
+        {
+            var info = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(info)) return info.Trim();
+            return assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        }
+        catch
+        {
+            return "0.0.0";
+        }
+    }
+
+    /// <summary>The product version: the informational version without its <c>+commit</c>.</summary>
+    public static string ProductText(string build)
+    {
+        var plus = build.IndexOf('+');
+        return plus >= 0 ? build.Substring(0, plus) : build;
     }
 }
 

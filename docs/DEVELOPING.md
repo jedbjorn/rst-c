@@ -672,7 +672,7 @@ changing only its `using` line (`using Serilog;` became `using RST.Core.Logging;
   resource carries that version. `AssemblyVersion` stays `0.1.0.0` (see the resolver, below), so
   code that wants the build reads `BuildVersion.Informational(assembly)` (`RST.Core/Logging`), never
   `GetName().Version`. The engine's header line is `BuildVersion.EngineHeader`; the bootstrap,
-  which cannot reference RST.Core, has its own copy (`RstBootstrap.BuildText`). Where each line
+  which cannot reference RST.Core, has its own copy (`BootVersion` in `RstBootstrap.cs`). Where each line
   appears: [Logging](logging.md#which-build-is-installed).
 
 ## The bootstrap's assembly resolver
