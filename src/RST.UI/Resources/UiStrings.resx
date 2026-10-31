@@ -738,6 +738,10 @@
   <data name="Loader_UnloadReportSubtitle" xml:space="preserve">
     <value>RST switched back on the add-ins it had switched off.</value>
   </data>
+  <!-- SC-048 F6: the closing summary replaces an empty Add-in Check. -->
+  <data name="Loader_LoadNoAddinChanges" xml:space="preserve">
+    <value>No add-in changes.</value>
+  </data>
   <data name="Loader_UnloadNoAddinChanges" xml:space="preserve">
     <value>Unloaded. No add-in changes were needed.</value>
   </data>

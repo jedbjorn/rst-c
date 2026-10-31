@@ -485,6 +485,9 @@ public static class UiStrings
 
     public static string Loader_UnloadReportSubtitle => Get(nameof(Loader_UnloadReportSubtitle));
 
+    // SC-048 F6: the closing summary replaces an empty Add-in Check.
+    public static string Loader_LoadNoAddinChanges => Get(nameof(Loader_LoadNoAddinChanges));
+
     public static string Loader_UnloadNoAddinChanges => Get(nameof(Loader_UnloadNoAddinChanges));
 
     public static string Loader_RestoreReportTitle => Get(nameof(Loader_RestoreReportTitle));

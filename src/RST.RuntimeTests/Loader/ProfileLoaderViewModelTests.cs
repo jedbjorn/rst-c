@@ -3,7 +3,7 @@
 // override, import, load (the add-in plan, confirm, the report, Loading … and close, ok:false,
 // throws), unload, delete (incl. while loaded), restore all, the RST 3.0 move and close. Message
 // texts are checked against profile_loader.html's; the add-in parts follow spec #18 (AC4).
-// SC-016: selection gates and command refresh.
+// SC-016 and SC-048 F6: selection gates, command refresh, and no-op loads without modals.
 
 using System.IO;
 using System.Windows.Controls;
@@ -112,6 +112,48 @@ public class ProfileLoaderViewModelTests
         reopened.SelectedCard.Should().BeNull();
         reopened.LoadCommand.CanExecute(null).Should().BeFalse();
         reopened.DeleteCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task No_change_with_disable_on_skips_both_dialogs_and_reports_in_the_closing_summary()
+    {
+        var vm = Model(new FakeLoaderBackend().With(LoaderFixtures.Mep()));
+        vm.SelectedCard = vm.Profiles.Single();
+        vm.DisableUnused = true;
+        await vm.LoadAsync();
+        _dialogs.Log.Should().BeEmpty();
+        vm.Busy.Message.Should().Contain("No add-in changes.");
+        _clock.PendingDelays.Should().Contain(ProfileLoaderViewModel.CloseDelay);
+    }
+
+    [Fact]
+    public async Task No_change_with_a_missing_requirement_skips_confirm_but_keeps_the_report()
+    {
+        var profile = LoaderFixtures.Mep();
+        profile.RequiredAddins = [new RequiredAddin { TabName = "Missing", AddinFile = "Missing.addin" }];
+        var vm = Model(new FakeLoaderBackend().With(profile));
+        vm.SelectedCard = vm.Profiles.Single();
+        vm.DisableUnused = true;
+        await vm.LoadAsync();
+        _dialogs.AddinChanges.Should().BeEmpty();
+        _dialogs.AddinReports.Single().Missing.Should().ContainSingle().Which.Text.Should().Be("Missing");
+        vm.Busy.Message.Should().NotContain("No add-in changes.");
+    }
+
+    [Fact]
+    public async Task Locked_only_changes_skip_confirm_but_are_reported_after_loading()
+    {
+        var backend = new FakeLoaderBackend
+        {
+            Inventory = FakeAddinSwitching.InventoryOf(FakeAddinSwitching.Item(2026, "Probe", adminLock: AdminLock.AlwaysEnabled)),
+        }.With(LoaderFixtures.Mep());
+        var vm = Model(backend);
+        vm.SelectedCard = vm.Profiles.Single();
+        vm.DisableUnused = true;
+        await vm.LoadAsync();
+        _dialogs.AddinChanges.Should().BeEmpty();
+        backend.LoadRequests.Should().ContainSingle();
+        _dialogs.AddinReports.Single().NotChanged.Should().Equal("Probe (2026): locked on by your administrator");
     }
 
     // ── boot ─────────────────────────────────────────────────────────────────
@@ -422,7 +464,8 @@ public class ProfileLoaderViewModelTests
     public async Task Load_sends_the_selection_shows_the_check_then_loading_for_3s_then_closes()
     {
         var backend = LoaderFixtures.Backend();
-        backend.OnLoad = _ => Task.FromResult(new LoadResult(true, [], true, [], QaCheck.Clear));
+        backend.OnLoad = _ => Task.FromResult(new LoadResult(true, [], true, [],
+            new QaCheck([new("Twinmotion", null, "https://twinmotion.com")], [])));
         var vm = Model(backend);
         vm.SelectedCard = Card(vm, "Structure");
         vm.DisableUnused = false;
@@ -435,8 +478,8 @@ public class ProfileLoaderViewModelTests
         backend.Plans.Single().HasChanges.Should().BeFalse("Disable off and nothing rst-c switched off: no confirm");
         _dialogs.Log.Should().Equal("AddinReport:Add-in Check");
         var check = _dialogs.AddinReports.Single();
-        check.Subtitle.Should().Be("All required add-ins are installed and on.");
-        check.IsEmpty.Should().BeTrue();
+        check.Missing.Should().Equal(new AddinCheckLine("Twinmotion", "https://twinmotion.com"));
+        check.IsEmpty.Should().BeFalse();
         check.NextStartNote.Should().Be("Add-in changes apply the next time Revit starts.");
 
         vm.Busy.IsBusy.Should().BeTrue();
