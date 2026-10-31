@@ -124,7 +124,10 @@ internal static class TrayMenu
         return chosen;
     }
 
-    /// <summary>The native menu for <paramref name="entries"/>, Open shown bold as the default; zero (logged) on failure. The caller destroys it.</summary>
+    /// <summary>
+    /// The native menu for <paramref name="entries"/> (the strings' access keys as Win32's &amp;), Open shown bold as the
+    /// default; zero (logged) on failure. The caller destroys it.
+    /// </summary>
     internal static IntPtr Create(IReadOnlyList<TrayMenuEntry> entries)
     {
         var menu = CreatePopupMenu();
@@ -137,7 +140,7 @@ internal static class TrayMenu
         {
             var ok = entry.IsSeparator
                 ? AppendMenuW(menu, MF_SEPARATOR, UIntPtr.Zero, null)
-                : AppendMenuW(menu, MF_STRING | (entry.Enabled ? 0u : MF_GRAYED), (UIntPtr)(uint)entry.Command, entry.Text);
+                : AppendMenuW(menu, MF_STRING | (entry.Enabled ? 0u : MF_GRAYED), (UIntPtr)(uint)entry.Command, TrayMenuModel.Win32Text(entry.Text));
             if (!ok) Log.Warning("tray menu: AppendMenu {Item} failed (error {Error})", entry.Command, Marshal.GetLastWin32Error());
             if (entry.IsDefault) SetMenuDefaultItem(menu, (uint)entry.Command, 0);
         }

@@ -49,6 +49,41 @@ public static class TrayMenuModel
     }
 
     /// <summary>
+    /// A WPF access-key text ("_Open RST", the tray's strings) as a Win32 menu text ("&amp;Open RST"): the first single
+    /// underscore marks the access key; "__" is a literal underscore, as is any later single one; a literal
+    /// ampersand is doubled.
+    /// </summary>
+    public static string Win32Text(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var sb = new System.Text.StringBuilder(text.Length + 2);
+        var keyed = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '&')
+            {
+                sb.Append("&&");
+            }
+            else if (c == '_' && i + 1 < text.Length && text[i + 1] == '_')
+            {
+                sb.Append('_');
+                i++;
+            }
+            else if (c == '_' && !keyed && i + 1 < text.Length)
+            {
+                sb.Append('&');
+                keyed = true;
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// The command TrackPopupMenuEx returned (TPM_RETURNCMD): one of the enabled items in <paramref name="entries"/>,
     /// else <see cref="TrayMenuCommand.None"/> (dismissed, or an id the menu does not hold).
     /// </summary>

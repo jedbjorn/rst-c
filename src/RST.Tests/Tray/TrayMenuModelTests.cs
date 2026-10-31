@@ -44,4 +44,16 @@ public sealed class TrayMenuModelTests
         TrayMenuModel.Chosen(entries, 2).Should().Be(TrayMenuCommand.None, "Check for updates is disabled here");
         TrayMenuModel.Chosen(entries, 99).Should().Be(TrayMenuCommand.None);
     }
+
+    [Theory]
+    [InlineData("_Open RST", "&Open RST")]
+    [InlineData("Check for _updates", "Check for &updates")]
+    [InlineData("_Quit", "&Quit")]
+    [InlineData("Plain", "Plain")]
+    [InlineData("A__B", "A_B")]
+    [InlineData("_A _B", "&A _B")]
+    [InlineData("R&D _tools", "R&&D &tools")]
+    [InlineData("Trailing_", "Trailing_")]
+    public void Win32Text_turns_WPF_access_keys_into_menu_mnemonics(string wpf, string win32) =>
+        TrayMenuModel.Win32Text(wpf).Should().Be(win32);
 }

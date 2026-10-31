@@ -52,7 +52,9 @@ public class TrayMenuTests
             {
                 Assert.Equal(6, GetMenuItemCount(menu));
                 var texts = Enumerable.Range(0, 6).Select(i => MenuText(menu, i)).ToList();
-                Assert.Equal(new[] { TrayStrings.Menu_Open, TrayStrings.Menu_CheckForUpdates, "", TrayStrings.Menu_Settings, "", TrayStrings.Menu_Quit }, texts);
+                // The strings' WPF access keys ("_Quit") become Win32 mnemonics ("&Quit").
+                Assert.Equal(new[] { "&Open RST", "Check for &updates", "", "&Settings", "", "&Quit" }, texts);
+                Assert.Equal(TrayMenuModel.Win32Text(TrayStrings.Menu_Quit), texts[5]);
                 Assert.Equal(new uint[] { 1, 2, 0, 3, 0, 4 }, Enumerable.Range(0, 6).Select(i => GetMenuItemID(menu, i)));
                 Assert.True((GetMenuState(menu, 2, MfByPosition) & MfSeparator) != 0);
                 Assert.True((GetMenuState(menu, 4, MfByPosition) & MfSeparator) != 0);
