@@ -15,6 +15,7 @@
 // install folder to %AppData%\RST\branding.png on first launch when no
 // per-machine logo exists yet. Idempotent — never overwrites an
 // existing branding.png.
+// SC-046 R9 / review L5: share the DPI decode budget with the ribbon without a Revit dependency.
 
 using System;
 using System.IO;
@@ -45,6 +46,13 @@ public sealed class BrandingDefaults
     /// between RST.UI's PickLogoFile and RST.Engine's PanelStyling.
     /// </summary>
     public const int PanelSizePx = 85;
+
+    /// <summary>Decode only the displayed panel edge, rounding up for fractional DPI.</summary>
+    public static int DecodePixels(double dpiScale)
+    {
+        if (!double.IsFinite(dpiScale) || dpiScale <= 0) dpiScale = 1;
+        return (int)Math.Clamp(Math.Ceiling(PanelSizePx * dpiScale), 1, int.MaxValue);
+    }
 
     /// <summary>True when a logo file currently exists on disk.</summary>
     public static bool HasLogo => File.Exists(LogoPath);
