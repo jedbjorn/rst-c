@@ -7,13 +7,12 @@
 //     row, and moves with the tile (Rows_*);
 //   - "bridge rejection caches an empty list" becomes a missing pack folder (only None shows);
 //   - "slot button shows exact variant thumbnail and logical name" checks the thumbnail file and
-//     the label (BuilderRules.IconButtonLabel).
+//     the logical name (feature #18 retired the Pick-icon button's text label: a tile shows the icon).
 // The view-model and window side (focus, Escape keys, outside click) is in RST.RuntimeTests.
 
 using System.IO;
 using FluentAssertions;
 using RST.Core.Builder;
-using RST.Core.Profiles;
 using RST.Core.Ribbon;
 using Xunit;
 
@@ -81,10 +80,10 @@ public class IconPickerModelTests
     {
         IconPack.TryParseValue("pack:move_red", out var red).Should().BeTrue();
         red!.RelativePath.Should().Be("icons/pack/32_move_red.png");
-        BuilderRules.IconButtonLabel(new Slot { IconFile = "pack:move_red" }).Should().Be("move");
+        red.Name.Should().Be("move");
         IconPack.TryParseValue("pack:move", out var bare).Should().BeTrue();
         bare!.RelativePath.Should().Be("icons/pack/32_move.png");
-        BuilderRules.IconButtonLabel(new Slot { IconFile = null }).Should().Be("Icon", "no icon → the + placeholder and \"Icon\"");
+        IconPack.TryParseValue(null, out _).Should().BeFalse("no icon → the tile's placeholder");
     }
 
     // ── open without mutation ──
