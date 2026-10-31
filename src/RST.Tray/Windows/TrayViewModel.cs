@@ -1,6 +1,7 @@
-// rst-c's own (not vendored): the RST tray window's view-model (spec #20 §1; F17 WU1). Four pages: Updates and
+// rst-c's own (not vendored): the RST tray window's view-model (spec #20 §1; F17 WU1). Five pages: Updates and
 // Apps (F17 WU3) are UpdatesViewModel, over the update checker; Add-ins (F17 WU2) is AddInsViewModel, over the
-// Profile Loader's own add-in switching, read when the page is first shown; Settings / About is real: the theme,
+// Profile Loader's own add-in switching, read when the page is first shown; Health (spec #25, F19 WU2) is
+// TrayHealthViewModel, its Device and Models sub-tabs; Settings / About is real: the theme,
 // "Check for updates automatically" (locked off by the UpdateChecks preset), the version and the log folder. Persistence
 // and re-theming go through ITraySettingsHost (TrayHost in the app, a fake in RuntimeTests).
 
@@ -21,6 +22,7 @@ public enum TrayPage
     Updates,
     Apps,
     AddIns,
+    Health,
     Settings,
 }
 
@@ -55,7 +57,9 @@ internal sealed class TrayViewModel : ObservableObject
 
     /// <param name="updates">The update checker (F17 WU3); null shows the pages with nothing detected or checked yet.</param>
     /// <param name="addIns">The Add-ins page (F17 WU2); null shows it with no Revit and no profiles.</param>
-    public TrayViewModel(ITraySettingsHost host, TrayPage page, ITrayUpdatesHost? updates = null, AddInsViewModel? addIns = null)
+    /// <param name="health">The Health page (spec #25); null shows Device with no snapshot and nothing to clean.</param>
+    public TrayViewModel(ITraySettingsHost host, TrayPage page, ITrayUpdatesHost? updates = null, AddInsViewModel? addIns = null,
+                         TrayHealthViewModel? health = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _page = page;
@@ -64,8 +68,13 @@ internal sealed class TrayViewModel : ObservableObject
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
         Updates = new UpdatesViewModel(updates ?? new NoUpdatesHost(host), () => _host.UpdateChecks);
         AddIns = addIns ?? new AddInsViewModel(NoTrayAddinsBackend.Instance, NoLoaderDialogs.Instance, new RST.UI.Dialogs.DialogService(), runInline: true);
+        Health = health ?? new TrayHealthViewModel(NoHealthService.Instance, new RST.UI.Dialogs.DialogService());
         if (page == TrayPage.AddIns) AddIns.EnsureLoadedAsync().Forget("tray: read the Add-ins page");
+        if (page == TrayPage.Health) Health.Shown();
     }
+
+    /// <summary>The Health page (spec #25): Device and Models.</summary>
+    public TrayHealthViewModel Health { get; }
 
     /// <summary>The Add-ins page (F17 WU2).</summary>
     public AddInsViewModel AddIns { get; }
@@ -86,9 +95,12 @@ internal sealed class TrayViewModel : ObservableObject
             OnPropertyChanged(nameof(IsUpdatesPage));
             OnPropertyChanged(nameof(IsAppsPage));
             OnPropertyChanged(nameof(IsAddInsPage));
+            OnPropertyChanged(nameof(IsHealthPage));
             OnPropertyChanged(nameof(IsSettingsPage));
             // Built lazily: the Add-ins page reads the disk the first time it is shown.
             if (value == TrayPage.AddIns) AddIns.EnsureLoadedAsync().Forget("tray: read the Add-ins page");
+            // Health's Device reads its snapshot the first time it is shown; Models is told each time (WU3's fold pass).
+            if (value == TrayPage.Health) UiGuard.Run("tray: show the Health page", Health.Shown);
         }
     }
 
@@ -107,6 +119,8 @@ internal sealed class TrayViewModel : ObservableObject
     public bool IsAppsPage => _page == TrayPage.Apps;
 
     public bool IsAddInsPage => _page == TrayPage.AddIns;
+
+    public bool IsHealthPage => _page == TrayPage.Health;
 
     public bool IsSettingsPage => _page == TrayPage.Settings;
 

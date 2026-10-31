@@ -40,7 +40,21 @@ public static class TrayStrings
 
     public static string Tab_AddIns => Get(nameof(Tab_AddIns));
 
+    public static string Tab_Health => Get(nameof(Tab_Health));
+
     public static string Tab_Settings => Get(nameof(Tab_Settings));
+
+    public static string Health_TabDevice => Get(nameof(Health_TabDevice));
+
+    public static string Health_TabModels => Get(nameof(Health_TabModels));
+
+    public static string Health_DeviceHeading => Get(nameof(Health_DeviceHeading));
+
+    public static string Health_DeviceDescription => Get(nameof(Health_DeviceDescription));
+
+    public static string Health_ModelsHeading => Get(nameof(Health_ModelsHeading));
+
+    public static string Health_ModelsPlaceholder => Get(nameof(Health_ModelsPlaceholder));
 
 
     public static string Updates_Heading => Get(nameof(Updates_Heading));
