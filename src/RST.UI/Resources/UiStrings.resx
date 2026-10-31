@@ -1148,4 +1148,7 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_StackPickInStack" xml:space="preserve">
     <value>in this stack</value>
   </data>
+  <data name="Builder_StackPickReturns" xml:space="preserve">
+    <value>goes back on the panel</value>
+  </data>
 </root>

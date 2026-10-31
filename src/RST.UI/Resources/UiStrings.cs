@@ -743,4 +743,6 @@ public static class UiStrings
     public static string Builder_StackLaterTip => Get(nameof(Builder_StackLaterTip));
 
     public static string Builder_StackPickInStack => Get(nameof(Builder_StackPickInStack));
+
+    public static string Builder_StackPickReturns => Get(nameof(Builder_StackPickReturns));
 }

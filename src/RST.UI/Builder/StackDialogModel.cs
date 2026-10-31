@@ -140,6 +140,9 @@ public sealed class StackPickItemViewModel : ObservableObject
     /// <summary>A row of the stack being edited (else a loose tool of the panel).</summary>
     public bool IsMember => Pick.Member;
 
+    /// <summary>A row of the stack: "in this stack" while ticked, "goes back on the panel" once unticked; "" for a loose tool.</summary>
+    public string MemberNote => !IsMember ? "" : IsChecked ? UiStrings.Builder_StackPickInStack : UiStrings.Builder_StackPickReturns;
+
     public bool IsChecked
     {
         get => _order > 0;
@@ -171,6 +174,7 @@ public sealed class StackPickItemViewModel : ObservableObject
             OnPropertyChanged(nameof(Order));
             OnPropertyChanged(nameof(OrderText));
             OnPropertyChanged(nameof(IsChecked));
+            OnPropertyChanged(nameof(MemberNote));
         }
         OnPropertyChanged(nameof(CanCheck));
     }

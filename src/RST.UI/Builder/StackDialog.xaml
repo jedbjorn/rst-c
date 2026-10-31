@@ -61,14 +61,14 @@
                                                 Visibility="Collapsed">
                                         <ContentControl Style="{StaticResource Pill}" Content="{Binding OrderText}" VerticalAlignment="Center"
                                                         AutomationProperties.AutomationId="StackDialog.Order" />
-                                        <Button Content="▲" Command="{Binding EarlierCommand}" Style="{StaticResource OrderButton}" Margin="6,0,0,0"
+                                        <Button Content="▲" Command="{Binding EarlierCommand}" Style="{StaticResource OrderButton}" Margin="6,0,0,0" AutomationProperties.AutomationId="StackDialog.Earlier"
                                                 ToolTip="{x:Static res:UiStrings.Builder_StackEarlierTip}"
                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_StackEarlierTip}" />
-                                        <Button Content="▼" Command="{Binding LaterCommand}" Style="{StaticResource OrderButton}"
+                                        <Button Content="▼" Command="{Binding LaterCommand}" Style="{StaticResource OrderButton}" AutomationProperties.AutomationId="StackDialog.Later"
                                                 ToolTip="{x:Static res:UiStrings.Builder_StackLaterTip}"
                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_StackLaterTip}" />
                                     </StackPanel>
-                                    <TextBlock x:Name="MemberNote" DockPanel.Dock="Right" Text="{x:Static res:UiStrings.Builder_StackPickInStack}"
+                                    <TextBlock x:Name="MemberNote" DockPanel.Dock="Right" Text="{Binding MemberNote}"
                                                Style="{StaticResource MutedText}" FontSize="11" Margin="8,0,8,0" VerticalAlignment="Center"
                                                Visibility="Collapsed" />
                                     <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding CanCheck}" VerticalAlignment="Center"
