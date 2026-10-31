@@ -251,6 +251,7 @@ function Start-MachineTray([string]$Label) {
   $null = $t.Handle
   $deadline = (Get-Date).AddSeconds(45)
   while (-not (Test-TrayMutex)) { if ($t.HasExited -or (Get-Date) -gt $deadline) { Show-TrayLog; throw "FAIL: $Label tray did not start" }; Start-Sleep -Milliseconds 250 }
+  Wait-TrayReady $t $Label
   Write-Host "$Label tray pid $($t.Id) in session $($t.SessionId) from $MachineTrayExe"
   return $t
 }
@@ -324,6 +325,17 @@ function Start-Holder([string]$Path) {
   }
   Write-Host "holder pid $($h.Id) holds $Path"
   return $h
+}
+# The tray is fully up (its hidden window exists, so WM_CLOSE can reach it) once it logs "tray icon shown".
+function Wait-TrayReady($Proc, [string]$Label) {
+  $deadline = (Get-Date).AddSeconds(45)
+  while ($true) {
+    $ready = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName } |
+      Where-Object { $_.Contains("[$($Proc.Id)]") -and $_.Contains('tray icon shown') })
+    if ($ready.Count -gt 0) { return }
+    if ($Proc.HasExited -or (Get-Date) -gt $deadline) { Show-TrayLog; throw "FAIL: $Label tray pid $($Proc.Id) never logged 'tray icon shown'" }
+    Start-Sleep -Milliseconds 250
+  }
 }
 function Show-TrayLog {
   Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' -ErrorAction SilentlyContinue | ForEach-Object {
@@ -502,6 +514,7 @@ if ($OlderMsi) {
   $null = $t.Handle
   $deadline = (Get-Date).AddSeconds(45)
   while (-not (Test-TrayMutex)) { if ($t.HasExited -or (Get-Date) -gt $deadline) { Show-TrayLog; throw "FAIL: (g) tray did not start" }; Start-Sleep -Milliseconds 250 }
+  Wait-TrayReady $t '(g)'
   Write-Host "(g) tray pid $($t.Id) from $MachineTrayExe"
   $logG = Join-Path $LogDir 'machine-g-upgrade.log'
   Invoke-Msiexec '/i' $Msi $logG | Out-Null
