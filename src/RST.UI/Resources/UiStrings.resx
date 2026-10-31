@@ -893,7 +893,7 @@ Revit's commands could not be read. Restart Revit and open the Builder again; th
     <comment>{0} the profile's file name.</comment>
   </data>
   <data name="Builder_SavedReloaded" xml:space="preserve">
-    <value>Saved &amp; ribbon reloaded.</value>
+    <value>Saved. The ribbon updates when you close the Builder.</value>
   </data>
   <data name="Builder_SavedReloadFailed" xml:space="preserve">
     <value>Saved (auto-reload failed).</value>
@@ -1321,7 +1321,7 @@ Revit's commands could not be read. Restart Revit and open the Builder again; th
     <comment>{0} "1 profile" or "N profiles".</comment>
   </data>
   <data name="Builder_ToolRibbonReloaded" xml:space="preserve">
-    <value>Ribbon reloaded.</value>
+    <value>The ribbon updates when you close the Builder.</value>
   </data>
   <data name="Builder_ToolReloadFailed" xml:space="preserve">
     <value>The loaded profile changed, but the ribbon could not be reloaded. Load it again from the Loader.</value>

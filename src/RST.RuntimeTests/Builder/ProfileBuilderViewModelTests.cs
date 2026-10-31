@@ -725,7 +725,7 @@ public class ProfileBuilderViewModelTests
         option.IsLoaded.Should().BeTrue();
         option.IsCurrent.Should().BeTrue();
         option.Note.Should().Be("loaded · tab \"Studio Arch\"");
-        AssertToast(h, "Saved & ribbon reloaded.", BannerKind.Success);
+        AssertToast(h, "Saved. The ribbon updates when you close the Builder.", BannerKind.Success);
     }
 
     [Fact]
@@ -820,7 +820,7 @@ public class ProfileBuilderViewModelTests
         (await save).Should().BeTrue();
 
         h.Backend.Loads.Single().Should().BeEquivalentTo(new LoadRequest("Architecture", BuilderFixtures.ArchId, true, ["Analyze"]));
-        AssertToast(h, "Saved & ribbon reloaded.", BannerKind.Success);
+        AssertToast(h, "Saved. The ribbon updates when you close the Builder.", BannerKind.Success);
         h.Model.IsWorking.Should().BeFalse();
     }
 

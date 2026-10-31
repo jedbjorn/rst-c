@@ -310,7 +310,7 @@ public sealed class ProfileBuilderShellTests : IDisposable
         active.DisableNonRequired.Should().BeTrue();
         ProfileStore.Resolve(active.ProfileName, active.ProfileId, ProfilesDir).Should().NotBeNull("the pointer resolves to a file on disk");
         scheduler.Scheduled.Should().ContainSingle().Which!.Id.Should().Be(id, "the ribbon was rebuilt from the saved profile");
-        h.Model.Toast.Text.Should().Be("Saved & ribbon reloaded.");
+        h.Model.Toast.Text.Should().Be("Saved. The ribbon updates when you close the Builder.");
         h.Model.IsLoadedProfile.Should().BeTrue();
     }
 
@@ -365,7 +365,7 @@ public sealed class ProfileBuilderShellTests : IDisposable
         h.Backend.Calls.SkipWhile(c => c != "Save").Should().ContainInOrder("Save", "Load", "RemoveSupersededFile");
         h.Backend.Loads.Single().Id.Should().Be(h.Model.Profile.Id);
         h.Backend.Removed.Should().Equal("Legacy.json");
-        h.Model.Toast.Text.Should().Be("Saved & ribbon reloaded.");
+        h.Model.Toast.Text.Should().Be("Saved. The ribbon updates when you close the Builder.");
         h.Model.ProfileOptions.Count(o => o.Display == "Legacy").Should().Be(1);
         h.Model.IsLoadedProfile.Should().BeTrue();
     }

@@ -1347,8 +1347,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// After an edit or remove everywhere: when the open profile's file was written, its clean
     /// baseline gets the same change (so a change already on disk does not read as unsaved, while
     /// other unsaved edits stay unsaved); the saved profiles are read again, the cards rebuilt from
-    /// the working copy, failures listed (and logged), and the ribbon reloaded when the loaded
-    /// profile's file changed.
+    /// the working copy, failures listed (and logged), and a ribbon reload queued when the loaded
+    /// profile's file changed (Revit runs it once the modal Builder closes: VM finding F1).
     /// </summary>
     private async Task AfterCustomToolUpdateAsync(CustomToolUpdate? update, Action<Profile> change, Func<object?, string> done)
     {
@@ -1461,7 +1461,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// saveAndMaybeReload: name and tab required; always under the open profile's id, so a name
     /// changed by Rename… is a rename (rename-as-copy is retired, spec #19); the required add-ins
     /// recomputed; the save; the profile menu refreshed; a clean baseline; then, when the saved
-    /// profile is the active one, the ribbon reloaded with the active hidden tabs and disable flag.
+    /// profile is the active one, a ribbon reload queued with the active hidden tabs and disable flag
+    /// (Revit runs it once the modal Builder closes: VM finding F1).
     /// True when the profile was saved.
     /// </summary>
     /// <remarks>
