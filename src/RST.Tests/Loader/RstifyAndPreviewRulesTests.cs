@@ -4,6 +4,7 @@
 using FluentAssertions;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 using Xunit;
 
 namespace RST.Tests.Loader;
@@ -72,6 +73,102 @@ public class RstifyRulesTests
         var list = RstifyRules.TabsToOffer(Arch(), ["Modify", "Architecture", "Studio Arch"]);
         list.Tabs.Should().BeEmpty();
         list.ShowsEmptyState.Should().BeTrue();
+    }
+
+    private static ScannedCommand Command(string id, params string[] tabs) => new(
+        id, id, CommandOrigin.Native, null, null, tabs[0], "Build",
+        tabs.Select(t => new CommandPlacement(t, "Build", id, null)).ToList());
+
+    private static Profile Tools(params Slot[] tools) => new()
+    {
+        Tab = "Studio", Panels = [new Panel { Slots = [.. tools] }],
+    };
+
+    private static Slot Tool(string id, string tab = "Architecture") => new()
+    {
+        CommandId = id, Name = id, SourceTab = tab,
+    };
+
+    [Fact]
+    public void Two_home_wall_is_offered_but_beams_only_home_is_not()
+    {
+        var profile = Tools(Tool("Wall"), Tool("Beam", "Structure"));
+        ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure"), Command("Beam", "Structure")];
+        RstifyRules.TabsToOffer(profile, ["Architecture", "Structure", "Modify"], catalog)
+            .Tabs.Should().Equal("Architecture");
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Architecture").Should().BeNull();
+    }
+
+    [Fact]
+    public void A_tick_disables_the_other_home_and_unticking_enables_it()
+    {
+        var profile = Tools(Tool("Wall"));
+        ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure")];
+        RstifyRules.TabsToOffer(profile, ["Architecture", "Structure"], catalog)
+            .Tabs.Should().Equal("Architecture", "Structure");
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture"], "Structure").Should().Be("Wall");
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, [], "Structure").Should().BeNull();
+    }
+
+    [Fact]
+    public void Unknown_id_and_empty_catalog_keep_the_saved_source_tab_locked()
+    {
+        var profile = Tools(Tool("Unknown", "Enscape"));
+        foreach (var catalog in new ScannedCommand[][] { [], [Command("Wall", "Architecture", "Structure")] })
+            RstifyRules.TabsToOffer(profile, ["Enscape", "Structure"], catalog).Tabs.Should().Equal("Structure");
+    }
+
+    [Fact]
+    public void Stack_tools_use_catalog_homes_and_core_homes_always_remain_visible()
+    {
+        var profile = Tools(new Slot { SlotType = "stack", Name = "Select" });
+        profile.Stacks["Select"] = new Stack { Tools = [Tool("Select"), Tool("Unknown", "Enscape")] };
+        ScannedCommand[] catalog = [Command("Select", "Architecture", "Structure", "Modify")];
+        RstifyRules.TabsToOffer(profile, Ribbon, catalog).Tabs.Should().Contain(["Architecture", "Structure"]).And.NotContain("Enscape");
+        RstifyRules.BlockingTool(profile, Ribbon, catalog, ["Architecture", "Modify"], "Structure").Should().BeNull();
+        RstifyRules.ReconcileHiddenTabs(profile, Ribbon, catalog, ["Structure", "Modify", "Architecture"])
+            .Should().Equal("Architecture", "Structure");
+    }
+
+    [Fact]
+    public void A_home_missing_from_this_ribbon_does_not_allow_hiding_the_last_visible_home()
+    {
+        var profile = Tools(Tool("Wall"));
+        ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure")];
+        RstifyRules.TabsToOffer(profile, ["Architecture"], catalog).Tabs.Should().Equal("Architecture");
+        RstifyRules.BlockingTool(profile, ["Architecture"], catalog, [], "Architecture").Should().Be("Wall");
+        RstifyRules.ReconcileHiddenTabs(profile, ["Architecture"], catalog, ["Architecture"]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Saved_ticks_are_reconciled_in_ribbon_order_not_saved_order()
+    {
+        var profile = Tools(Tool("Wall"));
+        ScannedCommand[] catalog = [Command("Wall", "Architecture", "Structure")];
+        RstifyRules.ReconcileHiddenTabs(profile, Ribbon, catalog, ["Structure", "Architecture", "Modify", "Gone"])
+            .Should().Equal("Architecture");
+        RstifyRules.ReconcileHiddenTabs(profile, ["Structure", "Architecture"], catalog, ["Architecture", "Structure"])
+            .Should().Equal("Structure");
+        profile.Panels[0].Slots[0].SourceTab.Should().Be("Architecture");
+    }
+
+    [Fact]
+    public void Several_panels_on_one_tab_are_one_home_and_url_and_email_tools_do_not_lock_tabs()
+    {
+        var command = Command("Beam", "Structure") with
+        {
+            Placements = [new("Structure", "Build", "Beam", null), new("Structure", "Other", "Beam", null)],
+        };
+        var profile = Tools(Tool("Beam"), Tool("URL:https://example.com", "Architecture"), Tool("URL:mailto:a@example.com", "Analyze"));
+        RstifyRules.TabsToOffer(profile, ["Structure", "Architecture", "Analyze"], [command])
+            .Tabs.Should().Equal("Architecture", "Analyze");
+    }
+
+    [Fact]
+    public void A_catalogued_tab_named_Custom_is_a_real_home()
+    {
+        RstifyRules.TabsToOffer(Tools(Tool("Addin")), ["Custom", "Architecture"], [Command("Addin", "Custom")])
+            .Tabs.Should().Equal("Architecture");
     }
 
     [Fact]

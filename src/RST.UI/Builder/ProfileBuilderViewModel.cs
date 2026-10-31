@@ -36,6 +36,7 @@ using RST.Core.Colors;
 using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Ribbon;
+using RST.Core.Scanning;
 using RST.UI.Controls;
 using RST.UI.Dialogs;
 using RST.UI.Loader;
@@ -65,6 +66,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
 
     private readonly IProfileBuilderBackend _backend;
     private readonly int? _revitYear;
+    private readonly IReadOnlyList<ScannedCommand> _scannedCatalog;
     private readonly IDialogService _dialogs;
     private readonly IBuilderDialogs _builderDialogs;
     private readonly Action<Action> _post;
@@ -125,16 +127,19 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// event). Null uses the dispatcher.
     /// </param>
     /// <param name="builderDialogs">Rename… / Duplicate… and Branding…; null cancels them (tests that do not open them).</param>
+    /// <param name="catalog">The session catalogue, retaining enum names and ribbon placements for label repair.</param>
     public ProfileBuilderViewModel(
         IProfileBuilderBackend backend,
         IDialogService dialogs,
         Func<TimeSpan, Action, IDisposable>? schedule = null,
         Action<Action>? post = null,
-        IBuilderDialogs? builderDialogs = null)
+        IBuilderDialogs? builderDialogs = null,
+        IReadOnlyList<ScannedCommand>? catalog = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _revitYear = int.TryParse(backend.RevitVersion, out var year) ? year : null;
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _scannedCatalog = catalog ?? [];
         _builderDialogs = builderDialogs ?? NoBuilderDialogs.Instance;
         _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
         Toast = new TransientMessage(schedule);
@@ -420,10 +425,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         _editMode = true;
         _originalName = _profile.ProfileName ?? "";
 
-        // The clean baseline is the profile as saved, taken BEFORE the stack normaliser (WU1 review
+        // The clean baseline is the profile as saved, taken BEFORE the stack and label repairs (WU1 review
         // F2, WU2 review F1): a repair then reads as an unsaved change, so Save is enabled and writes it.
         _pristine = ProfileEditing.Snapshot(_profile);
         var repaired = PanelStacks.Normalize(_profile, SerilogLoaderLog.Instance);
+        var renamed = SlotNameRefresh.Apply(_profile, _scannedCatalog);
+        if (renamed > 0)
+            Log.Information("Builder: {Name} labels refreshed on open ({Count}); the editor holds unsaved changes",
+                _profile.ProfileName, renamed);
         if (repaired.Changed)
             Log.Information("Builder: {Name} normalised on open ({Count} repairs); the editor holds unsaved changes",
                 _profile.ProfileName, repaired.Notes.Count);
@@ -431,7 +440,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         ProfileEdited();
         _supersededFile = superseded;
         OnPropertyChanged(nameof(IsLoadedProfile)); // a loaded legacy profile is known by that file
-        if (repaired.Changed) ShowToast(UiStrings.Builder_StacksRepaired(repaired.Notes.Count), BannerKind.Info);
+        var notices = new List<string>();
+        if (repaired.Changed) notices.Add(UiStrings.Builder_StacksRepaired(repaired.Notes.Count));
+        if (renamed > 0) notices.Add(UiStrings.Builder_NamesRefreshed(renamed));
+        if (notices.Count > 0) ShowToast(string.Join(" ", notices), BannerKind.Info);
     }
 
     private void ProfileChanged()
