@@ -218,7 +218,8 @@ public sealed class CustomToolsTests : IDisposable
         var arch = OnDisk(ArchId);
         arch.Panels[0].Slots[0].Should().BeEquivalentTo(Url("Knowledge", "https://wiki2.example.com", baseName: "Knowledge", icon: "pack:bulb"));
         var stacked = arch.Stacks["Stack 1"].Tools[0];
-        (stacked.Name, stacked.BaseName, stacked.CommandId, stacked.IconFile).Should().Be(("Our wiki", "Knowledge", newId, "pack:bulb"));
+        (stacked.Name, stacked.BaseName, stacked.CommandId, stacked.IconFile).Should().Be(("Our wiki", "Knowledge", newId, (string?)null),
+            "it had no icon, not the tool's old one (pack:book), so it keeps none: icons picked on a panel are kept");
 
         var str = OnDisk(StructId).Panels[0].Slots;
         (str[0].Name, str[0].BaseName, str[0].CommandId).Should().Be(("Knowledge", "Knowledge", newId), "its name was its base name");
@@ -574,5 +575,58 @@ public sealed class CustomToolsTests : IDisposable
         CustomTools.Check(new CustomToolEdit("Wiki", "https://wiki.example.com/a@b", null)).Should().BeNull();
         CustomTools.Check(new CustomToolEdit("Call", "tel:+4412345", null)).Should().BeNull();
         CustomTools.Check(new CustomToolEdit("Share", "file://server/share", null)).Should().BeNull();
+    }
+
+    // ── icons picked on a panel are kept (FnB decision on WU4 review F2) ──
+
+    private const string Help = "mailto:bim@studio.example";
+
+    /// <summary>Architecture: Help with the blue icon; Structure: Help with a grey icon picked on its panel, and a blue Help in a stack.</summary>
+    private void HelpProfiles()
+    {
+        ProfileStore.Save(Make("h-arch", "Architecture", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_blue")), _dir);
+        ProfileStore.Save(Make("h-struct", "Structure",
+            new() { ["S"] = new Stack { Tools = [Url("Help", Help, baseName: "Help", icon: "pack:question_blue"), Command("ID_BEAM")] } },
+            Url("Help", Help, baseName: "Help", icon: "pack:question_light_grey"),
+            PanelStacks.StackSlot("S")), _dir);
+    }
+
+    [Fact]
+    public void An_edit_keeps_an_icon_picked_on_a_panel_and_changes_the_ones_that_had_the_old_icon()
+    {
+        HelpProfiles();
+        var editor = Editor();
+        var help = editor.Derive(null).Single(t => t.Link == Help);
+        help.IconFile.Should().Be("pack:question_blue", "the first occurrence by profile name: Architecture's");
+
+        var result = editor.Edit(help, new CustomToolEdit("BIM help", "bim@studio.example", "pack:question_green"), null, null);
+
+        result.Ok.Should().BeTrue();
+        result.Written.Select(w => w.ProfileName).Should().Equal("Architecture", "Structure");
+        OnDisk("h-arch").Panels[0].Slots[0].IconFile.Should().Be("pack:question_green", "it had the tool's old icon");
+        var structure = OnDisk("h-struct");
+        var grey = structure.Panels[0].Slots[0];
+        (grey.Name, grey.BaseName, grey.IconFile).Should().Be(("BIM help", "BIM help", "pack:question_light_grey"), "the grey icon was picked on the panel: kept");
+        structure.Stacks["S"].Tools[0].IconFile.Should().Be("pack:question_green", "the stacked copy had the old icon");
+    }
+
+    [Fact]
+    public void An_icon_only_edit_does_not_write_a_profile_whose_placements_all_have_their_own_icon()
+    {
+        ProfileStore.Save(Make("h-arch", "Architecture", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_blue")), _dir);
+        ProfileStore.Save(Make("h-struct", "Structure", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_light_grey")), _dir);
+        var file = Path.Combine(_dir, FileOf("h-struct"));
+        var bytes = File.ReadAllText(file);
+        var stamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, stamp);
+        var editor = Editor();
+        var help = editor.Derive(null).Single(t => t.Link == Help);
+
+        var result = editor.Edit(help, new CustomToolEdit("Help", Help, "pack:question_green"), null, null);
+
+        result.Written.Select(w => w.ProfileName).Should().Equal(new[] { "Architecture" }, "only the icon would have changed, and Structure's is its own");
+        File.ReadAllText(file).Should().Be(bytes);
+        File.GetLastWriteTimeUtc(file).Should().Be(stamp, "no spurious write");
+        OnDisk("h-arch").Panels[0].Slots[0].IconFile.Should().Be("pack:question_green");
     }
 }

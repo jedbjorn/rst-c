@@ -1239,7 +1239,7 @@ Open the Loader from inside Revit to populate the catalog.</value>
     <comment>{0} the panel name.</comment>
   </data>
   <data name="Builder_ToolEditWarning" xml:space="preserve">
-    <value>Changes apply everywhere this tool is used: {0}. Names you gave it on a panel are kept.</value>
+    <value>Changes apply everywhere this tool is used: {0}. Names and icons you gave it on a panel are kept.</value>
     <comment>{0} the profiles that will change.</comment>
   </data>
   <data name="Builder_ToolNotChanged" xml:space="preserve">

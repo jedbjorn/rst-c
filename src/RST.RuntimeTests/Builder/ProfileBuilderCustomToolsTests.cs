@@ -378,7 +378,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
                 Assert.Equal("Edit custom tool", d.Title);
                 Assert.True(d.IsEmail);
                 Assert.Equal(("Help", "bim@studio.example"), (d.Label, d.Address));
-                Assert.Equal("Changes apply everywhere this tool is used: Architecture, Structure. Names you gave it on a panel are kept.", d.Warning);
+                Assert.Equal("Changes apply everywhere this tool is used: Architecture, Structure. Names and icons you gave it on a panel are kept.", d.Warning);
                 Assert.Equal("Update in 2 profiles", d.ConfirmText);
                 Assert.False(d.HasRefusals);
                 d.Label = "BIM help";
@@ -389,13 +389,16 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Click(RowButton(Row(window, "Help"), "Builder.EditCustomToolEverywhere"));
 
             const string newLink = "mailto:help@studio.example";
-            foreach (var id in new[] { LoaderFixtures.ArchId, LoaderFixtures.StructId })
+            // The icon changes where it was the tool's old one (Architecture's blue, the list's); Structure's
+            // grey Help, picked on its panel, is kept (FnB decision on review F2).
+            foreach (var (id, icon) in new[] { (LoaderFixtures.ArchId, "pack:question_green"), (LoaderFixtures.StructId, "pack:question_light_grey") })
             {
                 var disk = Disk(id);
                 Assert.Equal(0, CustomToolFixtures.Holding(disk, CustomToolFixtures.Help));
                 var tool = Assert.Single(CustomToolFixtures.Tools(disk), s => CustomTools.LinkOf(s) == newLink);
-                Assert.Equal(("BIM help", "BIM help", "pack:question_green"), (tool.Name, tool.BaseName, tool.IconFile));
+                Assert.Equal(("BIM help", "BIM help", icon), (tool.Name, tool.BaseName, tool.IconFile));
             }
+            Assert.Equal("pack:question_light_grey", h.Model.Panels[2].Tile(1).Model.IconFile);
             Assert.Equal(1, CustomToolFixtures.Holding(h.Model.Profile, newLink));
             Assert.Equal("BIM help", h.Model.Panels[2].Tile(1).Name);
 
@@ -470,7 +473,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             h.Modals.CustomTools.Enqueue(d =>
             {
                 Assert.Equal("Update in 1 profile", d.ConfirmText);
-                Assert.Equal("Changes apply everywhere this tool is used: Structure. Names you gave it on a panel are kept.", d.Warning);
+                Assert.Equal("Changes apply everywhere this tool is used: Structure. Names and icons you gave it on a panel are kept.", d.Warning);
                 Assert.Equal(2, d.Refusals.Count);
                 Assert.All(d.Refusals, r => Assert.StartsWith("Architecture (Architecture_", r));
                 d.Label = "Desk";

@@ -272,11 +272,14 @@ public static class CustomTools
     public static bool Holds(Profile profile, string link) => CustomSlots(profile).Any(s => LinkOf(s) == link);
 
     /// <summary>
-    /// Edit, in one profile: every slot with the tool's link gets the new link, BaseName and icon;
-    /// a slot's Name changes only where it still equals its old base name (its BaseName, or the
-    /// tool's old label when it has none), so names given on a panel are kept. Returns how many
-    /// slots hold the link (an edit that sets what is already there still counts them; the editor
-    /// compares snapshots to decide what to write).
+    /// Edit, in one profile: every slot with the tool's link gets the new link and BaseName; a slot's
+    /// Name changes only where it still equals its old base name (its BaseName, or the tool's old
+    /// label when it has none), so names given on a panel are kept; and its icon changes only where it
+    /// still is the tool's old icon (<see cref="CustomTool.IconFile"/>, the first occurrence's, which
+    /// the list shows), so icons picked on a panel are kept too (FnB decision on WU4 review F2).
+    /// Returns how many slots hold the link (an edit that sets what is already there still counts
+    /// them; the editor compares snapshots to decide what to write, so a slot left as it was is not
+    /// a write).
     /// </summary>
     public static int ApplyEdit(Profile profile, CustomTool tool, CustomToolEdit edit)
     {
@@ -293,11 +296,14 @@ public static class CustomTools
             if (string.IsNullOrEmpty(slot.Name) || slot.Name == oldBase) slot.Name = label;
             slot.BaseName = label;
             slot.CommandId = commandId;
-            slot.IconFile = icon;
+            if (SameIcon(slot.IconFile, tool.IconFile)) slot.IconFile = icon;
             changed++;
         }
         return changed;
     }
+
+    private static bool SameIcon(string? a, string? b) =>
+        string.Equals(string.IsNullOrEmpty(a) ? null : a, string.IsNullOrEmpty(b) ? null : b, StringComparison.Ordinal);
 
     /// <summary>
     /// Remove, in one profile: every slot with the link goes, loose or in a stack; a stack left

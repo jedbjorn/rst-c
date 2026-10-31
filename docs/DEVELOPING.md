@@ -457,6 +457,9 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     every profile that will change (two profiles that share a name show their files) and lists the ones
     that will not. A `mailto:` link must hold a plausible email address (`CustomTools.IsEmailAddress`),
     so Email mode cannot write a URL as an email to every profile.
+  - **Edit everywhere** changes every placement's link and BaseName; a placement's Name changes only
+    where it still equals the old base name, and its icon only where it is still the tool's old icon
+    (the one the list shows): names and icons picked on a panel are kept (FnB decision, WU4 review F2).
   - **Edit and Remove everywhere** go through `IProfileBuilderBackend` to `CustomToolEditor`. The
     confirmation comes from `CustomToolEditor.Plan`, the same classification the edit and remove run,
     so "Update in N profiles" / "Remove from N profiles" is what will be written: profiles that share a
