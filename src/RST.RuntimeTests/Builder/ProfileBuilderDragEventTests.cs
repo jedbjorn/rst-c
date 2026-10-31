@@ -892,6 +892,25 @@ public class ProfileBuilderDragStartTests
             rig.Window.LeftPressed = _ => true;
             Move(face);
             Assert.Empty(rig.Started);
+
+            // Review N1: a release outside the window (never seen), back in without a move over a source,
+            // a press on a non-source with the button held, then a move over Beam: no drag of the old tile.
+            rig.Pointer = new Point(200, 200);
+            Press(face);
+            Assert.NotNull(rig.Window.PendingDrag);
+            Press(empty); // no Release(face) in between: the release happened outside the window
+            Assert.Null(rig.Window.PendingDrag);
+            rig.Pointer = new Point(260, 200);
+            Move(face);
+            Assert.Empty(rig.Started);
+
+            // A real source still arms on its own press (the window's handler runs first).
+            rig.Pointer = new Point(200, 200);
+            Press(face);
+            Assert.NotNull(rig.Window.PendingDrag);
+            rig.Pointer = new Point(240, 200);
+            Move(face);
+            Assert.Single(rig.Started);
         }
         finally
         {

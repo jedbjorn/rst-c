@@ -58,6 +58,10 @@ public partial class ProfileBuilderWindow : Window
         // it wherever it happens (a still click on a tile, then a press-and-move elsewhere, must not
         // drag that tile: WU3 review leftover), so the window watches every left-button release.
         AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler((_, _) => _pendingDrag = null), handledEventsToo: true);
+        // Every press disarms too (review N1): a release outside the window is never seen, and a later
+        // press on a non-source would leave the old drag armed. The window's tunnelling handler runs
+        // before a source's own OnDragSourceDown, so a press on a source re-arms as before.
+        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => _pendingDrag = null), handledEventsToo: true);
     }
 
     public ProfileBuilderViewModel Model { get; }
