@@ -370,12 +370,32 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   `SuccessBrush`, `CautionTextBrush`, `WarningTextBrush`, `ErrorBrush` and `AccentForegroundBrush`.
 - **`controls:ActivityChart`** draws an `RST.Core.Health.ActivityChartLayout` (760 × 190 logical, scaled to its
   width): gridlines with y labels, date ticks, the monotone curve as a `Path` of `BezierSegment`s and dots with
-  tooltips. Set `LineBrush`, `GridBrush`, `LabelBrush` and `DotStrokeBrush`.
+  tooltips. Set `LineBrush`, `GridBrush`, `LabelBrush` and `DotStrokeBrush`. A dot with a `Tone` (the Health trend
+  chart) is drawn larger and filled with `OkBrush`, `WarnSoftBrush`, `WarnBrush`, `DangerBrush` or `NoDataBrush`;
+  a gridline with an empty label draws only its line.
 - **RST.Core** holds the rules: `HealthSeverityRules`, `HealthFormat` (`fmt`, `fmtDur`, `fmtHoursShort`,
-  `fmtElapsed`, and `HoursAxis`/`DurAxis`, which keep the four gridline labels distinct for small values), `ActivityChartMath` (Fritsch–Carlson tangents, the curve, `chartMode`), `ActivityChartLayout`,
-  `ActivityStats` (`activityStatValues`) and `ActivityRanges`. `tests/ui/activity-chart.test.mjs` is ported to
-  `src/RST.Tests/Health/`.
-- **Opening it:** `HealthLauncher.Show(ownerHwnd, context, telemetryToggled, liveSessionStartUtc)`, after
+  `fmtElapsed`, `Active` for active time in whole minutes, and `HoursAxis`/`DurAxis`, which keep the four gridline
+  labels distinct for small values), `ActivityChartMath` (Fritsch–Carlson tangents, the curve, `chartMode`),
+  `ActivityChartLayout` (`Build`, and `BuildHealthTrend`: coloured dots on a fixed score scale, the band edges as
+  unlabelled lines, no curve), `ActivityRanges`/`ActivityRange` (7D–6M for Revit, `PillsWithYear` adds 1Y;
+  `Window(today)` is the last N days, or for 6M and 1Y the last 26 or 52 whole ISO weeks) and
+  `ModelActivityCharts` (the four charts' series and the range cards' totals from a `ModelActivity`).
+  `tests/ui/activity-chart.test.mjs` is ported to `src/RST.Tests/Health/`.
+- **The Activity tab (spec #24)** reads the current model through `IHealthService.GetActivity()` →
+  `ModelActivityReader.ReadCurrentModel` (the rollups, plus outbox files the tray has not folded and this Revit
+  session's live file, folded in memory; it writes nothing; see [activity-rollups.md](activity-rollups.md)). It
+  re-reads when the tab is shown, on a range change, after a collection toggle and after Scan System; nothing
+  ticks. **`ModelActivityPanel`** (`RST.UI.Health`) renders one `ModelActivity` for a range: the stat cards
+  (Activity (Session), Revit only, then Activity (Total), Longest Sync, Longest Open Time, Warning Count, File
+  Size) and four `ChartCard`s (Active time, Opening time, Sync history, Health), per day or per event at 7D–3M and
+  per ISO week at 6M and 1Y. It knows nothing of Revit: the host passes `ModelActivityFacts` (workshared / cloud,
+  warnings, file size and an optional sub-line; `ModelActivityFacts.FromRollup` uses the rollup's last
+  `model_stats`). `HealthResources.xaml` draws it: `StatCardTemplate`, `ChartCardTemplate`, and
+  `ModelActivityStats` / `ModelActivityCharts` over a panel. The tray's model detail (spec #25) reuses all of it
+  with `ReadModel` and `ActivityRanges.PillsWithYear`. AutomationIds: `Health.Stat.<Card>`, `Health.Chart.<Chart>`,
+  `Health.Range.<Label>`. The pre-rollup `ActivityAggregator` now lives only in `RST.Tests` as the harness for
+  `SessionReplay`'s join-rule tests.
+- **Opening it:** `HealthLauncher.Show(ownerHwnd, context, telemetryToggled)`, after
   `RevitThemeDetector.ApplyToWindows()`. Scan and Clean run off the UI thread (`HealthViewModelOptions.RunInBackground`);
   while either runs, every command and input is disabled.
 - **Shared with the tray** (spec #25, F19 WU2): the severity dot, the row and section templates, the Junk modal's content
@@ -387,8 +407,9 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   folder found (`CleanupYears`, `CleanupPathResolver.ResolveEach`, `HealthCleaner.Run(CleanupPick…)`). The add-in's
   window, rows and listing are unchanged.
 - **Screenshots** (`src/RST.RuntimeTests/Health/HealthWindowScreenshotTests`): `health-sections`, `health-empty`,
-  `health-scanning`, `junk-modal`, `junk-modal-empty`, `health-cleaning`, `cleanup-result`, `activity-curves`, `activity-small`
-  and `activity-sparse`, each `-light` and `-dark`. The sections and curve captures are 900 wide and as tall as
+  `health-scanning`, `junk-modal`, `junk-modal-empty`, `health-cleaning`, `cleanup-result`, `activity-curves` (7D: the cards
+  and all four charts), `activity-weekly` (6M), `activity-small`, `activity-sparse` and `activity-no-model`, each `-light`
+  and `-dark`. The sections and curve captures are 900 wide and as tall as
   their content (the real window, 800 tall, scrolls); the others are 900 × 800.
 
 ## The Profile Loader (WU3)
