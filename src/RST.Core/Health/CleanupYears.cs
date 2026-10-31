@@ -3,6 +3,8 @@
 // that listing: which targets are year-specific, the year in an "Autodesk Revit YYYY" folder name and the path
 // hint a per-year row shows. A row's identity is never encoded in a string a profile could also produce: the
 // tray's DeviceHealthService keeps each row as a structured (target, year) pair (PR #176 review F1).
+// Inside Revit the Health tab's Junk Files rows describe the running Revit's year only (SC-018): RunningYear is
+// that year, from Revit's version number.
 
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -26,6 +28,17 @@ public static class CleanupYears
         if (string.IsNullOrEmpty(folderName)) return null;
         var m = FolderRe.Match(folderName);
         return m.Success ? int.Parse(m.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture) : null;
+    }
+
+    /// <summary>
+    /// The running Revit's year from its version number (<c>Application.VersionNumber</c>, "2027"); null for anything
+    /// that is not four ASCII digits (no Revit, outside Revit, an unreadable version).
+    /// </summary>
+    public static int? RunningYear(string? revitVersion)
+    {
+        var v = revitVersion?.Trim();
+        if (v is not { Length: 4 } || !v.All(char.IsAsciiDigit)) return null;
+        return int.Parse(v, NumberStyles.None, CultureInfo.InvariantCulture);
     }
 
     /// <summary>"Autodesk Revit 2026".</summary>
