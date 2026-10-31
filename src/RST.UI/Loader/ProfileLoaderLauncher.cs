@@ -19,8 +19,7 @@ public static class ProfileLoaderLauncher
     /// </summary>
     /// <param name="owner">Revit's main window (<c>UIApplication.MainWindowHandle</c>); zero opens it unowned, centred on the screen.</param>
     /// <param name="revitVersion">Revit's version number (e.g. "2026").</param>
-    /// <param name="catalog">The command catalogue LoaderHost.ShowModal took. The Loader does not show it; it is kept so
-    /// the command still builds (and caches) the catalogue as before.</param>
+    /// <param name="catalog">The session command catalogue; its placements keep each saved tool a visible home.</param>
     /// <param name="switchScheduler">The live profile switch; null falls back to "restart Revit".</param>
     /// <param name="allTabs">The ribbon's tab titles (RibbonTabEnumerator), for RSTify and the add-in matcher.</param>
     public static bool Show(IntPtr owner,
@@ -38,7 +37,7 @@ public static class ProfileLoaderLauncher
         var backend = new ProfileLoaderBackend(revitVersion, switchScheduler, allTabs);
         var dialogs = new DialogService { EscapeCancels = true, ReturnsFocus = true }; // decision #62; rc.3 VM finding F2
         var loaderDialogs = new LoaderDialogs { EscapeCancels = true, ReturnsFocus = true };
-        var model = new ProfileLoaderViewModel(backend, dialogs, loaderDialogs);
+        var model = new ProfileLoaderViewModel(backend, dialogs, loaderDialogs, catalog: catalog);
         model.LoadData();
         var window = new ProfileLoaderWindow(model);
         dialogs.Owner = window;

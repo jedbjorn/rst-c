@@ -1410,4 +1410,10 @@ The other profiles were changed and stay changed.</value>
     <value>Update</value>
     <comment>The Edit dialog's button while the edit fails its check (no count).</comment>
   </data>
+  <data name="Loader_RstifyLastHome" xml:space="preserve">
+    <value>This tab is the last visible home of “{0}”. Show another of its tabs before hiding this one.</value>
+  </data>
+  <data name="Builder_NamesRefreshed" xml:space="preserve">
+    <value>This profile's old tool names were updated to Revit's ribbon names ({0}). Save to keep the names.</value>
+  </data>
 </root>

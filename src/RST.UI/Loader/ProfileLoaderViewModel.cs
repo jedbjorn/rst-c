@@ -14,6 +14,7 @@ using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 using RST.UI.Controls;
 using RST.UI.Dialogs;
 using RST.UI.Mvvm;
@@ -35,6 +36,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
     private readonly ILoaderDialogs _loaderDialogs;
     private readonly Func<TimeSpan, Action, IDisposable> _schedule;
     private readonly Action<string> _openUrl;
+    private readonly IReadOnlyList<ScannedCommand> _catalog;
 
     private AddinSessionContext _session = new();
     private IReadOnlyDictionary<string, AddinLookupEntry> _lookup = new Dictionary<string, AddinLookupEntry>();
@@ -61,18 +63,21 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
     /// <param name="loaderDialogs">"Confirm Add-in Changes" and "Add-in Check".</param>
     /// <param name="schedule">Runs an action once after a delay (the 3 s close and the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
     /// <param name="openUrl">Opens an add-in link; null opens http(s) links in the default browser.</param>
+    /// <param name="catalog">The session catalogue, including each command's ribbon placements.</param>
     public ProfileLoaderViewModel(
         IProfileLoaderBackend backend,
         IDialogService dialogs,
         ILoaderDialogs loaderDialogs,
         Func<TimeSpan, Action, IDisposable>? schedule = null,
-        Action<string>? openUrl = null)
+        Action<string>? openUrl = null,
+        IReadOnlyList<ScannedCommand>? catalog = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _loaderDialogs = loaderDialogs ?? throw new ArgumentNullException(nameof(loaderDialogs));
         _schedule = schedule ?? DispatcherSchedule;
         _openUrl = openUrl ?? ExternalLinks.Open;
+        _catalog = catalog ?? [];
 
         Toast = new TransientMessage(schedule);
         Busy.PropertyChanged += (_, e) =>
@@ -395,9 +400,28 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
 
     private void RenderTabToggles(Profile profile)
     {
-        var list = RstifyRules.TabsToOffer(profile, _session.AllTabs);
-        TabToggles = list.Tabs.Select(t => new TabToggleViewModel(t, _previousHiddenTabs.Contains(t))).ToList();
+        var list = RstifyRules.TabsToOffer(profile, _session.AllTabs, _catalog);
+        var hidden = RstifyRules.ReconcileHiddenTabs(profile, _session.AllTabs, _catalog, _previousHiddenTabs);
+        TabToggles = list.Tabs.Select(t => new TabToggleViewModel(t, hidden.Contains(t))).ToList();
+        foreach (var toggle in TabToggles)
+            toggle.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(TabToggleViewModel.IsHidden)) RefreshTabLocks(profile);
+            };
+        RefreshTabLocks(profile);
         TabTogglesEmpty = list.ShowsEmptyState;
+    }
+
+    private void RefreshTabLocks(Profile profile)
+    {
+        var hidden = SelectedHiddenTabs;
+        foreach (var toggle in TabToggles)
+        {
+            // A ticked switch must always allow the user to show that tab again.
+            var tool = toggle.IsHidden ? null
+                : RstifyRules.BlockingTool(profile, _session.AllTabs, _catalog, hidden, toggle.Tab);
+            toggle.SetLock(tool);
+        }
     }
 
     private void AskAdoptPresets(ProfileCardViewModel card)
@@ -406,7 +430,9 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         var presets = profile.Presets ?? new ProfilePresets();
         var yes = _dialogs.Confirm(RstifyRules.AdoptPresetsTitle, RstifyRules.AdoptPresetsMessage(profile), [],
             UiStrings.Loader_Continue, danger: false, AdoptPresetsDialogId);
-        List<string> hidden = yes ? [.. presets.HiddenTabs ?? []] : [];
+        List<string> hidden = yes
+            ? [.. RstifyRules.ReconcileHiddenTabs(profile, _session.AllTabs, _catalog, presets.HiddenTabs ?? [])]
+            : [];
         var disableUnused = yes && presets.DisableUnusedAddins;
         try
         {

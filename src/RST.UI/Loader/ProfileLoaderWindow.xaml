@@ -235,6 +235,7 @@
                                                     <Border Style="{StaticResource LoaderRow}">
                                                         <DockPanel>
                                                             <CheckBox DockPanel.Dock="Right" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsHidden}"
+                                                                      IsEnabled="{Binding IsEnabled}" ToolTip="{Binding Tooltip}" ToolTipService.ShowOnDisabled="True"
                                                                       AutomationProperties.Name="{Binding Tab}" />
                                                             <TextBlock Text="{Binding Tab}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                                         </DockPanel>

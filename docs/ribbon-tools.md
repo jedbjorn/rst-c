@@ -18,7 +18,7 @@ Two ribbon-level tools come with every rst-c install: **RSTify**, which hides ta
 
 ### What it does
 
-RSTify is a tab-hiding mode. When enabled, rst-c hides the Revit and add-in tabs chosen for the active profile. Only tabs the profile does not draw commands from can be hidden, so the profile's tab and the tabs its tools come from always stay. The ribbon narrows to just the tools the profile provides.
+RSTify is a tab-hiding mode. When enabled, rst-c hides the Revit and add-in tabs chosen for the active profile. The Loader keeps at least one visible ribbon home for each saved tool, including tools in stacks. If a tool sits on several tabs, you can hide a tab while another home stays visible. The profile’s own tab always stays. The ribbon narrows to just the tools the profile provides.
 
 The intent is to remove the route back into the unfiltered Revit ribbon mid-session. A curated ribbon is only effective if users work from it — RSTify removes the distraction of the full tab bar while keeping the escape hatch (turning RSTify off) obvious and one click away.
 
@@ -30,11 +30,11 @@ The admin sets which tabs a profile hides by default on the **Loader defaults** 
 
 The **RSTify** button is on the **RST** panel of the **Add-Ins** tab. The button icon shows the current state: tabs hidden (on) or tabs visible (off). Clicking it toggles the state and the icon updates immediately.
 
-Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create), the profile's own tab and the tabs its commands come from (the tools in its stacks included) are never listed. Your switches are applied when you click **Load Profile →** and remembered for that profile.
+Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide These Tabs** list has a switch for each tab the profile can hide. The core tabs (Modify, Manage, View, Annotate, Add-Ins, Create), the profile’s own tab and any tab that is a saved tool’s only home are never listed. A tab shared with other homes is listed, but its switch is disabled if hiding it would remove a tool’s last visible home. Hover the disabled switch to see which tool needs it. Turning another home back on enables the switch again. Core tabs always count as visible homes. If a command is missing from the catalogue, its saved source tab stays protected; URL and email tools do not lock tabs. Your switches are applied when you click **Load Profile →** and remembered for that profile.
 
 ### How admin defaults work
 
-The admin sets a list of tabs to hide, and the starting position of **Disable unused add-ins**, on the **Loader defaults** tab of the [Builder](profile-builder.md#loader-defaults)'s Profile pane; they are stored in the profile's `presets` field. The first time a user selects the profile in the Loader, the Loader asks **Adopt RSTify Presets?** and summarises them. **Continue** adopts them; **Cancel** starts with no tabs hidden. Either way the question is asked only once per profile. From then on the user's own choices, stored per profile in `%AppData%\RST\user_profile_prefs.json`, apply on every load: the admin defaults only seed the first one.
+The admin sets a list of tabs to hide, and the starting position of **Disable unused add-ins**, on the **Loader defaults** tab of the [Builder](profile-builder.md#loader-defaults)'s Profile pane; they are stored in the profile's `presets` field. The first time a user selects the profile in the Loader, the Loader asks **Adopt RSTify Presets?** and summarises them. **Continue** adopts them; **Cancel** starts with no tabs hidden. Either way the question is asked only once per profile. From then on the user's own choices, stored per profile in `%AppData%\RST\user_profile_prefs.json`, apply on every load: the admin defaults only seed the first one. Saved choices and adopted defaults are applied in ribbon order; a tick that would remove a tool’s last visible home is dropped. The Builder’s Loader-defaults list has no lock; the Loader checks those defaults when they are adopted.
 
 ### Switching profiles with RSTify active
 

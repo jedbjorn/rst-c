@@ -10,6 +10,7 @@ using RST.Core.Activation;
 using RST.Core.Configuration;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 using RST.UI.Controls;
 using RST.UI.Loader;
 using Xunit;
@@ -23,9 +24,9 @@ public class ProfileLoaderViewModelTests
     private readonly List<string> _opened = [];
     private int _closed;
 
-    private ProfileLoaderViewModel Model(IProfileLoaderBackend backend, bool initialize = true)
+    private ProfileLoaderViewModel Model(IProfileLoaderBackend backend, bool initialize = true, IReadOnlyList<ScannedCommand>? catalog = null)
     {
-        var vm = new ProfileLoaderViewModel(backend, _dialogs, _dialogs, _clock.Schedule, url => _opened.Add(url));
+        var vm = new ProfileLoaderViewModel(backend, _dialogs, _dialogs, _clock.Schedule, url => _opened.Add(url), catalog);
         vm.CloseRequested += () => _closed++;
         if (initialize) vm.Initialize();
         return vm;
@@ -176,6 +177,52 @@ public class ProfileLoaderViewModelTests
         var vm = Model(backend);
         Card(vm, "Structure").IsLoaded.Should().BeTrue();
         vm.SelectedCard.Should().BeSameAs(Card(vm, "Structure"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Catalog_homes_reconcile_saved_ticks_and_update_disabled_switches(bool adoptPresets)
+    {
+        var profile = new Profile
+        {
+            Id = LoaderFixtures.ArchId, ProfileName = "Walls", Tab = "Studio",
+            Panels = [new Panel { Slots = [new Slot
+            {
+                CommandId = "ID_OBJECTS_WALL", Name = "ArchitecturalWall", SourceTab = "Architecture", SourcePanel = "Build",
+            }] }],
+        };
+        var backend = new FakeLoaderBackend { AllTabs = ["Architecture", "Structure", "Modify"] }.With(profile);
+        if (adoptPresets)
+        {
+            profile.Presets = new ProfilePresets { HiddenTabs = ["Structure", "Architecture"] };
+            _dialogs.ConfirmAnswers.Enqueue(true);
+        }
+        else
+            backend.Prefs.Profiles[profile.Id] = new UserProfilePrefsEntry { HiddenTabs = ["Structure", "Architecture"] };
+        ScannedCommand[] catalog = [new("ID_OBJECTS_WALL", "Wall: Architectural", CommandOrigin.Native,
+            null, null, "Architecture", "Build",
+            [new("Architecture", "Build", "Wall: Architectural", null), new("Structure", "Structure", "Wall", null)], "ArchitecturalWall")];
+        var vm = Model(backend, catalog: catalog);
+        vm.SelectedCard = Card(vm, "Walls");
+        vm.SelectedHiddenTabs.Should().Equal("Architecture");
+        if (adoptPresets) backend.PrefsWrites.Should().ContainSingle().Which.Hidden.Should().Equal("Architecture");
+        var architecture = vm.TabToggles.Single(t => t.Tab == "Architecture");
+        var structure = vm.TabToggles.Single(t => t.Tab == "Structure");
+        structure.IsEnabled.Should().BeFalse();
+        structure.Tooltip.Should().Contain("ArchitecturalWall");
+        architecture.IsEnabled.Should().BeTrue("a ticked switch can always be unticked");
+        structure.IsHidden = true;
+        structure.IsHidden.Should().BeFalse("a disabled switch cannot hide the last home");
+        architecture.IsHidden = false;
+        structure.IsEnabled.Should().BeTrue();
+        structure.Tooltip.Should().BeNull();
+        structure.IsHidden = true;
+        architecture.IsEnabled.Should().BeFalse();
+        await vm.LoadAsync();
+        backend.LoadRequests.Should().ContainSingle().Which.HiddenTabs.Should().Equal("Structure");
+        profile.Panels[0].Slots[0].Name.Should().Be("ArchitecturalWall", "the Loader never refreshes labels");
+        profile.Panels[0].Slots[0].SourceTab.Should().Be("Architecture");
     }
 
     // ── adopt presets ────────────────────────────────────────────────────────
