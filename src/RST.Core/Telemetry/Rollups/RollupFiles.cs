@@ -203,6 +203,22 @@ internal sealed class RollupFileIO
     {
         try
         {
+            // The current schema (every file but a stale or newer one) deserializes straight from
+            // one read-only parse; only migration and newer-schema reads need the mutable tree.
+            using (var probe = JsonDocument.Parse(bytes))
+            {
+                var root = probe.RootElement;
+                if (root.ValueKind != JsonValueKind.Object ||
+                    !root.TryGetProperty("schema_version", out var probedVersion) || probedVersion.ValueKind != JsonValueKind.Number ||
+                    !probedVersion.TryGetInt32(out var probed) || probed < 1)
+                    return (ParseState.Corrupt, null);
+                if (probed == RollupSchema.Version)
+                {
+                    var current = root.Deserialize<T>(RollupJson.Options);
+                    if (current is null || (validate is not null && !validate(current))) return (ParseState.Corrupt, null);
+                    return (ParseState.Ok, current);
+                }
+            }
             if (JsonNode.Parse(bytes) is not JsonObject obj) return (ParseState.Corrupt, null);
             if (obj["schema_version"] is not JsonValue sv || !sv.TryGetValue<int>(out var version) || version < 1)
                 return (ParseState.Corrupt, null);
