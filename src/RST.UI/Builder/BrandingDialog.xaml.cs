@@ -19,7 +19,7 @@ public partial class BrandingDialog : Window
         InitializeComponent();
         DarkTitleBar.Attach(this);
         DataContext = model ?? throw new ArgumentNullException(nameof(model));
-        // Done (decision #62): a fresh press only, and never past its Pick… file dialog.
+        // Done (decision #62), on a fresh press only: a held Escape that closed its Pick… file dialog does not close it too.
         EscapeGuard.CancelOnEscape(this);
         Loaded += (_, _) => UiGuard.Run("Branding dialog: loaded", () =>
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UiGuard.Run("Branding dialog: focus", () => PickLogoButton.Focus())));

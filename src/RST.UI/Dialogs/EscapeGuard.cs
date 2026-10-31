@@ -31,8 +31,9 @@ internal static class EscapeGuard
     /// does: <paramref name="cancel"/>, by default closing it with no result, which every RST dialog
     /// reads as Cancel. Only a fresh press, and only one the dialog's own content has not taken (a
     /// text box or drop-down that uses Escape acts first); never past a dialog, menu or popup the
-    /// dialog has open (that one takes the press), so a press closes the innermost modal only. (No RST dialog has a busy state
-    /// of its own: what it waits on, a file or colour dialog or the icon picker, is a dialog it owns.)
+    /// dialog has open (that one takes the press), so a press closes the innermost modal only. (No
+    /// RST dialog has a busy state of its own: what it waits on, a file or colour dialog or the icon
+    /// picker, is a dialog it owns.)
     /// A held Escape's repeats do nothing in the dialog: WPF's IsCancel button acts on a repeat too,
     /// so without this the press that closed a dialog in front would, held, cancel this one as well.
     /// </summary>
