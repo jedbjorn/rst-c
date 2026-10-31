@@ -445,7 +445,7 @@ public class HealthWindowScreenshotTests
         var window = new HealthWindow(vm);
         try
         {
-            Capture(window, theme, "activity-sparse", WindowSize);
+            Capture(window, theme, "activity-sparse");
             Assert.False(window.CollectionToggle.IsChecked);
             var visible = WindowCapture.Descendants<ActivityChart>(window).Where(c => c.IsVisible).ToList();
             Assert.Equal(2, visible.Count); // Opening time and Health: one dot each

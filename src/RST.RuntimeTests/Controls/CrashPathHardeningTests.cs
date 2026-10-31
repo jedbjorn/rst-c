@@ -353,7 +353,7 @@ public class CrashPathHardeningTests
     [Fact]
     public void R6_Healths_tab_setter_logs_a_failure_instead_of_letting_WPF_swallow_it()
     {
-        var service = new FakeHealthService { Activity = () => new RST.Core.Health.ActivityData() };
+        var service = new FakeHealthService { Activity = () => new RST.Core.Health.ActivityData { Model = RST.Core.Telemetry.Rollups.ModelActivity.Empty } }; // a model open: rendering reads the clock
         var vm = Health(service, new FakeDialogs(), now: () => throw new InvalidOperationException("SC-046 test: no clock"));
         Exception? escaped = null;
         var events = CaptureLog(() => escaped = Record.Exception(() => vm.SelectedTab = HealthViewModel.ActivityTab));
@@ -366,7 +366,7 @@ public class CrashPathHardeningTests
     [Fact]
     public void R6_Healths_range_pill_logs_a_failure()
     {
-        var service = new FakeHealthService { Activity = () => new RST.Core.Health.ActivityData() };
+        var service = new FakeHealthService { Activity = () => new RST.Core.Health.ActivityData { Model = RST.Core.Telemetry.Rollups.ModelActivity.Empty } }; // a model open: rendering reads the clock
         var vm = Health(service, new FakeDialogs(), now: () => throw new InvalidOperationException("SC-046 test: no clock"));
         var events = CaptureLog(() => Assert.Null(Record.Exception(() => vm.Ranges[1].IsSelected = true)));
 
