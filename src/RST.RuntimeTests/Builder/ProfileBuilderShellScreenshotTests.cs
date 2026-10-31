@@ -5,7 +5,9 @@
 // profile menu (each a popup window: its content is rendered and composed under its button, as the
 // Branding popover's capture was), each Profile tab, and the Branding, Rename and Duplicate
 // dialogs. Each capture also checks the state it shows (the header's Tint, the pane widths, the
-// ticked profile, the refusal line).
+// ticked profile, the refusal line). The F18 follow-up adds the header's alignment with the panes: the
+// divider on the Commands pane's border and the title over the Panels label, at the default width and at
+// the minimum, with a long profile name and with a wider Export ZIP.
 
 using System.Windows;
 using System.Windows.Automation;
@@ -154,6 +156,84 @@ public class ProfileBuilderShellScreenshotTests
             Assert.True(window.ProfileNameBox.IsReadOnly);
             Assert.Equal(Visibility.Collapsed, window.UnsavedIndicator.Visibility);
             Assert.False(window.SaveButton.IsEnabled, "Save is enabled only with changes");
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    public static TheoryData<UiTheme, int> ThemesAndWidths => new()
+    {
+        { UiTheme.Light, 1450 }, { UiTheme.Dark, 1450 }, // the window's default width
+        { UiTheme.Light, 1100 }, { UiTheme.Dark, 1100 }, // its MinWidth
+    };
+
+    private static double Left(FrameworkElement element, Visual root) => element.TransformToAncestor(root).Transform(new Point(0, 0)).X;
+
+    private static double Right(FrameworkElement element, Visual root) =>
+        element.TransformToAncestor(root).Transform(new Point(element.ActualWidth, 0)).X;
+
+    /// <summary>The divider ends on the Commands pane's right border; the title starts where the Panels label does.</summary>
+    private static void AssertHeaderLinesUp(ProfileBuilderWindow w, string when)
+    {
+        var divider = Right(w.TitleDivider, w.Root);
+        var border = Right(w.CommandsPane, w.Root);
+        Assert.True(Math.Abs(divider - border) <= 1, $"{when}: the divider ends at x {divider}, the Commands pane's border at x {border}");
+        var title = Left(w.BuilderTitle, w.Root);
+        var panels = Left(w.PanelsLabel, w.Root);
+        Assert.True(Math.Abs(title - panels) <= 1, $"{when}: the title starts at x {title}, the Panels label at x {panels}");
+    }
+
+    /// <summary>In the profile button, left to right and inside it: the name, "(loaded)", the chevron.</summary>
+    private static void AssertProfileButtonHoldsItsParts(ProfileBuilderWindow w, string when)
+    {
+        var b = w.ProfileButton;
+        Assert.True(w.LoadedMark.ActualWidth > 0, $"{when}: \"(loaded)\" is not shown");
+        Assert.True(Right(w.ProfileButtonName, b) <= Left(w.LoadedMark, b) + 0.5, $"{when}: the name runs into \"(loaded)\"");
+        Assert.True(Right(w.LoadedMark, b) <= Left(w.ProfileChevron, b) + 0.5, $"{when}: \"(loaded)\" runs into the chevron");
+        Assert.True(Right(w.ProfileChevron, b) <= b.ActualWidth, $"{when}: the chevron is cut off");
+        Assert.True(Right(b, w.Root) < Left(w.ExportButton, w.Root), $"{when}: the profile button runs into Export ZIP");
+    }
+
+    [Theory]
+    [MemberData(nameof(ThemesAndWidths))]
+    public void The_header_lines_up_with_the_panes(UiTheme theme, int width) => Sta(() =>
+    {
+        RstTheme.Apply(theme);
+        var (window, h) = Open();
+        try
+        {
+            var size = new Size(width, BuilderSize.Height);
+            var bitmap = WindowCapture.Content(window, size);
+            Screenshots.Save(bitmap, Name($"f18-builder-header-{width}", theme));
+            Assert.Equal(width, bitmap.PixelWidth);
+            AssertHeaderLinesUp(window, $"{width} px");
+            AssertProfileButtonHoldsItsParts(window, $"{width} px");
+            Assert.Equal("Architecture", window.ProfileButtonName.Text);
+            Assert.Equal("Architecture", window.ProfileButtonName.ToolTip);
+            var buttonWidth = window.ProfileButton.ActualWidth;
+
+            // A long name trims to the space left; "(loaded)" and the chevron stay, the button keeps its width.
+            const string longName = "Architecture — Interiors and Workshare Coordination Standards 2027";
+            h.Model.ProfileName = longName;
+            bitmap = WindowCapture.Content(window, size);
+            Screenshots.Save(bitmap, Name($"f18-builder-header-long-name-{width}", theme));
+            Assert.Equal(longName, window.ProfileButtonName.Text);
+            Assert.Equal(longName, window.ProfileButtonName.ToolTip);
+            Assert.Equal(buttonWidth, window.ProfileButton.ActualWidth);
+            var full = new TextBlock { Text = longName, FontWeight = FontWeights.SemiBold, FontFamily = window.FontFamily, FontSize = window.FontSize };
+            full.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Assert.True(window.ProfileButtonName.ActualWidth < full.DesiredSize.Width, "the long name is trimmed");
+            AssertHeaderLinesUp(window, $"{width} px, a long name");
+            AssertProfileButtonHoldsItsParts(window, $"{width} px, a long name");
+
+            // A wider Export ZIP (another wording): the profile button gives way; the alignment holds.
+            window.ExportButton.Content = "Export this profile as a ZIP file…";
+            WindowCapture.Content(window, size);
+            Assert.True(window.ProfileButton.ActualWidth < buttonWidth, "the profile button narrows for a wider Export ZIP");
+            AssertHeaderLinesUp(window, $"{width} px, a wider Export ZIP");
+            AssertProfileButtonHoldsItsParts(window, $"{width} px, a wider Export ZIP");
         }
         finally
         {
