@@ -253,7 +253,14 @@ internal sealed class FakeRevit : IRevitWatch
         _closed.TrySetResult();
     }
 
-    public bool AnyRunning() => Throws ? throw new InvalidOperationException("access denied") : Running;
+    /// <summary>A click or external install during the process listing (SC-017 DN1/DN6).</summary>
+    public Action? OnCheck { get; set; }
+
+    public bool AnyRunning()
+    {
+        OnCheck?.Invoke();
+        return Throws ? throw new InvalidOperationException("access denied") : Running;
+    }
 
     public async Task WaitUntilNoneAsync(CancellationToken cancel)
     {

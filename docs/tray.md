@@ -124,7 +124,7 @@ The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file>
 
 - **Installed:** the row says so.
 - **Restart needed** (msiexec 3010): the app is installed, and Windows asks for a restart to finish. The tray never restarts the PC.
-- **Another installation is running** (1618): the tray tries again after three minutes, three times in all.
+- **Another installation is running** (1618): the tray tries again after three minutes, three times in all. During a self-update's retries (up to two 3-minute waits plus the installer runs), the updater deliberately keeps the tray's single-instance mutex, so no tray can start until it finishes (SC-017 DN3).
 - **Anything else:** the row gives the error number, and **Open log** shows the details.
 
 The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\<app>\<version>\`. Gantt-It and Splash-It remove their old version before they install the new one, so a failed upgrade can leave neither installed. The row then offers **Reinstall previous version (x.y.z)**: from the cache, or, if the tray didn't install that version itself, downloaded and checked the same four ways.
