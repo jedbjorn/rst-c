@@ -325,6 +325,59 @@ public sealed class RollupFoldTests : IDisposable
     }
 
     [Fact]
+    public void Model_stats_written_after_doc_closing_are_attributed_by_keys_not_clipped_to_the_open_interval()
+    {
+        // Close → Save and Synchronize-and-Close (PR #175): model_stats lands after doc_closing and
+        // before doc_closed or session_end, outside the model's open interval.
+        var doc = SessionBuilder.Central("Tower");
+        var s = new SessionBuilder().Start(D(30, 8)).Open(D(30, 9), doc, 0)
+            .Pulses(D(30, 10), D(30, 10, 5), doc)
+            .Stats(D(30, 9, 1), doc, 10, 100L * 1024 * 1024);
+        var closingId = "late-close";
+        var closing = OutboxTestData.Event(s.SessionGuid, 100, TelemetryEventTypes.DocClosing, D(30, 17));
+        doc.WriteKeysTo(closing);
+        closing.SetField(TelemetryFields.ClosingId, closingId);
+        var stats = OutboxTestData.Event(s.SessionGuid, 101, TelemetryEventTypes.ModelStats, D(30, 17, 0).AddSeconds(30));
+        doc.WriteKeysTo(stats);
+        stats.SetField(TelemetryFields.WarningsCount, 42);
+        stats.SetField(TelemetryFields.FileSizeBytes, 200L * 1024 * 1024);
+        var closed = OutboxTestData.Event(s.SessionGuid, 102, TelemetryEventTypes.DocClosed, D(30, 17, 1));
+        closed.SetField(TelemetryFields.ClosingId, closingId);
+        var end = OutboxTestData.Event(s.SessionGuid, 103, TelemetryEventTypes.SessionEnd, D(30, 17, 2));
+        OutboxTestData.WriteSessionFile(_f.Outbox, s.SessionGuid,
+            s.Events.Concat(new[] { closing, stats, closed, end }).ToArray());
+        _f.Pass();
+
+        var day = _f.Rollup(doc)!.Days.Single();
+        day.ActiveMs.Should().Be(5 * 60_000, "active time is still clipped to the open interval");
+        day.Stats.Should().Be(new ModelStatsPoint(D(30, 17).AddSeconds(30), 42, 200L * 1024 * 1024));
+        day.Health!.WarningsCount.Should().Be(42);
+        day.Health.FileSizeBytes.Should().Be(200L * 1024 * 1024);
+        _f.Index().Single().LastStats!.WarningsCount.Should().Be(42);
+    }
+
+    [Fact]
+    public void Model_stats_written_after_the_close_on_the_next_day_still_counts_for_the_model()
+    {
+        // A save-then-close straddling midnight: the stats row lands on a day with no open time.
+        var doc = SessionBuilder.Local("Night");
+        var s = new SessionBuilder().Start(D(29, 22)).Open(D(29, 23), doc, 0)
+            .Pulse(D(29, 23, 10), doc).Close(D(29, 23, 59), doc);
+        s.Stats(D(30, 0, 0).AddSeconds(5), doc, 7, 50L * 1024 * 1024).End(D(30, 0, 1)).Write(_f.Outbox);
+        _f.Pass();
+
+        var days = _f.Rollup(doc)!.Days;
+        days.Select(d => d.Date.Day).Should().Equal(29, 30);
+        days[1].OpenMs.Should().Be(0);
+        days[1].Stats!.WarningsCount.Should().Be(7);
+        days[1].Health!.WarningsCount.Should().Be(7);
+        var row = _f.Index().Single();
+        row.LastStats!.WarningsCount.Should().Be(7);
+        row.LastActiveDay.Should().Be(new DateOnly(2026, 10, 29), "a stats-only day is not an active day");
+        row.Health!.WarningsCount.Should().Be(7);
+    }
+
+    [Fact]
     public void Per_day_health_inputs_carry_stats_forward_and_recompute_forward_after_a_late_fold()
     {
         var doc = SessionBuilder.Central("A");
