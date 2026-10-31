@@ -39,6 +39,13 @@ public sealed class CleanResult
     public Dictionary<string, int> Skipped { get; } = new();
 }
 
+/// <summary>
+/// One target to clean: the whole target (<paramref name="RevitYear"/> null: every path it resolves to), or only
+/// the path of one Revit year's folder (the tray's per-year rows, decision #56). Counts are keyed by
+/// <paramref name="Key"/>. The year only narrows the target's own resolved paths; it never adds one.
+/// </summary>
+public sealed record CleanupPick(CleanupTarget Target, int? RevitYear, string Key);
+
 public static class HealthCleaner
 {
     private static readonly Regex RecentFileEntryRe = new(
@@ -54,12 +61,26 @@ public static class HealthCleaner
     public static CleanResult Run(IEnumerable<CleanupTarget> selectedTargets)
     {
         if (selectedTargets is null) throw new ArgumentNullException(nameof(selectedTargets));
+        return Run(selectedTargets
+            .Where(t => t is not null)
+            .Select(t => new CleanupPick(t, null, string.IsNullOrEmpty(t.Id) ? t.Name : t.Id)));
+    }
+
+    /// <summary>
+    /// <see cref="Run(IEnumerable{CleanupTarget})"/> for picks: a pick with a year cleans only the paths in that
+    /// year's <c>Autodesk Revit YYYY</c> folder. <paramref name="folders"/>: the user folders the path tokens
+    /// stand for (null: this user's; tests pass their own).
+    /// </summary>
+    public static CleanResult Run(IEnumerable<CleanupPick> picks, CleanupFolders? folders = null)
+    {
+        if (picks is null) throw new ArgumentNullException(nameof(picks));
 
         var result = new CleanResult();
         int targetCount = 0;
-        foreach (var target in selectedTargets)
+        foreach (var pick in picks)
         {
-            if (target is null || !target.Enabled) continue;
+            var target = pick?.Target;
+            if (pick is null || target is null || !target.Enabled) continue;
             // Cleanup is locked to the built-in preset paths. A profile is
             // importable/hand-editable (untrusted), so refuse to recursively
             // delete anything the profile points at that isn't a preset.
@@ -69,15 +90,18 @@ public static class HealthCleaner
                 continue;
             }
             targetCount++;
-            var key = string.IsNullOrEmpty(target.Id) ? target.Name : target.Id;
-            result.Deleted[key] = 0;
-            result.Skipped[key] = 0;
+            var key = pick.Key;
+            result.Deleted.TryAdd(key, 0);
+            result.Skipped.TryAdd(key, 0);
 
-            var resolved = CleanupPathResolver.Resolve(target.Path);
+            var resolved = CleanupPathResolver.ResolveEach(target.Path, folders)
+                .Where(p => pick.RevitYear is null || p.RevitYear == pick.RevitYear)
+                .Select(p => p.Path)
+                .ToList();
             if (resolved.Count == 0)
             {
-                Log.Information("HealthCleaner: target {Name} ({Path}) resolved to 0 paths — skipping",
-                                target.Name, target.Path);
+                Log.Information("HealthCleaner: target {Name} ({Path}) resolved to 0 paths{Year} — skipping",
+                                target.Name, target.Path, pick.RevitYear is { } y ? " for " + y : "");
                 continue;
             }
 

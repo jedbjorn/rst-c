@@ -245,6 +245,21 @@
     <value>build {0}</value>
     <comment>{0} the Revit build.</comment>
   </data>
+  <data name="Health_RowInstalledRevit" xml:space="preserve">
+    <value>Installed</value>
+    <comment>The tray's Revit section before a scan, or when the scan found no supported Revit (spec #25).</comment>
+  </data>
+  <data name="Health_NoRevitInstalled" xml:space="preserve">
+    <value>No Revit 2025 or later found</value>
+  </data>
+  <data name="Health_RowRevitYear" xml:space="preserve">
+    <value>Revit {0}</value>
+    <comment>The tray's Revit section: one row per installed year. {0} the year.</comment>
+  </data>
+  <data name="Health_JunkTargetYear" xml:space="preserve">
+    <value>{0} — {1}</value>
+    <comment>The tray's Clean Junk Files: a year-specific target once per Revit year (decision #56). {0} the target's name, {1} the year.</comment>
+  </data>
   <data name="Health_ModelSize" xml:space="preserve">
     <value>{0} MB</value>
     <comment>{0} the model size.</comment>

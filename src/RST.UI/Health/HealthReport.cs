@@ -77,14 +77,30 @@ public sealed class HealthSection : ObservableObject
     public override string ToString() => Title;
 }
 
+/// <summary>Where the snapshot is shown, which decides the Revit section's rows.</summary>
+public enum HealthScope
+{
+    /// <summary>The add-in's Health window: the running Revit's version, username, acceleration, model and warnings.</summary>
+    Revit,
+
+    /// <summary>
+    /// The tray's Device page (spec #25, decision #59): no Revit is running, so the Revit section lists the
+    /// installed Revit years and their builds instead; every other section is the same.
+    /// </summary>
+    Tray,
+}
+
 /// <summary>The Health tab built from a snapshot.</summary>
 public sealed record HealthReport(string Device, string Captured, IReadOnlyList<HealthSection> Sections)
 {
     /// <summary>
     /// Builds the header fields and the four sections from <paramref name="snap"/>. Null (no snapshot
     /// yet, or an unreadable one) renders every value as "—", as the HTML's <c>render(null)</c> did.
+    /// <paramref name="scope"/> <see cref="HealthScope.Tray"/> swaps the Revit section's rows for one row per
+    /// installed Revit year (<see cref="HealthSnapshot.RevitInstalls"/>).
     /// </summary>
-    public static HealthReport Build(HealthSnapshot? snap, CultureInfo? culture = null, TimeZoneInfo? zone = null)
+    public static HealthReport Build(HealthSnapshot? snap, CultureInfo? culture = null, TimeZoneInfo? zone = null,
+                                     HealthScope scope = HealthScope.Revit)
     {
         var c = culture ?? CultureInfo.CurrentCulture;
         var hasSnap = snap is not null;
@@ -224,6 +240,7 @@ public sealed record HealthReport(string Device, string Captured, IReadOnlyList<
                     tooManyWarnings ? HealthSeverity.Warn : HealthSeverity.None)
                 : new HealthRow(UiStrings.Health_RowWarnings, null),
         };
+        if (scope == HealthScope.Tray) revit = InstalledRevitRows(hasSnap ? snap.RevitInstalls : null, hasSnap);
 
         var osName = string.Join(" ", new[] { os.Name, os.Release }.Where(s => !string.IsNullOrEmpty(s)));
         var osRows = new List<HealthRow>
@@ -238,9 +255,31 @@ public sealed record HealthReport(string Device, string Captured, IReadOnlyList<
             [
                 new HealthSection(UiStrings.Health_SectionHardware, hwDot, hardware),
                 new HealthSection(UiStrings.Health_SectionDisplayNetwork, HealthSeverity.Info, display),
-                new HealthSection(UiStrings.Health_SectionRevit, HealthSeverityRules.RevitDot(rv.HardwareAcceleration, rv.WarningsCount), revit),
+                // The tray has no running Revit, so neither of the dot's inputs: its dot is the rule's "nothing wrong" (Info).
+                new HealthSection(UiStrings.Health_SectionRevit, scope == HealthScope.Tray
+                    ? HealthSeverityRules.RevitDot(null, null)
+                    : HealthSeverityRules.RevitDot(rv.HardwareAcceleration, rv.WarningsCount), revit),
                 new HealthSection(UiStrings.Health_SectionOs, HealthSeverity.None, osRows),
             ]);
+    }
+
+    /// <summary>
+    /// The tray's Revit section: "Revit 2026 | 26.0.4.409" with the install folder under it, one row per installed
+    /// year, oldest first. Before the first scan one "Installed" row reads "—"; a scan that found no supported Revit
+    /// says so in that row.
+    /// </summary>
+    private static List<HealthRow> InstalledRevitRows(IReadOnlyList<RevitInstallInfo>? installs, bool scanned)
+    {
+        if (installs is null || installs.Count == 0)
+            return [new HealthRow(UiStrings.Health_RowInstalledRevit, scanned && installs is not null ? UiStrings.Health_NoRevitInstalled : null)];
+        return installs
+            .Where(i => i is not null)
+            .OrderBy(i => i.Year)
+            .Select(i => new HealthRow(
+                UiStrings.Health_RowRevitYear(i.Year.ToString(CultureInfo.InvariantCulture)),
+                HealthFormat.Str(i.Build),
+                string.IsNullOrEmpty(i.InstallDir) ? null : [[new HealthRun(i.InstallDir)]]))
+            .ToList();
     }
 
     /// <summary><c>fmt.bool</c>: Enabled, Disabled or Unknown.</summary>
