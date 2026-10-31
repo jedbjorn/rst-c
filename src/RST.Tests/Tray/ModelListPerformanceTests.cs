@@ -1,8 +1,8 @@
 // ModelListPerformanceTests.cs — spec #25 AC 9 (logic) and the list's read path (F19 #25 WU1).
 // AC 9 is inferred from synthetic timing (CI is a guard, not a lab): with a 500-model index,
-// index load + filter ≤ 150 ms (asserted on the first 500-model load) and changing a chip
-// ≤ 100 ms. The JIT is warmed on a separate small index first; warm 500-model loads are
-// logged as supplementary evidence.
+// index load + filter ≤ 150 ms (the best of three fresh loads, each from the file into a new
+// instance, after a JIT warm-up on a separate small index; all three logged) and changing a
+// chip ≤ 100 ms.
 // Also: an index the real fold wrote lists with the same active time the model detail reads.
 
 using System;
@@ -122,25 +122,13 @@ public sealed class ModelListPerformanceTests : IDisposable
         var bytes = WriteIndex(_f.Rollups, 500);
         _out.WriteLine($"index.json: {bytes:N0} bytes for 500 models");
 
-        // The budget is asserted on the first 500-model load and filter after the small-index
-        // warm-up. Warm loads (three untimed ones with a pause for tiered compilation, then five
-        // timed) are logged as supplementary evidence only.
-        var sw = Stopwatch.StartNew();
-        var index = ModelListIndex.Load(Options(_f.Rollups));
-        var first = index.Query(ModelListQuery.Default, Today);
-        sw.Stop();
-        var firstMs = sw.Elapsed.TotalMilliseconds;
-        _out.WriteLine($"first load + filter: {firstMs:F1} ms ({first.Cards.Count} cards on Recent)");
-        index.Count.Should().Be(500);
-        first.Cards.Should().NotBeEmpty();
-        firstMs.Should().BeLessThanOrEqualTo(150);
-        for (var i = 0; i < 3; i++)
-        {
-            ModelListIndex.Load(Options(_f.Rollups)).Query(ModelListQuery.Default, Today);
-            System.Threading.Thread.Sleep(200);
-        }
+        // AC 9 (spec #25, planner ruling): the best of three fresh loads, each from the file into
+        // a new instance after the small-index warm-up, against 150 ms; all three are logged.
+        var sw = new Stopwatch();
         var loads = new List<double>();
-        for (var i = 0; i < 5; i++)
+        ModelListIndex index = ModelListIndex.Empty;
+        ModelListResult first = null!;
+        for (var i = 0; i < 3; i++)
         {
             sw.Restart();
             index = ModelListIndex.Load(Options(_f.Rollups));
@@ -148,8 +136,10 @@ public sealed class ModelListPerformanceTests : IDisposable
             sw.Stop();
             loads.Add(sw.Elapsed.TotalMilliseconds);
         }
-        loads.Sort();
-        _out.WriteLine($"warm load + filter: median {loads[2]:F1} ms (all: {string.Join(", ", loads.Select(l => l.ToString("F1")))})");
+        _out.WriteLine($"load + filter, three fresh loads: {string.Join(", ", loads.Select(l => l.ToString("F1") + " ms"))}; best {loads.Min():F1} ms ({first.Cards.Count} cards on Recent)");
+        index.Count.Should().Be(500);
+        first.Cards.Should().NotBeEmpty();
+        loads.Min().Should().BeLessThanOrEqualTo(150);
 
         var queries = new List<ModelListQuery>();
         foreach (var chip in Enum.GetValues<ModelTimeChip>())
