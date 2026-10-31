@@ -8,7 +8,8 @@
 //                             the updater copy (F17 WU4): wait for that tray to exit, install RST.msi, start the
 //                             new tray; refused unless run as the copy in %LocalAppData%\RST\Tray\updater\
 //
-// Exit code 0 in every normal case, including a second launch.
+// Exit code 0 in every normal case, including a second launch; 2 when the tray could not start (TrayStartup), 3 when
+// it quit over a UI exception that kept coming back (TrayFaults).
 //
 // SC-022: the single-instance mutex is the first thing a tray takes, before its log, settings, theme or WPF. Two
 // launches that meet (Restart Manager's restart and the updater's start, Revit's start and a sign-in) decide which
@@ -17,7 +18,6 @@
 
 using System.Collections.Generic;
 using System.Windows;
-using System.Windows.Threading;
 using RST.Core.Tray;
 using RST.Tray.Shell;
 using RST.Core.Logging;
@@ -51,6 +51,7 @@ internal static class Program
         using (instance)
         {
             TrayLog.Configure();
+            TrayFaults.HookProcess();
             try
             {
                 foreach (var note in notes) Log.Warning("{Message}", note);
@@ -68,9 +69,27 @@ internal static class Program
 
                 foreach (var unknown in args.Unknown) Log.Warning("ignored argument {Argument}", unknown);
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-                app.DispatcherUnhandledException += OnUnhandled;
                 using var host = new TrayHost(args, instance);
-                app.Startup += (_, _) => host.Start();
+                var faults = new TrayFaults(host.Quit);
+                // A UI exception is logged and the tray keeps running: it must never vanish from under the user.
+                app.DispatcherUnhandledException += (_, e) =>
+                {
+                    faults.OnUiException(e.Exception);
+                    e.Handled = true;
+                };
+                app.Startup += (_, _) =>
+                {
+                    try
+                    {
+                        host.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        // TrayHost.Start handles its own steps; this is the backstop, so the tray never stays iconless.
+                        Log.Fatal(ex, "RST tray could not start; exiting");
+                        app.Shutdown(TrayStartup.FatalExitCode);
+                    }
+                };
                 var code = app.Run();
                 Log.Information("RST tray exited ({Code}; {Reason})", code, host.ExitReason);
                 return code;
@@ -90,6 +109,7 @@ internal static class Program
     private static int RunUpdater(TrayArguments args)
     {
         TrayLog.Configure();
+        TrayFaults.HookProcess();
         try
         {
             return RST.Tray.Updates.Updater.Run(args);
@@ -103,12 +123,5 @@ internal static class Program
         {
             Log.CloseAndFlush();
         }
-    }
-
-    /// <summary>A UI exception is logged and the tray keeps running: it must never vanish from under the user.</summary>
-    private static void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
-    {
-        Log.Error(e.Exception, "unhandled UI exception");
-        e.Handled = true;
     }
 }
