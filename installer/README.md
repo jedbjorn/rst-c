@@ -45,7 +45,7 @@ dotnet build installer\RST.Installer.wixproj -c Release
 # → installer\bin\Release\RST.msi  (Revit 2025 + 2026 + 2027)
 ```
 
-Local and push/PR builds without `-p:RstMsiVersion=` are stamped with the `.wixproj` fallback version (`3.0.99`), which sits between the latest release (v3.0.0) and the next (v3.1.0) so a dev build upgrades a released install in place.
+Local and push/PR builds without `-p:RstMsiVersion=` are stamped with the `.wixproj` fallback version (`3.1.99`), which sits between the latest release (v3.1.1) and the next (v3.2.0) so a dev build upgrades a released install in place.
 
 **Generated per-year components** — `<Files Include>` harvesting cannot carry a component `Condition`, so the `.wixproj` target `RstGenerateRevitYears` runs `installer/gen-revit-years.ps1` before compiling. It writes `installer/obj/RevitYears.g.wxs` (`installer/obj/machine/RevitYears.g.wxs` for `RST-Machine.msi`): component groups `Revit2025`/`Revit2026`/`Revit2027`, with one component per staged file and each component carrying its year's condition and `Transitive="yes"`. The file is regenerated on every build and never committed. The package is **x64**, as in gantt-it and splash-it, because the Revit detection reads the 64-bit registry (ICE80).
 
