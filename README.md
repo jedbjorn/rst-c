@@ -208,7 +208,7 @@ Years before 2025 are not supported.
 
 Revit's journal file logs `Assembly version conflict in some references in RST.Bootstrap.dll` at every start, naming RevitAPI and RevitAPIUI. This is Revit's normal notice for any add-in built against a different update than the one running. It is not an error, and rst-c loads normally.
 
-**Raising the floor** is a deliberate change: CI (`build/check-revit-api-floor.py`) fails any build that references a newer Revit update than the floor. If a feature needs newer API, raise the pins and the floor in the same pull request and update this table, so dropping the older updates is a visible decision. The steps are in [docs/DEVELOPING.md](docs/DEVELOPING.md#revit-api-floor).
+**Raising the floor** is a deliberate change: CI (`build/check-revit-api-floor.py` plus staged AssemblyRefs in `build/check-revit-api-refs.py`) fails any build that references a newer Revit update than the floor. If a feature needs newer API, raise the pins and the floor in the same pull request and update this table, so dropping the older updates is a visible decision. The steps are in [docs/DEVELOPING.md](docs/DEVELOPING.md#revit-api-floor).
 
 ## Build
 

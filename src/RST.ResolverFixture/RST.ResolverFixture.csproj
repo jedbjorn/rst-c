@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SC-013 N3: a test-only RST assembly that no test uses by type. A Default-context
+       copy would satisfy LoadFromAssemblyName before the Resolving event could run. -->
+  <PropertyGroup>
+    <!-- Like RST.Core, usable by both net8 and net10; no Revit or Windows dependency. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>
