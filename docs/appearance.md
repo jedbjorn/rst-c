@@ -24,7 +24,7 @@ Every profile tab can display an 85×85 pixel square branding image with rounded
 
 The branding panel sits at the leading edge of the tab so the curated ribbon is visibly associated with the organisation that built it. This is intentional: a shared ribbon that carries no identity makes it harder for users to know they are working from a curated environment.
 
-![A profile tab on the Revit ribbon showing branding and panel colours together: the logo at the leading edge, followed by panels each tinted a different colour, one of them holding stacked buttons beside large ones](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
+![A profile tab on the Revit ribbon showing branding and panel colours together: the logo at the leading edge, followed by panels each tinted a different colour, several of them holding stacked buttons beside large ones](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
 
 ### Setting a logo
 

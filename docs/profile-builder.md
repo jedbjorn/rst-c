@@ -24,7 +24,7 @@ This machine: ⚙ at the far left :::class2 -> Which profile: the profile menu :
 
 ## Building a profile
 
-![The Profile Builder window: along the tinted header, the ⚙ machine settings button, the profile menu showing the loaded profile, Export ZIP and the title, with Save and Exit on the right; the Commands pane on the left with Filter, Create new and the Custom Tools group above the Revit command catalogue; the profile's panels in the centre as cards of tool tiles, one holding a stack; the Profile pane on the right on its General tab; and the Live Preview of the ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
+![The Profile Builder window: along the tinted header, the ⚙ machine settings button, the profile menu showing the loaded profile, Export ZIP and the title, with Save and Exit on the right; the Commands pane on the left with Filter, Create new and the Custom Tools group above the Revit command catalogue; the profile's panels in the centre as cards of tool tiles, some holding stacks; the Profile pane on the right on its General tab; and the Live Preview of the ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
 
 ### Opening the Builder
 
@@ -44,13 +44,13 @@ The Builder opens on the profile the Loader has loaded, ready to edit. With noth
 
 ### The profile menu
 
-Click the profile button in the header. Under "Switch profile" it lists your saved profiles: the one in the editor is ticked, and each shows its tab name ("loaded · tab "…"" for the loaded one). Below them:
+Click the profile button in the header. Under "Switch profile" it lists your saved profiles: the one in the editor is ticked, and each shows its tab name; the loaded one reads *loaded · tab "<tab>"*. Below them:
 
 - **+ New profile:** a new, unnamed profile with one empty panel.
 - **Rename…** (same profile, new name): see [Rename and Duplicate](#rename-and-duplicate).
 - **Duplicate…** (a copy; original kept): only for a saved profile.
 
-Choosing another profile, or **+ New profile**, with unsaved changes asks first (see [Unsaved changes](#unsaved-changes)). Your edits are made to a working copy, so the menu keeps showing the saved profiles until you save.
+Choosing another profile, or **+ New profile**, with unsaved changes asks first (see [Unsaved changes](#unsaved-changes)). Your edits stay in the Builder until you save, so the menu keeps showing the profiles as saved.
 
 ### The command catalogue
 
@@ -122,7 +122,7 @@ There are three ways to make one:
 
 The Builder names stacks itself ("Stack 1", "Stack 2", … in the profile file) and never shows the names. Removing a stack never removes its tools.
 
-When the Builder opens a profile, it tidies its stacks, each repair logged: two places that share one stack get a stack each, an empty or one-tool stack becomes a plain tool (or goes), and a reference to a missing stack or a stack no panel places is dropped. The toast "This profile's stacks were repaired when it opened (N). Save to keep the repair." says so, and the profile counts as changed. A profile file whose stacks break the rules is not listed at all (see [Notes & limits](#notes--limits)).
+When the Builder opens a saved profile, it can make two repairs to its stacks, each logged: a stack that two places on the panels share gets a copy for each place, and a stack that no panel places is dropped. The toast "This profile's stacks were repaired when it opened (N). Save to keep the repair." says so, and the profile counts as changed. Any other broken stack (an empty, one-tool or 4+ stack, or a place that names a missing stack) makes the file fail validation when it is read, so neither the Builder nor the Loader lists it (see [Notes & limits](#notes--limits)).
 
 ### Icons
 
@@ -158,7 +158,7 @@ The defaults are stored in the profile's `presets` field. When a user first sele
 
 ![The Profile Builder with the Profile pane on its Loader defaults tab: the Disable unused add-ins switch and the "Hide these tabs (RSTify)" switch list, some tabs switched on](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
 
-### Junk cleanup targets
+### Junk cleanup
 
 The **Junk cleanup** tab chooses which of the Health tool's cleanup targets this profile offers in **Clean Junk Files**. The paths are fixed presets for safety: Temp, the Revit package cache, journals, the collaboration cache, the recent-file list and the RST logs (see [Health Tool](health-tool.md#junk-file-cleanup) for the paths). You cannot add a path of your own. Each row has:
 
@@ -171,10 +171,6 @@ The **Junk cleanup** tab chooses which of the Health tool's cleanup targets this
 ![The Profile Builder with the Profile pane on its Junk cleanup tab: the help text, then one row per cleanup target with an on/off switch, an editable name and ×, and Restore defaults below](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-junk-cleanup.png)
 
 A profile keeps its own cleanup targets when you edit and save it. Only a profile with no targets at all (one made before cleanup targets existed) is given the defaults.
-
-### Required add-ins
-
-When you save, the Builder works out which add-ins the profile depends on from the commands you used, and stores that list in the profile. The Loader checks it when the profile is loaded: it re-enables installed add-ins that are disabled and shows download links for missing ones. See [Ribbon Tools](ribbon-tools.md).
 
 ## Machine settings
 
@@ -203,9 +199,13 @@ New profile :::class1 -> Rename… to name it, set the tab :::class2 -> Panels, 
 - A stack of more than three tools cannot be saved: "Panel "<name>" has a stack of N tools. A stack holds 2–3 tools; move some out before saving."
 - If the profile you saved is the loaded one, rst-c reloads it on the ribbon when you close the Builder ("Saved. The ribbon updates when you close the Builder."): Revit cannot rebuild the ribbon while the Builder is open.
 
+### Required add-ins
+
+When you save, the Builder works out which add-ins the profile depends on from the commands you used, and stores that list in the profile. The Loader checks it when the profile is loaded: it re-enables installed add-ins that are disabled and shows download links for missing ones. See [Ribbon Tools](ribbon-tools.md).
+
 ### Rename and Duplicate
 
-**Rename…** (profile menu, or the General tab) opens **Rename profile**: "Same profile, new name. Users who have it loaded keep it." The name is required and must not be used by another saved profile (case does not matter). It changes only the working copy's name, so it is an unsaved change: **Save** writes it under the same id, and the loaded profile stays loaded.
+**Rename…** (profile menu, or the General tab) opens **Rename profile**: "Same profile, new name. Users who have it loaded keep it." The name is required and must not be used by another saved profile (case does not matter). It changes only the name in the Builder, so it is an unsaved change: **Save** writes it under the same id, and the loaded profile stays loaded.
 
 **Duplicate…** (profile menu, saved profiles only) opens **Duplicate profile** with "<name> copy" as the name (then "<name> copy 2", and so on, if taken). "A new profile with its own id, made from what you see now, unsaved edits included. The original stays as last saved." **Duplicate** writes the copy at once and switches the Builder to it; the toast reads "Duplicated as "<name>"; the original is kept." Any unsaved edits go with the copy; the original's file is not touched.
 
@@ -244,7 +244,7 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 
 ## Notes & limits
 
-- The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means the catalogue could not be read.
+- The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means Revit's commands could not be read: restart Revit and open the Builder again (the RST log has the details).
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
 - **Min RST version** (the `min_version` field) is informational: the Loader shows it on the profile's card and details ("Min RST"), but rst-c does not check or enforce it when a profile is loaded.
