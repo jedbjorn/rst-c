@@ -31,7 +31,14 @@
 // a panel item on a later tab (Structure > Structure's arrow is Structural
 // Settings, which lives on Manage > Settings), so every launcher hit is held
 // back and yielded after all tabs' panel items. A command that exists only
-// as a launcher (Text Types) still gets its own tab and panel.
+// as a launcher still gets its own tab and panel.
+//
+// SC-051 (decision #63): only what Revit lets an add-in post reaches the
+// catalog: one of this Revit's PostableCommand ids (CommandCatalog passes
+// BuiltinCommandScanner's seed) or an external command's CustomCtrl_ id (see
+// RST.Core.Scanning.PostCommandRule). Text Types (ID_SETTINGS_TEXT) and the
+// other internal commands PostCommand refuses are left out, counted as
+// "outside PostableCommand" in the summary and listed on one Information line.
 //
 // Reliability (review N4): a throw from a tab (its title or panels), a panel
 // (its source, title, items or launcher) or a single item skips only that
@@ -61,7 +68,12 @@ namespace RST.Engine.Scanning;
 
 internal static class RibbonScanner
 {
-    public static IEnumerable<ScannedCommand> Enumerate()
+    /// <param name="postableCommandIds">
+    /// This Revit's PostableCommand ids (BuiltinCommandScanner). When given, the walk leaves out
+    /// every id Revit would not let an add-in post (SC-051). Null or empty turns that check off
+    /// (an empty seed would otherwise drop every Revit tool, so it is logged and ignored).
+    /// </param>
+    public static IEnumerable<ScannedCommand> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null)
     {
         RibbonControl? ribbon;
         IEnumerable<RibbonTab?>? tabs;
@@ -80,20 +92,32 @@ internal static class RibbonScanner
             Log.Warning("RibbonScanner: ComponentManager.Ribbon is null — no add-in commands will be enumerated");
             return Array.Empty<ScannedCommand>();
         }
-        return EnumerateTabs(tabs, IsPostable);
+        Func<string, bool>? isPostableCommand = null;
+        if (postableCommandIds is { Count: > 0 })
+        {
+            var set = postableCommandIds as ISet<string> ?? new HashSet<string>(postableCommandIds, StringComparer.Ordinal);
+            isPostableCommand = set.Contains;
+        }
+        else if (postableCommandIds is not null)
+        {
+            Log.Warning("RibbonScanner: no PostableCommand ids were read, so tools Revit won't let add-ins run are not left out of this scan");
+        }
+        return EnumerateTabs(tabs, IsPostable, isPostableCommand: isPostableCommand);
     }
 
     /// <summary>
     /// The walk over the given tabs (the live ribbon's, or a test's): every tab's panel items in
-    /// ribbon order, then every dialog launcher. <paramref name="isPostable"/> is asked only for
-    /// kinds the walk reaches since SC-027 (see RibbonWalker). Logs one Information line with the
-    /// scan's counts.
+    /// ribbon order, then every dialog launcher. <paramref name="resolves"/> is asked only for
+    /// kinds the walk reaches since SC-027; <paramref name="isPostableCommand"/>, when given, holds
+    /// the PostableCommand ids every id is checked against (SC-051, see RibbonWalker). Logs one
+    /// Information line with the scan's counts, and one with the ids left out as not postable.
     /// </summary>
     internal static IReadOnlyList<ScannedCommand> EnumerateTabs(
-        IEnumerable<RibbonTab?>? tabs, Func<string, bool> isPostable, RibbonScanCounts? counts = null)
+        IEnumerable<RibbonTab?>? tabs, Func<string, bool> resolves, RibbonScanCounts? counts = null,
+        Func<string, bool>? isPostableCommand = null)
     {
         counts ??= new RibbonScanCounts();
-        var walker = new RibbonWalker<RibbonItem>(Describe, isPostable, counts);
+        var walker = new RibbonWalker<RibbonItem>(Describe, resolves, counts, isPostableCommand);
         var items = new List<ScannedCommand>();
         var launchers = new List<ScannedCommand>();
 
@@ -169,6 +193,9 @@ internal static class RibbonScanner
                   tabsSkippedRestricted, tabsSkippedRst);
         // SC-027: one line per scan, so a VM run or a new Revit year can be checked from the log.
         Log.Information("RibbonScanner: {Summary}", counts.Summary());
+        if (counts.NotPostableIds.Count > 0)
+            Log.Information("RibbonScanner: left out {Count} ids Revit won't let add-ins run: {Ids}",
+                            counts.NotPostableIds.Count, string.Join(", ", counts.NotPostableIds));
 
         items.AddRange(launchers);
         return items;

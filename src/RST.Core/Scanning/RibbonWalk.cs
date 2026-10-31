@@ -34,13 +34,21 @@
 // stack, a split button: Thin Lines, the panel-level Show Mass, Multi-Point Routing …) were in the
 // catalog before SC-027 and stay in. Saved profiles may already place them, and dropping them from
 // the catalog would break those profiles; many of them also start a mode rather than flip a
-// setting.
+// setting. Since SC-051 they, like every kind, stay only when Revit lets add-ins post their Id
+// (Thin Lines does; the panel-level Show Mass does not).
 //
-// Postability: an Id is opaque and RevitCommandId.LookupCommandId(id) resolves it (see
-// RibbonScanner). Kinds the walk reaches for the first time with SC-027 (menu items, checklist and
-// sub-menu entries, dialog launchers) are emitted only when the caller's isPostable accepts the
-// Id; the ones refused are counted as "not postable". Kinds the walk already reached are emitted
-// exactly as before.
+// Postability, two checks, both counted as "not postable":
+//   - SC-051 (decision #63), every kind: an Id Revit does not let add-ins post (not one of this
+//     Revit's PostableCommand ids and not an external command's, see PostCommandRule) is left out.
+//     UIApplication.PostCommand refuses it, so a profile button for it could never run (Text Types,
+//     the Annotate > Text arrow, did exactly that in v3.1.0). Applied when the caller passes the
+//     PostableCommand ids; counted as "outside PostableCommand".
+//   - SC-027: an Id is opaque and RevitCommandId.LookupCommandId(id) resolves it (see
+//     RibbonScanner). Kinds the walk reaches for the first time with SC-027 (menu items, checklist
+//     and sub-menu entries, dialog launchers) are emitted only when the caller's resolves accepts
+//     the Id; counted as "unresolved". Kinds the walk already reached are not asked.
+// Postability is per Id, so every occurrence of an Id goes the same way: no Id kept in the
+// catalog changes tab or panel because another one is left out.
 
 using System;
 using System.Collections.Generic;
@@ -197,9 +205,20 @@ public sealed class RibbonScanCounts
     public int PanelsSkipped { get; set; }
     public int ItemsSkipped { get; private set; }
     public int MenuItemsCollected { get; private set; }
-    public int NotPostable { get; private set; }
+    /// <summary>Items left out because Revit would not post them: <see cref="OutsidePostableCommand"/> plus <see cref="Unresolved"/>.</summary>
+    public int NotPostable => OutsidePostableCommand + Unresolved;
+    /// <summary>Items whose Id Revit does not let add-ins post (SC-051): not a PostableCommand, not an external command.</summary>
+    public int OutsidePostableCommand { get; private set; }
+    /// <summary>Newly reached items whose Id RevitCommandId.LookupCommandId did not resolve (SC-027).</summary>
+    public int Unresolved { get; private set; }
     public int Cycles { get; private set; }
     public int DepthCapped { get; private set; }
+
+    private readonly List<string> _notPostableIds = new();
+    private readonly HashSet<string> _notPostableSeen = new(StringComparer.Ordinal);
+
+    /// <summary>The distinct Ids left out as not postable, in the order the walk met them.</summary>
+    public IReadOnlyList<string> NotPostableIds => _notPostableIds;
 
     public int Collected(RibbonContainerKind kind) => _collected[(int)kind];
     public int ExcludedAsToggle(RibbonContainerKind kind) => _excluded[(int)kind];
@@ -214,7 +233,13 @@ public sealed class RibbonScanCounts
     }
 
     internal void AddExcluded(RibbonContainerKind kind) => _excluded[(int)kind]++;
-    internal void AddNotPostable() => NotPostable++;
+    internal void AddOutsidePostableCommand(string id) { OutsidePostableCommand++; NoteNotPostable(id); }
+    internal void AddUnresolved(string id) { Unresolved++; NoteNotPostable(id); }
+
+    private void NoteNotPostable(string id)
+    {
+        if (_notPostableSeen.Add(id)) _notPostableIds.Add(id);
+    }
     internal void AddCycle() => Cycles++;
     internal void AddDepthCapped() => DepthCapped++;
     internal void AddItemSkipped() => ItemsSkipped++;
@@ -229,7 +254,9 @@ public sealed class RibbonScanCounts
         }
         ItemsSkipped += other.ItemsSkipped;
         MenuItemsCollected += other.MenuItemsCollected;
-        NotPostable += other.NotPostable;
+        OutsidePostableCommand += other.OutsidePostableCommand;
+        Unresolved += other.Unresolved;
+        foreach (var id in other._notPostableIds) NoteNotPostable(id);
         Cycles += other.Cycles;
         DepthCapped += other.DepthCapped;
     }
@@ -237,7 +264,7 @@ public sealed class RibbonScanCounts
     /// <summary>
     /// The scan summary, every kind always present so two scans (or two Revit years) compare
     /// field by field. For example:
-    /// <c>tabs 14/16; collected 700 (panel=120, stack=250, splitButton=210, …, dialogLauncher=13; menu items 18); excluded as toggles 80 (…); not postable 0; cycles 0; depth capped 0; skipped tabs 0, panels 0, items 0</c>
+    /// <c>tabs 14/16; collected 700 (panel=120, stack=250, splitButton=210, …, dialogLauncher=13; menu items 18); excluded as toggles 80 (…); not postable 90 (outside PostableCommand 90, unresolved 0); cycles 0; depth capped 0; skipped tabs 0, panels 0, items 0</c>
     /// </summary>
     public string Summary()
     {
@@ -249,6 +276,8 @@ public sealed class RibbonScanCounts
           .Append("); excluded as toggles ").Append(ExcludedTotal).Append(" (");
         AppendKinds(sb, _excluded);
         sb.Append("); not postable ").Append(NotPostable)
+          .Append(" (outside PostableCommand ").Append(OutsidePostableCommand)
+          .Append(", unresolved ").Append(Unresolved).Append(')')
           .Append("; cycles ").Append(Cycles)
           .Append("; depth capped ").Append(DepthCapped)
           .Append("; skipped tabs ").Append(TabsSkipped)
@@ -276,18 +305,25 @@ public sealed class RibbonScanCounts
 public sealed class RibbonWalker<TNode> where TNode : class
 {
     private readonly Func<TNode, RibbonNode<TNode>> _describe;
-    private readonly Func<string, bool> _isPostable;
+    private readonly Func<string, bool> _resolves;
+    private readonly Func<string, bool>? _isPostableCommand;
     private readonly HashSet<TNode> _onPath = new(ReferenceEqualityComparer.Instance);
 
     public RibbonScanCounts Counts { get; }
 
     /// <param name="describe">Maps an item to its role, kind, Id, text and children.</param>
-    /// <param name="isPostable">Accepts an Id that Revit can post; asked only for newly reached kinds.</param>
+    /// <param name="resolves">Accepts an Id that Revit can look up (LookupCommandId); asked only for newly reached kinds.</param>
     /// <param name="counts">Where the scan's counts go; shared across panels and tabs.</param>
-    public RibbonWalker(Func<TNode, RibbonNode<TNode>> describe, Func<string, bool> isPostable, RibbonScanCounts? counts = null)
+    /// <param name="isPostableCommand">
+    /// Holds this Revit's PostableCommand Ids. When given, every Id is checked against
+    /// <see cref="PostCommandRule.LetsAddinsPost"/> first (SC-051); when null, that check is off.
+    /// </param>
+    public RibbonWalker(Func<TNode, RibbonNode<TNode>> describe, Func<string, bool> resolves, RibbonScanCounts? counts = null,
+                        Func<string, bool>? isPostableCommand = null)
     {
         _describe = describe ?? throw new ArgumentNullException(nameof(describe));
-        _isPostable = isPostable ?? throw new ArgumentNullException(nameof(isPostable));
+        _resolves = resolves ?? throw new ArgumentNullException(nameof(resolves));
+        _isPostableCommand = isPostableCommand;
         Counts = counts ?? new RibbonScanCounts();
     }
 
@@ -414,18 +450,24 @@ public sealed class RibbonWalker<TNode> where TNode : class
             tally.AddExcluded(container);
             return;
         }
-        if (!RibbonWalkRules.ReachedBeforeSc027(leaf, container) && !SafeIsPostable(id!))
+        // SC-051: Revit's PostCommand takes only PostableCommand and external-command Ids.
+        if (_isPostableCommand is not null && !PostCommandRule.LetsAddinsPost(id, _isPostableCommand))
         {
-            tally.AddNotPostable();
+            tally.AddOutsidePostableCommand(id!);
+            return;
+        }
+        if (!RibbonWalkRules.ReachedBeforeSc027(leaf, container) && !SafeResolves(id!))
+        {
+            tally.AddUnresolved(id!);
             return;
         }
         tally.AddCollected(container, leaf);
         hits.Add(new RibbonHit(id!, string.IsNullOrWhiteSpace(displayName) ? id! : displayName!, container, leaf));
     }
 
-    private bool SafeIsPostable(string id)
+    private bool SafeResolves(string id)
     {
-        try { return _isPostable(id); }
+        try { return _resolves(id); }
         catch { return false; }
     }
 }
