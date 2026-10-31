@@ -5,6 +5,7 @@
 // shared family dialogs take it when the add-in's DialogService or LoaderDialogs turns it on; the tray
 // app's (both off by default) keep WPF's own Escape.
 
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -141,6 +142,53 @@ public class DialogEscapeTests
     [InlineData(Key.Enter, true, false)]
     public void Only_a_held_Escape_is_swallowed(Key key, bool isRepeat, bool swallowed) =>
         Assert.Equal(swallowed, EscapeGuard.IsHeldEscape(key, isRepeat));
+
+    /// <summary>
+    /// A held Escape's repeat, as Windows sends it while the key stays down. KeyEventArgs.IsRepeat has
+    /// no public setter; WPF's own KeyboardDevice sets it through the internal SetRepeat.
+    /// </summary>
+    private static KeyEventArgs HeldEscapeArgs(Window w, RoutedEvent routedEvent)
+    {
+        var args = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(w)!, 0, Key.Escape) { RoutedEvent = routedEvent };
+        var setRepeat = typeof(KeyEventArgs).GetMethod("SetRepeat", BindingFlags.Instance | BindingFlags.NonPublic, [typeof(bool)])
+                        ?? throw new MissingMethodException(nameof(KeyEventArgs), "SetRepeat");
+        setRepeat.Invoke(args, [true]);
+        Assert.True(args.IsRepeat, "the test's Escape is a repeat, so the test is not vacuous");
+        return args;
+    }
+
+    /// <summary>
+    /// The headline fix: on a real IsCancel dialog, a held Escape's repeat is swallowed in the
+    /// tunnelling phase (EscapeGuard.CancelOnEscape's PreviewKeyDown hook), so neither WPF's IsCancel
+    /// button (which acts on repeats, and only on unhandled presses) nor the dialog's own Escape
+    /// cancels it. Without the hook the repeat stays unhandled and IsCancel would close the dialog:
+    /// the press that closed the icon picker in front would, held, cancel this dialog too.
+    /// </summary>
+    [Fact]
+    public void A_held_Escape_is_swallowed_and_never_cancels_the_dialog() => Sta(() =>
+    {
+        var model = CustomToolDialogModel.ForCreate("Frame", [], null);
+        var o = Show(new CustomToolDialog(model));
+        try
+        {
+            Assert.Contains(WindowCapture.Descendants<Button>(o.Window), b => b.IsCancel); // WPF's IsCancel acts on repeats
+
+            var preview = HeldEscapeArgs(o.Window, Keyboard.PreviewKeyDownEvent);
+            o.Window.LabelBox.RaiseEvent(preview);
+            WindowCapture.DoEvents();
+            Assert.True(preview.Handled, "the dialog swallows a held Escape before anything in it, IsCancel included, can act");
+            Assert.False(o.Closed);
+
+            var bubble = HeldEscapeArgs(o.Window, Keyboard.KeyDownEvent);
+            o.Window.LabelBox.RaiseEvent(bubble);
+            WindowCapture.DoEvents();
+            Assert.False(o.Closed, "a repeat never cancels: only a fresh press does");
+        }
+        finally
+        {
+            o.CloseIfOpen();
+        }
+    });
 
     [Fact]
     public void Escape_that_the_dialogs_content_took_leaves_the_dialog() => Sta(() =>
