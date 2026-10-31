@@ -219,7 +219,10 @@ public class ProfileBuilderShellScreenshotTests
     {
         Assert.Equal(name, w.ProfileButtonName.Text);
         var full = FullWidth(w, name);
-        Assert.True(w.ProfileButtonName.ActualWidth >= full - 1,
+        // Both widths are rounded to whole device pixels alike (FullWidth measures with the window's layout
+        // rounding and formatting mode), so a name shown in full is exactly as wide, and a trimmed one is at
+        // least a pixel narrower: half a pixel of slack only absorbs floating-point noise (SC-049).
+        Assert.True(w.ProfileButtonName.ActualWidth >= full - 0.5,
             $"{when}: \"{name}\" is trimmed ({w.ProfileButtonName.ActualWidth} px shown of {full})");
         AssertProfileButtonHoldsItsParts(w, when);
     }

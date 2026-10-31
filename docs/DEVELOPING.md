@@ -188,9 +188,13 @@ for tools and stacks, `PanelDrops` for the panel reorder, and `PanelStacks` for 
   clicking ✎, ×, ▲ or ▼ never start one. A tile's or a stack row's icon (`IconHandle`) is the
   exception: a press there arms a drag that starts once the pointer moves past
   `SystemParameters.MinimumHorizontal/VerticalDragDistance` (the button's mouse capture is released
-  first, so no Click follows), and a still click opens the icon picker. The move is watched in the
-  **Preview** phase (`PreviewMouseMove`): a button holding the mouse marks the bubbling `MouseMove`
-  handled, so a bubbling handler on the tile or row would never see it. A tile's name box is only as
+  first, so no Click follows), and a still click opens the icon picker. The **window**, not the
+  source, watches the move, in the **Preview** phase (`PreviewMouseMove`, handled or not), and
+  starts the drag from the element that was pressed. The move that crosses the drag distance can
+  land outside that element: after a press near a tile's edge it can already be in the gutter or on
+  the card, where a handler on the tile never saw it, and the drag never started (SC-032). The
+  Preview phase matters too: a button holding the mouse marks the bubbling `MouseMove` handled. A
+  tile's name box is only as
   wide as its text, a row's sits left, so the rest of each tile and row can be grabbed; the hover-only
   × takes no press while hidden (`IsHitTestVisible` follows the hover). The pointer, the button state
   and the OS drag loop are window seams (`PointerAt`, `LeftPressed`, `RunDragDrop`) so the runtime
@@ -218,11 +222,15 @@ Escape closes every RST modal the add-in shows, the same way its Cancel, Close o
 - **The windows.** The Builder, Loader and Health close as Exit or Close does
   (their own `OnKeyDown`). The Builder goes through the Save / Discard / Cancel prompt, and nothing
   happens while Close or Exit is disabled (a load, scan, clean or save).
-- **The dialogs.** Each dialog opts in with `EscapeGuard.CancelOnEscape(dialog)`. Escape then closes it
-  with no result, which every RST dialog reads as Cancel; never as a confirming or destructive
-  action. On Save / Discard / Cancel, Escape is Cancel. The Builder's own dialogs opt in from their
-  constructors. The shared family dialogs (`MessageDialog`, the colour picker, Confirm Add-in Changes
-  and the add-in report) opt in through `DialogService.EscapeCancels` and
+- **The dialogs.** Each dialog opts in with `EscapeGuard.CancelOnEscape(dialog)`. By default Escape
+  then closes it with no result, which the dialog reads as its Cancel (a message or the add-in
+  report, which only inform, as their OK or Continue); never as a confirming or destructive action.
+  On Save / Discard / Cancel, Escape is Cancel. Two dialogs do something else, still nothing
+  destructive. `IconPickerWindow` passes its own action: Escape closes an open colour row first, and
+  the next press cancels the picker. `BrandingDialog` has no Cancel: Escape closes it as Done does,
+  and the link in its box is kept, because closing the dialog saves it. The Builder's own dialogs
+  opt in from their constructors. The shared family dialogs (`MessageDialog`, the colour picker,
+  Confirm Add-in Changes and the add-in report) opt in through `DialogService.EscapeCancels` and
   `LoaderDialogs.EscapeCancels`. The add-in launchers turn those on; they are off by default, so
   the tray app, which opens the same dialogs, keeps WPF's own Escape. **A new RST dialog must
   opt in** and get an Escape test: `DialogEscapeTests.Every_RST_UI_window_has_its_Escape_covered`
