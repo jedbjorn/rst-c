@@ -156,9 +156,10 @@ public class TrayModelsScreenshotTests
             Settle();
             model.Rows.OfType<ModelsGroupHeaderRow>().Single(h => h.Title == "Revit 2026.3").IsExpanded = false;
             Capture(page, Name("minor", theme), new Size(720, 760));
-            var headers = ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>().Select(t => t.Text).ToList();
-            Assert.Contains("Revit 2026 — unknown minor", headers);
-            Assert.Equal("Revit 2027.1", headers[0]);
+            // The rows (the list virtualizes, so not every header is realized in the capture).
+            var headers = model.Rows.OfType<ModelsGroupHeaderRow>().Select(h => h.Title).ToList();
+            Assert.Equal(new[] { "Revit 2027.1", "Revit 2026.4", "Revit 2026.3", "Revit 2026 — unknown minor", "Revit 2025.4" }, headers);
+            Assert.Equal("Revit 2027.1", ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>().First().Text);
         }
         finally
         {

@@ -123,8 +123,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         _source = o.Source ?? EmptyModelListSource.Instance;
         _fold = o.Fold;
         _thumbnails = o.Thumbnails;
-        // Nothing to read without a source: answer at once, so a page built without one never shows "loading".
-        _run = o.RunInBackground ?? (_source is EmptyModelListSource ? RunInline : Task.Run);
+        _run = o.RunInBackground ?? Task.Run;
         var dispatcher = Dispatcher.CurrentDispatcher;
         _post = o.Post ?? (a => dispatcher.BeginInvoke(DispatcherPriority.Background, a));
         _today = o.Today ?? (() => ModelList.LocalToday(DateTimeOffset.UtcNow, TimeZoneInfo.Local));
@@ -331,6 +330,11 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     public void Reload()
     {
         if (_disposed) return;
+        if (_source is EmptyModelListSource)
+        {
+            Apply(ModelListIndex.Empty); // nothing to read: answer at once, never "loading"
+            return;
+        }
         if (_loading)
         {
             _reloadQueued = true;
@@ -396,12 +400,6 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
             _thumbnails.Ready -= OnThumbnailReady;
             _thumbnails.Dispose();
         }
-    }
-
-    private static Task RunInline(Action work)
-    {
-        work();
-        return Task.CompletedTask;
     }
 
     private PillOption<ModelTimeChip> ChipOption(ModelTimeChip chip, string label, string id, string tip) =>

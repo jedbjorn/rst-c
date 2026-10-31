@@ -104,8 +104,14 @@ internal partial class ModelsView : UserControl
         {
             try
             {
-                _scroller.ScrollToVerticalOffset(offset);
-                _scroller.UpdateLayout();
+                // The panel estimates the height of rows it has not realized yet, so the first jump can land a few
+                // pixels off; once the rows there are measured, a second (rarely a third) jump lands exactly.
+                for (var i = 0; i < 3; i++)
+                {
+                    _scroller.ScrollToVerticalOffset(offset);
+                    _scroller.UpdateLayout();
+                    if (Math.Abs(_scroller.VerticalOffset - Math.Min(offset, _scroller.ScrollableHeight)) < 0.5) break;
+                }
             }
             finally
             {
