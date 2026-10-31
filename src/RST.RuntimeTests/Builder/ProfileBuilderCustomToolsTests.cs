@@ -475,8 +475,10 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             var archFiles = Directory.GetFiles(_dir.Path, "Architecture*.json").ToDictionary(f => f, File.ReadAllText);
             h.Modals.CustomTools.Enqueue(d =>
             {
-                Assert.Equal("No profile can be changed.", d.Warning); // nothing typed yet, and the Architecture files are refused
-                Assert.Equal(2, d.Refusals.Count);
+                // Nothing typed yet: Structure is merely unchanged so far (it can change), so not "No profile can be changed."
+                Assert.Equal("Nothing to change yet: edit the label, address or icon.", d.Warning);
+                Assert.False(d.CanConfirm);
+                Assert.Equal(2, d.Refusals.Count); // the Architecture pair, refused
                 d.Label = "Desk";
                 Assert.Equal("Update in 1 profile", d.ConfirmText);
                 Assert.Equal("Changes apply everywhere this tool is used: Structure. Names and icons you gave it on a panel are kept.", d.Warning);
@@ -1010,6 +1012,64 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Assert.Empty(h.Backend.Loads); // the loaded profile (Structure) was not written
             Assert.Equal("Updated in 1 profile.", h.Model.Toast.Text);
             Assert.Empty(h.Dialogs.Messages); // a profile left as it is is not a failure
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    // ── second delta review F8a: an invalid edit cannot be confirmed and shows no count ──
+
+    [Fact]
+    public void While_the_edit_fails_its_check_Update_is_disabled_and_shows_no_count() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            CustomToolDialogModel? model = null;
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                model = d;
+                d.Label = "Studio wiki";
+                Assert.Equal(("Update in 1 profile", true, false), (d.ConfirmText, d.CanConfirm, d.HasError));
+
+                d.Label = ""; // cleared
+                Assert.Equal(("Update", false), (d.ConfirmText, d.CanConfirm));
+                Assert.Equal("A label is required.", d.Error);
+
+                d.Label = "Studio wiki";
+                d.IsEmail = true; // the URL becomes mailto:https://… — not an email address
+                Assert.Equal(("Update", false), (d.ConfirmText, d.CanConfirm));
+                Assert.Equal("That is not an email address. In Email mode, type an address such as bim@studio.example.", d.Error);
+
+                d.Address = "";
+                Assert.Equal(("Update", false), (d.ConfirmText, d.CanConfirm));
+                Assert.Equal("An address is required.", d.Error);
+                return true; // pressing Update is refused, as the disabled button is
+            });
+            Click(RowButton(Row(window, "Wiki"), "Builder.EditCustomToolEverywhere"));
+            Assert.Empty(h.Backend.CustomToolChanges);
+
+            // The real dialog: the button is disabled and reads "Update".
+            var dialog = new CustomToolDialog(model!);
+            WindowCapture.ShowOffScreen(dialog);
+            try
+            {
+                Assert.False(dialog.ConfirmButton.IsEnabled);
+                Assert.Equal("Update", dialog.ConfirmButton.Content);
+                Assert.True(dialog.ErrorLine.IsVisible);
+                model!.IsEmail = false;
+                model.Address = "wiki2.studio.example";
+                WindowCapture.DoEvents();
+                Assert.True(dialog.ConfirmButton.IsEnabled);
+                Assert.Equal("Update in 1 profile", dialog.ConfirmButton.Content);
+                Assert.False(dialog.ErrorLine.IsVisible);
+            }
+            finally
+            {
+                dialog.Close();
+            }
         }
         finally
         {

@@ -859,4 +859,6 @@ public static class UiStrings
     public static string Builder_ToolNothingYet => Get(nameof(Builder_ToolNothingYet));
 
     public static string Builder_ToolUnchanged(object? arg0) => Format(nameof(Builder_ToolUnchanged), arg0);
+
+    public static string Builder_Update => Get(nameof(Builder_Update));
 }

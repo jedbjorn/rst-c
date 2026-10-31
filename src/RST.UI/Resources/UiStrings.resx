@@ -1346,4 +1346,8 @@ The other profiles were changed and stay changed.</value>
     <value>{0}: nothing to change there; its names and icons are its own.</value>
     <comment>{0} the profile (as the confirmation names it).</comment>
   </data>
+  <data name="Builder_Update" xml:space="preserve">
+    <value>Update</value>
+    <comment>The Edit dialog's button while the edit fails its check (no count).</comment>
+  </data>
 </root>

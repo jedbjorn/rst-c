@@ -226,10 +226,18 @@ public sealed class CustomToolDialogModel : ObservableObject
     public string Title => IsEdit ? UiStrings.Builder_EditToolTitle : UiStrings.Builder_CreateToolTitle;
 
     /// <summary>"Create", or "Update in N profiles" (N: the profiles that will actually change).</summary>
-    public string ConfirmText => IsEdit ? UiStrings.Builder_UpdateIn(ProfileCount(Plan!.Count)) : UiStrings.Builder_Create;
+    public string ConfirmText => !IsEdit ? UiStrings.Builder_Create
+        : IsValid ? UiStrings.Builder_UpdateIn(ProfileCount(Plan!.Count))
+        : UiStrings.Builder_Update; // no count while the edit fails its check (second delta review F8a)
 
-    /// <summary>An edit that would change no profile (nothing changed yet, or every holder refused) cannot be confirmed.</summary>
-    public bool CanConfirm => !IsEdit || Plan!.Count > 0;
+    /// <summary>
+    /// Edit: an edit that fails its check (a cleared label, no address, not an email address), or would
+    /// change no profile (nothing changed yet, or every holder refused), cannot be confirmed.
+    /// </summary>
+    public bool CanConfirm => !IsEdit || (IsValid && Plan!.Count > 0);
+
+    /// <summary>The dialog's label and address pass RST.Core's check.</summary>
+    public bool IsValid => CustomTools.Check(Result) is null;
 
     /// <summary>The Email side of the URL / Email switch.</summary>
     public bool IsEmail
@@ -341,7 +349,9 @@ public sealed class CustomToolDialogModel : ObservableObject
         {
             if (_plan is not { } plan) return null;
             if (plan.Count > 0) return UiStrings.Builder_ToolEditWarning(string.Join(", ", TargetNames(plan.Changing)));
-            return plan.Refused.Any(t => t.State != CustomToolTargetState.Unchanged) ? UiStrings.Builder_ToolNothingToChange : UiStrings.Builder_ToolNothingYet;
+            // "No profile can be changed." only when every holder is refused; a holder the edit merely
+            // leaves as it is so far means one can be (second delta review N1).
+            return plan.Refused.Any(t => t.State == CustomToolTargetState.Unchanged) ? UiStrings.Builder_ToolNothingYet : UiStrings.Builder_ToolNothingToChange;
         }
     }
 
@@ -378,15 +388,9 @@ public sealed class CustomToolDialogModel : ObservableObject
     /// <summary>Confirm: true with a label and an address; otherwise the refusal shows and the dialog stays open.</summary>
     public bool TryConfirm()
     {
-        if (!CanConfirm) return false;
-        Error = CustomTools.Check(Result) switch
-        {
-            null => null,
-            "Label required" => UiStrings.Builder_ToolLabelRequired,
-            CustomTools.NotAnEmail => UiStrings.Builder_ToolNotAnEmail,
-            _ => UiStrings.Builder_ToolAddressRequired,
-        };
-        return Error is null;
+        if (IsEdit && !CanConfirm) return false; // Edit shows its refusal as the user types (Replan)
+        Error = ErrorFor(CustomTools.Check(Result));
+        return Error is null && CanConfirm;
     }
 
     /// <summary>"1 profile", "3 profiles" (the Custom Tool confirmations and toasts).</summary>
@@ -423,10 +427,21 @@ public sealed class CustomToolDialogModel : ObservableObject
     };
 
     /// <summary>The plan of the edit as it stands (a dry run), and everything it shows.</summary>
+    private static string? ErrorFor(string? check) => check switch
+    {
+        null => null,
+        "Label required" => UiStrings.Builder_ToolLabelRequired,
+        CustomTools.NotAnEmail => UiStrings.Builder_ToolNotAnEmail,
+        _ => UiStrings.Builder_ToolAddressRequired,
+    };
+
     private void Replan()
     {
         if (!IsEdit || Tool is null) return;
         if (_planEdit is not null) _plan = _planEdit(Result);
+        // While the edit fails its check, Update is disabled and the reason shows at once (second delta review F8a).
+        Error = ErrorFor(CustomTools.Check(Result));
+        OnPropertyChanged(nameof(IsValid));
         OnPropertyChanged(nameof(Plan));
         OnPropertyChanged(nameof(ConfirmText));
         OnPropertyChanged(nameof(CanConfirm));
