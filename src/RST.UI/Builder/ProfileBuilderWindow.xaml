@@ -542,12 +542,14 @@
 
             <!--
                 A Custom Tools row (feature #18, WU4; decision #20): the 16 px icon, the label, the kind tag;
-                ✎ (edit everywhere) and × (remove everywhere) on hover; the link and "Used in: …" as the
-                tooltip. Dragged onto a panel like a catalogue command; a double-click adds it to the
-                selected panel. Each placement is a new slot.
+                ✎ (edit everywhere) and × (remove everywhere) on hover or keyboard focus; the link and
+                "Used in: …" as the tooltip. Dragged onto a panel like a catalogue command; a double-click
+                adds it to the selected panel. Each placement is a new slot. The row is a keyboard stop
+                (review F7): ↑ ↓ move between rows, Delete removes the tool everywhere (with the confirm).
             -->
             <DataTemplate DataType="{x:Type builder:CustomToolItemViewModel}">
                 <Border x:Name="Row" Padding="20,2,4,2" CornerRadius="3" Background="Transparent" MinHeight="24" ToolTip="{Binding ToolTip}"
+                        Focusable="True" FocusVisualStyle="{StaticResource FocusRing}" KeyDown="OnCustomToolKeyDown"
                         PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
                         AutomationProperties.AutomationId="Builder.CustomTool" AutomationProperties.Name="{Binding Label}">
                     <Border.InputBindings>
@@ -753,6 +755,7 @@
                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_CreateNewTip}" />
                             <Grid>
                                 <TextBox x:Name="FilterBox" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                                         PreviewKeyDown="OnFilterKeyDown"
                                          AutomationProperties.AutomationId="Builder.Filter"
                                          AutomationProperties.Name="{x:Static res:UiStrings.Builder_FilterPlaceholder}" />
                                 <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_FilterPlaceholder}"

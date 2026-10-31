@@ -325,6 +325,50 @@ public partial class ProfileBuilderWindow : Window
     private static DependencyObject? ParentOf(DependencyObject d) =>
         d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
 
+    // ---- the Custom Tools rows by keyboard (feature #18, WU4 review F7) ------------------------
+
+    /// <summary>The Custom Tools rows the tree shows now, in order.</summary>
+    internal IReadOnlyList<Border> CustomToolRows() =>
+        BordersIn(CatalogTreeView).Where(b => b.Name == "Row" && b.DataContext is CustomToolItemViewModel && b.IsVisible).ToList();
+
+    private static IEnumerable<Border> BordersIn(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is Border b) yield return b;
+            foreach (var deeper in BordersIn(child)) yield return deeper;
+        }
+    }
+
+    /// <summary>↓ in Filter… moves to the first Custom Tools row (when the list shows one).</summary>
+    private void OnFilterKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Down || CustomToolRows().FirstOrDefault() is not { } first) return;
+        e.Handled = first.Focus();
+    }
+
+    /// <summary>On a focused Custom Tools row: ↑ ↓ move between rows (↓ past the last goes on into the tree), Delete removes it everywhere (asking first).</summary>
+    private void OnCustomToolKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not Border { DataContext: CustomToolItemViewModel item } row) return;
+        switch (e.Key)
+        {
+            case Key.Delete:
+                if (item.RemoveCommand.CanExecute(null)) item.RemoveCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.Up or Key.Down:
+                var rows = CustomToolRows();
+                var at = rows.ToList().IndexOf(row);
+                var next = at + (e.Key == Key.Down ? 1 : -1);
+                if (next >= 0 && next < rows.Count) e.Handled = rows[next].Focus();
+                else if (next >= rows.Count) e.Handled = row.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+                else e.Handled = FilterBox.Focus();
+                break;
+        }
+    }
+
     // ---- the Panels pane header ---------------------------------------------------------------
 
     /// <summary>"on tab [name]": the General tab opens with its Ribbon tab name field focused.</summary>

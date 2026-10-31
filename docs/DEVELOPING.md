@@ -442,7 +442,9 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     ✎ and × on hover, the link and "Used in: …" as the tooltip; dragged like a catalogue command
     (`BuilderDrag.FromCustomTool`, `DragKind.CustomTool`: every drop places a fresh slot,
     `CustomTools.SlotFor`) and double-clicked to add to the selected panel. The pane's count is the
-    commands plus the custom tools; Filter… filters the list too (label or link).
+    commands plus the custom tools; Filter… filters the list too (label or link). **Keyboard:** each row is
+    a keyboard stop (↓ from Filter… enters the list, ↑ ↓ move between rows); focus shows ✎ × as hover
+    does, and Delete removes the tool everywhere through the usual confirmation.
   - **One scroll region** (decision #25): the tree's `ItemsSource` is a `CompositeCollection` (code-behind)
     of the group, then `CatalogRoots`, so the catalogue keeps its virtualizing tree (AC7). The
     `CatalogItemTemplateSelector` and `CatalogItemStyleSelector` give the group its own template and a
@@ -452,7 +454,9 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     `EditCustomToolCommand`). URL / Email (`RangePill`s; Email adds `mailto:`), label, address and the
     live "Opens: …" line, and the icon (the family icon picker in its own window, `IconPickerWindow`,
     since its 700 px card does not fit the dialog). Create's note names the panel; Edit's warning names
-    every profile that will change and lists the ones that will not.
+    every profile that will change (two profiles that share a name show their files) and lists the ones
+    that will not. A `mailto:` link must hold a plausible email address (`CustomTools.IsEmailAddress`),
+    so Email mode cannot write a URL as an email to every profile.
   - **Edit and Remove everywhere** go through `IProfileBuilderBackend` to `CustomToolEditor`. The
     confirmation comes from `CustomToolEditor.Plan`, the same classification the edit and remove run,
     so "Update in N profiles" / "Remove from N profiles" is what will be written: profiles that share a
