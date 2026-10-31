@@ -239,6 +239,17 @@ Escape closes every RST modal the add-in shows, the same way its Cancel, Close o
   press that closed the icon picker would, held, cancel the Custom Tool dialog behind it as well.
 - **Left alone.** Native dialogs (file, colour, Revit's `TaskDialog`) keep Windows' own Cancel.
   The eyedropper overlay is cancelled by `ScreenColorPicker` on a fresh press.
+- **Focus comes back.** When a dialog or an in-window modal closes (by OK, Cancel, Escape or ✕),
+  keyboard focus goes back inside the window that opened it, so the next Escape works with no click
+  (`FocusReturn`, `src/RST.UI/Dialogs/FocusReturn.cs`; rc.3 VM finding F2). It goes to the element
+  that had focus, or its nearest focusable ancestor when that element is hidden or disabled now (the
+  Custom Tools row's ✎ shows only on hover or focus), or else the window. Without this, WPF's own
+  restore fails on such an element and clears keyboard focus, and no key reaches the window at all.
+  `BuilderDialogs` and the icon picker window always do it; `DialogService.ReturnsFocus` and
+  `LoaderDialogs.ReturnsFocus` turn it on for the shared family dialogs (the add-in's launchers set
+  them; the tray app keeps WPF's own). The icon picker overlay and Health's Junk modal use
+  `OverlayFocus`. **A new dialog** shown another way goes through `FocusReturn.ShowDialog`, and gets a
+  test in `FocusReturnTests`.
 
 ## Theme keys
 
