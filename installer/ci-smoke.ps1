@@ -376,12 +376,13 @@ function Show-TrayLog {
 # Lines are "yyyy-MM-dd HH:mm:ss.fff LVL [pid] message" in local time; $Since keeps an earlier process with the same
 # pid out.
 function Wait-TrayLogLine([int]$TrayPid, [string]$Text, [datetime]$Since, [int]$Seconds) {
-  $from = $Since.AddSeconds(-1)
+  # Pid 0 searches every launch, with the exact install start (SC-047 R1); earlier single-instance tests must not match.
+  $from = if ($TrayPid -eq 0) { $Since } else { $Since.AddSeconds(-1) }
   $deadline = (Get-Date).AddSeconds($Seconds)
   do {
     foreach ($f in @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' -ErrorAction SilentlyContinue)) {
       foreach ($l in @(Get-Content $f.FullName -ErrorAction SilentlyContinue)) {
-        if ($l.Length -lt 23 -or -not $l.Contains(" [$TrayPid] ") -or -not $l.Contains($Text)) { continue }
+        if ($l.Length -lt 23 -or ($TrayPid -ne 0 -and -not $l.Contains(" [$TrayPid] ")) -or -not $l.Contains($Text)) { continue }
         $at = [datetime]::MinValue
         if ([datetime]::TryParseExact($l.Substring(0, 23), 'yyyy-MM-dd HH:mm:ss.fff', [Globalization.CultureInfo]::InvariantCulture,
                                       [Globalization.DateTimeStyles]::None, [ref]$at) -and $at -ge $from) { return $true }
@@ -605,7 +606,8 @@ if ($Mode -eq 'Install') {
   Assert-TrayInstalled '(d) repair'
   $linestrayD = Get-StartTrayLines $sinceD '(d)'
   Assert-StartedTray $trayD $TrayExe '(d) after the repair'
-  Assert (@($linestrayD | Where-Object { $_ -match "started RST\.Tray pid $($trayD.Id) " }).Count -eq 1) "(d) RstStartTray started the one tray left (its log names pid $($trayD.Id)); Restart Manager restarted none (review B1)"
+  Assert (@($linestrayD | Where-Object { $_ -match "started RST\.Tray pid $($trayD.Id) " }).Count -eq 1) "(d) RstStartTray started the one tray left (its log names pid $($trayD.Id)) (review B1)"
+  Assert (-not (Wait-TrayLogLine 0 'RST tray already running for this user' $sinceD 1)) '(d) no duplicate tray start logged since the install began (SC-047 R1)'
 
   Set-RevitStubs @('2025', '2027')
   Invoke-Msiexec '/fa' $Msi (Join-Path $LogDir 'rst-repair-drop-2026.log') | Out-Null
@@ -642,7 +644,8 @@ if ($Mode -eq 'Install') {
     Assert (Test-Path $cacheB) '(b) the tray cache survives the upgrade (RemoveFolderEx skips UPGRADINGPRODUCTCODE)'
     $linestrayB2 = Get-StartTrayLines $sinceB '(b)'
     Assert-StartedTray $trayB2 $TrayExe '(b) after the upgrade'
-    Assert (@($linestrayB2 | Where-Object { $_ -match "started RST\.Tray pid $($trayB2.Id) " }).Count -eq 1) "(b) RstStartTray started the one tray left (its log names pid $($trayB2.Id)); Restart Manager restarted none (review B1)"
+    Assert (@($linestrayB2 | Where-Object { $_ -match "started RST\.Tray pid $($trayB2.Id) " }).Count -eq 1) "(b) RstStartTray started the one tray left (its log names pid $($trayB2.Id)) (review B1)"
+    Assert (-not (Wait-TrayLogLine 0 'RST tray already running for this user' $sinceB 1)) '(b) no duplicate tray start logged since the install began (SC-047 R1)'
 
     # A no-op reinstall of the installed product (delta review N1): CloseApplication's condition
     # (NOT Installed OR REINSTALL OR REMOVE OR UPGRADINGPRODUCTCODE) is false, nothing is replaced, so the
@@ -726,7 +729,8 @@ if ($Mode -eq 'Install') {
     Assert-TrayInstalled '(u) upgraded'
     $linestrayU2 = Get-StartTrayLines $sinceU '(u)'
     Assert-StartedTray $trayU2 $TrayExe '(u) after the MajorUpgrade'
-    Assert (@($linestrayU2 | Where-Object { $_ -match "started RST\.Tray pid $($trayU2.Id) " }).Count -eq 1) "(u) RstStartTray started the one tray left (its log names pid $($trayU2.Id)); Restart Manager restarted none (review B1)"
+    Assert (@($linestrayU2 | Where-Object { $_ -match "started RST\.Tray pid $($trayU2.Id) " }).Count -eq 1) "(u) RstStartTray started the one tray left (its log names pid $($trayU2.Id)) (review B1)"
+    Assert (-not (Wait-TrayLogLine 0 'RST tray already running for this user' $sinceU 1)) '(u) no duplicate tray start logged since the install began (SC-047 R1)'
     Assert (Test-Path $cacheU) '(u) the tray cache survives the MajorUpgrade'
 
     # Uninstall the normal way (Settings > Apps: Restart Manager on) with a tray running (delta review B1):
