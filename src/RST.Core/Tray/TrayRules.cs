@@ -51,7 +51,7 @@ public static class UpdateChecksPolicy
 }
 
 /// <summary>
-/// The one-time update-check notice, following the telemetry ConsentNotice precedent (RST.Engine): shown on the
+/// The one-time update-check notice, modelled on the former telemetry first-run notice (removed in v3.2, decision #49): shown on the
 /// first tray start where checks are on and the notice was never shown; recorded however it is dismissed.
 /// </summary>
 public static class TrayUpdateNotice

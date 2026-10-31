@@ -131,7 +131,7 @@
     <value>Once a day, the RST tray asks GitHub whether a newer RST, Gantt-It or Splash-It is available, and tells you when one is. It sends nothing about you or your models, and it installs nothing until you click Install.
 
 To turn this off, open RST from the notification area and go to Settings.</value>
-    <comment>The one-time first-run notice (the telemetry ConsentNotice precedent).</comment>
+    <comment>The one-time first-run notice (modelled on the former telemetry first-run notice).</comment>
   </data>
   <data name="Shadow_Heading" xml:space="preserve">
     <value>RST is installed twice</value>

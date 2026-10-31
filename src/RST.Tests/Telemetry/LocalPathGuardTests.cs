@@ -76,4 +76,55 @@ public sealed class LocalPathGuardTests
         LocalPathGuard.IsLocalFile(@"Q:\a.rvt", c => { seen = c; return DriveType.Fixed; });
         seen.Should().Be('Q');
     }
+
+    // ---- LocalFileLength: model_stats' file_size_bytes (spec #24) ------
+
+    [Fact]
+    public void File_length_is_read_for_a_verified_local_path()
+    {
+        string? readFrom = null;
+        LocalPathGuard.LocalFileLength(@"C:\proj\model.rvt", Probe(DriveType.Fixed),
+                p => { readFrom = p; return 123_456_789L; })
+            .Should().Be(123_456_789L);
+        readFrom.Should().Be(@"C:\proj\model.rvt");
+    }
+
+    [Theory]
+    [InlineData(@"\\server\share\model.rvt")]             // network share
+    [InlineData("Autodesk Docs://Hub/Project/model.rvt")] // cloud
+    [InlineData("")]                                      // unsaved model
+    [InlineData(null)]
+    public void File_length_is_null_without_reading_for_non_local_paths(string? path)
+    {
+        var read = false;
+        LocalPathGuard.LocalFileLength(path, Probe(DriveType.Fixed), _ => { read = true; return 1L; })
+            .Should().BeNull();
+        read.Should().BeFalse("only a verified-local path may be read");
+    }
+
+    [Fact]
+    public void File_length_is_null_on_a_mapped_network_drive()
+    {
+        var read = false;
+        LocalPathGuard.LocalFileLength(@"N:\proj\model.rvt", Probe(DriveType.Network), _ => { read = true; return 1L; })
+            .Should().BeNull();
+        read.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_failed_length_read_is_null_and_never_throws()
+    {
+        long? result = 0;
+        var act = () => { result = LocalPathGuard.LocalFileLength(@"C:\gone.rvt", Probe(DriveType.Fixed),
+            _ => throw new FileNotFoundException()); };
+        act.Should().NotThrow();
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Public_overload_is_null_for_a_path_that_is_not_a_drive_letter_path()
+    {
+        // On the Linux CI runner nothing is a verified-local drive-letter path.
+        LocalPathGuard.LocalFileLength("/tmp/model.rvt").Should().BeNull();
+    }
 }
