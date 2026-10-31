@@ -30,11 +30,11 @@ This machine: ⚙ at the far left :::class2 -> Which profile: the profile menu :
 
 Click **Builder** on the **RST** panel of the **Add-Ins** tab. The window, titled **RST — Profile Builder**, opens centred over Revit, belongs to Revit (no taskbar button of its own; Revit waits until you close it) and uses Revit's light or dark theme as it was when the window opened.
 
-The Builder opens on the profile the Loader has loaded, ready to edit. With nothing loaded, or when the loaded profile is not among the saved profiles or cannot be opened, it starts on a new, unnamed profile ("New profile") with one empty panel, "Panel 1". To start a new profile, choose **+ New profile** from the [profile menu](#the-profile-menu); to edit another saved profile, choose it there.
+The Builder opens on the profile the Loader has loaded, ready to edit. With nothing loaded, or when the loaded profile is not among the saved profiles or cannot be opened, it starts on a new, unnamed profile ("New profile") with one empty panel, "Panel 1". To start a new profile, choose **+ New profile** from the [profile menu](#the-profile-menu); to edit another saved profile, choose it there. A loaded profile made by an older version, or one whose stacks need a repair, opens with "Unsaved changes"; saving it once clears that.
 
 ### The window
 
-- **Header** (tinted, so it reads apart from the panes), left to right: **⚙** (settings for this machine), the profile menu button with the profile's name and "(loaded)" when it is the one the Loader has loaded, **Export ZIP**, then the title "Profile Builder". On the right: "Unsaved changes" with a dot while there are any, **Save** (enabled only when there are changes) and **Exit**.
+- **Header** (tinted, so it reads apart from the panes), left to right: **⚙** (settings for this machine), the profile menu button with the profile's name (a long name is shortened; hover it for the full name) and a green dot ("Loaded") when it is the one the Loader has loaded, **Export ZIP**, then a divider in line with the edge of the Commands pane and the title "Profile Builder". On the right: "Unsaved changes" with a dot while there are any, **Save** (enabled only when there are changes) and **Exit**.
 - **Commands (left):** the number of commands and custom tools, **Filter…** with **+ Create new**, the **Custom Tools** group, then the Revit command catalogue.
 - **Panels (centre):** "Panels on tab" and the tab name, **+ Add Panel**, and one card per panel, in ribbon order.
 - **Profile (right):** "Profile · editing <name>", with three tabs: **General**, **Loader defaults** and **Junk cleanup**.

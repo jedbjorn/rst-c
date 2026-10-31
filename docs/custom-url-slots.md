@@ -57,11 +57,11 @@ When you confirm, in every saved profile that holds the tool, and in the profile
 
 The profile open in the Builder shows the change at once. Where its file was written, the change is already saved; your other unsaved edits stay unsaved. A profile that is open but has never been saved is listed as "(open, not saved yet)": the change shows in the Builder and is saved with the profile.
 
-If the profile the Loader has loaded was changed, its ribbon tab is rebuilt straight away: the toast reads "Updated in N profiles. Ribbon reloaded." Add-ins are never switched by this reload.
+If the profile the Loader has loaded was changed, its ribbon tab is rebuilt when you close the Builder: the toast reads "Updated in N profiles. The ribbon updates when you close the Builder." Add-ins are never switched by this reload.
 
 ## Removing a tool everywhere
 
-**×** on a Custom Tools row asks first: **Remove custom tool**, "Remove "<label>" (<address>) from every profile that uses it? A stack left with one tool becomes a plain button.", with the profiles listed and **Remove from N profiles** as the button. Every button with that link goes from every saved profile and from the open profile; the loaded profile's tab is rebuilt if it changed.
+**×** on a Custom Tools row asks first: **Remove custom tool**, "Remove "<label>" (<address>) from every profile that uses it? A stack left with one tool becomes a plain button.", with the profiles listed and **Remove from N profiles** as the button. Every button with that link goes from every saved profile and from the open profile; if the loaded profile changed, its tab is rebuilt when you close the Builder.
 
 **×** on a placed tile or stack row is different: it removes that one button from the open profile only, without asking.
 
