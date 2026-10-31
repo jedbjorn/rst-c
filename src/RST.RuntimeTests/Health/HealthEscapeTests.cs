@@ -1,6 +1,6 @@
 // rst-c's own (not vendored). SC-010 (feature #18, spec #19, WU6): Escape closes Health the way Close
-// does, and does nothing while Close could not (a scan in progress), while the Junk modal is open, or
-// while a dialog Health opened is showing.
+// does, and does nothing while Close could not (a scan in progress) or while a dialog Health opened is
+// showing. Decision #62: while the Junk modal is open, Escape is its Cancel and closes the modal only.
 
 using System.Globalization;
 using System.Windows;
@@ -75,10 +75,13 @@ public class HealthEscapeTests
     }
 
     /// <summary>Raises Escape on the window (as a key press bubbles up to it) and returns whether it was handled.</summary>
-    private static bool PressEscape(Window w)
+    private static bool PressEscape(Window w) => PressEscape(w, w);
+
+    /// <summary>Raises Escape on <paramref name="source"/>, from where it bubbles to the window; returns whether it was handled.</summary>
+    private static bool PressEscape(UIElement source, Window w)
     {
         var args = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(w)!, 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent };
-        w.RaiseEvent(args);
+        source.RaiseEvent(args);
         WindowCapture.DoEvents();
         return args.Handled;
     }
@@ -124,26 +127,54 @@ public class HealthEscapeTests
         }
     });
 
+    /// <summary>
+    /// Decision #62: Escape on the Junk modal is its Cancel, and that press closes the modal only
+    /// (innermost first); the next press closes Health.
+    /// </summary>
     [Fact]
-    public void Escape_while_the_Junk_modal_is_open_leaves_Health() => Sta(() =>
+    public void Escape_cancels_the_Junk_modal_then_closes_Health() => Sta(() =>
     {
-        var o = Open(new FakeHealthService { Snapshot = HealthSamples.Snapshot(), Targets = HealthSamples.Targets() });
+        var service = new FakeHealthService { Snapshot = HealthSamples.Snapshot(), Targets = HealthSamples.Targets() };
+        var o = Open(service);
         try
         {
             o.Window.ViewModel.OpenJunk();
             WindowCapture.DoEvents();
             Assert.True(o.Window.ViewModel.IsJunkOpen);
-            Assert.False(PressEscape(o.Window));
-            Assert.False(o.Closed, "the Junk modal is open: Escape does not close the window behind it");
-            Assert.True(o.Window.ViewModel.IsJunkOpen);
+            var cancel = WindowCapture.Descendants<System.Windows.Controls.Button>(o.Window)
+                .Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "Health.JunkCancel");
+            Assert.True(PressEscape(cancel, o.Window));
+            Assert.False(o.Window.ViewModel.IsJunkOpen, "Escape cancels the Junk modal");
+            Assert.False(o.Closed, "one press closes the innermost modal only");
+            Assert.Empty(service.CleanCalls);
 
-            o.Window.ViewModel.CancelJunk();
-            WindowCapture.DoEvents();
             Assert.True(PressEscape(o.Window));
             Assert.True(o.Closed, "with the modal gone, Escape closes Health");
         }
         finally
         {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_on_the_Junk_modal_with_a_dialog_in_front_does_nothing() => Sta(() =>
+    {
+        var o = Open(new FakeHealthService { Snapshot = HealthSamples.Snapshot(), Targets = HealthSamples.Targets() });
+        var dialog = new MessageDialog(new MessageDialogModel("Clean", "Clean", "Remove these files?", [], "Continue", HasCancel: true, Danger: true),
+            MessageDialog.MessageId) { Owner = o.Window };
+        try
+        {
+            o.Window.ViewModel.OpenJunk();
+            WindowCapture.DoEvents();
+            WindowCapture.ShowOffScreen(dialog);
+            Assert.False(PressEscape(o.Window));
+            Assert.True(o.Window.ViewModel.IsJunkOpen, "the dialog in front takes Escape, not the Junk modal behind it");
+            Assert.False(o.Closed);
+        }
+        finally
+        {
+            if (dialog.IsVisible) dialog.Close();
             CloseIfOpen(o);
         }
     });
