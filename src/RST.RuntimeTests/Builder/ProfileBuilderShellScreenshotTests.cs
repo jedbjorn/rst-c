@@ -237,6 +237,7 @@ public class ProfileBuilderShellScreenshotTests
             Screenshots.Save(bitmap, Name($"f18-builder-header-{width}", theme));
             Assert.Equal(width, bitmap.PixelWidth);
             AssertHeaderLinesUp(window, $"{width} px");
+            Assert.Equal(window.PanelsHeader.Padding, window.BuilderTitle.Margin); // bound: the title's inset is the pane header's
             AssertNameUntrimmed(window, "Architecture", $"{width} px");
             Assert.Equal("Architecture", window.ProfileButtonName.ToolTip);
             // The loaded mark is the Loader's: its green (SuccessBrush), "Loaded" as its tooltip and name.

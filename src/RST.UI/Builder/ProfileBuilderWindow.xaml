@@ -648,7 +648,8 @@
                 settings), the profile button and its menu, Export ZIP, a divider, "Profile Builder"; on the right,
                 the unsaved-changes dot and text, Save (the Primary; only with changes) and Exit. The left group fills
                 a column as wide as the Commands pane (CommandsPaneWidth), so the divider ends on the pane's right
-                border and the title starts where the Panels label does (16 px in, PaneHeader's inset); the profile
+                border and the title starts where the Panels label does (its margin is the Panels header's padding,
+                PaneHeader's inset, bound so the two cannot drift); the profile
                 button takes whatever width ⚙ and Export ZIP leave. The strip's left padding moves onto ⚙ for this.
             -->
             <Border x:Name="Header" Style="{StaticResource HeaderStrip}" Padding="0,0,16,0" AutomationProperties.AutomationId="Builder.Header">
@@ -730,7 +731,7 @@
                         <Rectangle x:Name="TitleDivider" Grid.Column="3" Style="{StaticResource HeaderDivider}" Margin="16,0,0,0" />
                     </Grid>
                     <TextBlock x:Name="BuilderTitle" Grid.Column="1" Text="{x:Static res:UiStrings.Builder_Title}" Style="{StaticResource HeaderTitle}"
-                               Margin="16,0,0,0" AutomationProperties.AutomationId="Builder.Title" />
+                               Margin="{Binding Padding, ElementName=PanelsHeader}" AutomationProperties.AutomationId="Builder.Title" />
 
                     <!-- The unsaved-changes indicator, then the family button bar: Save (the Primary), Exit rightmost. -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -813,7 +814,7 @@
                     included (a TextBox swallows drags: the TextBox lesson in docs/DEVELOPING.md).
                 -->
                 <DockPanel Grid.Column="1">
-                    <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
+                    <Border x:Name="PanelsHeader" DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
                         <DockPanel VerticalAlignment="Center">
                             <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Builder_AddPanel}" Command="{Binding AddPanelCommand}"
                                     AutomationProperties.AutomationId="Builder.AddPanel" />
