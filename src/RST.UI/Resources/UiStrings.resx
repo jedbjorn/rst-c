@@ -1339,4 +1339,11 @@ The other profiles were changed and stay changed.</value>
     <value>{0} ({1})</value>
     <comment>{0} the profile name; {1} its file, when two profiles in the list share a name.</comment>
   </data>
+  <data name="Builder_ToolNothingYet" xml:space="preserve">
+    <value>Nothing to change yet: edit the label, address or icon.</value>
+  </data>
+  <data name="Builder_ToolUnchanged" xml:space="preserve">
+    <value>{0}: nothing to change there; its names and icons are its own.</value>
+    <comment>{0} the profile (as the confirmation names it).</comment>
+  </data>
 </root>

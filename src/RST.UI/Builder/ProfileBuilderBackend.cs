@@ -66,8 +66,11 @@ public interface IProfileBuilderBackend
     /// <summary>The icon pack catalogue (one entry per design with a complete color set); empty when the pack is missing.</summary>
     IReadOnlyList<IconPackEntry> GetIconPack();
 
-    /// <summary>What an edit or remove everywhere of <paramref name="link"/> will do (the confirmation; feature #18, WU4).</summary>
-    CustomToolPlan PlanCustomTool(string link, Profile? working);
+    /// <summary>
+    /// The profiles folder read once for a confirmation of <paramref name="link"/> (feature #18, WU4):
+    /// Remove's plan, and an edit's exact plan as the dialog changes (a dry run, no I/O).
+    /// </summary>
+    CustomToolPreview PreviewCustomTool(string link, Profile? working);
 
     /// <summary>Edit everywhere: every saved profile holding the tool, and <paramref name="working"/> in memory.</summary>
     CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId);
@@ -188,7 +191,7 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     /// </summary>
     public Task<LoadResult> LoadAsync(LoadRequest request) => Task.FromResult(_load.Reload(request));
 
-    public CustomToolPlan PlanCustomTool(string link, Profile? working) => _customTools.Plan(link, working);
+    public CustomToolPreview PreviewCustomTool(string link, Profile? working) => _customTools.Preview(link, working);
 
     public CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId) =>
         _customTools.Edit(tool, edit, working, activeProfileId);

@@ -934,7 +934,7 @@ public class ProfileBuilderViewModelTests
         public OpResult ClearLogo() => throw new InvalidOperationException();
         public Task<LoadResult> LoadAsync(LoadRequest request) => throw new InvalidOperationException();
         public IReadOnlyList<RST.Core.Ribbon.IconPackEntry> GetIconPack() => throw new InvalidOperationException();
-        public CustomToolPlan PlanCustomTool(string link, Profile? working) => throw new InvalidOperationException();
+        public CustomToolPreview PreviewCustomTool(string link, Profile? working) => throw new InvalidOperationException();
         public CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId) => throw new InvalidOperationException();
         public CustomToolUpdate RemoveCustomTool(string link, Profile? working, string? activeProfileId) => throw new InvalidOperationException();
     }

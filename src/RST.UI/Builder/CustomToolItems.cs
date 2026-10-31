@@ -169,6 +169,8 @@ public sealed class CustomToolDialogModel : ObservableObject
     private string _address;
     private string? _iconFile;
     private string? _error;
+    private CustomToolPlan? _plan;
+    private Func<CustomToolEdit, CustomToolPlan>? _planEdit;
 
     private CustomToolDialogModel(bool isEdit, bool isEmail, string label, string address, string? iconFile,
                                   IReadOnlyList<IconPackEntry> pack, string? packDirectory)
@@ -186,20 +188,26 @@ public sealed class CustomToolDialogModel : ObservableObject
     public static CustomToolDialogModel ForCreate(string panelName, IReadOnlyList<IconPackEntry> pack, string? packDirectory) =>
         new(false, false, "", "", DefaultIcon, pack, packDirectory) { Note = UiStrings.Builder_ToolCreateNote(panelName) };
 
-    /// <summary>✎: the tool filled in, and what the update will do (<paramref name="plan"/>).</summary>
-    public static CustomToolDialogModel ForEdit(CustomTool tool, CustomToolPlan plan, IReadOnlyList<IconPackEntry> pack, string? packDirectory)
+    /// <summary>
+    /// ✎: the tool filled in, and what the update will do. With <paramref name="planEdit"/> (RST.Core's
+    /// CustomToolPreview.PlanEdit, a dry run with no I/O), the plan follows the dialog as it changes,
+    /// so "Update in N profiles" is exactly what will be written (delta review F8); without it,
+    /// <paramref name="plan"/> stands.
+    /// </summary>
+    public static CustomToolDialogModel ForEdit(CustomTool tool, CustomToolPlan plan, IReadOnlyList<IconPackEntry> pack, string? packDirectory,
+                                                Func<CustomToolEdit, CustomToolPlan>? planEdit = null)
     {
         ArgumentNullException.ThrowIfNull(tool);
         ArgumentNullException.ThrowIfNull(plan);
         var email = tool.Kind == CustomToolKind.Email;
-        return new CustomToolDialogModel(true, email, tool.Label, email ? CustomTools.ShortLink(tool.Link) : tool.Link, tool.IconFile, pack, packDirectory)
+        var model = new CustomToolDialogModel(true, email, tool.Label, email ? CustomTools.ShortLink(tool.Link) : tool.Link, tool.IconFile, pack, packDirectory)
         {
-            Plan = plan,
             Tool = tool,
-            // With nothing to change, the warning says so instead of naming no profile (review F5).
-            Warning = plan.Count > 0 ? UiStrings.Builder_ToolEditWarning(string.Join(", ", TargetNames(plan.Changing))) : UiStrings.Builder_ToolNothingToChange,
-            Refusals = plan.Refused.Select(RefusalLine).ToList(),
         };
+        model._plan = plan;
+        model._planEdit = planEdit;
+        model.Replan();
+        return model;
     }
 
     /// <summary>A new tool's icon: the link icon (as the approved spike).</summary>
@@ -210,8 +218,8 @@ public sealed class CustomToolDialogModel : ObservableObject
     /// <summary>The tool being edited (null for Create).</summary>
     public CustomTool? Tool { get; private init; }
 
-    /// <summary>What an edit will do (null for Create).</summary>
-    public CustomToolPlan? Plan { get; private init; }
+    /// <summary>What the edit as it stands will do (null for Create).</summary>
+    public CustomToolPlan? Plan => _plan;
 
     public string? PackDirectory { get; }
 
@@ -220,7 +228,7 @@ public sealed class CustomToolDialogModel : ObservableObject
     /// <summary>"Create", or "Update in N profiles" (N: the profiles that will actually change).</summary>
     public string ConfirmText => IsEdit ? UiStrings.Builder_UpdateIn(ProfileCount(Plan!.Count)) : UiStrings.Builder_Create;
 
-    /// <summary>An edit that would change no profile (every holder is refused) cannot be confirmed.</summary>
+    /// <summary>An edit that would change no profile (nothing changed yet, or every holder refused) cannot be confirmed.</summary>
     public bool CanConfirm => !IsEdit || Plan!.Count > 0;
 
     /// <summary>The Email side of the URL / Email switch.</summary>
@@ -234,6 +242,7 @@ public sealed class CustomToolDialogModel : ObservableObject
             OnPropertyChanged(nameof(AddressLabel));
             OnPropertyChanged(nameof(AddressPlaceholder));
             RaiseOpens();
+            Replan();
         }
     }
 
@@ -248,7 +257,9 @@ public sealed class CustomToolDialogModel : ObservableObject
         get => _label;
         set
         {
-            if (SetField(ref _label, value ?? "")) Error = null;
+            if (!SetField(ref _label, value ?? "")) return;
+            Error = null;
+            Replan();
         }
     }
 
@@ -261,6 +272,7 @@ public sealed class CustomToolDialogModel : ObservableObject
             if (!SetField(ref _address, value ?? "")) return;
             Error = null;
             RaiseOpens();
+            Replan();
         }
     }
 
@@ -302,6 +314,7 @@ public sealed class CustomToolDialogModel : ObservableObject
             if (!SetField(ref _iconFile, string.IsNullOrEmpty(value) ? null : value)) return;
             OnPropertyChanged(nameof(Icon));
             OnPropertyChanged(nameof(IconName));
+            Replan();
         }
     }
 
@@ -317,13 +330,30 @@ public sealed class CustomToolDialogModel : ObservableObject
 
     public bool HasNote => Note is not null;
 
-    /// <summary>Edit's warning: every profile that will change.</summary>
-    public string? Warning { get; private init; }
+    /// <summary>
+    /// Edit's warning: every profile that will change; with none, "No profile can be changed." when
+    /// holders are refused (review F5), or "Nothing to change yet…" while the edit leaves every
+    /// profile as it is.
+    /// </summary>
+    public string? Warning
+    {
+        get
+        {
+            if (_plan is not { } plan) return null;
+            if (plan.Count > 0) return UiStrings.Builder_ToolEditWarning(string.Join(", ", TargetNames(plan.Changing)));
+            return plan.Refused.Any(t => t.State != CustomToolTargetState.Unchanged) ? UiStrings.Builder_ToolNothingToChange : UiStrings.Builder_ToolNothingYet;
+        }
+    }
 
     public bool HasWarning => Warning is not null;
 
-    /// <summary>Edit: the profiles that will not change, and why.</summary>
-    public IReadOnlyList<string> Refusals { get; private init; } = [];
+    /// <summary>
+    /// Edit: the profiles that will not change, and why: the refused ones always, and while the edit
+    /// changes some profiles, the holders it leaves as they are (their names and icons are their own).
+    /// </summary>
+    public IReadOnlyList<string> Refusals => _plan is not { } plan
+        ? []
+        : plan.Refused.Where(t => t.State != CustomToolTargetState.Unchanged || plan.Count > 0).Select(RefusalLine).ToList();
 
     public bool HasRefusals => Refusals.Count > 0;
 
@@ -388,8 +418,23 @@ public sealed class CustomToolDialogModel : ObservableObject
     {
         CustomToolTargetState.NoId => UiStrings.Builder_ToolRefusedNoId(target.ProfileName),
         CustomToolTargetState.SharedId => UiStrings.Builder_ToolRefusedSharedId(target.ProfileName, target.FileName),
+        CustomToolTargetState.Unchanged => UiStrings.Builder_ToolUnchanged(TargetNames([target]).Single()),
         _ => UiStrings.Builder_ToolRefusedUnreadable(target.FileName),
     };
+
+    /// <summary>The plan of the edit as it stands (a dry run), and everything it shows.</summary>
+    private void Replan()
+    {
+        if (!IsEdit || Tool is null) return;
+        if (_planEdit is not null) _plan = _planEdit(Result);
+        OnPropertyChanged(nameof(Plan));
+        OnPropertyChanged(nameof(ConfirmText));
+        OnPropertyChanged(nameof(CanConfirm));
+        OnPropertyChanged(nameof(Warning));
+        OnPropertyChanged(nameof(HasWarning));
+        OnPropertyChanged(nameof(Refusals));
+        OnPropertyChanged(nameof(HasRefusals));
+    }
 
     private void RaiseOpens()
     {

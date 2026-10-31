@@ -203,10 +203,10 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
     private CustomToolEditor Editor() => new(ProfilesDir ?? throw new InvalidOperationException("custom tool edits run on a profiles folder: call OnDisk first"),
         new ProfileSaveService(ProfilesDir));
 
-    public CustomToolPlan PlanCustomTool(string link, Profile? working)
+    public CustomToolPreview PreviewCustomTool(string link, Profile? working)
     {
-        Calls.Add("PlanCustomTool");
-        return Editor().Plan(link, working);
+        Calls.Add("PreviewCustomTool");
+        return Editor().Preview(link, working);
     }
 
     public CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId)

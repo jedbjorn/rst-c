@@ -855,4 +855,8 @@ public static class UiStrings
     public static string Builder_ToolTargetOpenOnly(object? arg0) => Format(nameof(Builder_ToolTargetOpenOnly), arg0);
 
     public static string Builder_ToolTargetFile(object? arg0, object? arg1) => Format(nameof(Builder_ToolTargetFile), arg0, arg1);
+
+    public static string Builder_ToolNothingYet => Get(nameof(Builder_ToolNothingYet));
+
+    public static string Builder_ToolUnchanged(object? arg0) => Format(nameof(Builder_ToolUnchanged), arg0);
 }

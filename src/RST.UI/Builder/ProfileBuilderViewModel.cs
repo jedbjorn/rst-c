@@ -1227,16 +1227,18 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         if (IsWorking) return;
         RefreshProfiles(); // another Revit session may have saved since
         tool = _customTools.Find(tool.Link) ?? tool;
-        if (Safe<CustomToolPlan?>(() => _backend.PlanCustomTool(tool.Link, _profile), null, "plan_custom_tool") is not { } plan)
+        if (Safe<CustomToolPreview?>(() => _backend.PreviewCustomTool(tool.Link, _profile), null, "plan_custom_tool") is not { } preview)
         {
             ShowToast(UiStrings.Builder_ToolChangeFailed, BannerKind.Error);
             return;
         }
-        var dialog = CustomToolDialogModel.ForEdit(tool, plan, IconPackEntries, PackDirectory);
+        // The confirmation's count follows the dialog: a dry run of the edit as it stands (delta review F8).
+        var target = tool;
+        var dialog = CustomToolDialogModel.ForEdit(tool, preview.Plan, IconPackEntries, PackDirectory, e => preview.PlanEdit(target, e));
         if (!_builderDialogs.EditCustomTool(dialog) || !dialog.CanConfirm) return;
         var edit = dialog.Result;
         if (CustomTools.Check(edit) is not null) return;
-        Log.Information("Builder: edit custom tool {Link} everywhere ({Count} profiles)", tool.Link, plan.Count);
+        Log.Information("Builder: edit custom tool {Link} everywhere ({Count} profiles)", tool.Link, dialog.Plan?.Count);
         var update = Safe<CustomToolUpdate?>(() => _backend.EditCustomTool(tool, edit, _profile, _activeId), null, "edit_custom_tool");
         await AfterCustomToolUpdateAsync(update, p => CustomTools.ApplyEdit(p, tool, edit), UiStrings.Builder_ToolUpdated);
     }
@@ -1249,7 +1251,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     {
         if (IsWorking) return;
         RefreshProfiles();
-        if (Safe<CustomToolPlan?>(() => _backend.PlanCustomTool(tool.Link, _profile), null, "plan_custom_tool") is not { } plan)
+        if (Safe(() => _backend.PreviewCustomTool(tool.Link, _profile).Plan, null, "plan_custom_tool") is not { } plan)
         {
             ShowToast(UiStrings.Builder_ToolChangeFailed, BannerKind.Error);
             return;
