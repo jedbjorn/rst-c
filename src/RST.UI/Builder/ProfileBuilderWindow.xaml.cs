@@ -77,22 +77,32 @@ public partial class ProfileBuilderWindow : Window
     /// <summary>
     /// The title-bar ✕ goes through the unsaved-changes prompt, as Exit does. Not when the window safety net
     /// closes the Builder after an error (SC-045): no prompt and no save from a faulted state; unsaved edits
-    /// are discarded, and the log says so.
+    /// are discarded, and the log says so. The same when the prompt itself fails (SC-046 review N2): the error
+    /// is logged, the window closes, and the log says the edits were discarded.
     /// </summary>
     protected override void OnClosing(CancelEventArgs e)
     {
         if (WindowGuard.IsClosingAfterFault(this))
         {
-            if (HasUnsavedEdits()) Log.Warning("Builder: closed after an unexpected error; its unsaved changes were discarded, not saved");
-            Model.Abandon(); // a queued or in-flight save, switch or reload does nothing more
+            AbandonAfterFault();
             base.OnClosing(e);
             return;
         }
+        var asked = false;
         UiGuard.Run("Builder window: closing", () =>
         {
             if (!Model.CanClose()) e.Cancel = true;
+            asked = true;
         });
+        if (!asked && !e.Cancel) AbandonAfterFault();
         base.OnClosing(e);
+    }
+
+    /// <summary>The Builder closes after an error: unsaved edits are discarded (said in the log), and nothing more is saved.</summary>
+    private void AbandonAfterFault()
+    {
+        if (HasUnsavedEdits()) Log.Warning("Builder: closed after an unexpected error; its unsaved changes were discarded, not saved");
+        Model.Abandon(); // a queued or in-flight save, switch or reload does nothing more
     }
 
     private bool HasUnsavedEdits()
@@ -278,7 +288,13 @@ public partial class ProfileBuilderWindow : Window
     // the stack or the stack row under the pointer and reports where (TileHit) to the view-model;
     // anything else over the card is the card (a panel reorder, or a tool to the panel's end). A text
     // drag is left alone, so it still reaches a name box.
-    private void OnCardDragOver(object sender, DragEventArgs e) => UiGuard.Run("Builder window: drag over a card", () => CardDragOver(sender, e));
+    // On a failure the pointer must not promise a drop that will not land (SC-046 review N6).
+    private void OnCardDragOver(object sender, DragEventArgs e) => UiGuard.Run("Builder window: drag over a card", () => CardDragOver(sender, e),
+        onFailure: () =>
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+        });
 
     private void CardDragOver(object sender, DragEventArgs e)
     {

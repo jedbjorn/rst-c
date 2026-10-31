@@ -15,7 +15,8 @@ namespace RST.UI.Mvvm;
 /// <summary>Runs UI work so a failure is logged, not fatal.</summary>
 public static class UiGuard
 {
-    internal const string FaultTemplate = "UI: {Site} failed; the error was logged and the window kept running";
+    // Not "the window kept running": a closing handler's failure lets the window close (SC-046 review N2).
+    internal const string FaultTemplate = "UI: {Site} failed; the error was logged";
 
     internal const string CancelledTemplate = "UI: {Site} was cancelled";
 
@@ -33,6 +34,30 @@ public static class UiGuard
         }
         catch (Exception ex)
         {
+            Report(site, ex, owner: null, toast: false);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Run(string, Action)"/>, and on a failure also runs <paramref name="onFailure"/> (which may not
+    /// throw further): a drag-over handler that fails says "no drop" rather than leaving the pointer's promise.
+    /// </summary>
+    public static void Run(string site, Action action, Action onFailure)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                onFailure();
+            }
+            catch (Exception inner)
+            {
+                Log.Debug(inner, "UI: the failure step of {Site} failed too", site);
+            }
             Report(site, ex, owner: null, toast: false);
         }
     }
