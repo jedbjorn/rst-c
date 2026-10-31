@@ -345,8 +345,13 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// <param name="fileName">Its file; kept when the profile has no id, for the first save to replace (WU1 review F6).</param>
     private void LoadIntoEditor(Profile source, string? fileName = null)
     {
-        _supersededFile = string.IsNullOrEmpty(source.Id) ? fileName : null;
-        _profile = ProfileEditing.ForEditing(source);
+        // The file a first save replaces is set only once the load is complete (SC-046 review N3). A load that
+        // fails before the editor changes leaves the previous profile's as it was; one that fails part-way
+        // leaves none, so the next Save cannot remove a file that is not the editor's own.
+        var superseded = string.IsNullOrEmpty(source.Id) ? fileName : null;
+        var editing = ProfileEditing.ForEditing(source);
+        _supersededFile = null;
+        _profile = editing;
         _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
         _editMode = true;
         _originalName = _profile.ProfileName ?? "";
@@ -360,6 +365,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
                 _profile.ProfileName, repaired.Notes.Count);
         ProfileChanged();
         ProfileEdited();
+        _supersededFile = superseded;
         if (repaired.Changed) ShowToast(UiStrings.Builder_StacksRepaired(repaired.Notes.Count), BannerKind.Info);
     }
 
