@@ -1,7 +1,7 @@
 ---
 title: Profile Loader
 tags: [rst-c, loader, profiles, end-user]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: End-user guide to loading and managing profiles
 ---
@@ -16,7 +16,7 @@ The Loader is the end-user face of rst-c. It is a native Revit window that lists
 
 ## Using it
 
-![The Profile Loader window: the Profiles list on the left with the loaded profile ringed in green, and for the selected profile its ribbon tab preview with the opacity slider, the RSTify "Hide These Tabs" switches and the required add-ins with their status pills, above the footer buttons](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-profile-selector.png)
+![The Profile Loader window: the header with the title, the Revit version and Import from File; the Profiles list on the left with the loaded profile ringed in green; and for the selected profile its ribbon tab preview with the opacity slider, the RSTify "Hide These Tabs" switches and the required add-ins, above the footer buttons](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-profile-selector.png)
 
 ### Opening the Loader
 
@@ -24,12 +24,13 @@ Click **Loader** on the **RST** panel of the **Add-Ins** tab. The window, titled
 
 - It belongs to Revit. It has no taskbar button of its own, and Revit waits until you close it.
 - It uses Revit's light or dark theme, as set in Revit under Options → Colors → UI active theme (including "Use system setting"). The theme is read when the window opens; if you change Revit's theme, close and reopen the Loader to pick it up.
+- **Escape** closes it, as **Close** does, except while a load or unload is running or a dialog is open over it.
 
 ![The Profile Loader opened with Revit's dark theme: the same window with a dark palette and a dark title bar](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-dark.png)
 
 ### The window
 
-- **Header:** "Profile Selector", the running Revit version, and **+ Import from File**.
+- **Header:** "Profile Selector", the running Revit version, and **+ Import from File**. It has the same tinted header strip and pane headers as the [Profile Builder](profile-builder.md), so the two windows read as one family.
 - **Profiles (left):** one card per profile, with its name, Tab, Min RST (the minimum RST version) and panel count, and a count of profiles at the top. The loaded profile has a green ring and a **● Loaded** badge. With no profiles installed, the list reads "No profiles found" and offers **+ Import Profile from File**.
 - **Details (right):** the selected profile's name (with **● Loaded** when it is the loaded one), its Tab, Min RST and Updated date, and three sections:
   - **Tab Preview:** a read-only picture of the ribbon tab the profile builds: its panels, their colours and the tools' icons and names.
@@ -45,7 +46,7 @@ Every profile stored under `%AppData%\RST\profiles\` has a card. Click a card to
 
 ### Admin presets
 
-A profile can carry defaults set by its admin: tabs to hide and whether to disable unused add-ins. The first time you select such a profile, the Loader asks **Adopt RSTify Presets?** and summarises the defaults. **Continue** turns them on; **Cancel** starts with nothing hidden and the switch off. Either way you are asked only once per profile, and you can change the switches at any time.
+A profile can carry defaults set by its admin on the [Builder](profile-builder.md#loader-defaults)'s **Loader defaults** tab: tabs to hide and whether to disable unused add-ins. The first time you select such a profile, the Loader asks **Adopt RSTify Presets?** and summarises the defaults. **Continue** turns them on; **Cancel** starts with nothing hidden and the switch off. Either way you are asked only once per profile, and you can change the switches at any time.
 
 ### Loading a profile
 

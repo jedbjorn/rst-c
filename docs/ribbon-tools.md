@@ -1,7 +1,7 @@
 ---
 title: Ribbon Tools
 tags: [rst-c, rstify, required-addins, addins-manager, ribbon, stacks]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: Guide to RSTify tab-hiding, required add-ins and add-in switching, and how stacks render on the ribbon
 ---
@@ -22,9 +22,9 @@ RSTify is a tab-hiding mode. When enabled, rst-c hides the Revit and add-in tabs
 
 The intent is to remove the route back into the unfiltered Revit ribbon mid-session. A curated ribbon is only effective if users work from it — RSTify removes the distraction of the full tab bar while keeping the escape hatch (turning RSTify off) obvious and one click away.
 
-The admin sets which tabs a profile hides by default in the Builder's RST Presets dialog:
+The admin sets which tabs a profile hides by default on the **Loader defaults** tab of the Builder's Profile pane:
 
-![The RST Presets dialog in the Builder: a switch per ribbon tab under "RSTify — Hide These Tabs", some switched on, and the Disable Unused Add-ins switch below](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
+![The Profile Builder with the Profile pane on its Loader defaults tab: the Disable unused add-ins switch and a switch per ribbon tab under "Hide these tabs (RSTify)", some switched on](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-rst-presets.png)
 
 ### Turning RSTify on and off
 
@@ -34,7 +34,7 @@ Which tabs are hidden is chosen per profile in the Loader: the **RSTify: Hide Th
 
 ### How admin defaults work
 
-The admin sets a list of tabs to hide, and the starting position of **Disable unused add-ins**, in the Builder's **RST Presets** dialog; they are stored in the profile's `presets` field. The first time a user selects the profile in the Loader, the Loader asks **Adopt RSTify Presets?** and summarises them. **Continue** adopts them; **Cancel** starts with no tabs hidden. Either way the question is asked only once per profile. From then on the user's own choices, stored per profile in `%AppData%\RST\user_profile_prefs.json`, apply on every load: the admin defaults only seed the first one.
+The admin sets a list of tabs to hide, and the starting position of **Disable unused add-ins**, on the **Loader defaults** tab of the [Builder](profile-builder.md#loader-defaults)'s Profile pane; they are stored in the profile's `presets` field. The first time a user selects the profile in the Loader, the Loader asks **Adopt RSTify Presets?** and summarises them. **Continue** adopts them; **Cancel** starts with no tabs hidden. Either way the question is asked only once per profile. From then on the user's own choices, stored per profile in `%AppData%\RST\user_profile_prefs.json`, apply on every load: the admin defaults only seed the first one.
 
 ### Switching profiles with RSTify active
 
@@ -132,10 +132,10 @@ RST 3.0 switched add-ins off by renaming their manifests to `.addin.RSTdisabled`
 
 ## Stacks on the ribbon
 
-A profile panel can hold [stacks](profile-builder.md#stacks): two or three small buttons, one above the other. In this version they are added by editing the profile's JSON; the Builder keeps them but does not author them yet.
+A profile panel can hold [stacks](profile-builder.md#stacks): two or three small buttons, one above the other. They are made in the Builder, on the panel cards: drop one tool onto another, or use **+ New Stack**.
 
 - **How they look.** A stack is drawn like Revit's own stacked buttons: one small button per row, each with a 16 px icon (the tool's pack icon, decoded at 16 px, or rst-c's default icon, a dark ≡ on a light grey tile) and its label on one line. Large buttons keep their 32 px icon and two-line label. The panel's colour is drawn behind the whole panel, stacks included.
-- **What they do.** A stacked button works like a large one: it runs its Revit or add-in command, or opens its URL.
+- **What they do.** A stacked button works like a large one: it runs its Revit or add-in command, or opens its [custom tool](custom-url-slots.md)'s link.
 - **When a stack is not drawn.** rst-c draws a stack only when it has two or three valid tools (each a tool with a command id). Otherwise the stack is skipped and the log (`%AppData%\RST\logs\`) records why, for example `stack 'Draw' has 1 valid item; a stack needs 2 or 3`. A tool slot without a command id is skipped the same way. A profile with such a stack fails validation when it is read, so it is not listed in the Loader or the Builder.
 - **Switching and unloading.** Stacks are part of the profile tab, so a live profile switch or **Unload** removes them with the tab's other panels, and the next profile is built from scratch.
 - **Required add-ins and RSTify.** Commands in stacks count towards the profile's required add-ins, and the tabs they come from are never offered for hiding.
@@ -150,5 +150,5 @@ Stacks are built through the same AdWindows interface as the rest of the profile
 - IT's admin locks (`AdminSettings.json`) are read, reported and respected, never changed.
 - If a year's settings file cannot be read (for example while that Revit year is starting), rst-c leaves it and its record for that year untouched and says so; try again in a moment.
 - Record clean-ups (entries for add-ins that are back on or uninstalled) are reported in one "Tidied up" line. Two Loaders open in different Revit years can save the record at the same time; each re-reads it first, so neither loses the other's entries.
-- Saving the active profile in the Builder reloads its ribbon only; it never changes add-ins. Add-ins change through **Load Profile**, with its confirmation and its report.
+- Saving the active profile in the Builder reloads its ribbon only, when the Builder closes; it never changes add-ins. Add-ins change through **Load Profile**, with its confirmation and its report.
 - A profile's requirements are always evaluated against the computer it is loaded on, not the one it was built on. Profiles built before the required add-in feature (pre-RST-022) have an empty `requiredAddins` list; the check is a no-op for them.
