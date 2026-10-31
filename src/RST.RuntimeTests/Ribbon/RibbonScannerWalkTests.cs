@@ -206,4 +206,81 @@ public sealed class RibbonScannerWalkTests
         commands.Select(c => c.Id).Should().NotContain("ID_SETTINGS_PENS");
         counts.NotPostable.Should().Be(1);
     });
+
+    [Fact]
+    public void A_panel_item_on_a_later_tab_wins_over_a_dialog_launcher_on_an_earlier_tab() => Screenshots.RunSta(() =>
+    {
+        // Review B1: Structure > Structure's arrow is Structural Settings, which also sits in a split
+        // button on Manage > Settings. CommandCatalog keeps the first hit, so launchers come last.
+        var structure = Tab("Structure",
+            Panel("Structure", Button("ID_STRUCTURAL_SETTINGS", "Structural Settings"), Button("ID_OBJECTS_BEAM", "Beam")));
+        var settings = With(new RibbonSplitButton(), "HID_STRUCTURAL_SETTINGS_GENERAL_RibbonListButton", "Structural  Settings");
+        settings.Items.Add(Button("ID_STRUCTURAL_SETTINGS", "Structural Settings"));
+        var manage = Tab("Manage", Panel("Settings", null, settings));
+        var annotate = Tab("Annotate", Panel("Text", new RibbonButton { Id = "ID_SETTINGS_TEXT", Name = "Text Types" }, Button("ID_TEXT", "Text")));
+
+        var commands = RibbonScanner.EnumerateTabs(new[] { structure, annotate, manage }, _ => true).ToList();
+
+        var first = commands.First(c => c.Id == "ID_STRUCTURAL_SETTINGS");
+        first.SourceTab.Should().Be("Manage");
+        first.SourcePanel.Should().Be("Settings");
+        // What CommandCatalog keeps: the first hit per id.
+        var kept = commands.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        kept["ID_STRUCTURAL_SETTINGS"].SourceTab.Should().Be("Manage");
+        kept["ID_SETTINGS_TEXT"].SourceTab.Should().Be("Annotate", "a launcher-only command keeps its own tab");
+        kept["ID_SETTINGS_TEXT"].SourcePanel.Should().Be("Text");
+        commands.FindIndex(c => c.Id == "ID_OBJECTS_BEAM").Should().BeLessThan(commands.FindIndex(c => c.Id == "ID_SETTINGS_TEXT"));
+    });
+
+    [Fact]
+    public void An_add_in_radio_group_header_with_an_id_is_still_emitted() => Screenshots.RunSta(() =>
+    {
+        // Review B2: RibbonRadioButtonGroup is a RibbonButton, so the old walk emitted it.
+        var group = With(new RibbonRadioButtonGroup(), "CustomCtrl_%CustomCtrl_%Acme%Tools%Mode", "Mode");
+        group.Items.Add(Toggle("CustomCtrl_%CustomCtrl_%Acme%Tools%ModeA", "A"));
+        group.Items.Add(Toggle("CustomCtrl_%CustomCtrl_%Acme%Tools%ModeB", "B"));
+        var counts = new RibbonScanCounts();
+
+        var ids = RibbonScanner.EnumerateTabs(new[] { Tab("Acme", Panel("Tools", null, group)) }, _ => true, counts)
+            .Select(c => c.Id).ToList();
+
+        ids.Should().Equal("CustomCtrl_%CustomCtrl_%Acme%Tools%Mode");
+        counts.ExcludedAsToggle(RibbonContainerKind.RadioGroup).Should().Be(2);
+    });
+
+    [Fact]
+    public void A_checkable_checklist_entry_is_left_out_as_a_toggle() => Screenshots.RunSta(() =>
+    {
+        var list = With(new RibbonChecklistButton(), "HID_LIST", "List");
+        var checkable = With(new RibbonMenuItem(), "ID_CHECKABLE", "Checkable");
+        checkable.IsCheckable = true;
+        list.Items.Add(checkable);
+        list.Items.Add(With(new RibbonMenuItem(), "ID_KEYBOARD_SHORTCUT_DIALOG", "Keyboard Shortcuts"));
+        var counts = new RibbonScanCounts();
+
+        var ids = RibbonScanner.EnumerateTabs(new[] { Tab("View", Panel("Windows", null, list)) }, _ => true, counts)
+            .Select(c => c.Id).ToList();
+
+        ids.Should().Equal("HID_LIST", "ID_KEYBOARD_SHORTCUT_DIALOG");
+        counts.ExcludedAsToggle(RibbonContainerKind.Checklist).Should().Be(1);
+    });
+
+    [Fact]
+    public void Tabs_read_before_a_throw_are_kept_and_the_throw_is_counted() => Screenshots.RunSta(() =>
+    {
+        var counts = new RibbonScanCounts();
+
+        var ids = RibbonScanner.EnumerateTabs(TabsThatBreak(), _ => true, counts).Select(c => c.Id).ToList();
+
+        ids.Should().Equal("ID_SETTINGS_MATERIALS");
+        counts.TabsSkipped.Should().Be(1);
+        counts.Summary().Should().EndWith("skipped tabs 1, panels 0, items 0");
+
+        static IEnumerable<RibbonTab?> TabsThatBreak()
+        {
+            yield return Tab("Manage", Panel("Settings", null, Button("ID_SETTINGS_MATERIALS", "Materials")));
+            yield return null;
+            throw new InvalidOperationException("tab collection broke");
+        }
+    });
 }

@@ -5,10 +5,13 @@
 //   - descends every container generically: split buttons (Revit's UIFramework.RvtMenuSplitButton
 //     is one), menu and checklist buttons, radio groups, any other list button, stacks and fold
 //     panels, and menu items that carry their own sub-menu (UIFramework.RvtLargeMenuItem);
-//   - visits each panel's dialog launcher (the arrow in the panel title);
+//   - visits each panel's dialog launcher (the arrow in the panel title) on its own call, so the
+//     scanner can yield launcher hits after every tab's panel items (see RibbonScanner, B1);
 //   - decides per leaf: collect it, or leave it out as an on/off state control (below);
 //   - guards against cycles (a container met again on its own path) and runaway depth;
-//   - keeps the counts RibbonScanner logs once per scan.
+//   - skips an item whose description or children throw, reports it, and walks on;
+//   - keeps the counts RibbonScanner logs once per scan. A call's counts are added to the scan's
+//     only when the call returns its hits, so nothing dropped is counted as collected.
 //
 // Before SC-027 the walk descended RibbonSplitButton and RibbonRowPanel only and emitted
 // RibbonButton only. A RibbonMenuItem (and so Revit's RvtLargeMenuItem) and a dialog launcher are
@@ -23,12 +26,15 @@
 //   - check boxes (RibbonCheckBox), wherever they sit (the Select panel's "Select links" …);
 //   - every entry of a radio group (RibbonRadioButtonGroup, incl. UIFramework.SplitRadioGroup:
 //     the four Show Mass modes);
-//   - toggle buttons and check boxes inside a checklist (RibbonChecklistButton: ViewCube,
-//     Navigation Bar, Status Bar …). The checklist's plain command entries (RibbonMenuItem:
-//     Browser Organization, Keyboard Shortcuts) are collected.
-// Toggle buttons in ordinary places (a panel, a stack, a split button: Thin Lines, Show Mass,
-// Multi-Point Routing …) were collected before SC-027 and still are: many of them start a mode
-// rather than flip a setting, and removing them would drop tools existing profiles may use.
+//   - toggle buttons, check boxes and checkable items (RibbonCommandItem.IsCheckable) inside a
+//     checklist (RibbonChecklistButton: ViewCube, Navigation Bar, Status Bar …). The checklist's
+//     plain command entries (RibbonMenuItem: Browser Organization, Keyboard Shortcuts) are
+//     collected.
+// Deliberate keep (Planner, SC-027 review N2): toggle buttons in ordinary places (a panel, a
+// stack, a split button: Thin Lines, the panel-level Show Mass, Multi-Point Routing …) were in the
+// catalog before SC-027 and stay in. Saved profiles may already place them, and dropping them from
+// the catalog would break those profiles; many of them also start a mode rather than flip a
+// setting.
 //
 // Postability: an Id is opaque and RevitCommandId.LookupCommandId(id) resolves it (see
 // RibbonScanner). Kinds the walk reaches for the first time with SC-027 (menu items, checklist and
@@ -38,6 +44,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace RST.Core.Scanning;
@@ -102,19 +109,21 @@ public enum RibbonNodeRole
 /// <param name="Id">The item's command Id, opaque.</param>
 /// <param name="DisplayName">The ribbon text (or name) to show.</param>
 /// <param name="Children">For a container: its items.</param>
+/// <param name="IsCheckable">The item says it holds a check state (RibbonCommandItem.IsCheckable).</param>
 public readonly record struct RibbonNode<TNode>(
     RibbonNodeRole Role,
     RibbonContainerKind ContainerKind,
     RibbonLeafKind LeafKind,
     string? Id,
     string? DisplayName,
-    IEnumerable<TNode?>? Children)
+    IEnumerable<TNode?>? Children,
+    bool IsCheckable = false)
     where TNode : class
 {
     public static RibbonNode<TNode> Ignored => new(RibbonNodeRole.Ignore, default, default, null, null, null);
 
-    public static RibbonNode<TNode> Leaf(RibbonLeafKind kind, string? id, string? displayName) =>
-        new(RibbonNodeRole.Leaf, default, kind, id, displayName, null);
+    public static RibbonNode<TNode> Leaf(RibbonLeafKind kind, string? id, string? displayName, bool isCheckable = false) =>
+        new(RibbonNodeRole.Leaf, default, kind, id, displayName, null, isCheckable);
 
     public static RibbonNode<TNode> Container(RibbonContainerKind kind, IEnumerable<TNode?>? children, string? id = null, string? displayName = null) =>
         new(RibbonNodeRole.Container, kind, RibbonLeafKind.Button, id, displayName, children);
@@ -132,25 +141,29 @@ public static class RibbonWalkRules
     public const int MaxDepth = 8;
 
     /// <summary>Collect a leaf, or leave it out as an on/off state control (see the file header).</summary>
-    public static RibbonLeafDecision Decide(RibbonLeafKind leaf, RibbonContainerKind container)
+    public static RibbonLeafDecision Decide(RibbonLeafKind leaf, RibbonContainerKind container, bool isCheckable = false)
     {
         if (leaf == RibbonLeafKind.CheckBox) return RibbonLeafDecision.ExcludeToggle;
         // A radio group is a single state with several values: every entry sets that state.
         if (container == RibbonContainerKind.RadioGroup) return RibbonLeafDecision.ExcludeToggle;
         // A checklist's toggles show and hide parts of the UI; its plain entries are commands.
-        if (container == RibbonContainerKind.Checklist && leaf == RibbonLeafKind.ToggleButton)
+        if (container == RibbonContainerKind.Checklist && (leaf == RibbonLeafKind.ToggleButton || isCheckable))
             return RibbonLeafDecision.ExcludeToggle;
         return RibbonLeafDecision.Collect;
     }
 
     /// <summary>
-    /// True for the list buttons that RibbonScanner emitted as commands themselves before SC-027
-    /// (any RibbonListButton that is not a split button or a radio group was a plain RibbonButton
-    /// to that walk). They stay emitted, so no existing catalog entry disappears; their children
-    /// are now walked as well.
+    /// True for the list buttons that RibbonScanner emitted as commands themselves before SC-027.
+    /// Every RibbonListButton is a RibbonButton in AdWindows 2025–2027, and the old walk descended
+    /// only RibbonSplitButton, so any other list button with an Id (menu button, checklist, radio
+    /// group, any other subclass) was emitted as a plain button. They stay emitted, so no existing
+    /// catalog entry disappears (an add-in's RadioButtonGroup included); their children are now
+    /// walked as well. A radio group's header is the group's own command, not one of the state
+    /// values it holds, and Revit's own SplitRadioGroup has a blank Id, so it adds nothing.
     /// </summary>
     public static bool ContainerIsAlsoACommand(RibbonContainerKind kind) =>
-        kind is RibbonContainerKind.MenuButton or RibbonContainerKind.Checklist or RibbonContainerKind.ListButton;
+        kind is RibbonContainerKind.MenuButton or RibbonContainerKind.Checklist
+            or RibbonContainerKind.RadioGroup or RibbonContainerKind.ListButton;
 
     /// <summary>
     /// True when the walk before SC-027 already emitted this leaf: a RibbonButton (toggle or not)
@@ -180,6 +193,9 @@ public sealed class RibbonScanCounts
 
     public int TabsTotal { get; set; }
     public int TabsWalked { get; set; }
+    public int TabsSkipped { get; set; }
+    public int PanelsSkipped { get; set; }
+    public int ItemsSkipped { get; private set; }
     public int MenuItemsCollected { get; private set; }
     public int NotPostable { get; private set; }
     public int Cycles { get; private set; }
@@ -188,8 +204,8 @@ public sealed class RibbonScanCounts
     public int Collected(RibbonContainerKind kind) => _collected[(int)kind];
     public int ExcludedAsToggle(RibbonContainerKind kind) => _excluded[(int)kind];
 
-    public int CollectedTotal { get { var n = 0; foreach (var c in _collected) n += c; return n; } }
-    public int ExcludedTotal { get { var n = 0; foreach (var c in _excluded) n += c; return n; } }
+    public int CollectedTotal => _collected.Sum();
+    public int ExcludedTotal => _excluded.Sum();
 
     internal void AddCollected(RibbonContainerKind kind, RibbonLeafKind leaf)
     {
@@ -201,11 +217,27 @@ public sealed class RibbonScanCounts
     internal void AddNotPostable() => NotPostable++;
     internal void AddCycle() => Cycles++;
     internal void AddDepthCapped() => DepthCapped++;
+    internal void AddItemSkipped() => ItemsSkipped++;
+
+    /// <summary>Adds another tally's walk counts (not its tab and panel counts) to this one.</summary>
+    internal void AddWalk(RibbonScanCounts other)
+    {
+        for (var i = 0; i < Kinds.Length; i++)
+        {
+            _collected[i] += other._collected[i];
+            _excluded[i] += other._excluded[i];
+        }
+        ItemsSkipped += other.ItemsSkipped;
+        MenuItemsCollected += other.MenuItemsCollected;
+        NotPostable += other.NotPostable;
+        Cycles += other.Cycles;
+        DepthCapped += other.DepthCapped;
+    }
 
     /// <summary>
     /// The scan summary, every kind always present so two scans (or two Revit years) compare
     /// field by field. For example:
-    /// <c>tabs 14/16; collected 700 (panel=120, stack=250, splitButton=210, …, dialogLauncher=13; menu items 18); excluded as toggles 80 (…); not postable 0; cycles 0; depth capped 0</c>
+    /// <c>tabs 14/16; collected 700 (panel=120, stack=250, splitButton=210, …, dialogLauncher=13; menu items 18); excluded as toggles 80 (…); not postable 0; cycles 0; depth capped 0; skipped tabs 0, panels 0, items 0</c>
     /// </summary>
     public string Summary()
     {
@@ -218,7 +250,10 @@ public sealed class RibbonScanCounts
         AppendKinds(sb, _excluded);
         sb.Append("); not postable ").Append(NotPostable)
           .Append("; cycles ").Append(Cycles)
-          .Append("; depth capped ").Append(DepthCapped);
+          .Append("; depth capped ").Append(DepthCapped)
+          .Append("; skipped tabs ").Append(TabsSkipped)
+          .Append(", panels ").Append(PanelsSkipped)
+          .Append(", items ").Append(ItemsSkipped);
         return sb.ToString();
     }
 
@@ -235,7 +270,8 @@ public sealed class RibbonScanCounts
 
 /// <summary>
 /// Walks one ribbon panel at a time. <typeparamref name="TNode"/> is Autodesk.Windows.RibbonItem in
-/// RST.Engine and a plain test type in RST.Tests.
+/// RST.Engine and a plain test type in RST.Tests. The walk methods do not throw for a bad item:
+/// it is skipped, counted and reported to <c>onSkip</c>.
 /// </summary>
 public sealed class RibbonWalker<TNode> where TNode : class
 {
@@ -255,38 +291,75 @@ public sealed class RibbonWalker<TNode> where TNode : class
         Counts = counts ?? new RibbonScanCounts();
     }
 
-    /// <summary>The collected leaves of one panel: its items (slide-out included) and its dialog launcher.</summary>
-    public List<RibbonHit> WalkPanel(IEnumerable<TNode?>? items, TNode? dialogLauncher)
+    /// <summary>The collected leaves of a panel's items (slide-out included).</summary>
+    /// <param name="onSkip">Told about each item skipped because it threw, with a short description of it.</param>
+    public List<RibbonHit> WalkItems(IEnumerable<TNode?>? items, Action<Exception, string>? onSkip = null) =>
+        Run(onSkip, (tally, hits) =>
+        {
+            foreach (var item in Materialize(items, "the panel's items", tally, onSkip))
+                Visit(item, RibbonContainerKind.Panel, 0, hits, tally, onSkip);
+        });
+
+    /// <summary>The collected leaves of a panel's dialog launcher.</summary>
+    public List<RibbonHit> WalkDialogLauncher(TNode? dialogLauncher, Action<Exception, string>? onSkip = null) =>
+        Run(onSkip, (tally, hits) => Visit(dialogLauncher, RibbonContainerKind.DialogLauncher, 0, hits, tally, onSkip));
+
+    /// <summary>Items, then dialog launcher: the order a single panel lists them in.</summary>
+    public List<RibbonHit> WalkPanel(IEnumerable<TNode?>? items, TNode? dialogLauncher, Action<Exception, string>? onSkip = null)
     {
-        var hits = new List<RibbonHit>();
-        if (items is not null)
-            foreach (var item in items)
-                Visit(item, RibbonContainerKind.Panel, 0, hits);
-        if (dialogLauncher is not null)
-            Visit(dialogLauncher, RibbonContainerKind.DialogLauncher, 0, hits);
+        var hits = WalkItems(items, onSkip);
+        hits.AddRange(WalkDialogLauncher(dialogLauncher, onSkip));
         return hits;
     }
 
-    private void Visit(TNode? item, RibbonContainerKind container, int depth, List<RibbonHit> hits)
+    private List<RibbonHit> Run(Action<Exception, string>? onSkip, Action<RibbonScanCounts, List<RibbonHit>> walk)
+    {
+        // A call's counts reach the scan's only together with its hits.
+        var tally = new RibbonScanCounts();
+        var hits = new List<RibbonHit>();
+        walk(tally, hits);
+        Counts.AddWalk(tally);
+        return hits;
+    }
+
+    private void Visit(TNode? item, RibbonContainerKind container, int depth, List<RibbonHit> hits,
+                       RibbonScanCounts tally, Action<Exception, string>? onSkip)
     {
         if (item is null) return;
-        var node = _describe(item);
+        RibbonNode<TNode> node;
+        try
+        {
+            node = _describe(item);
+        }
+        catch (Exception ex)
+        {
+            Skip(ex, $"an item in {container}", tally, onSkip);
+            return;
+        }
+
         switch (node.Role)
         {
             case RibbonNodeRole.Leaf:
-                Emit(node.LeafKind, node.Id, node.DisplayName, container, hits);
+                Emit(node.LeafKind, node.Id, node.DisplayName, node.IsCheckable, container, hits, tally);
                 return;
 
             case RibbonNodeRole.Container:
-                if (RibbonWalkRules.ContainerIsAlsoACommand(node.ContainerKind))
-                    Emit(RibbonLeafKind.Button, node.Id, node.DisplayName, container, hits);
-                if (node.Children is null) return;
-                if (depth >= RibbonWalkRules.MaxDepth) { Counts.AddDepthCapped(); return; }
-                if (!_onPath.Add(item)) { Counts.AddCycle(); return; }
+                if (node.Children is null)
+                {
+                    EmitContainer(node, container, hits, tally);
+                    return;
+                }
+                if (depth >= RibbonWalkRules.MaxDepth) { tally.AddDepthCapped(); return; }
+                if (!_onPath.Add(item)) { tally.AddCycle(); return; }
                 try
                 {
-                    foreach (var child in node.Children)
-                        Visit(child, node.ContainerKind, depth + 1, hits);
+                    // Read the children before emitting anything, so a container whose items throw is
+                    // skipped whole (its header included).
+                    var children = Materialize(node.Children, $"{node.ContainerKind} {node.Id}", tally, onSkip, out var ok);
+                    if (!ok) return;
+                    EmitContainer(node, container, hits, tally);
+                    foreach (var child in children)
+                        Visit(child, node.ContainerKind, depth + 1, hits, tally, onSkip);
                 }
                 finally
                 {
@@ -299,20 +372,54 @@ public sealed class RibbonWalker<TNode> where TNode : class
         }
     }
 
-    private void Emit(RibbonLeafKind leaf, string? id, string? displayName, RibbonContainerKind container, List<RibbonHit> hits)
+    private void EmitContainer(RibbonNode<TNode> node, RibbonContainerKind container, List<RibbonHit> hits, RibbonScanCounts tally)
+    {
+        if (RibbonWalkRules.ContainerIsAlsoACommand(node.ContainerKind))
+            Emit(RibbonLeafKind.Button, node.Id, node.DisplayName, isCheckable: false, container, hits, tally);
+    }
+
+    private static List<TNode?> Materialize(IEnumerable<TNode?>? items, string what, RibbonScanCounts tally, Action<Exception, string>? onSkip) =>
+        Materialize(items, what, tally, onSkip, out _);
+
+    private static List<TNode?> Materialize(IEnumerable<TNode?>? items, string what, RibbonScanCounts tally,
+                                            Action<Exception, string>? onSkip, out bool ok)
+    {
+        ok = true;
+        if (items is null) return new List<TNode?>();
+        try
+        {
+            return items.ToList();
+        }
+        catch (Exception ex)
+        {
+            ok = false;
+            Skip(ex, what, tally, onSkip);
+            return new List<TNode?>();
+        }
+    }
+
+    private static void Skip(Exception ex, string what, RibbonScanCounts tally, Action<Exception, string>? onSkip)
+    {
+        tally.AddItemSkipped();
+        try { onSkip?.Invoke(ex, what); }
+        catch { /* reporting must not stop the walk */ }
+    }
+
+    private void Emit(RibbonLeafKind leaf, string? id, string? displayName, bool isCheckable, RibbonContainerKind container,
+                      List<RibbonHit> hits, RibbonScanCounts tally)
     {
         if (string.IsNullOrEmpty(id)) return;
-        if (RibbonWalkRules.Decide(leaf, container) == RibbonLeafDecision.ExcludeToggle)
+        if (RibbonWalkRules.Decide(leaf, container, isCheckable) == RibbonLeafDecision.ExcludeToggle)
         {
-            Counts.AddExcluded(container);
+            tally.AddExcluded(container);
             return;
         }
         if (!RibbonWalkRules.ReachedBeforeSc027(leaf, container) && !SafeIsPostable(id!))
         {
-            Counts.AddNotPostable();
+            tally.AddNotPostable();
             return;
         }
-        Counts.AddCollected(container, leaf);
+        tally.AddCollected(container, leaf);
         hits.Add(new RibbonHit(id!, string.IsNullOrWhiteSpace(displayName) ? id! : displayName!, container, leaf));
     }
 

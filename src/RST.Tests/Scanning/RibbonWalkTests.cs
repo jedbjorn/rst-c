@@ -20,9 +20,18 @@ public sealed class RibbonWalkTests
         public RibbonLeafKind Leaf { get; init; }
         public string? Id { get; init; }
         public string? Text { get; init; }
+        public bool Checkable { get; init; }
+        public bool ThrowOnDescribe { get; init; }
+        public bool KidsThrow { get; init; }
         public List<N?> Kids { get; } = new();
 
         public N With(params N?[] kids) { Kids.AddRange(kids); return this; }
+
+        public IEnumerable<N?> Children()
+        {
+            foreach (var kid in Kids) yield return kid;
+            if (KidsThrow) throw new InvalidOperationException("items collection broke");
+        }
     }
 
     private static N Leaf(RibbonLeafKind kind, string id, string? text = null) =>
@@ -37,12 +46,16 @@ public sealed class RibbonWalkTests
     private static N Box(RibbonContainerKind kind, string? id = null, string? text = null) =>
         new() { Role = RibbonNodeRole.Container, Kind = kind, Id = id, Text = text };
 
-    private static RibbonNode<N> Describe(N n) => n.Role switch
+    private static RibbonNode<N> Describe(N n)
     {
-        RibbonNodeRole.Container => RibbonNode<N>.Container(n.Kind, n.Kids, n.Id, n.Text),
-        RibbonNodeRole.Leaf => RibbonNode<N>.Leaf(n.Leaf, n.Id, n.Text),
-        _ => RibbonNode<N>.Ignored,
-    };
+        if (n.ThrowOnDescribe) throw new InvalidOperationException("item property broke");
+        return n.Role switch
+        {
+            RibbonNodeRole.Container => RibbonNode<N>.Container(n.Kind, n.Children(), n.Id, n.Text),
+            RibbonNodeRole.Leaf => RibbonNode<N>.Leaf(n.Leaf, n.Id, n.Text, n.Checkable),
+            _ => RibbonNode<N>.Ignored,
+        };
+    }
 
     private static RibbonWalker<N> Walker(Func<string, bool>? isPostable = null) =>
         new(Describe, isPostable ?? (_ => true));
@@ -162,6 +175,17 @@ public sealed class RibbonWalkTests
         RibbonWalkRules.Decide(leaf, container).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(RibbonLeafKind.MenuItem, RibbonContainerKind.Checklist, RibbonLeafDecision.ExcludeToggle)]
+    [InlineData(RibbonLeafKind.Button, RibbonContainerKind.Checklist, RibbonLeafDecision.ExcludeToggle)]
+    [InlineData(RibbonLeafKind.MenuItem, RibbonContainerKind.SplitButton, RibbonLeafDecision.Collect)]
+    [InlineData(RibbonLeafKind.Button, RibbonContainerKind.Panel, RibbonLeafDecision.Collect)]
+    [InlineData(RibbonLeafKind.CommandItem, RibbonContainerKind.DialogLauncher, RibbonLeafDecision.Collect)]
+    public void Decide_treats_a_checkable_item_as_a_toggle_only_inside_a_checklist(RibbonLeafKind leaf, RibbonContainerKind container, RibbonLeafDecision expected)
+    {
+        RibbonWalkRules.Decide(leaf, container, isCheckable: true).Should().Be(expected);
+    }
+
     [Fact]
     public void Kinds_reached_before_SC027_are_not_asked_about_postability()
     {
@@ -261,6 +285,110 @@ public sealed class RibbonWalkTests
     }
 
     [Fact]
+    public void A_radio_group_header_with_an_id_is_still_emitted_and_its_entries_are_not()
+    {
+        // Review B2: every RibbonRadioButtonGroup is a RibbonButton, so the old walk emitted an
+        // add-in's group header (one with an Id). Revit's SplitRadioGroup has a blank Id.
+        var walker = Walker();
+        N[] items =
+        [
+            Box(RibbonContainerKind.RadioGroup, "CustomCtrl_%CustomCtrl_%Addin%Panel%Mode", "Mode").With(
+                Toggle("CustomCtrl_%CustomCtrl_%Addin%Panel%ModeA"), Toggle("CustomCtrl_%CustomCtrl_%Addin%Panel%ModeB")),
+            Box(RibbonContainerKind.RadioGroup).With(Toggle("ID_SHOW_MASS_STANDARD")),
+        ];
+
+        var hits = walker.WalkItems(items);
+
+        hits.Select(h => h.Id).Should().Equal("CustomCtrl_%CustomCtrl_%Addin%Panel%Mode");
+        hits[0].Container.Should().Be(RibbonContainerKind.Panel);
+        walker.Counts.ExcludedAsToggle(RibbonContainerKind.RadioGroup).Should().Be(3);
+    }
+
+    [Fact]
+    public void A_checkable_checklist_entry_is_a_toggle_but_a_checkable_item_elsewhere_is_not()
+    {
+        var walker = Walker();
+        N[] items =
+        [
+            Box(RibbonContainerKind.Checklist).With(
+                new N { Role = RibbonNodeRole.Leaf, Leaf = RibbonLeafKind.MenuItem, Id = "ID_CHECKED_ENTRY", Checkable = true },
+                MenuItem("ID_KEYBOARD_SHORTCUT_DIALOG")),
+            Box(RibbonContainerKind.SplitButton).With(
+                new N { Role = RibbonNodeRole.Leaf, Leaf = RibbonLeafKind.MenuItem, Id = "ID_CHECKABLE_IN_MENU", Checkable = true }),
+        ];
+
+        walker.WalkItems(items).Select(h => h.Id).Should().Equal("ID_KEYBOARD_SHORTCUT_DIALOG", "ID_CHECKABLE_IN_MENU");
+        walker.Counts.ExcludedAsToggle(RibbonContainerKind.Checklist).Should().Be(1);
+    }
+
+    [Fact]
+    public void An_item_that_throws_is_skipped_reported_and_the_walk_goes_on()
+    {
+        var skipped = new List<string>();
+        var walker = Walker();
+        N[] items =
+        [
+            Button("ID_BEFORE"),
+            new N { Role = RibbonNodeRole.Leaf, Leaf = RibbonLeafKind.Button, Id = "ID_BROKEN", ThrowOnDescribe = true },
+            Box(RibbonContainerKind.SplitButton).With(
+                MenuItem("ID_IN_MENU"),
+                new N { Role = RibbonNodeRole.Container, Kind = RibbonContainerKind.SubMenu, ThrowOnDescribe = true }),
+            Button("ID_AFTER"),
+        ];
+
+        var ids = walker.WalkItems(items, (_, what) => skipped.Add(what)).Select(h => h.Id).ToList();
+
+        ids.Should().Equal("ID_BEFORE", "ID_IN_MENU", "ID_AFTER");
+        skipped.Should().HaveCount(2);
+        walker.Counts.ItemsSkipped.Should().Be(2);
+        walker.Counts.CollectedTotal.Should().Be(3);
+    }
+
+    [Fact]
+    public void A_container_whose_items_throw_is_skipped_whole_header_included()
+    {
+        var walker = Walker();
+        N[] items =
+        [
+            new N { Role = RibbonNodeRole.Container, Kind = RibbonContainerKind.Checklist, Id = "HID_BROKEN_LIST", KidsThrow = true }
+                .With(MenuItem("ID_WOULD_BE_LOST")),
+            Button("ID_AFTER"),
+        ];
+
+        walker.WalkItems(items).Select(h => h.Id).Should().Equal("ID_AFTER");
+        walker.Counts.ItemsSkipped.Should().Be(1);
+        walker.Counts.CollectedTotal.Should().Be(1, "nothing from the skipped container is counted");
+    }
+
+    [Fact]
+    public void A_panel_items_collection_that_throws_skips_only_that_panel()
+    {
+        var walker = Walker();
+
+        walker.WalkItems(Throwing()).Should().BeEmpty();
+        walker.WalkItems([Button("ID_NEXT_PANEL")]).Select(h => h.Id).Should().Equal("ID_NEXT_PANEL");
+        walker.Counts.ItemsSkipped.Should().Be(1);
+        walker.Counts.CollectedTotal.Should().Be(1, "the broken panel's partial items are not counted");
+
+        static IEnumerable<N?> Throwing()
+        {
+            yield return Button("ID_PARTIAL");
+            throw new InvalidOperationException("panel items broke");
+        }
+    }
+
+    [Fact]
+    public void Panel_items_and_the_dialog_launcher_walk_separately()
+    {
+        var walker = Walker();
+
+        walker.WalkItems([Button("ID_ITEM")]).Select(h => h.Id).Should().Equal("ID_ITEM");
+        walker.WalkDialogLauncher(Button("ID_ARROW")).Should().ContainSingle()
+            .Which.Container.Should().Be(RibbonContainerKind.DialogLauncher);
+        walker.WalkDialogLauncher(null).Should().BeEmpty();
+    }
+
+    [Fact]
     public void Summary_lists_every_kind_so_two_scans_compare_field_by_field()
     {
         var counts = new RibbonScanCounts();
@@ -275,6 +403,6 @@ public sealed class RibbonWalkTests
             "tabs 2/3; collected 12 (panel=2, stack=2, splitButton=3, menuButton=0, checklist=2, radioGroup=0, " +
             "listButton=0, subMenu=2, dialogLauncher=1; menu items 7); excluded as toggles 4 (panel=0, stack=0, " +
             "splitButton=0, menuButton=0, checklist=3, radioGroup=1, listButton=0, subMenu=0, dialogLauncher=0); " +
-            "not postable 0; cycles 0; depth capped 0");
+            "not postable 0; cycles 0; depth capped 0; skipped tabs 0, panels 0, items 0");
     }
 }
