@@ -1,8 +1,9 @@
 // rst-c's own (not vendored): the Profile Builder's WU5 flows on the view-model (spec #16, WU5,
 // AC5): the icon picker (open on the slot's value, a variant commits and redraws, None clears,
 // Cancel / Escape / outside click change nothing, legacy values), drag and drop (the four kinds
-// and their markers, through the view-model the window drives), and the RST Presets and Junk
-// Cleanup modals (Apply, Cancel, Cancel reverts the Cleanup edits: Planner default 4).
+// and their markers, through the view-model the window drives), and the Profile pane's Loader
+// defaults and Junk cleanup tabs, which replaced the RST Presets and Junk Cleanup modals (feature
+// #18, spec #19): edits are unsaved changes, saved with Save.
 
 using System.IO;
 using FluentAssertions;
@@ -190,7 +191,7 @@ public class ProfileBuilderInteractionTests
     {
         var h = Structure();
         h.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
-        h.Model.SelectedProfileOption = h.Model.ProfileOptions[0];
+        h.Model.NewProfileCommand.Execute(null);
         h.Model.IsIconPickerOpen.Should().BeFalse();
     }
 
@@ -284,121 +285,94 @@ public class ProfileBuilderInteractionTests
         ProfileBuilderWindow.DragFor(h.Model.Panels[1].Slots[2]).Should().Be(BuilderDrag.FromSlot(1, 2));
     }
 
-    // ── RST Presets ──────────────────────────────────────────────────────────
+    // ── Loader defaults (the RST Presets, inline) ─────────────────────────────
 
     [Fact]
-    public void Presets_lists_the_hideable_tabs_and_apply_replaces_the_presets()
+    public void Loader_defaults_lists_the_hideable_tabs_and_a_switch_rewrites_the_presets()
     {
         var h = Structure(); // presets: Massing & Site, Collaborate hidden; disable on; tab "Studio Struct"
-        h.Modals.EditPresetsWith = m =>
-        {
-            m.Tabs.Select(t => t.Tab).Should().Equal("Architecture", "Structure", "Systems", "Insert", "Analyze", "Massing & Site",
-                "Collaborate", "Enscape", "Kinship Tools", "Studio Arch");
-            m.Tabs.Where(t => t.IsHidden).Select(t => t.Tab).Should().Equal("Massing & Site", "Collaborate");
-            m.DisableUnused.Should().BeTrue();
-            m.Tabs.Single(t => t.Tab == "Enscape").IsHidden = true;
-            m.Tabs.Single(t => t.Tab == "Collaborate").IsHidden = false;
-            m.DisableUnused = false;
-        };
-        h.Model.ConfigurePresetsCommand.Execute(null);
+        h.Model.PresetTabs.Select(t => t.Tab).Should().Equal("Architecture", "Structure", "Systems", "Insert", "Analyze", "Massing & Site",
+            "Collaborate", "Enscape", "Kinship Tools", "Studio Arch");
+        h.Model.PresetTabs.Where(t => t.IsHidden).Select(t => t.Tab).Should().Equal("Massing & Site", "Collaborate");
+        h.Model.DisableUnused.Should().BeTrue();
+
+        h.Model.PresetTabs.Single(t => t.Tab == "Enscape").IsHidden = true;
+        h.Model.PresetTabs.Single(t => t.Tab == "Collaborate").IsHidden = false;
+        h.Model.DisableUnused = false;
         h.Model.Profile.Presets!.HiddenTabs.Should().Equal("Massing & Site", "Enscape");
         h.Model.Profile.Presets.DisableUnusedAddins.Should().BeFalse();
-        h.Model.PresetsSummary.Should().Be("2 tabs hidden  •  Disable Unused: off");
+        h.Model.IsDirty.Should().BeTrue("a Loader default is an unsaved change");
+
+        h.Model.PresetTabs.Single(t => t.Tab == "Enscape").IsHidden = false;
+        h.Model.PresetTabs.Single(t => t.Tab == "Collaborate").IsHidden = true;
+        h.Model.DisableUnused = true;
+        h.Model.IsDirty.Should().BeFalse("back as it was saved");
     }
 
     [Fact]
-    public void Presets_keeps_preset_tabs_that_are_off_the_ribbon_and_cancel_changes_nothing()
+    public void Loader_defaults_keeps_preset_tabs_off_the_ribbon_and_never_offers_the_profile_s_own_tab()
     {
         var h = Structure();
         h.Model.Profile.Presets!.HiddenTabs.Add("Lumion");
-        h.Modals.PresetsAnswer = false;
-        h.Modals.EditPresetsWith = m =>
-        {
-            m.Tabs.Select(t => t.Tab).Should().EndWith("Lumion");
-            m.Tabs.Single(t => t.Tab == "Lumion").IsHidden.Should().BeTrue();
-            foreach (var t in m.Tabs) t.IsHidden = false;
-        };
-        h.Model.ConfigurePresetsCommand.Execute(null);
-        h.Model.Profile.Presets.HiddenTabs.Should().Equal("Massing & Site", "Collaborate", "Lumion");
+        h.Model.ProfileTab = "Enscape"; // rebuilds the list
+        h.Model.PresetTabs.Select(t => t.Tab).Should().NotContain("Enscape").And.EndWith("Lumion");
+        h.Model.PresetTabs.Single(t => t.Tab == "Lumion").IsHidden.Should().BeTrue();
+        h.Model.ProfileTab = "Studio Struct";
+        h.Model.PresetTabs.Select(t => t.Tab).Should().Contain("Enscape");
     }
 
-    // ── Junk Cleanup ─────────────────────────────────────────────────────────
+    [Fact]
+    public void Loader_defaults_with_no_tabs_to_hide()
+    {
+        var backend = BuilderFixtures.Backend();
+        backend.AllTabs = ["Modify", "View"];
+        var h = BuilderHarness.Create(backend);
+        h.Model.PresetTabs.Should().BeEmpty();
+        h.Model.HasPresetTabs.Should().BeFalse();
+    }
+
+    // ── Junk cleanup (inline) ────────────────────────────────────────────────
 
     [Fact]
-    public void Cleanup_edits_a_copy_and_apply_keeps_the_non_blank_rows()
+    public void Junk_cleanup_edits_the_targets_in_place()
     {
         var h = Structure(); // a legacy profile: the defaults are seeded
-        h.Modals.EditCleanupWith = m =>
-        {
-            m.Rows.Should().HaveCount(6);
-            m.Rows[0].Enabled = false;
-            m.Rows[1].Name = "Package Cache";
-            m.Rows[5].RemoveCommand.Execute(null);
-            m.Rows[4].Name = "";
-            m.Rows[4].Target.Path = "";
-        };
-        h.Model.ConfigureCleanupCommand.Execute(null);
+        h.Model.CleanupRows.Should().HaveCount(6);
+        h.Model.CleanupRows[0].Enabled = false;
+        h.Model.CleanupRows[1].Name = "Package Cache";
+        h.Model.CleanupRows[5].RemoveCommand.Execute(null);
         var targets = h.Model.Profile.CleanupTargets!;
-        targets.Select(t => t.Name).Should().Equal("Temp", "Package Cache", "Journals", "Collaboration Cache");
+        targets.Select(t => t.Name).Should().Equal("Temp", "Package Cache", "Journals", "Collaboration Cache", "Recent File List");
         targets[0].Enabled.Should().BeFalse();
         targets.Should().OnlyContain(t => CleanupDefaults.IsPresetPath(t.Path), "paths are never edited");
-        h.Model.CleanupSummary.Should().Be("3 of 4 targets enabled.");
+        h.Model.CleanupRows.Should().HaveCount(5);
+        h.Model.CleanupRows[1].PathTip.Should().StartWith(targets[1].Path!);
+        h.Model.IsDirty.Should().BeTrue();
     }
 
     [Fact]
-    public void Cleanup_cancel_reverts_every_edit()
+    public void Junk_cleanup_restore_defaults_and_the_empty_state()
     {
         var h = Structure();
-        var before = ProfileEditing.Snapshot(h.Model.Profile);
-        h.Modals.CleanupAnswer = false;
-        h.Modals.EditCleanupWith = m =>
-        {
-            m.Rows[0].Enabled = false;
-            m.Rows[1].Name = "Changed";
-            m.Rows[2].RemoveCommand.Execute(null);
-        };
-        h.Model.ConfigureCleanupCommand.Execute(null);
-        ProfileEditing.Snapshot(h.Model.Profile).Should().Be(before, "Planner default 4: Cancel reverts");
-        h.Model.IsDirty.Should().BeFalse();
-    }
-
-    [Fact]
-    public void Cleanup_restore_defaults_and_the_empty_state()
-    {
-        var h = Structure();
-        h.Modals.EditCleanupWith = m =>
-        {
-            foreach (var row in m.Rows.ToList()) row.RemoveCommand.Execute(null);
-            m.IsEmpty.Should().BeTrue();
-            m.RestoreDefaultsCommand.Execute(null);
-            m.Rows.Should().HaveCount(6);
-            m.IsEmpty.Should().BeFalse();
-        };
-        h.Model.ConfigureCleanupCommand.Execute(null);
-        h.Model.Profile.CleanupTargets.Should().BeEquivalentTo(CleanupDefaults.Build());
-    }
-
-    [Fact]
-    public void Cleanup_on_an_emptied_list_shows_the_defaults_and_cancel_keeps_it_empty()
-    {
-        var h = Structure();
-        h.Model.Profile.CleanupTargets = [];
-        h.Modals.CleanupAnswer = false;
-        h.Modals.EditCleanupWith = m => m.Rows.Should().HaveCount(6, "the modal offers the defaults (ensureCleanupTargets)");
-        h.Model.ConfigureCleanupCommand.Execute(null);
-        h.Model.Profile.CleanupTargets.Should().BeEmpty("the page wrote the defaults here even on Cancel; now nothing changes (Planner default 4)");
-    }
-
-    [Fact]
-    public void Cleanup_with_every_row_removed_applies_an_empty_list()
-    {
-        var h = Structure();
-        h.Modals.EditCleanupWith = m =>
-        {
-            foreach (var row in m.Rows.ToList()) row.RemoveCommand.Execute(null);
-        };
-        h.Model.ConfigureCleanupCommand.Execute(null);
+        foreach (var row in h.Model.CleanupRows.ToList()) row.RemoveCommand.Execute(null);
+        h.Model.HasCleanupTargets.Should().BeFalse();
         h.Model.Profile.CleanupTargets.Should().BeEmpty("the admin removed every target");
-        h.Model.CleanupSummary.Should().Be("0 of 0 targets enabled.");
+        h.Model.RestoreCleanupDefaultsCommand.Execute(null);
+        h.Model.CleanupRows.Should().HaveCount(6);
+        h.Model.HasCleanupTargets.Should().BeTrue();
+        h.Model.Profile.CleanupTargets.Should().BeEquivalentTo(CleanupDefaults.Build());
+        h.Model.IsDirty.Should().BeFalse("the defaults are what the legacy profile was seeded with");
+    }
+
+    [Fact]
+    public void Junk_cleanup_shows_an_emptied_list_as_empty()
+    {
+        var backend = BuilderFixtures.Backend();
+        var structure = backend.Library.Single(e => e.Profile.ProfileName == "Structure").Profile;
+        structure.CleanupTargets = [];
+        var h = BuilderHarness.Create(backend);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.CleanupRows.Should().BeEmpty("the inline list shows what the profile holds; Restore defaults brings them back");
+        h.Model.IsDirty.Should().BeFalse();
     }
 }

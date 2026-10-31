@@ -1,11 +1,11 @@
 // rst-c's own (not vendored); the capture helpers follow Loader/ProfileLoaderScreenshotTests.
 // AC3 for the Profile Builder shell (spec #16, WU4): the window rendered off-screen to PNG in light
 // and dark, driven by the view-model: a realistic profile in edit mode (filtered, expanded tree,
-// selected panel, color swatch, live preview), a new profile, the Branding popover (its popup is a
-// separate window, so its content is rendered and composed under the Branding button), the URL
-// button editor, the three-way unsaved-changes dialog, the catalogue's two empty states, and a
-// toast. Each capture also samples the pixels or elements that prove its state. The window and
-// its dialogs stay out of the taskbar (PLN1's VM finding on the Health window).
+// selected panel, live preview), a new profile, the three-way unsaved-changes dialog, the
+// catalogue's two empty states, and a toast. Each capture also samples the pixels or elements that
+// prove its state. The window and its dialogs stay out of the taskbar (PLN1's VM finding on the
+// Health window). Feature #18 retired the Branding popover and the URL button editor; the new
+// header, menus, Profile tabs and dialogs are captured in ProfileBuilderShellScreenshotTests.
 
 using System.Windows;
 using System.Windows.Controls;
@@ -137,7 +137,7 @@ public class ProfileBuilderScreenshotTests
             AssertWindowBackground(bitmap, opened, theme, "builder-edit");
             var root = opened.Window.Root;
             Assert.True(opened.Model.IsEditMode);
-            Assert.Equal("Structure", opened.Window.NameBox.Text);
+            Assert.Equal("Structure", opened.Window.ProfileNameBox.Text);
 
             // The tree: filtered, the native group open, match counts.
             var tree = opened.Window.CatalogTreeView;
@@ -152,9 +152,10 @@ public class ProfileBuilderScreenshotTests
             var ring = cards[1];
             AssertColor(Palette(theme, UiPalette.AccentForeground), At(bitmap, ring, root, 1, ring.ActualHeight / 2), "selected panel ring");
 
-            // The color swatch shows the selected panel's color.
-            var swatch = opened.Window.ColorSwatch;
-            AssertColor(Color.FromRgb(0x14, 0xb8, 0xa6), At(bitmap, swatch, root, swatch.ActualWidth / 2, swatch.ActualHeight / 2), "panel color swatch");
+            // The selected card's stripe shows its colour (the Properties pane's swatch is retired, feature #18).
+            var stripe = WindowCapture.Descendants<Border>(opened.Window.PanelCards)
+                .Where(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "Builder.PanelStripe").ElementAt(1);
+            AssertColor(Color.FromRgb(0x14, 0xb8, 0xa6), At(bitmap, stripe, root, stripe.ActualWidth / 2, 1), "panel colour stripe");
 
             // The live preview: three panels on the theme's ribbon canvas, pack icons drawn.
             var preview = opened.Window.Preview;
@@ -179,73 +180,11 @@ public class ProfileBuilderScreenshotTests
         {
             var bitmap = CaptureBuilder(opened, theme, "builder-new");
             AssertWindowBackground(bitmap, opened, theme, "builder-new");
-            Assert.Equal("+ New Profile", ((ProfileOptionViewModel)opened.Window.ProfileSelector.SelectedItem).Display);
+            Assert.True(opened.Model.SelectedProfileOption!.IsNew);
+            Assert.Equal("New profile", opened.Window.ProfileButtonName.Text);
             Assert.Single(opened.Model.Panels);
             Assert.False(opened.Model.CatalogRoots[0].IsExpanded, "the native group is collapsed by default");
             Assert.Single(opened.Window.Preview.DrawnPanels);
-        }
-        finally
-        {
-            Close(opened);
-        }
-    });
-
-    [Theory]
-    [MemberData(nameof(Themes))]
-    public void The_branding_popover_opens_under_its_button(UiTheme theme) => Sta(() =>
-    {
-        RstTheme.Apply(theme);
-        var backend = BuilderFixtures.Backend();
-        backend.Branding = new BrandingState(true, "branding.png", "https://studio.example");
-        var opened = Open(backend, h => h.Model.IsBrandingOpen = true);
-        try
-        {
-            WindowCapture.DoEvents();
-            Assert.True(opened.Window.BrandingPopup.IsOpen);
-            var window = WindowCapture.Content(opened.Window, BuilderSize);
-
-            // The popup is its own window: render its content and draw it where WPF places it.
-            var popover = opened.Window.BrandingPopover;
-            popover.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            popover.Arrange(new Rect(popover.DesiredSize));
-            popover.UpdateLayout();
-            var content = WindowCapture.Render(popover, popover.ActualWidth, popover.ActualHeight);
-            var button = opened.Window.BrandingButton;
-            var at = Offset(button, opened.Window.Root);
-            var composed = WindowCapture.Compose(window, content, new Point(at.X, at.Y + button.ActualHeight + 6), Palette(theme, UiPalette.StrongBorder));
-            Screenshots.Save(composed, Name("builder-branding", theme));
-            Assert.True(Screenshots.DistinctPixels(composed) > 200);
-
-            Assert.Equal("branding.png", opened.Window.LogoName.Text);
-            Assert.Equal("https://studio.example", opened.Window.BrandingUrlBox.Text);
-            Assert.True(opened.Model.HasBranding);
-            AssertColor(Palette(theme, UiPalette.Success), At(window, opened.Window.BrandingDot, opened.Window.Root, 4, 4), "filled branding dot");
-        }
-        finally
-        {
-            opened.Model.IsBrandingOpen = false;
-            Close(opened);
-        }
-    });
-
-    [Theory]
-    [MemberData(nameof(Themes))]
-    public void The_url_button_editor_opens_in_the_properties_pane(UiTheme theme) => Sta(() =>
-    {
-        RstTheme.Apply(theme);
-        var opened = Open(BuilderFixtures.Backend(), h =>
-        {
-            h.Model.SelectedProfileOption = h.Option("Architecture");
-            h.Model.OpenUrlEditorCommand.Execute(null);
-            h.Model.UrlLabel = "Studio Wiki";
-            h.Model.UrlAddress = "wiki.studio.example";
-        });
-        try
-        {
-            var bitmap = CaptureBuilder(opened, theme, "builder-url-editor");
-            AssertWindowBackground(bitmap, opened, theme, "builder-url-editor");
-            Assert.Equal(Visibility.Visible, opened.Window.UrlEditor.Visibility);
-            Assert.Equal("Studio Wiki", opened.Window.UrlLabelBox.Text);
         }
         finally
         {

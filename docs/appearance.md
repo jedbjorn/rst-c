@@ -28,11 +28,11 @@ The branding panel sits at the leading edge of the tab so the curated ribbon is 
 
 ### Setting a logo
 
-Branding is a setting for the machine (per Windows user), not part of a profile. Set it in the Builder: click **Branding ▾**, then **Pick…** and choose an image. rst-c resizes a PNG, JPG or BMP to 85×85 pixels and saves it as `%AppData%\RST\branding.png`; the original file is not changed. The dialog also offers SVG, but an SVG is copied as picked, without resizing, and the ribbon may not display it. **×** clears it. The dot on the Branding button is filled while a logo or URL is set.
+Branding is a setting for the machine (per Windows user), not part of a profile. Set it in the Builder: click **⚙** (Settings for this machine), then **Branding…**, then **Pick…** and choose an image. rst-c resizes a PNG, JPG or BMP to 85×85 pixels and saves it as `%AppData%\RST\branding.png`; the original file is not changed. The dialog also offers SVG, but an SVG is copied as picked, without resizing, and the ribbon may not display it. **×** clears it.
 
 The logo appears on every profile tab on this machine that does not carry its own logo (see below), the next time the tab is built. On first launch with no logo set, rst-c seeds `branding.png` with the bundled RST logo.
 
-The Branding panel also has a **URL** box. The URL is stored with the branding (`%AppData%\RST\branding.json`) and included in exported profiles. The ribbon's branding panel does not open it.
+The Branding dialog also has a **URL** box. The URL is stored with the branding (`%AppData%\RST\branding.json`) and included in exported profiles. The ribbon's branding panel does not open it.
 
 ### Logo in exported profiles
 

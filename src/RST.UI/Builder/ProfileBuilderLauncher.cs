@@ -36,7 +36,7 @@ public static class ProfileBuilderLauncher
 
         var backend = new ProfileBuilderBackend(revitVersion, catalog, switchScheduler, allTabs);
         var dialogs = new DialogService();
-        var builderDialogs = new BuilderDialogs();
+        var builderDialogs = new BuilderDialogs(dialogs);
         var model = new ProfileBuilderViewModel(backend, dialogs, builderDialogs: builderDialogs);
         model.Initialize();
         var window = new ProfileBuilderWindow(model);

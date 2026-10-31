@@ -30,8 +30,8 @@ Click **Loader** on the **RST** panel of the **Add-Ins** tab. The window, titled
 ### The window
 
 - **Header:** "Profile Selector", the running Revit version, and **+ Import from File**.
-- **Profiles (left):** one card per profile, with its name, Tab, Min Revit and panel count, and a count of profiles at the top. The loaded profile has a green ring and a **● Loaded** badge. With no profiles installed, the list reads "No profiles found" and offers **+ Import Profile from File**.
-- **Details (right):** the selected profile's name (with **● Loaded** when it is the loaded one), its Tab, Min Revit and Updated date, and three sections:
+- **Profiles (left):** one card per profile, with its name, Tab, Min RST (the minimum RST version) and panel count, and a count of profiles at the top. The loaded profile has a green ring and a **● Loaded** badge. With no profiles installed, the list reads "No profiles found" and offers **+ Import Profile from File**.
+- **Details (right):** the selected profile's name (with **● Loaded** when it is the loaded one), its Tab, Min RST and Updated date, and three sections:
   - **Tab Preview:** a read-only picture of the ribbon tab the profile builds: its panels, their colours and the tools' icons and names.
   - **RSTify: Hide These Tabs:** one switch per ribbon tab the profile can hide. See [Ribbon Tools](ribbon-tools.md).
   - **Required Add-ins for this profile:** each add-in the profile depends on, with its file name, an **info ↗** link where the profile has one, and a status pill for the running Revit year: **Native** (built into Revit), **Loaded** (installed and on), **Disabled** (switched off, by you in Autodesk's Add-Ins Manager or by rst-c; it does not load until switched back on), **Locked** (switched off by your administrator) or **Not Found**. A switched-off add-in never shows **Loaded**.

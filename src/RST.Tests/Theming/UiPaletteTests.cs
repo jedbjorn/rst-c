@@ -1,5 +1,5 @@
 // Adapted from splash-it tests/SplashIt.Core.Tests/Theming/UiPaletteTests.cs (splash-it commit ba86a71; originally gantt-it tests/GanttIt.Core.Tests/Theming/UiPaletteTests.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); the XAML scan reads src/RST.UI and finds the repo by RST-C.sln; splash-it's SurfaceTokens_MatchTheTabTextBackdrops is left out (it needs SplashItDefaults); explicit Xunit usings; a test that every new rst-c style key has its contrast requirement, and one for the Health window's keys.
+// Changes: namespaces (SplashIt.* to RST.*); the XAML scan reads src/RST.UI and finds the repo by RST-C.sln; splash-it's SurfaceTokens_MatchTheTabTextBackdrops is left out (it needs SplashItDefaults); explicit Xunit usings; a test that every new rst-c style key has its contrast requirement, one for the Health window's keys, and one for the window header's Tint (feature #18).
 
 using System.Text.RegularExpressions;
 using RST.Core.Theming;
@@ -118,6 +118,26 @@ public class UiPaletteTests(ITestOutputHelper output)
         var checkedKeys = UiPalette.HealthRequirements.Select(r => r.Foreground).ToHashSet(StringComparer.Ordinal);
         Assert.Contains(UiPalette.CautionText, checkedKeys);
         Assert.All(UiPalette.HealthRequirements, r => Assert.Contains(r, UiPalette.Requirements));
+    }
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void HeaderTint_KeepsItsTextAndControlsReadable(UiTheme theme)
+    {
+        // Feature #18 (decision #24): the window header is AccentSoft in both themes. Its title and
+        // muted text and the unsaved-changes text are body text (4.5:1); the focus ring of its
+        // buttons is a 3:1 indicator. The buttons draw on their own fills, checked as body text too.
+        var palette = UiPalette.For(theme);
+        double Ratio(string fg, string bg) => UiColor.ContrastRatio(palette[fg], palette[bg]);
+        Assert.True(Ratio(UiPalette.Text, UiPalette.AccentSoft) >= 4.5, "title on the header");
+        Assert.True(Ratio(UiPalette.MutedText, UiPalette.AccentSoft) >= 4.5, "muted text on the header");
+        Assert.True(Ratio(UiPalette.WarningText, UiPalette.AccentSoft) >= 4.5, "unsaved-changes text on the header");
+        Assert.True(Ratio(UiPalette.AccentForeground, UiPalette.AccentSoft) >= 3, "focus ring on the header");
+        foreach (var fill in new[] { UiPalette.Surface, UiPalette.Hover, UiPalette.Pressed })
+            Assert.True(Ratio(UiPalette.Text, fill) >= 4.5, $"header button text on {fill}");
+        Assert.True(Ratio(UiPalette.OnAccent, UiPalette.Accent) >= 4.5, "Save (primary) text");
+        Assert.All(UiPalette.HeaderRequirements, r => Assert.Contains(r, UiPalette.Requirements));
+        Assert.All(UiPalette.HeaderRequirements, r => Assert.Equal(UiPalette.AccentSoft, r.Background));
     }
 
     [Theory]

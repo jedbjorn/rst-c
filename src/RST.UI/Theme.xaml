@@ -1,6 +1,6 @@
 <!--
     Adapted from splash-it src/SplashIt.UI/Theme.xaml (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Theme.xaml, gantt-it commit a96d0a1), MIT, same owner.
-    Changes: namespaces (SplashIt.* to RST.*); comments say RST for Splash-It; rst-c's styles are added after splash-it's Slider, in the section marked "rst-c additions": SuccessText, SuccessBanner, the pills, ToggleSwitch, TabControl/TabItem, TreeView/TreeViewItem, plain ListBoxItem rows, CardListBox/CardListBoxItem (selected and active), Vertical/HorizontalGridSplitter, BusyIndicator/BusySpinner/BusyOverlay and TransientBanner, plus the Success/Scrim brushes they use.
+    Changes: namespaces (SplashIt.* to RST.*); comments say RST for Splash-It; rst-c's styles are added after splash-it's Slider, in the section marked "rst-c additions": SuccessText, SuccessBanner, the pills, ToggleSwitch, TabControl/TabItem, TreeView/TreeViewItem, plain ListBoxItem rows, CardListBox/CardListBoxItem (selected and active), Vertical/HorizontalGridSplitter, BusyIndicator/BusySpinner/BusyOverlay and TransientBanner, plus the Success/Scrim brushes they use; and, at the end, the window header styles (HeaderStrip, HeaderTitle, HeaderDivider; feature #18).
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -1601,6 +1601,37 @@
         <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
         <Setter Property="Padding" Value="10,7" />
+    </Style>
+
+    <!--
+        ====================================================================================
+        Window header (feature #18, spec #19; decision #24). The Builder's header, shared so the
+        Loader can take the same treatment (WU6): the Tint, AccentSoft with an InfoBorder bottom
+        line in light and dark (contrast: UiPalette.HeaderRequirements), 54 px tall with 16 px side
+        padding; the window title; and the 1 px divider between header groups.
+        ====================================================================================
+    -->
+    <Style x:Key="HeaderStrip" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource InfoBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Height" Value="54" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="HeaderTitle" TargetType="TextBlock" BasedOn="{StaticResource SectionText}">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="HeaderDivider" TargetType="Rectangle">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Margin" Value="16,0" />
+        <Setter Property="Fill" Value="{StaticResource InfoBorderBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
 </ResourceDictionary>

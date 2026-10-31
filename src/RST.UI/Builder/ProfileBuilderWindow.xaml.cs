@@ -1,22 +1,20 @@
 // rst-c's own (not vendored); the window wiring follows splash-it
 // src/SplashIt.UI/Settings/SettingsWindow.xaml.cs (splash-it commit ba86a71, MIT, same owner).
 // The Profile Builder window (spec #16, WU4). All behavior is in ProfileBuilderViewModel; the
-// code here is view plumbing: the title-bar ✕ asks the view-model first (Planner default 3), the
-// Branding popover takes keyboard focus when it opens, commits its URL box when it closes and
-// closes on Escape (Branding ▾ is a ToggleButton bound to the popup, so the dismissing click cannot
-// reopen it), the URL editor's
-// label box takes focus when the editor opens, and drag and drop
-// (WU5): DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel
-// headers and the slot rows; the cards and rows report the cursor's half to the view-model, which
-// owns the markers and the index arithmetic (RST.Core PanelDrops).
+// code here is view plumbing: the title-bar ✕ and Escape ask the view-model first, as Exit does
+// (Planner default 3; SC-010), the header's ⚙ and profile menus open under their toggles (feature
+// #18: the profile menu lists ProfileOptions each time it opens), and drag and drop (WU5):
+// DragDrop.DoDragDrop with a typed BuilderDrag payload from the catalogue rows, the panel headers
+// and the slot rows; the cards and rows report the cursor's half to the view-model, which owns the
+// markers and the index arithmetic (RST.Core PanelDrops).
 
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using RST.Core.Builder;
 using RST.UI.Dialogs;
 using RST.UI.Theming;
@@ -35,12 +33,14 @@ public partial class ProfileBuilderWindow : Window
         {
             if (IsVisible) Close();
         };
-        model.PropertyChanged += (_, e) =>
+        // A ContextMenu is not in the window's tree: it takes the view-model and its toggle directly.
+        foreach (var (toggle, menu) in new[] { (SettingsButton, SettingsMenu), (ProfileButton, ProfileMenu) })
         {
-            // buildUrlEditor: the label box takes focus when the editor opens.
-            if (e.PropertyName == nameof(ProfileBuilderViewModel.IsUrlEditorOpen) && model.IsUrlEditorOpen)
-                Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UrlLabelBox.Focus());
-        };
+            menu.DataContext = model;
+            menu.PlacementTarget = toggle;
+            menu.Placement = PlacementMode.Bottom;
+            menu.VerticalOffset = 4;
+        }
         // A drag that leaves the window straight from a card, a row or a name box (whose own DragLeave
         // the TextBox handles) still clears its marker.
         AddHandler(DragDrop.DragLeaveEvent, new DragEventHandler((_, _) => Model.ClearDropMarkers()), handledEventsToo: true);
@@ -61,25 +61,67 @@ public partial class ProfileBuilderWindow : Window
         base.OnClosing(e);
     }
 
-    // Opening moves keyboard focus into the popover (its first control, Pick…), so Escape closes it
-    // straight away after a mouse click on Branding ▾ (VM finding, WU5 re-run c89b3d78). The popup's
-    // content is laid out once it has opened, hence the Input-priority post.
-    private void OnBrandingOpened(object? sender, EventArgs e) =>
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PickLogoButton.Focus());
-
-    // Escape inside the popover closes it and puts the focus back on Branding ▾.
-    private void OnBrandingPopoverKey(object sender, KeyEventArgs e)
+    /// <summary>
+    /// Escape closes the Builder the way Exit does, through the unsaved-changes prompt (SC-010). Only
+    /// when nothing else takes it: an open menu, the icon picker and the dialogs handle their own
+    /// Escape, and a drag in progress ends on it.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.Key != Key.Escape) return;
-        Model.IsBrandingOpen = false;
-        BrandingButton.Focus();
+        base.OnKeyDown(e);
+        if (e.Handled || e.Key != Key.Escape || !EscapeCloses) return;
         e.Handled = true;
+        _ = Model.ExitAsync();
     }
 
-    // The URL is saved on change (blur or Enter); closing the popover is a blur.
-    private void OnBrandingClosed(object? sender, EventArgs e)
+    private bool EscapeCloses =>
+        Model.IsIdle && !Model.IsIconPickerOpen && Model.CurrentDrag is null && !SettingsMenu.IsOpen && !ProfileMenu.IsOpen;
+
+    // ---- the header's menus -------------------------------------------------------------------
+
+    // ⚙ and the profile button are toggles, checked while their menu is open and not hit-testable
+    // then, so the click that dismisses the menu cannot reopen it (VM finding D2). Checking one, by
+    // a click or Space, opens its menu; the menu closing unchecks it.
+    private void OnMenuToggleChecked(object sender, RoutedEventArgs e)
     {
-        BrandingUrlBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        if (sender is not ToggleButton { ContextMenu: { } menu }) return;
+        if (ReferenceEquals(menu, ProfileMenu)) FillProfileMenu();
+        menu.IsOpen = true;
+    }
+
+    private void OnMenuClosed(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(sender, SettingsMenu)) SettingsButton.IsChecked = false;
+        else if (ReferenceEquals(sender, ProfileMenu)) ProfileButton.IsChecked = false;
+    }
+
+    private readonly List<MenuItem> _profileItems = [];
+
+    /// <summary>The profile menu's rows for the saved profiles (tests).</summary>
+    internal IReadOnlyList<MenuItem> ProfileMenuItems => _profileItems;
+
+    /// <summary>The saved profiles go between the heading and the divider: the current one ticked, a note with the tab.</summary>
+    private void FillProfileMenu()
+    {
+        Model.RefreshProfiles(); // another Revit session may have saved, renamed or removed one
+        foreach (var item in _profileItems) ProfileMenu.Items.Remove(item);
+        _profileItems.Clear();
+        var at = ProfileMenu.Items.IndexOf(ProfileMenuDivider);
+        foreach (var option in Model.ProfileOptions)
+        {
+            var item = new MenuItem
+            {
+                Header = option,
+                HeaderTemplate = (DataTemplate)FindResource("ProfileMenuHeader"),
+                InputGestureText = option.Note,
+                Command = Model.SwitchProfileCommand,
+                CommandParameter = option,
+            };
+            AutomationProperties.SetAutomationId(item, "Builder.ProfileMenuItem");
+            AutomationProperties.SetName(item, option.Display);
+            ProfileMenu.Items.Insert(at++, item);
+            _profileItems.Add(item);
+        }
     }
 
     // ---- drag and drop ------------------------------------------------------------------------

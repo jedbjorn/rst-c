@@ -190,7 +190,7 @@
                             <ListBoxItem x:Name="CardNormal">
                                 <StackPanel>
                                     <TextBlock Text="Structure" FontWeight="SemiBold" />
-                                    <TextBlock Text="Tab RST-S · Min Revit 2025+ · 4 panels" Style="{StaticResource MutedText}" />
+                                    <TextBlock Text="Tab RST-S · Min RST 3.0 · 4 panels" Style="{StaticResource MutedText}" />
                                 </StackPanel>
                             </ListBoxItem>
                             <ListBoxItem x:Name="CardSelected" IsSelected="True">

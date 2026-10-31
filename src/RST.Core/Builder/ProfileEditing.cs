@@ -52,7 +52,7 @@ public static class ProfileEditing
 
     /// <summary>
     /// <c>startFresh</c>'s blank profile (before its first panel is added): schema 1, no id, empty
-    /// name and tab, Min Revit "0.1.0", opacity 100, no presets, and the default cleanup targets.
+    /// name and tab, Min RST version "0.1.0", opacity 100, no presets, and the default cleanup targets.
     /// </summary>
     public static Profile NewProfile() => new()
     {
@@ -74,7 +74,7 @@ public static class ProfileEditing
 
     /// <summary>
     /// <c>loadIntoProfile</c>: a copy of <paramref name="source"/> for editing, with the JS's
-    /// defaults (schema <c>|| 1</c>, Min Revit <c>|| "0.1.0"</c>), branding dropped (it is machine-wide
+    /// defaults (schema <c>|| 1</c>, Min RST version <c>|| "0.1.0"</c>), branding dropped (it is machine-wide
     /// now), presets normalized, and the default cleanup targets for a profile that has none
     /// (pre-RST-031).
     /// </summary>

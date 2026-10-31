@@ -30,9 +30,6 @@ public sealed record DuplicateOutcome(NameCheck Check, SaveOutcome? Save)
 
 public static class ProfileNaming
 {
-    /// <summary>The Rename dialog's help text.</summary>
-    public const string RenameHelp = "Same profile, new name. Users who have it loaded keep it.";
-
     /// <summary>
     /// True when a saved profile other than <paramref name="selfId"/> has <paramref name="name"/>
     /// (trimmed, case-insensitive). Profiles without an id are not compared (as the save's check
