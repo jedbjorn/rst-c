@@ -41,10 +41,6 @@ internal static class EscapeGuard
     {
         ArgumentNullException.ThrowIfNull(dialog);
         var site = dialog.GetType().Name + ": Escape";
-        dialog.PreviewKeyDown += (_, e) => UiGuard.Run(site, () =>
-        {
-            if (IsHeldEscape(e.Key, e.IsRepeat)) e.Handled = true;
-        });
         dialog.KeyDown += (_, e) => UiGuard.Run(site, () =>
         {
             if (!IsFreshEscape(e.Key, e.IsRepeat, e.Handled)) return;
