@@ -150,5 +150,5 @@ Stacks are built through the same AdWindows interface as the rest of the profile
 - IT's admin locks (`AdminSettings.json`) are read, reported and respected, never changed.
 - If a year's settings file cannot be read (for example while that Revit year is starting), rst-c leaves it and its record for that year untouched and says so; try again in a moment.
 - Record clean-ups (entries for add-ins that are back on or uninstalled) are reported in one "Tidied up" line. Two Loaders open in different Revit years can save the record at the same time; each re-reads it first, so neither loses the other's entries.
-- Saving the active profile in the Builder reloads its ribbon only; it never changes add-ins. Add-ins change through **Load Profile**, with its confirmation and its report.
+- Saving the active profile in the Builder reloads its ribbon only, when the Builder closes; it never changes add-ins. Add-ins change through **Load Profile**, with its confirmation and its report.
 - A profile's requirements are always evaluated against the computer it is loaded on, not the one it was built on. Profiles built before the required add-in feature (pre-RST-022) have an empty `requiredAddins` list; the check is a no-op for them.

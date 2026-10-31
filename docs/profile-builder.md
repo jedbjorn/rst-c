@@ -24,7 +24,7 @@ This machine: ⚙ at the far left :::class2 -> Which profile: the profile menu :
 
 ## Building a profile
 
-![The Profile Builder window: along the tinted header, the ⚙ machine settings button, the profile menu showing the loaded profile, Export ZIP and the title, with Save and Exit on the right; the Commands pane on the left with Filter, Create new and the Custom Tools group above the Revit command catalogue; the profile's panels in the centre as cards of tool tiles, some holding stacks; the Profile pane on the right on its General tab; and the Live Preview of the ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
+![The Profile Builder window: along the tinted header, the ⚙ machine settings button, the profile menu showing the loaded profile with its green dot, Export ZIP and the title, with Save and Exit on the right; the Commands pane on the left with Filter, Create new and the Custom Tools group above the Revit command catalogue; the profile's panels in the centre as cards of tool tiles, some holding stacks; the Profile pane on the right on its General tab; and the Live Preview of the ribbon tab along the bottom](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-overview.png)
 
 ### Opening the Builder
 
