@@ -61,11 +61,13 @@ public partial class ProfileBuilderWindow : Window
         // A press arms a drag that only a move with the button still down starts. The release disarms
         // it wherever it happens (a still click on a tile, then a press-and-move elsewhere, must not
         // drag that tile: WU3 review leftover), so the window watches every left-button release.
-        AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler((_, _) => UiGuard.Run("Builder window: release", () => _pendingDrag = null)), handledEventsToo: true);
+        AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler((_, _) => UiGuard.Run("Builder window: release", Disarm)), handledEventsToo: true);
         // Every press disarms too (review N1): a release outside the window is never seen, and a later
         // press on a non-source would leave the old drag armed. The window's tunnelling handler runs
         // before a source's own OnDragSourceDown, so a press on a source re-arms as before.
-        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => UiGuard.Run("Builder window: press", () => _pendingDrag = null)), handledEventsToo: true);
+        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => UiGuard.Run("Builder window: press", Disarm)), handledEventsToo: true);
+        // The window, not the source, watches the move that starts an armed drag (SC-032): see OnPointerMove.
+        AddHandler(PreviewMouseMoveEvent, new MouseEventHandler(OnPointerMove), handledEventsToo: true);
     }
 
     public ProfileBuilderViewModel Model { get; }
@@ -207,6 +209,7 @@ public partial class ProfileBuilderWindow : Window
 
     private Point _dragStart;
     private BuilderDrag? _pendingDrag;
+    private DependencyObject? _dragSource;
 
     /// <summary>The drag a press has armed, waiting for the pointer to move past the drag distance (tests).</summary>
     internal BuilderDrag? PendingDrag => _pendingDrag;
@@ -240,33 +243,49 @@ public partial class ProfileBuilderWindow : Window
 
     private void DragSourceDown(object sender, MouseButtonEventArgs e)
     {
-        _pendingDrag = null;
+        Disarm();
         // Typing in a name box or clicking ✎ × ▲ ▼ never starts a drag. A tile's or a row's icon does,
         // once the pointer moves past the drag distance; a still click opens the icon picker.
         if (IsInteractive(e.OriginalSource as DependencyObject, sender as DependencyObject)) return;
         _pendingDrag = DragFor((sender as FrameworkElement)?.DataContext);
+        _dragSource = _pendingDrag is null ? null : sender as DependencyObject;
         _dragStart = PointerAt(e, this);
     }
 
-    // Wired to PreviewMouseMove (WU3 review N6): a ButtonBase that holds the mouse (the icon after a
-    // press) marks the bubbling MouseMove handled, so a bubbling handler on the tile or row would never
-    // see the move that should start the drag. The tunnelling move reaches the tile first.
-    private void OnDragSourceMove(object sender, MouseEventArgs e) => UiGuard.Run("Builder window: drag", () => DragSourceMove(sender, e));
-
-    private void DragSourceMove(object sender, MouseEventArgs e)
+    private void Disarm()
     {
-        if (_pendingDrag is null || !Model.IsIdle) return;
+        _pendingDrag = null;
+        _dragSource = null;
+    }
+
+    // The window watches every move, in the Preview phase and handled or not, and starts the armed drag
+    // from the element that was pressed (SC-032). The move that crosses the drag distance can land
+    // anywhere: a press near a tile's edge (the strip below its source line, 3 px above the border)
+    // whose next move is already in the gutter, on the card or on another tile is still a drag of that
+    // tile. A handler on the source itself saw only the moves routed through it, so such a press armed
+    // a drag that never started. The Preview phase also covers WU3 review N6: a ButtonBase holding the
+    // mouse (the icon after a press) marks the bubbling MouseMove handled.
+    private void OnPointerMove(object sender, MouseEventArgs e)
+    {
+        if (_pendingDrag is null) return; // most moves: nothing armed
+        UiGuard.Run("Builder window: drag", () => PointerMove(e));
+    }
+
+    private void PointerMove(MouseEventArgs e)
+    {
+        if (_pendingDrag is null || _dragSource is null || !Model.IsIdle) return;
         if (!LeftPressed(e))
         {
             // The button came up where the window did not see it (outside it): the armed drag is stale.
-            _pendingDrag = null;
+            Disarm();
             return;
         }
         var p = PointerAt(e, this);
         if (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         var drag = _pendingDrag;
-        _pendingDrag = null;
+        var source = _dragSource;
+        Disarm();
         // A press on the icon button captured the mouse: release it, so the button is no longer
         // pressed and no Click (the icon picker) follows the drag (WU3 review B1).
         if (Mouse.Captured is not null) Mouse.Capture(null);
@@ -274,7 +293,7 @@ public partial class ProfileBuilderWindow : Window
         try
         {
             var effects = drag.IsNew ? DragDropEffects.Copy : DragDropEffects.Move;
-            RunDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
+            RunDragDrop(source, new DataObject(typeof(BuilderDrag), drag), effects);
         }
         finally
         {
@@ -285,7 +304,8 @@ public partial class ProfileBuilderWindow : Window
     /// <summary>The icon buttons of tiles and stack rows are drag handles as well as buttons.</summary>
     internal const string IconHandleName = "IconHandle";
 
-    private static bool IsInteractive(DependencyObject? source, DependencyObject? stop)
+    /// <summary>Whether a press on <paramref name="source"/> belongs to a name box or a button between it and the drag source <paramref name="stop"/> (no drag).</summary>
+    internal static bool IsInteractive(DependencyObject? source, DependencyObject? stop)
     {
         for (var d = source; d is not null && !ReferenceEquals(d, stop); d = ParentOf(d))
             if (d is TextBoxBase || d is ButtonBase { Name: not IconHandleName }) return true;

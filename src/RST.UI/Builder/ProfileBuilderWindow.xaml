@@ -309,7 +309,7 @@
             <DataTemplate DataType="{x:Type builder:ToolTileViewModel}">
                 <Border x:Name="TileCell" Background="Transparent" Padding="0,0,10,10" VerticalAlignment="Top">
                 <Grid x:Name="Tile" Width="100" VerticalAlignment="Top" Background="Transparent"
-                      ToolTip="{Binding ToolTip}" PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                      ToolTip="{Binding ToolTip}" PreviewMouseLeftButtonDown="OnDragSourceDown"
                       AutomationProperties.AutomationId="Builder.Tile" AutomationProperties.Name="{Binding Name}">
                     <Border x:Name="TileFace" Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1" CornerRadius="4" Padding="4,7,4,5" SnapsToDevicePixels="True">
@@ -370,7 +370,7 @@
             <!-- A stack's row: the 16 px icon (the icon picker), the name box; ✎ (custom tools, WU4) and × on hover. -->
             <DataTemplate x:Key="StackRowTemplate" DataType="{x:Type builder:ToolTileViewModel}">
                 <Grid x:Name="StackRow" Margin="0,0,0,3" Background="Transparent" ToolTip="{Binding ToolTip}"
-                      PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                      PreviewMouseLeftButtonDown="OnDragSourceDown"
                       AutomationProperties.AutomationId="Builder.StackRow" AutomationProperties.Name="{Binding Name}">
                     <Border x:Name="RowFace" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1" CornerRadius="3" Padding="2,1,2,1" SnapsToDevicePixels="True">
@@ -429,7 +429,7 @@
                             CornerRadius="4" Padding="6,2,6,3" SnapsToDevicePixels="True">
                         <StackPanel>
                             <DockPanel x:Name="StackHeader" Margin="0,0,0,2" Background="Transparent" Cursor="SizeAll"
-                                       PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                                       PreviewMouseLeftButtonDown="OnDragSourceDown"
                                        AutomationProperties.AutomationId="Builder.StackHeader">
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                     <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCommand}"
@@ -479,7 +479,7 @@
                                    TextTrimming="CharacterEllipsis" />
                     </DockPanel>
                     <DockPanel x:Name="CommandRow" Background="Transparent" Visibility="Collapsed" ToolTip="{Binding ToolTip}"
-                               PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove">
+                               PreviewMouseLeftButtonDown="OnDragSourceDown">
                         <DockPanel.InputBindings>
                             <MouseBinding Gesture="LeftDoubleClick"
                                           Command="{Binding DataContext.AddCatalogCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -545,7 +545,7 @@
             <DataTemplate DataType="{x:Type builder:CustomToolItemViewModel}">
                 <Border x:Name="Row" Padding="20,2,4,2" CornerRadius="3" Background="Transparent" MinHeight="24" ToolTip="{Binding ToolTip}"
                         Focusable="True" FocusVisualStyle="{StaticResource FocusRing}" KeyDown="OnCustomToolKeyDown"
-                        PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                        PreviewMouseLeftButtonDown="OnDragSourceDown"
                         AutomationProperties.AutomationId="Builder.CustomTool" AutomationProperties.Name="{Binding Label}">
                     <Border.InputBindings>
                         <MouseBinding Gesture="LeftDoubleClick" Command="{Binding AddCommand}" />
@@ -857,7 +857,7 @@
                                                             AutomationProperties.AutomationId="Builder.PanelStripe" />
                                                     <Border Background="{StaticResource SurfaceAltBrush}" BorderBrush="{StaticResource DividerBrush}"
                                                             BorderThickness="0,0,0,1" Padding="10,6"
-                                                            PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                                                            PreviewMouseLeftButtonDown="OnDragSourceDown"
                                                             AutomationProperties.AutomationId="Builder.PanelHeader">
                                                         <DockPanel>
                                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

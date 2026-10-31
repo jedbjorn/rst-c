@@ -853,6 +853,88 @@ public class ProfileBuilderDragStartTests
         }
     });
 
+    /// <summary>
+    /// The element a real press at <paramref name="at"/> (a point on <paramref name="on"/>) lands on: the
+    /// window's own hit test, as the input system does it, up to the nearest UIElement.
+    /// </summary>
+    private static UIElement HitAt(ProfileBuilderWindow w, FrameworkElement on, Point at)
+    {
+        var result = VisualTreeHelper.HitTest(w, on.TranslatePoint(at, w));
+        Assert.NotNull(result); // something is hit at the point
+        DependencyObject? d = result.VisualHit;
+        while (d is not null and not UIElement) d = VisualTreeHelper.GetParent(d);
+        return Assert.IsAssignableFrom<UIElement>(d);
+    }
+
+    private static bool IsInside(DependencyObject? d, DependencyObject ancestor)
+    {
+        for (; d is not null; d = VisualTreeHelper.GetParent(d))
+            if (ReferenceEquals(d, ancestor)) return true;
+        return false;
+    }
+
+    [Fact]
+    public void A_press_anywhere_on_a_tile_but_its_name_box_drags_it_even_when_the_move_leaves_the_tile() => Sta(() =>
+    {
+        // SC-032 (F18 WU5 VM finding F2): a press in the strip below a tile's source line, at the
+        // tile's centre 3 px above its border, started no drag. The tile is hit-tested as a real
+        // mouse would hit it, every 2 px across its face: each point belongs to the tile, and the
+        // only one that does not drag is the name box (the hidden × takes no press).
+        var rig = Open();
+        try
+        {
+            var tile = Tile(rig.Window, 0, 1); // Column
+            var face = WindowCapture.Descendants<Border>(tile).Single(b => b.Name == "TileFace");
+            var box = WindowCapture.Descendants<TextBox>(tile).Single(t => Id(t) == "Builder.ToolName");
+            var source = WindowCapture.Descendants<TextBlock>(tile).Single(t => Id(t) == "Builder.ToolSource");
+            for (var y = 2.0; y < face.ActualHeight - 2; y += 2)
+            for (var x = 6.0; x < face.ActualWidth - 6; x += 2)
+            {
+                var hit = HitAt(rig.Window, face, new Point(x, y));
+                Assert.True(IsInside(hit, tile), $"({x}, {y}) on the tile hits {hit.GetType().Name} outside it");
+                if (IsInside(hit, box)) continue;
+                Assert.False(ProfileBuilderWindow.IsInteractive(hit, tile), $"a press at ({x}, {y}) on the tile lands on a button or box ({hit.GetType().Name})");
+            }
+
+            // VM finding F2's point: below the source line, 3 px above the border's inner edge.
+            var at = new Point(face.ActualWidth / 2, face.ActualHeight - face.BorderThickness.Bottom - 3);
+            var sourceBottom = source.TranslatePoint(new Point(0, source.ActualHeight), face).Y;
+            Assert.True(at.Y > sourceBottom, $"the point (y {at.Y}) is below the source line (ends at y {sourceBottom})");
+            var strip = HitAt(rig.Window, face, at);
+            Assert.True(IsInside(strip, tile) && !ProfileBuilderWindow.IsInteractive(strip, tile), $"the strip below the source line hits {strip.GetType().Name}");
+
+            // The press arms the tile's drag; the move that crosses the drag distance is already in the
+            // tile's gutter (its cell, outside the tile and no drag source): the drag of the tile starts.
+            var expected = ProfileBuilderWindow.DragFor(rig.Harness.Model.Panels[0].Tile(1))!;
+            rig.Pointer = new Point(200, 200);
+            Press(strip);
+            Assert.Equal(expected, rig.Window.PendingDrag);
+            var cell = Assert.IsType<Border>(VisualTreeHelper.GetParent(tile));
+            Assert.Equal("TileCell", cell.Name);
+            rig.Pointer = new Point(200, 200 + SystemParameters.MinimumVerticalDragDistance + 4);
+            Move(cell);
+            var started = Assert.Single(rig.Started);
+            Assert.Same(tile, started.Source);
+            Assert.Equal(expected, started.Drag);
+            Assert.True(started.SourceFaded, "the dragged tile is drawn faded during the drag");
+            Assert.Null(rig.Window.PendingDrag);
+
+            // A move that lands on another tile first still drags the pressed one, from the pressed one.
+            rig.Started.Clear();
+            rig.Pointer = new Point(200, 200);
+            Press(HitAt(rig.Window, face, at));
+            rig.Pointer = new Point(240, 200);
+            Move(Tile(rig.Window, 0, 2));
+            started = Assert.Single(rig.Started);
+            Assert.Same(tile, started.Source);
+            Assert.Equal(expected, started.Drag);
+        }
+        finally
+        {
+            Close(rig);
+        }
+    });
+
     /// <summary>A left release as the input system raises it: PreviewMouseUp, then MouseUp (each element cracks its own left-button event).</summary>
     private static void Release(UIElement on)
     {
