@@ -9,8 +9,11 @@
 // over it in the Preview phase: it reports the tile, stack or stack row under the pointer and where
 // on it (TileHit) to the view-model, which owns the markers and the rules (RST.Core TileDrops and
 // PanelStacks; PanelDrops for the panel reorder). "on tab [name]" opens General on the tab field.
+// Feature #18, WU4: the Commands tree's items are the Custom Tools group then the catalogue (one
+// CompositeCollection, so both scroll together); a Custom Tools row is a drag source like a command.
 
 using System.ComponentModel;
+using System.Windows.Data;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -31,6 +34,11 @@ public partial class ProfileBuilderWindow : Window
         DarkTitleBar.Attach(this);
         Model = model ?? throw new ArgumentNullException(nameof(model));
         DataContext = model;
+        CatalogTreeView.ItemsSource = new CompositeCollection
+        {
+            model.CustomToolsGroup,
+            new CollectionContainer { Collection = model.CatalogRoots },
+        };
         model.CloseRequested += () =>
         {
             if (IsVisible) Close();
@@ -46,6 +54,14 @@ public partial class ProfileBuilderWindow : Window
         // A drag that leaves the window straight from a card, a row or a name box (whose own DragLeave
         // the TextBox handles) still clears its marker.
         AddHandler(DragDrop.DragLeaveEvent, new DragEventHandler((_, _) => Model.ClearDropMarkers()), handledEventsToo: true);
+        // A press arms a drag that only a move with the button still down starts. The release disarms
+        // it wherever it happens (a still click on a tile, then a press-and-move elsewhere, must not
+        // drag that tile: WU3 review leftover), so the window watches every left-button release.
+        AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler((_, _) => _pendingDrag = null), handledEventsToo: true);
+        // Every press disarms too (review N1): a release outside the window is never seen, and a later
+        // press on a non-source would leave the old drag armed. The window's tunnelling handler runs
+        // before a source's own OnDragSourceDown, so a press on a source re-arms as before.
+        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => _pendingDrag = null), handledEventsToo: true);
     }
 
     public ProfileBuilderViewModel Model { get; }
@@ -145,13 +161,14 @@ public partial class ProfileBuilderWindow : Window
         (source, data, effects) => DragDrop.DoDragDrop(source, data, effects);
 
     /// <summary>
-    /// The drag a source element would start, from its view-model: a catalogue command, a panel (its
-    /// header), a tile or a stack's row, or a whole stack (its header). A slot drag carries the slot
-    /// it was started from, so the drop can check it is still there (WU3 review N1).
+    /// The drag a source element would start, from its view-model: a catalogue command, a Custom Tools
+    /// row, a panel (its header), a tile or a stack's row, or a whole stack (its header). A slot drag
+    /// carries the slot it was started from, so the drop can check it is still there (WU3 review N1).
     /// </summary>
     internal static BuilderDrag? DragFor(object? dataContext) => dataContext switch
     {
         CatalogNodeViewModel { Command: { } command } => BuilderDrag.FromCatalog(command),
+        CustomToolItemViewModel row => BuilderDrag.FromCustomTool(row.Tool),
         PanelCardViewModel card => BuilderDrag.FromPanel(card.Index),
         ToolTileViewModel tile => BuilderDrag.FromSlot(tile.Panel.Index, tile.Index, tile.Row, tile.Model),
         StackGroupViewModel stack => BuilderDrag.FromSlot(stack.Panel.Index, stack.Index, -1, stack.Model),
@@ -173,7 +190,13 @@ public partial class ProfileBuilderWindow : Window
     // see the move that should start the drag. The tunnelling move reaches the tile first.
     private void OnDragSourceMove(object sender, MouseEventArgs e)
     {
-        if (_pendingDrag is null || !LeftPressed(e) || !Model.IsIdle) return;
+        if (_pendingDrag is null || !Model.IsIdle) return;
+        if (!LeftPressed(e))
+        {
+            // The button came up where the window did not see it (outside it): the armed drag is stale.
+            _pendingDrag = null;
+            return;
+        }
         var p = PointerAt(e, this);
         if (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
@@ -185,7 +208,7 @@ public partial class ProfileBuilderWindow : Window
         Model.BeginDrag(drag);
         try
         {
-            var effects = drag.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+            var effects = drag.IsNew ? DragDropEffects.Copy : DragDropEffects.Move;
             RunDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
         }
         finally
@@ -205,7 +228,7 @@ public partial class ProfileBuilderWindow : Window
     }
 
     private DragDropEffects DropEffect(bool accepted) =>
-        !accepted ? DragDropEffects.None : Model.CurrentDrag?.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+        !accepted ? DragDropEffects.None : Model.CurrentDrag?.IsNew == true ? DragDropEffects.Copy : DragDropEffects.Move;
 
     // The card's handlers run in the Preview phase, before anything inside the card sees the drag.
     // A TextBox takes every drag that passes over it (TextEditor marks DragOver handled, with no
@@ -301,6 +324,88 @@ public partial class ProfileBuilderWindow : Window
 
     private static DependencyObject? ParentOf(DependencyObject d) =>
         d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+
+    // ---- the Custom Tools rows by keyboard (feature #18, WU4 review F7) ------------------------
+
+    /// <summary>The Custom Tools rows the tree shows now, in order.</summary>
+    internal IReadOnlyList<Border> CustomToolRows() =>
+        BordersIn(CatalogTreeView).Where(b => b.Name == "Row" && b.DataContext is CustomToolItemViewModel && b.IsVisible).ToList();
+
+    private static IEnumerable<Border> BordersIn(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is Border b) yield return b;
+            foreach (var deeper in BordersIn(child)) yield return deeper;
+        }
+    }
+
+    /// <summary>↓ in Filter… moves to the first Custom Tools row (when the list shows one).</summary>
+    private void OnFilterKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Down || CustomToolRows().FirstOrDefault() is not { } first) return;
+        e.Handled = first.Focus();
+    }
+
+    /// <summary>
+    /// On a focused Custom Tools row: ↑ ↓ move between rows (↑ on the first goes to Filter…, ↓ on the
+    /// last to the first catalogue node, not the row's own ✎: delta review N1); Delete removes it
+    /// everywhere (asking first), then focus goes to the next row, the previous one when it was the
+    /// last, or Filter… when the list is empty (delta review F10); a cancelled remove keeps it.
+    /// </summary>
+    private void OnCustomToolKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not Border { DataContext: CustomToolItemViewModel item } row) return;
+        var rows = CustomToolRows();
+        var at = rows.ToList().IndexOf(row);
+        switch (e.Key)
+        {
+            case Key.Delete:
+                e.Handled = true;
+                if (!item.RemoveCommand.CanExecute(null)) return;
+                var links = rows.Select(r => ((CustomToolItemViewModel)r.DataContext).Tool.Link).ToList();
+                item.RemoveCommand.Execute(null);
+                // The rows are rebuilt by then: focus once the new ones are laid out.
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => FocusAfterRemove(item.Tool.Link, links, at)));
+                break;
+            case Key.Up or Key.Down:
+                var next = at + (e.Key == Key.Down ? 1 : -1);
+                if (next >= 0 && next < rows.Count) e.Handled = rows[next].Focus();
+                else if (next >= rows.Count) e.Handled = FirstCatalogItem()?.Focus() ?? false;
+                else e.Handled = FilterBox.Focus();
+                break;
+        }
+    }
+
+    /// <summary>The first catalogue node the tree shows (the Custom Tools group is not one).</summary>
+    internal TreeViewItem? FirstCatalogItem() =>
+        TreeItemsIn(CatalogTreeView).FirstOrDefault(t => t.DataContext is CatalogNodeViewModel && t.IsVisible);
+
+    private static IEnumerable<TreeViewItem> TreeItemsIn(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TreeViewItem t) yield return t;
+            foreach (var deeper in TreeItemsIn(child)) yield return deeper;
+        }
+    }
+
+    /// <summary>
+    /// After Delete on a row: the row again when the remove was cancelled; else the row that followed
+    /// it, or the one before when it was the last; else Filter….
+    /// </summary>
+    private void FocusAfterRemove(string removed, IReadOnlyList<string> before, int at)
+    {
+        var rows = CustomToolRows();
+        Border? Row(string link) => rows.FirstOrDefault(r => ((CustomToolItemViewModel)r.DataContext).Tool.Link == link);
+        var target = Row(removed)
+                     ?? before.Skip(at + 1).Select(Row).FirstOrDefault(r => r is not null)
+                     ?? before.Take(at).Reverse().Select(Row).FirstOrDefault(r => r is not null);
+        if (target is not null) target.Focus();
+        else FilterBox.Focus();
+    }
 
     // ---- the Panels pane header ---------------------------------------------------------------
 

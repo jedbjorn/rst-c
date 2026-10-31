@@ -1151,4 +1151,203 @@ Open the Loader from inside Revit to populate the catalog.</value>
   <data name="Builder_StackPickReturns" xml:space="preserve">
     <value>goes back on the panel</value>
   </data>
+  <data name="Builder_CreateNew" xml:space="preserve">
+    <value>+ Create new</value>
+  </data>
+  <data name="Builder_CreateNewTip" xml:space="preserve">
+    <value>Create a URL or email tool</value>
+  </data>
+  <data name="Builder_CustomTools" xml:space="preserve">
+    <value>Custom Tools</value>
+  </data>
+  <data name="Builder_CustomToolsNote" xml:space="preserve">
+    <value>URL and email tools found in your profiles. Drag onto a panel.</value>
+    <comment>The same text as RST.Core's CustomTools.ListNote.</comment>
+  </data>
+  <data name="Builder_CustomToolsToggleTip" xml:space="preserve">
+    <value>Show or hide the Custom Tools</value>
+  </data>
+  <data name="Builder_KindUrl" xml:space="preserve">
+    <value>URL</value>
+    <comment>The kind tag on a Custom Tools row.</comment>
+  </data>
+  <data name="Builder_KindEmail" xml:space="preserve">
+    <value>EMAIL</value>
+    <comment>The kind tag on a Custom Tools row.</comment>
+  </data>
+  <data name="Builder_CustomToolUsedIn" xml:space="preserve">
+    <value>Used in: {0}</value>
+    <comment>{0} the profiles that hold the tool (the second line of a Custom Tools row's tooltip, under the link).</comment>
+  </data>
+  <data name="Builder_EditToolEverywhereTip" xml:space="preserve">
+    <value>Edit this tool everywhere it is used</value>
+  </data>
+  <data name="Builder_RemoveToolEverywhereTip" xml:space="preserve">
+    <value>Remove from every profile</value>
+  </data>
+  <data name="Builder_CreateToolTitle" xml:space="preserve">
+    <value>Create new tool</value>
+  </data>
+  <data name="Builder_EditToolTitle" xml:space="preserve">
+    <value>Edit custom tool</value>
+  </data>
+  <data name="Builder_ToolKindUrlOption" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="Builder_ToolKindEmailOption" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="Builder_ToolLabel" xml:space="preserve">
+    <value>Label</value>
+  </data>
+  <data name="Builder_ToolLabelPlaceholder" xml:space="preserve">
+    <value>Button label</value>
+  </data>
+  <data name="Builder_ToolAddress" xml:space="preserve">
+    <value>Address</value>
+  </data>
+  <data name="Builder_ToolEmailAddress" xml:space="preserve">
+    <value>Email address</value>
+  </data>
+  <data name="Builder_ToolAddressPlaceholder" xml:space="preserve">
+    <value>wiki.studio.example</value>
+  </data>
+  <data name="Builder_ToolEmailPlaceholder" xml:space="preserve">
+    <value>bim@studio.example</value>
+  </data>
+  <data name="Builder_ToolOpens" xml:space="preserve">
+    <value>Opens: {0}</value>
+    <comment>{0} the normalised link.</comment>
+  </data>
+  <data name="Builder_ToolIcon" xml:space="preserve">
+    <value>Icon</value>
+  </data>
+  <data name="Builder_ToolNoIcon" xml:space="preserve">
+    <value>No icon</value>
+  </data>
+  <data name="Builder_Create" xml:space="preserve">
+    <value>Create</value>
+  </data>
+  <data name="Builder_ToolLabelRequired" xml:space="preserve">
+    <value>A label is required.</value>
+  </data>
+  <data name="Builder_ToolAddressRequired" xml:space="preserve">
+    <value>An address is required.</value>
+  </data>
+  <data name="Builder_ToolCreateNote" xml:space="preserve">
+    <value>Added to the panel “{0}”. Tools live in profiles: a tool on no panel of any profile leaves Custom Tools.</value>
+    <comment>{0} the panel name.</comment>
+  </data>
+  <data name="Builder_ToolEditWarning" xml:space="preserve">
+    <value>Changes apply everywhere this tool is used: {0}. Names and icons you gave it on a panel are kept.</value>
+    <comment>{0} the profiles that will change.</comment>
+  </data>
+  <data name="Builder_ToolNotChanged" xml:space="preserve">
+    <value>Not changed:</value>
+  </data>
+  <data name="Builder_ProfileCountOne" xml:space="preserve">
+    <value>1 profile</value>
+  </data>
+  <data name="Builder_ProfileCountMany" xml:space="preserve">
+    <value>{0} profiles</value>
+    <comment>{0} how many profiles (2 or more, or 0).</comment>
+  </data>
+  <data name="Builder_UpdateIn" xml:space="preserve">
+    <value>Update in {0}</value>
+    <comment>{0} "1 profile" or "N profiles".</comment>
+  </data>
+  <data name="Builder_RemoveFrom" xml:space="preserve">
+    <value>Remove from {0}</value>
+    <comment>{0} "1 profile" or "N profiles".</comment>
+  </data>
+  <data name="Builder_ToolTargetUnsaved" xml:space="preserve">
+    <value>{0} (open, not saved yet)</value>
+    <comment>{0} the open profile's name.</comment>
+  </data>
+  <data name="Builder_ToolRefusedNoId" xml:space="preserve">
+    <value>{0}: a legacy profile with no id. Open it in the Builder and save it once.</value>
+    <comment>{0} the profile name.</comment>
+  </data>
+  <data name="Builder_ToolRefusedSharedId" xml:space="preserve">
+    <value>{0} ({1}): files share this profile's id. Remove the stale copy.</value>
+    <comment>{0} the profile name; {1} its file.</comment>
+  </data>
+  <data name="Builder_ToolRefusedUnreadable" xml:space="preserve">
+    <value>{0}: could not be read, so it was not checked.</value>
+    <comment>{0} the file name.</comment>
+  </data>
+  <data name="Builder_RemoveToolTitle" xml:space="preserve">
+    <value>Remove custom tool</value>
+  </data>
+  <data name="Builder_RemoveToolText" xml:space="preserve">
+    <value>Remove “{0}” ({1}) from every profile that uses it? A stack left with one tool becomes a plain button.</value>
+    <comment>{0} the tool's label; {1} its link without the scheme.</comment>
+  </data>
+  <data name="Builder_ToolNothingToChange" xml:space="preserve">
+    <value>No profile can be changed.</value>
+  </data>
+  <data name="Builder_AddPanelFirst" xml:space="preserve">
+    <value>Add a panel first.</value>
+  </data>
+  <data name="Builder_ToolAdded" xml:space="preserve">
+    <value>Added to “{0}”.</value>
+    <comment>{0} the panel name.</comment>
+  </data>
+  <data name="Builder_ToolAddedExisting" xml:space="preserve">
+    <value>That link is already in Custom Tools — another copy was added to the panel.</value>
+  </data>
+  <data name="Builder_ToolUpdated" xml:space="preserve">
+    <value>Updated in {0}.</value>
+    <comment>{0} "1 profile" or "N profiles".</comment>
+  </data>
+  <data name="Builder_ToolRemoved" xml:space="preserve">
+    <value>Removed from {0}.</value>
+    <comment>{0} "1 profile" or "N profiles".</comment>
+  </data>
+  <data name="Builder_ToolRibbonReloaded" xml:space="preserve">
+    <value>Ribbon reloaded.</value>
+  </data>
+  <data name="Builder_ToolReloadFailed" xml:space="preserve">
+    <value>The loaded profile changed, but the ribbon could not be reloaded. Load it again from the Loader.</value>
+  </data>
+  <data name="Builder_ToolChangeFailed" xml:space="preserve">
+    <value>The tool could not be changed. See the RST log.</value>
+  </data>
+  <data name="Builder_ToolsPartialTitle" xml:space="preserve">
+    <value>Some profiles were not changed</value>
+  </data>
+  <data name="Builder_ToolsPartialText" xml:space="preserve">
+    <value>These profiles were not changed:
+
+{0}
+
+The other profiles were changed and stay changed.</value>
+    <comment>{0} one line per profile: name (file): why.</comment>
+  </data>
+  <data name="Builder_ToolFailedLine" xml:space="preserve">
+    <value>{0} ({1}): {2}</value>
+    <comment>{0} the profile name; {1} its file; {2} why.</comment>
+  </data>
+  <data name="Builder_ToolNotAnEmail" xml:space="preserve">
+    <value>That is not an email address. In Email mode, type an address such as bim@studio.example.</value>
+  </data>
+  <data name="Builder_ToolTargetOpenOnly" xml:space="preserve">
+    <value>{0} (open here; only its unsaved copy changes)</value>
+    <comment>{0} the open profile's name: its file is not changed (it shares its id with another file).</comment>
+  </data>
+  <data name="Builder_ToolTargetFile" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>{0} the profile name; {1} its file, when two profiles in the list share a name.</comment>
+  </data>
+  <data name="Builder_ToolNothingYet" xml:space="preserve">
+    <value>Nothing to change yet: edit the label, address or icon.</value>
+  </data>
+  <data name="Builder_ToolUnchanged" xml:space="preserve">
+    <value>{0}: nothing to change there; its names and icons are its own.</value>
+    <comment>{0} the profile (as the confirmation names it).</comment>
+  </data>
+  <data name="Builder_Update" xml:space="preserve">
+    <value>Update</value>
+    <comment>The Edit dialog's button while the edit fails its check (no count).</comment>
+  </data>
 </root>

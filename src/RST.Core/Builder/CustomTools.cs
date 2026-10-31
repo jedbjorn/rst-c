@@ -9,6 +9,16 @@
 // are written. A partial failure keeps what was written and reports (and logs) each profile that
 // failed; nothing is skipped silently: a file that cannot be read (locked, in use), a file with no
 // id, and files that share one id are reported as failures and left unwritten.
+// WU4 (the window): CustomToolEditor.Plan lists what an edit or remove will do before it runs (the
+// confirmation's profiles and its "Update in N profiles" count), from the same classification the
+// edit and remove use, so the two cannot disagree: every profile is listed (two profiles that share
+// a name are two entries), the open profile's unsaved working copy is listed under its current
+// name, and the files that will be refused are listed apart with the reason. A change to the
+// working copy that throws is reported as a failure, never thrown (WU1 review follow-up F8).
+// For an edit, the plan is exact (WU4 delta review F8): a dry run of the same ApplyEdit on a copy of
+// each holder (and of the working copy) marks a profile the edit would leave as it is "Unchanged",
+// so "Update in N profiles" is what will be written; a profile whose names and icons are all its
+// own is listed apart, not counted.
 
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -44,6 +54,62 @@ public sealed record CustomToolFailure(string ProfileName, string? ProfileId, st
 /// working copy changed, and whether the loaded (active) profile's file was written (the ribbon then
 /// reloads).
 /// </summary>
+/// <summary>What Edit or Remove everywhere will do to one profile (WU4: the confirmation lists these).</summary>
+public enum CustomToolTargetState
+{
+    /// <summary>Its saved file holds the tool and is written (when it is the open profile, its working copy changes too).</summary>
+    Write,
+
+    /// <summary>Only the open profile's working copy changes: it has no saved file yet, or its file does not hold the tool.</summary>
+    WorkingCopy,
+
+    /// <summary>Not changed: a legacy file with no id (open it in the Builder and save it once).</summary>
+    NoId,
+
+    /// <summary>Not changed: several files share its id.</summary>
+    SharedId,
+
+    /// <summary>Not changed: the file could not be read, so it was not checked.</summary>
+    Unreadable,
+
+    /// <summary>
+    /// Not changed: it holds the tool, but the edit leaves it as it is (its names and icons are its
+    /// own, and the link and label are already the new ones). Only an edit's plan has it (a dry run);
+    /// it is not a failure: nothing is written and nothing is reported.
+    /// </summary>
+    Unchanged,
+}
+
+/// <summary>One profile an edit or remove reaches, or refuses.</summary>
+/// <param name="ProfileName">The profile's name (the working copy's current one, possibly blank, for <see cref="CustomToolTargetState.WorkingCopy"/>).</param>
+/// <param name="ProfileId">Its id, when it has one.</param>
+/// <param name="FileName">Its file ("" for a working copy with no file).</param>
+/// <param name="State">What happens to it.</param>
+/// <param name="Reason">Why it is refused (the failure the edit or remove reports), or why it is unchanged; else null.</param>
+/// <param name="IsOpen">It is the profile open in the Builder.</param>
+public sealed record CustomToolTarget(string ProfileName, string? ProfileId, string FileName, CustomToolTargetState State, string? Reason, bool IsOpen)
+{
+    /// <summary>The edit or remove changes this profile (its file, or the open working copy).</summary>
+    public bool WillChange => State is CustomToolTargetState.Write or CustomToolTargetState.WorkingCopy;
+}
+
+/// <summary>
+/// What an edit or remove everywhere will do (WU4): every profile it reaches, in the order it runs
+/// (files that could not be read, then the holders by profile name, then an open working copy with
+/// no file holding the tool). <see cref="Count"/> is the "Update in N profiles" number.
+/// </summary>
+public sealed record CustomToolPlan(IReadOnlyList<CustomToolTarget> Targets)
+{
+    /// <summary>The profiles that will change.</summary>
+    public IReadOnlyList<CustomToolTarget> Changing => Targets.Where(t => t.WillChange).ToList();
+
+    /// <summary>The profiles that will be refused (reported as failures when it runs).</summary>
+    public IReadOnlyList<CustomToolTarget> Refused => Targets.Where(t => !t.WillChange).ToList();
+
+    /// <summary>How many profiles will change.</summary>
+    public int Count => Targets.Count(t => t.WillChange);
+}
+
 public sealed record CustomToolUpdate(
     IReadOnlyList<CustomToolWrite> Written,
     IReadOnlyList<CustomToolFailure> Failed,
@@ -85,9 +151,14 @@ public static class CustomTools
     /// <summary>The dialog's "Opens: …" line: the address normalised ("" while it is blank).</summary>
     public static string Opens(string? address) => Normalize(address);
 
+    /// <summary>The check's answer for an email link that is not an email address (WU4 review F4).</summary>
+    public const string NotAnEmail = "Not an email address";
+
     /// <summary>
     /// The dialog's checks: a label, then an address (a bare scheme such as "mailto:" or "https://"
-    /// is not one). Null when both are given.
+    /// is not one), and a <c>mailto:</c> link must hold a plausible email address
+    /// (<see cref="IsEmailAddress"/>: "mailto:https://wiki…" is refused before it is written to every
+    /// profile; WU4 review F4). Null when all pass.
     /// </summary>
     public static string? Check(CustomToolEdit edit)
     {
@@ -97,7 +168,51 @@ public static class CustomTools
         var colon = link.IndexOf(':');
         var rest = colon < 0 ? link : link[(colon + 1)..].TrimStart('/');
         if (rest.Trim().Length == 0) return "Address required";
+        if (KindOf(link) == CustomToolKind.Email && !IsEmailAddress(link["mailto:".Length..])) return NotAnEmail;
         return null;
+    }
+
+    /// <summary>
+    /// What follows "mailto:" holds plausible email addresses: one, or several separated by commas
+    /// (RFC 6068: "a@x.example,b@y.example"; review F9), each with one "@" and something on each
+    /// side, no spaces, no "/" or ":" before the "@" (so not a URL), and no "/", ":" or "\" in the
+    /// domain; a "?subject=…" query after them is allowed. A blank recipient ("a@x.example,") is
+    /// refused. Not a full RFC 5322 check: it refuses links and typos, not rare addresses.
+    /// </summary>
+    public static bool IsEmailAddress(string? address)
+    {
+        var a = (address ?? "").Trim();
+        var query = a.IndexOf('?');
+        if (query >= 0) a = a[..query];
+        var recipients = a.Split(',');
+        return recipients.Length > 0 && recipients.All(r => IsOneAddress(r.Trim()));
+    }
+
+    private static bool IsOneAddress(string a)
+    {
+        var at = a.IndexOf('@');
+        if (at <= 0 || at != a.LastIndexOf('@') || at == a.Length - 1) return false;
+        if (a.Any(char.IsWhiteSpace)) return false;
+        return a[..at].IndexOfAny(['/', ':']) < 0 && a[(at + 1)..].IndexOfAny(['/', ':', '\\']) < 0;
+    }
+
+    /// <summary>
+    /// A link without its scheme: "wiki.example.com", "bim@studio.example" (a tile's source line, the
+    /// Remove confirmation, the Edit dialog's Email address box). The full link is the tooltip.
+    /// </summary>
+    public static string ShortLink(string? link)
+    {
+        var l = link ?? "";
+        var colon = l.IndexOf(':');
+        if (colon <= 0) return l;
+        return l[(colon + 1)..].TrimStart('/').TrimEnd('/');
+    }
+
+    /// <summary>A fresh slot for a list entry (WU4: a Custom Tools row dragged or double-clicked onto a panel).</summary>
+    public static Slot SlotFor(CustomTool tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        return NewSlot(new CustomToolEdit(tool.Label, tool.Link, tool.IconFile));
     }
 
     /// <summary>The tool slot Create adds: <c>URL:&lt;normalised link&gt;</c>, named and base-named by the label.</summary>
@@ -175,11 +290,14 @@ public static class CustomTools
     public static bool Holds(Profile profile, string link) => CustomSlots(profile).Any(s => LinkOf(s) == link);
 
     /// <summary>
-    /// Edit, in one profile: every slot with the tool's link gets the new link, BaseName and icon;
-    /// a slot's Name changes only where it still equals its old base name (its BaseName, or the
-    /// tool's old label when it has none), so names given on a panel are kept. Returns how many
-    /// slots hold the link (an edit that sets what is already there still counts them; the editor
-    /// compares snapshots to decide what to write).
+    /// Edit, in one profile: every slot with the tool's link gets the new link and BaseName; a slot's
+    /// Name changes only where it still equals its old base name (its BaseName, or the tool's old
+    /// label when it has none), so names given on a panel are kept; and its icon changes only where it
+    /// still is the tool's old icon (<see cref="CustomTool.IconFile"/>, the first occurrence's, which
+    /// the list shows), so icons picked on a panel are kept too (FnB decision on WU4 review F2).
+    /// Returns how many slots hold the link (an edit that sets what is already there still counts
+    /// them; the editor compares snapshots to decide what to write, so a slot left as it was is not
+    /// a write).
     /// </summary>
     public static int ApplyEdit(Profile profile, CustomTool tool, CustomToolEdit edit)
     {
@@ -196,11 +314,14 @@ public static class CustomTools
             if (string.IsNullOrEmpty(slot.Name) || slot.Name == oldBase) slot.Name = label;
             slot.BaseName = label;
             slot.CommandId = commandId;
-            slot.IconFile = icon;
+            if (SameIcon(slot.IconFile, tool.IconFile)) slot.IconFile = icon;
             changed++;
         }
         return changed;
     }
+
+    private static bool SameIcon(string? a, string? b) =>
+        string.Equals(string.IsNullOrEmpty(a) ? null : a, string.IsNullOrEmpty(b) ? null : b, StringComparison.Ordinal);
 
     /// <summary>
     /// Remove, in one profile: every slot with the link goes, loose or in a stack; a stack left
@@ -265,16 +386,40 @@ public sealed class CustomToolEditor
     public IReadOnlyList<CustomTool> Derive(Profile? working) => CustomTools.Derive(Saved().Select(e => e.Profile), working);
 
     /// <summary>
-    /// The names the confirmation lists ("Update in N profiles", "Remove from N profiles"): every
-    /// saved profile that holds the link (by name), and the working copy when it holds it.
+    /// What an edit or remove of <paramref name="link"/> will do (WU4: the confirmation), from the same
+    /// classification <see cref="Edit"/> and <see cref="Remove"/> run: the files that could not be
+    /// read, every saved profile that holds the link (refused when it has no id or shares its id
+    /// with another file), and the working copy when it holds the link and no file it was saved to
+    /// is written. Profiles that share a name are separate entries.
     /// </summary>
-    public IReadOnlyList<string> Affected(string link, Profile? working)
+    public CustomToolPlan Plan(string link, Profile? working) => Preview(link, working).Plan;
+
+    /// <summary>
+    /// The profiles folder read once for a confirmation of <paramref name="link"/>: its
+    /// <see cref="CustomToolPreview.Plan"/> (as <see cref="Plan"/>), and the exact plan of any edit
+    /// the dialog holds (<see cref="CustomToolPreview.PlanEdit"/>, a dry run with no I/O, so it can
+    /// follow the dialog as the user types).
+    /// </summary>
+    public CustomToolPreview Preview(string link, Profile? working)
     {
-        var saved = Saved().Select(e => e.Profile).Where(p => CustomTools.Holds(p, link)).ToList();
-        var names = CustomTools.Sources(saved, working is not null && CustomTools.Holds(working, link) ? working : null)
-            .Select(p => p.ProfileName ?? "");
-        return names.Distinct().ToList();
+        ArgumentNullException.ThrowIfNull(link);
+        var saved = Read(out var unread);
+        return new CustomToolPreview(Classify(link, saved, unread, working), working);
     }
+
+    /// <summary>The exact plan of an edit everywhere: what <see cref="Edit"/> would write now (see <see cref="CustomToolPreview.PlanEdit"/>).</summary>
+    public CustomToolPlan PlanEdit(CustomTool tool, CustomToolEdit edit, Profile? working)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        return Preview(tool.Link, working).PlanEdit(tool, edit);
+    }
+
+    /// <summary>
+    /// The names of the profiles the change will reach (<see cref="Plan"/>'s changing entries, not
+    /// de-duplicated: two profiles that share a name are listed twice).
+    /// </summary>
+    public IReadOnlyList<string> Affected(string link, Profile? working) =>
+        Plan(link, working).Changing.Select(t => t.ProfileName).ToList();
 
     /// <summary>Edit everywhere: the new label, link and icon for <paramref name="tool"/>.</summary>
     public CustomToolUpdate Edit(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId)
@@ -308,11 +453,70 @@ public sealed class CustomToolEditor
     }
 
     /// <summary>Applies <paramref name="change"/> and says whether the profile's JSON is different afterwards.</summary>
-    private static bool Changes(Profile profile, Action<Profile> change)
+    internal static bool Changes(Profile profile, Action<Profile> change)
     {
         var before = ProfileEditing.Snapshot(profile);
         change(profile);
         return ProfileEditing.Snapshot(profile) != before;
+    }
+
+    /// <summary>
+    /// Sorts the profiles for an edit or remove of <paramref name="link"/> (see <see cref="Plan"/>):
+    /// each target, with the saved profile to change for <see cref="CustomToolTargetState.Write"/>.
+    /// </summary>
+    internal static List<(CustomToolTarget Target, Profile? Saved)> Classify(
+        string link, IReadOnlyList<ProfileEntry> saved, IEnumerable<(string Path, Exception Error)> unread, Profile? working)
+    {
+        var list = new List<(CustomToolTarget, Profile?)>();
+        foreach (var (path, error) in unread)
+            list.Add((new CustomToolTarget(Path.GetFileNameWithoutExtension(path), null, Path.GetFileName(path),
+                CustomToolTargetState.Unreadable, "Could not be read, so it was not checked: " + error.Message, false), null));
+
+        // Files sharing one id: saving one would delete the others (ProfileStore.Save), so none is written.
+        var shared = saved
+            .Where(e => !string.IsNullOrEmpty(e.Profile.Id))
+            .GroupBy(e => e.Profile.Id!, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.FileName).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
+
+        var workingId = string.IsNullOrEmpty(working?.Id) ? null : working!.Id;
+        var holders = saved
+            .Where(e => CustomTools.Holds(e.Profile, link))
+            .OrderBy(e => e.Profile.ProfileName ?? "", StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.FileName, StringComparer.Ordinal);
+        var reportedIds = new HashSet<string>(StringComparer.Ordinal);
+        var openWritten = false;
+        foreach (var entry in holders)
+        {
+            var profile = entry.Profile;
+            var name = profile.ProfileName ?? "";
+            if (string.IsNullOrEmpty(profile.Id))
+            {
+                list.Add((new CustomToolTarget(name, null, entry.FileName, CustomToolTargetState.NoId,
+                    $"\"{name}\" is a legacy profile with no id, so it was not changed. Open it in the Builder and save it once to give it an id.", false), null));
+                continue;
+            }
+            var isOpen = profile.Id == workingId;
+            if (shared.TryGetValue(profile.Id, out var files))
+            {
+                if (!reportedIds.Add(profile.Id)) continue;
+                var message = $"{files.Count} files share this profile's id ({string.Join(", ", files)}), so none was changed. Remove the stale copy, then try again.";
+                foreach (var file in files)
+                {
+                    var other = saved.First(e => e.FileName == file).Profile;
+                    list.Add((new CustomToolTarget(other.ProfileName ?? "", profile.Id, file, CustomToolTargetState.SharedId, message, isOpen), null));
+                }
+                continue;
+            }
+            openWritten |= isOpen;
+            list.Add((new CustomToolTarget(name, profile.Id, entry.FileName, CustomToolTargetState.Write, null, isOpen), profile));
+        }
+
+        // The open profile's working copy changes in memory whenever it holds the tool; it is its own
+        // entry unless its saved file is already listed as written.
+        if (working is not null && !openWritten && CustomTools.Holds(working, link))
+            list.Add((new CustomToolTarget(working.ProfileName ?? "", workingId, "", CustomToolTargetState.WorkingCopy, null, true), null));
+        return list;
     }
 
     private CustomToolUpdate Apply(string link, Action<Profile> change, Profile? working, string? activeId, string verb)
@@ -326,39 +530,12 @@ public sealed class CustomToolEditor
         }
 
         var saved = Read(out var unread);
-        foreach (var (path, error) in unread)
-            Fail(Path.GetFileNameWithoutExtension(path), null, Path.GetFileName(path), "Could not be read, so it was not checked: " + error.Message);
-
-        // Files sharing one id: saving one would delete the others (ProfileStore.Save), so none is written.
-        var shared = saved
-            .Where(e => !string.IsNullOrEmpty(e.Profile.Id))
-            .GroupBy(e => e.Profile.Id!, StringComparer.Ordinal)
-            .Where(g => g.Count() > 1)
-            .ToDictionary(g => g.Key, g => g.Select(e => e.FileName).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
-
-        var holders = saved
-            .Where(e => CustomTools.Holds(e.Profile, link))
-            .OrderBy(e => e.Profile.ProfileName ?? "", StringComparer.OrdinalIgnoreCase)
-            .ThenBy(e => e.FileName, StringComparer.Ordinal);
-        var reportedIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var entry in holders)
+        foreach (var (target, profile) in Classify(link, saved, unread, working))
         {
-            var profile = entry.Profile;
-            var name = profile.ProfileName ?? "";
-            if (string.IsNullOrEmpty(profile.Id))
+            if (target.State == CustomToolTargetState.WorkingCopy) continue; // below
+            if (target.State != CustomToolTargetState.Write || profile is null)
             {
-                Fail(name, null, entry.FileName, $"\"{name}\" is a legacy profile with no id, so it was not changed. Open it in the Builder and save it once to give it an id.");
-                continue;
-            }
-            if (shared.TryGetValue(profile.Id, out var files))
-            {
-                if (!reportedIds.Add(profile.Id)) continue;
-                var message = $"{files.Count} files share this profile's id ({string.Join(", ", files)}), so none was changed. Remove the stale copy, then try again.";
-                foreach (var file in files)
-                {
-                    var other = saved.First(e => e.FileName == file).Profile;
-                    Fail(other.ProfileName ?? "", profile.Id, file, message);
-                }
+                Fail(target.ProfileName, target.ProfileId, target.FileName, target.Reason ?? "unknown");
                 continue;
             }
             try
@@ -366,21 +543,94 @@ public sealed class CustomToolEditor
                 if (!Changes(profile, change)) continue;
                 var outcome = _saver.Save(profile);
                 if (outcome.Ok)
-                    written.Add(new CustomToolWrite(name, outcome.Saved?.Id ?? profile.Id, outcome.FileName ?? entry.FileName));
+                    written.Add(new CustomToolWrite(target.ProfileName, outcome.Saved?.Id ?? profile.Id, outcome.FileName ?? target.FileName));
                 else
-                    Fail(name, profile.Id, entry.FileName, outcome.Error ?? "unknown");
+                    Fail(target.ProfileName, profile.Id, target.FileName, outcome.Error ?? "unknown");
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "Builder.custom_tools: {Verb} failed for {Name} ({File})", verb, name, entry.FileName);
-                failed.Add(new CustomToolFailure(name, profile.Id, entry.FileName, ex.Message));
+                _log.Error(ex, "Builder.custom_tools: {Verb} failed for {Name} ({File})", verb, target.ProfileName, target.FileName);
+                failed.Add(new CustomToolFailure(target.ProfileName, profile.Id, target.FileName, ex.Message));
             }
         }
 
-        var workingChanged = working is not null && Changes(working, change);
+        // The working copy: a change that throws is reported, never thrown (F8). Whatever it did
+        // before it threw still counts as a change, so the editor redraws and reads as unsaved.
+        var workingChanged = false;
+        if (working is not null)
+        {
+            var before = ProfileEditing.Snapshot(working);
+            try
+            {
+                change(working);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "Builder.custom_tools: {Verb} failed for the open profile {Name}", verb, working.ProfileName);
+                failed.Add(new CustomToolFailure(working.ProfileName ?? "", working.Id, "", "The open profile could not be changed: " + ex.Message));
+            }
+            workingChanged = ProfileEditing.Snapshot(working) != before;
+        }
         var activeChanged = !string.IsNullOrEmpty(activeId) && written.Any(w => w.ProfileId == activeId);
         _log.Information("Builder.custom_tools: {Verb} {Link}: written={Written} failed={Failed} working={Working} active={Active}",
             verb, link, written.Count, failed.Count, workingChanged, activeChanged);
         return new CustomToolUpdate(written, failed, workingChanged, activeChanged);
+    }
+}
+
+/// <summary>
+/// The profiles folder as read for one confirmation (<see cref="CustomToolEditor.Preview"/>): the
+/// classification Edit and Remove run, and the exact plan of an edit, worked out by a dry run of the
+/// same <see cref="CustomTools.ApplyEdit"/> on copies, with the same snapshot compare Apply uses to
+/// decide what to write (WU4 delta review F8).
+/// </summary>
+public sealed class CustomToolPreview
+{
+    /// <summary>Why a holder the edit leaves as it is does not count.</summary>
+    public const string UnchangedReason = "Nothing to change: its names and icons are its own.";
+
+    private readonly IReadOnlyList<(CustomToolTarget Target, Profile? Saved)> _classified;
+    private readonly Profile? _working;
+
+    internal CustomToolPreview(IReadOnlyList<(CustomToolTarget Target, Profile? Saved)> classified, Profile? working)
+    {
+        _classified = classified;
+        _working = working;
+        Plan = new CustomToolPlan(classified.Select(t => t.Target).ToList());
+    }
+
+    /// <summary>Every holder (and refusal), as Remove everywhere reaches them.</summary>
+    public CustomToolPlan Plan { get; }
+
+    /// <summary>
+    /// What an edit everywhere would write, exactly: a holder whose file the edit would leave as it is
+    /// is <see cref="CustomToolTargetState.Unchanged"/>; the open profile counts once, as
+    /// <see cref="CustomToolTargetState.Write"/> when its file changes, as
+    /// <see cref="CustomToolTargetState.WorkingCopy"/> when only its working copy does. Refusals stay.
+    /// An edit that fails <see cref="CustomTools.Check"/> gets <see cref="Plan"/>.
+    /// </summary>
+    public CustomToolPlan PlanEdit(CustomTool tool, CustomToolEdit edit)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        ArgumentNullException.ThrowIfNull(edit);
+        if (CustomTools.Check(edit) is not null) return Plan;
+        void Change(Profile p) => CustomTools.ApplyEdit(p, tool, edit);
+        var workingChanges = _working is not null && CustomToolEditor.Changes(ProfileEditing.Clone(_working), Change);
+        CustomToolTarget Unchanged(CustomToolTarget t) => t with { State = CustomToolTargetState.Unchanged, Reason = UnchangedReason };
+        var targets = _classified.Select(c =>
+        {
+            var t = c.Target;
+            switch (t.State)
+            {
+                case CustomToolTargetState.Write when c.Saved is not null:
+                    if (CustomToolEditor.Changes(ProfileEditing.Clone(c.Saved), Change)) return t;
+                    return t.IsOpen && workingChanges ? t with { State = CustomToolTargetState.WorkingCopy } : Unchanged(t);
+                case CustomToolTargetState.WorkingCopy:
+                    return workingChanges ? t : Unchanged(t);
+                default:
+                    return t;
+            }
+        }).ToList();
+        return new CustomToolPlan(targets);
     }
 }

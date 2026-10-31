@@ -745,4 +745,120 @@ public static class UiStrings
     public static string Builder_StackPickInStack => Get(nameof(Builder_StackPickInStack));
 
     public static string Builder_StackPickReturns => Get(nameof(Builder_StackPickReturns));
+
+    // Custom Tools: the Commands pane's list, + Create new and the Custom Tool dialog (feature #18, spec #19, WU4).
+
+    public static string Builder_CreateNew => Get(nameof(Builder_CreateNew));
+
+    public static string Builder_CreateNewTip => Get(nameof(Builder_CreateNewTip));
+
+    public static string Builder_CustomTools => Get(nameof(Builder_CustomTools));
+
+    public static string Builder_CustomToolsNote => Get(nameof(Builder_CustomToolsNote));
+
+    public static string Builder_CustomToolsToggleTip => Get(nameof(Builder_CustomToolsToggleTip));
+
+    public static string Builder_KindUrl => Get(nameof(Builder_KindUrl));
+
+    public static string Builder_KindEmail => Get(nameof(Builder_KindEmail));
+
+    public static string Builder_CustomToolUsedIn(object? arg0) => Format(nameof(Builder_CustomToolUsedIn), arg0);
+
+    public static string Builder_EditToolEverywhereTip => Get(nameof(Builder_EditToolEverywhereTip));
+
+    public static string Builder_RemoveToolEverywhereTip => Get(nameof(Builder_RemoveToolEverywhereTip));
+
+    public static string Builder_CreateToolTitle => Get(nameof(Builder_CreateToolTitle));
+
+    public static string Builder_EditToolTitle => Get(nameof(Builder_EditToolTitle));
+
+    public static string Builder_ToolKindUrlOption => Get(nameof(Builder_ToolKindUrlOption));
+
+    public static string Builder_ToolKindEmailOption => Get(nameof(Builder_ToolKindEmailOption));
+
+    public static string Builder_ToolLabel => Get(nameof(Builder_ToolLabel));
+
+    public static string Builder_ToolLabelPlaceholder => Get(nameof(Builder_ToolLabelPlaceholder));
+
+    public static string Builder_ToolAddress => Get(nameof(Builder_ToolAddress));
+
+    public static string Builder_ToolEmailAddress => Get(nameof(Builder_ToolEmailAddress));
+
+    public static string Builder_ToolAddressPlaceholder => Get(nameof(Builder_ToolAddressPlaceholder));
+
+    public static string Builder_ToolEmailPlaceholder => Get(nameof(Builder_ToolEmailPlaceholder));
+
+    public static string Builder_ToolOpens(object? arg0) => Format(nameof(Builder_ToolOpens), arg0);
+
+    public static string Builder_ToolIcon => Get(nameof(Builder_ToolIcon));
+
+    public static string Builder_ToolNoIcon => Get(nameof(Builder_ToolNoIcon));
+
+    public static string Builder_Create => Get(nameof(Builder_Create));
+
+    public static string Builder_ToolLabelRequired => Get(nameof(Builder_ToolLabelRequired));
+
+    public static string Builder_ToolAddressRequired => Get(nameof(Builder_ToolAddressRequired));
+
+    public static string Builder_ToolCreateNote(object? arg0) => Format(nameof(Builder_ToolCreateNote), arg0);
+
+    public static string Builder_ToolEditWarning(object? arg0) => Format(nameof(Builder_ToolEditWarning), arg0);
+
+    public static string Builder_ToolNotChanged => Get(nameof(Builder_ToolNotChanged));
+
+    public static string Builder_ProfileCountOne => Get(nameof(Builder_ProfileCountOne));
+
+    public static string Builder_ProfileCountMany(object? arg0) => Format(nameof(Builder_ProfileCountMany), arg0);
+
+    public static string Builder_UpdateIn(object? arg0) => Format(nameof(Builder_UpdateIn), arg0);
+
+    public static string Builder_RemoveFrom(object? arg0) => Format(nameof(Builder_RemoveFrom), arg0);
+
+    public static string Builder_ToolTargetUnsaved(object? arg0) => Format(nameof(Builder_ToolTargetUnsaved), arg0);
+
+    public static string Builder_ToolRefusedNoId(object? arg0) => Format(nameof(Builder_ToolRefusedNoId), arg0);
+
+    public static string Builder_ToolRefusedSharedId(object? arg0, object? arg1) => Format(nameof(Builder_ToolRefusedSharedId), arg0, arg1);
+
+    public static string Builder_ToolRefusedUnreadable(object? arg0) => Format(nameof(Builder_ToolRefusedUnreadable), arg0);
+
+    public static string Builder_RemoveToolTitle => Get(nameof(Builder_RemoveToolTitle));
+
+    public static string Builder_RemoveToolText(object? arg0, object? arg1) => Format(nameof(Builder_RemoveToolText), arg0, arg1);
+
+    public static string Builder_ToolNothingToChange => Get(nameof(Builder_ToolNothingToChange));
+
+    public static string Builder_AddPanelFirst => Get(nameof(Builder_AddPanelFirst));
+
+    public static string Builder_ToolAdded(object? arg0) => Format(nameof(Builder_ToolAdded), arg0);
+
+    public static string Builder_ToolAddedExisting => Get(nameof(Builder_ToolAddedExisting));
+
+    public static string Builder_ToolUpdated(object? arg0) => Format(nameof(Builder_ToolUpdated), arg0);
+
+    public static string Builder_ToolRemoved(object? arg0) => Format(nameof(Builder_ToolRemoved), arg0);
+
+    public static string Builder_ToolRibbonReloaded => Get(nameof(Builder_ToolRibbonReloaded));
+
+    public static string Builder_ToolReloadFailed => Get(nameof(Builder_ToolReloadFailed));
+
+    public static string Builder_ToolChangeFailed => Get(nameof(Builder_ToolChangeFailed));
+
+    public static string Builder_ToolsPartialTitle => Get(nameof(Builder_ToolsPartialTitle));
+
+    public static string Builder_ToolsPartialText(object? arg0) => Format(nameof(Builder_ToolsPartialText), arg0);
+
+    public static string Builder_ToolFailedLine(object? arg0, object? arg1, object? arg2) => Format(nameof(Builder_ToolFailedLine), arg0, arg1, arg2);
+
+    public static string Builder_ToolNotAnEmail => Get(nameof(Builder_ToolNotAnEmail));
+
+    public static string Builder_ToolTargetOpenOnly(object? arg0) => Format(nameof(Builder_ToolTargetOpenOnly), arg0);
+
+    public static string Builder_ToolTargetFile(object? arg0, object? arg1) => Format(nameof(Builder_ToolTargetFile), arg0, arg1);
+
+    public static string Builder_ToolNothingYet => Get(nameof(Builder_ToolNothingYet));
+
+    public static string Builder_ToolUnchanged(object? arg0) => Format(nameof(Builder_ToolUnchanged), arg0);
+
+    public static string Builder_Update => Get(nameof(Builder_Update));
 }

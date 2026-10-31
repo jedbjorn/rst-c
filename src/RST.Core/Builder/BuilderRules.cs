@@ -1,11 +1,12 @@
 // rst-c's own (not vendored): the Builder's small rules (spec #16, WU4), ported from
 // profile_builder.html: shortId (1936-1940), addPanel's defaults (1943-1951), the slot shapes of
-// addToolToSelectedPanel (1974-1986) and the URL button editor (2170-2209), normalizeUrl
+// addToolToSelectedPanel (1974-1986), normalizeUrl
 // (2214-2225, the same rule as Core's UrlNormalizer), normalizeHex (2230-2237).
 // Behavior and text are unchanged. Feature #18 (WU3) replaces the card's "N slot(s)" count and the
 // Pick-icon button's label (3237-3256) with the tool count and the tiles' source line and tooltip.
 // The RST Presets and Junk Cleanup summaries went with the Properties pane (feature #18, spec #19):
-// the Profile pane's tabs show the settings themselves.
+// the Profile pane's tabs show the settings themselves. The URL button editor's slot (UrlSlot) is
+// retired with it: Custom Tools' Create new makes URL and email tools (feature #18, WU4).
 
 using System.Text.RegularExpressions;
 using RST.Core.Profiles;
@@ -53,14 +54,6 @@ public static partial class BuilderRules
             SourcePanel = string.IsNullOrEmpty(command.SourcePanel) ? null : command.SourcePanel,
         };
     }
-
-    /// <summary>The URL button the inline editor adds: a tool slot whose command id is <c>URL:&lt;url&gt;</c>.</summary>
-    public static Slot UrlSlot(string label, string normalizedUrl) => new()
-    {
-        SlotType = "tool",
-        Name = label,
-        CommandId = UrlCommandPrefix + normalizedUrl,
-    };
 
     /// <summary>
     /// <c>normalizeUrl</c>: empty stays empty; a known scheme passes through; a bare e-mail address
@@ -110,13 +103,7 @@ public static partial class BuilderRules
     public static string SourceLine(Slot slot)
     {
         ArgumentNullException.ThrowIfNull(slot);
-        if (CustomTools.IsCustom(slot))
-        {
-            var link = CustomTools.LinkOf(slot);
-            var colon = link.IndexOf(':');
-            if (colon <= 0) return link;
-            return link[(colon + 1)..].TrimStart('/').TrimEnd('/');
-        }
+        if (CustomTools.IsCustom(slot)) return CustomTools.ShortLink(CustomTools.LinkOf(slot));
         var tab = slot.SourceTab ?? "";
         var panel = slot.SourcePanel ?? "";
         if (tab.Length > 0 && panel.Length > 0) return tab + " · " + panel;

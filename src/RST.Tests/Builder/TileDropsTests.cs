@@ -408,4 +408,26 @@ public class TileDropsTests
         TileDrops.SourceOf(BuilderDrag.FromPanel(0)).Should().BeNull();
         Shape(p).Should().Be("P0:A");
     }
+
+    [Fact]
+    public void A_Custom_Tools_row_drops_like_a_catalogue_command_with_a_fresh_slot_each_time()
+    {
+        var p = Make(["A", "B+C"], ["D"]);
+        var wiki = new CustomTool("https://wiki.example.com", "Wiki", "pack:book", CustomToolKind.Url, ["Arch"]);
+        var drag = BuilderDrag.FromCustomTool(wiki);
+        drag.IsNew.Should().BeTrue();
+        BuilderDrag.FromCatalog(Wall).IsNew.Should().BeTrue();
+        BuilderDrag.FromSlot(0, 0).IsNew.Should().BeFalse();
+
+        Drop(p, drag, Middle(0, 0)).Result.Should().Be(StackResult.Done, "onto a tool: a new stack");
+        Drop(p, drag, TileHit.On(0, 1, SW / 2, SW)).Result.Should().Be(StackResult.Done, "onto a stack: joins it");
+        TileDrops.Apply(p, drag, TileDrops.PlanCard(p, drag, 1)).Should().Be(StackResult.Done);
+        AssertConsistent(p);
+        Shape(p).Should().Be("P0:[A Wiki],[B C Wiki] | P1:D,Wiki");
+
+        var placed = p.Stacks.Values.Select(s => s.Tools.Last()).Append(p.Panels[1].Slots[1]).ToList();
+        placed.Should().OnlyHaveUniqueItems("every drop places its own slot").And.OnlyContain(s =>
+            s.CommandId == "URL:https://wiki.example.com" && s.BaseName == "Wiki" && s.IconFile == "pack:book");
+        TileDrops.PlanCard(p, new BuilderDrag(DragKind.CustomTool), 0).Should().Be(TileDrop.None, "a row drag names its tool");
+    }
 }

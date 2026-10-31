@@ -32,9 +32,13 @@ public sealed class FakeDialogs : IDialogService
     public void ShowMessage(string title, string message, string automationId = MessageDialog.MessageId) =>
         Messages.Add((title, message));
 
+    /// <summary>The items each confirm listed, in the order of <see cref="ConfirmCalls"/>.</summary>
+    public List<IReadOnlyList<string>> ConfirmItems { get; } = [];
+
     public bool Confirm(string title, string message, IReadOnlyList<string> items, string confirmText, bool danger, string automationId)
     {
         ConfirmCalls.Add((title, message, confirmText, danger, automationId));
+        ConfirmItems.Add(items);
         return ConfirmResult;
     }
 

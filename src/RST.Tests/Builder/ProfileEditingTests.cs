@@ -219,4 +219,19 @@ public sealed class ProfileEditingTests : IDisposable
 
         service.Export(p, Path.Combine(_dir, "missing", "x.zip")).Error.Should().StartWith("Write failed: ");
     }
+
+    [Fact]
+    public void A_snapshot_reads_back_as_the_profile_it_was_taken_of()
+    {
+        var p = ProfileEditing.NewProfile();
+        p.Id = "id-1";
+        p.ProfileName = "Arch";
+        p.Tab = "Studio";
+        p.Panels.Add(new Panel { Name = "Links", Color = "#4f8ef7", Slots = [new Slot { SlotType = "tool", Name = "Wiki", BaseName = "Wiki", CommandId = "URL:https://wiki.example.com" }, PanelStacks.StackSlot("S")] });
+        p.Stacks["S"] = new Stack { Tools = [new Slot { SlotType = "tool", Name = "A", CommandId = "A" }, new Slot { SlotType = "tool", Name = "B", CommandId = "B" }] };
+        var snapshot = ProfileEditing.Snapshot(p);
+        var back = ProfileEditing.FromSnapshot(snapshot);
+        back.Should().NotBeSameAs(p);
+        ProfileEditing.Snapshot(back).Should().Be(snapshot);
+    }
 }
