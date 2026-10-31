@@ -233,6 +233,56 @@ public sealed class RibbonScannerWalkTests
     });
 
     [Fact]
+    public void Ids_Revit_wont_let_add_ins_post_are_left_out_and_no_kept_id_moves() => Screenshots.RunSta(() =>
+    {
+        // SC-051 (decision #63): Text Types (the Annotate > Text arrow) resolves but PostCommand refuses
+        // it. Given the PostableCommand ids, the scan leaves it and its kind out on every tab.
+        var postable = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "ID_STRUCTURAL_SETTINGS", "ID_OBJECTS_BEAM", "ID_TEXT", "ID_SETTINGS_MATERIALS", "ID_SETTINGS_OBJECTSTYLES",
+            "ID_SETTINGS_SNAPPING", "ID_SETTINGS_LINE_STYLES", "ID_SETTINGS_PENS", "ID_SETTINGS_ANNOTATIONS_LEADERS",
+            "ID_VIEWTAGSTYLES_SECTIONTAGS", "ID_SETTINGS_HALFTONE", "ID_THIN_LINES", "ID_VIEW_TAB",
+            "ID_BROWSER_ORGANIZATION", "ID_KEYBOARD_SHORTCUT_DIALOG",
+        };
+        var structure = Tab("Structure",
+            Panel("Structure", Button("ID_STRUCTURAL_SETTINGS", "Structural Settings"), Button("ID_OBJECTS_BEAM", "Beam")));
+        var settings = With(new RibbonSplitButton(), "HID_STRUCTURAL_SETTINGS_GENERAL_RibbonListButton", "Structural  Settings");
+        settings.Items.Add(Button("ID_STRUCTURAL_SETTINGS", "Structural Settings"));
+        var annotate = Tab("Annotate", Panel("Text", new RibbonButton { Id = "ID_SETTINGS_TEXT", Name = "Text Types" }, Button("ID_TEXT", "Text")));
+        var addIns = Tab("Add-Ins", Panel("Acme", null, Button("CustomCtrl_%CustomCtrl_%Add-Ins%Acme%Go", "Go")));
+        var counts = new RibbonScanCounts();
+
+        var commands = RibbonScanner.EnumerateTabs(
+            new[] { structure, annotate, Manage(), View(), MassingAndSite(), addIns, Tab("Manage", Panel("Settings", null, settings)) },
+            _ => true, counts, postable.Contains).ToList();
+        var ids = commands.Select(c => c.Id).ToList();
+
+        ids.Should().NotContain(new[]
+        {
+            "ID_SETTINGS_TEXT", "ID_GRAPHIC_DISPLAY_OPTIONS", "ID_SITE_SETTINGS",       // dialog launchers
+            "HID_APPLICATION_ELEMENTS_RibbonListButton",                                // a checklist header
+            "ID_SHOW_MASS", "ID_INPLACE_MASS",                                          // stack items
+        });
+        ids.Should().Contain(new[]
+        {
+            "ID_SETTINGS_LINE_STYLES", "ID_KEYBOARD_SHORTCUT_DIALOG", "ID_BROWSER_ORGANIZATION",
+            "ID_STRUCTURAL_SETTINGS", "ID_TEXT", "CustomCtrl_%CustomCtrl_%Add-Ins%Acme%Go",
+        });
+        var kept = commands.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        kept["ID_STRUCTURAL_SETTINGS"].SourceTab.Should().Be("Manage", "the Settings tools stay on Manage > Settings");
+        kept["ID_SETTINGS_LINE_STYLES"].SourceTab.Should().Be("Manage");
+        kept["ID_SETTINGS_LINE_STYLES"].SourcePanel.Should().Be("Settings");
+        kept["ID_KEYBOARD_SHORTCUT_DIALOG"].SourceTab.Should().Be("View");
+        kept["ID_KEYBOARD_SHORTCUT_DIALOG"].SourcePanel.Should().Be("Windows");
+        counts.OutsidePostableCommand.Should().Be(6);
+        counts.NotPostableIds.Should().BeEquivalentTo(
+            "ID_SETTINGS_TEXT", "HID_APPLICATION_ELEMENTS_RibbonListButton", "ID_GRAPHIC_DISPLAY_OPTIONS",
+            "ID_SHOW_MASS", "ID_INPLACE_MASS", "ID_SITE_SETTINGS");
+        counts.Collected(RibbonContainerKind.DialogLauncher).Should().Be(1, "Structural Settings' launcher stays");
+        counts.CollectedTotal.Should().Be(commands.Count);
+    });
+
+    [Fact]
     public void An_add_in_radio_group_header_with_an_id_is_still_emitted() => Screenshots.RunSta(() =>
     {
         // Review B2: RibbonRadioButtonGroup is a RibbonButton, so the old walk emitted it.

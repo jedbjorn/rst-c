@@ -19,6 +19,7 @@ public partial class HealthWindow : Window
     public HealthWindow(HealthViewModel viewModel)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _junkFocus = new OverlayFocus(this);
         InitializeComponent();
         DarkTitleBar.Attach(this);
         DataContext = viewModel;
@@ -74,10 +75,22 @@ public partial class HealthWindow : Window
     private bool EscapeCloses =>
         !ViewModel.IsJunkOpen && ViewModel.CloseCommand.CanExecute(null) && !EscapeGuard.HasSomethingOpen(this);
 
-    /// <summary>The Junk modal takes the keyboard focus when it opens (the content behind it is disabled).</summary>
+    private readonly OverlayFocus _junkFocus;
+
+    /// <summary>
+    /// The Junk modal takes the keyboard focus when it opens (the content behind it is disabled). When it
+    /// closes, focus goes back where it was (Clean junk files…), or into the window when that cannot take
+    /// it, so Escape works on the next press (rc.3 VM finding F2, FocusReturn).
+    /// </summary>
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) => UiGuard.Run("Health window: focus the Junk modal", () =>
     {
-        if (e.PropertyName != nameof(HealthViewModel.IsJunkOpen) || !ViewModel.IsJunkOpen) return;
+        if (e.PropertyName != nameof(HealthViewModel.IsJunkOpen)) return;
+        if (!ViewModel.IsJunkOpen)
+        {
+            _junkFocus.Closed();
+            return;
+        }
+        _junkFocus.Opened();
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
             UiGuard.Run("Health window: focus the Junk modal", () => JunkCard.MoveFocus(new TraversalRequest(FocusNavigationDirection.First))));
     });

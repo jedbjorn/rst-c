@@ -245,6 +245,7 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 ## Notes & limits
 
 - The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means Revit's commands could not be read: restart Revit and open the Builder again (the RST log has the details).
+- The catalogue lists only tools that Revit lets an add-in run: Revit's own postable commands and add-in commands. Revit tools outside that set, such as Text Types (the arrow on Annotate › Text), are left out, and the set comes from the running Revit, so each Revit year gets its own. A profile saved with an earlier version keeps any such button where it is; clicking it says that Revit doesn't let add-ins run this command, and you can remove it in the Builder.
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
 - **Min RST version** (the `min_version` field) is informational: the Loader shows it on the profile's card and details ("Min RST"), but rst-c does not check or enforce it when a profile is loaded.

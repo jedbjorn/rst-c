@@ -37,7 +37,7 @@ public partial class IconPickerWindow : Window
     public static IconPickerOutcome Pick(Window owner, Func<Action<IconPickerOutcome>, IconPickerViewModel> create)
     {
         var window = new IconPickerWindow(create) { Owner = owner };
-        window.ShowDialog();
+        FocusReturn.ShowDialog(window); // focus goes back into the Custom Tool dialog (rc.3 VM finding F2)
         return window._outcome;
     }
 

@@ -5,7 +5,10 @@
 //      entries. Authoritative for displayName + Native origin tag, but
 //      carries no SourceTab/SourcePanel (PostableCommand is just an enum;
 //      tab/panel placement is what the ribbon decides).
-//   2. RibbonScanner         — live ribbon walk. For every button:
+//   2. RibbonScanner         — live ribbon walk, given the seed's ids so it
+//                              leaves out every button Revit won't let an
+//                              add-in post (SC-051: not a PostableCommand,
+//                              not an external command). For every button:
 //        - if Id is new        → add as a fresh entry (3rd-party content).
 //        - if Id is in seed    → ENRICH: copy SourceTab/SourcePanel onto
 //                                the existing entry. This is how Revit's
@@ -84,9 +87,11 @@ public sealed class CommandCatalog
         var byId = new Dictionary<string, ScannedCommand>();
 
         var builtinCount = 0;
+        var postableIds = new HashSet<string>(System.StringComparer.Ordinal);
         foreach (var c in BuiltinCommandScanner.Enumerate())
         {
             byId[c.Id] = c;
+            postableIds.Add(c.Id);
             builtinCount++;
         }
         Log.Information("BuiltinCommandScanner: {Count} commands", builtinCount);
@@ -94,7 +99,7 @@ public sealed class CommandCatalog
         var ribbonAdded = 0;
         var ribbonEnriched = 0;
         var ribbonRedundant = 0;
-        foreach (var c in RibbonScanner.Enumerate())
+        foreach (var c in RibbonScanner.Enumerate(postableIds))
         {
             if (byId.TryGetValue(c.Id, out var existing))
             {

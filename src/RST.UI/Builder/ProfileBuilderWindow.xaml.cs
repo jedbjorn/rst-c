@@ -45,6 +45,15 @@ public partial class ProfileBuilderWindow : Window
         {
             if (IsVisible) Close();
         });
+        // The icon picker overlay: when it closes, focus goes back to the icon that opened it (or into the
+        // window), so Escape works on the next press (rc.3 VM finding F2, FocusReturn).
+        _iconPickerFocus = new OverlayFocus(this);
+        model.PropertyChanged += (_, e) => UiGuard.Run("Builder window: focus after the icon picker", () =>
+        {
+            if (e.PropertyName != nameof(ProfileBuilderViewModel.IsIconPickerOpen)) return;
+            if (Model.IsIconPickerOpen) _iconPickerFocus.Opened();
+            else _iconPickerFocus.Closed();
+        });
         // The loaded profile's stack-repair toast waits for the first render, so its time runs while it shows.
         ContentRendered += (_, _) => UiGuard.Run("Builder window: boot toast", model.ShowBootToast);
         // A ContextMenu is not in the window's tree: it takes the view-model and its toggle directly.
@@ -71,6 +80,8 @@ public partial class ProfileBuilderWindow : Window
     }
 
     public ProfileBuilderViewModel Model { get; }
+
+    private readonly OverlayFocus _iconPickerFocus;
 
     protected override void OnSourceInitialized(EventArgs e)
     {
