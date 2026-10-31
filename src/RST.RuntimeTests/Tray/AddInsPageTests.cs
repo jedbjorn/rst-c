@@ -319,9 +319,10 @@ public class AddInsViewModelTests
         Assert.True(first.Disable);
         Assert.True(first.Plan!.HasChanges);
         Assert.True(UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.ProbeId)!.DisableUnusedAddins);
-        Assert.True(picker.NullsWritten > 0, "the picker lost its item when the list was read again, as WPF's does");
+        Assert.Equal(0, picker.NullsWritten); // the page lets the picker go of its item before the list is read again (SC-048)
         Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
         Assert.Same(vm.SelectedProfile, picker.Selected);
+        Assert.Same(vm.SelectedProfile, picker.Shown);
         Assert.True(vm.DisableUnused, "Disable unused add-ins after Apply");
 
         await vm.RefreshAsync(); // Refresh
@@ -860,8 +861,7 @@ public class AddInsPageScreenshotTests
             Assert.True(UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.ProbeId)!.DisableUnusedAddins);
             Assert.True(vm.DisableUnused, "the view-model's switch after Apply");
             Assert.True(page.DisableUnusedToggle.IsChecked, "the page's switch after Apply");
-            Assert.Same(vm.SelectedProfile, page.ProfilePicker.SelectedItem);
-            Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
+            AssertPickerShows(page, vm, "F16 Needs Probe", "after Apply");
             Screenshots.Save(WindowCapture.Content(window, PageSize), Name("applied-switch-kept", theme));
 
             vm.RefreshAsync().GetAwaiter().GetResult();
