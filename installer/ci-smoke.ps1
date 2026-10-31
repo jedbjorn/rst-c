@@ -354,10 +354,36 @@ function Show-TrayLog {
   }
   Write-Host '----'
 }
+# A tray log line (tray_*.log, shared by every tray) from pid $TrayPid since $Since holding $Text, within $Seconds.
+# Lines are "yyyy-MM-dd HH:mm:ss.fff LVL [pid] message" in local time; $Since keeps an earlier process with the same
+# pid out.
+function Wait-TrayLogLine([int]$TrayPid, [string]$Text, [datetime]$Since, [int]$Seconds) {
+  $from = $Since.AddSeconds(-1)
+  $deadline = (Get-Date).AddSeconds($Seconds)
+  do {
+    foreach ($f in @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' -ErrorAction SilentlyContinue)) {
+      foreach ($l in @(Get-Content $f.FullName -ErrorAction SilentlyContinue)) {
+        if ($l.Length -lt 23 -or -not $l.Contains(" [$TrayPid] ") -or -not $l.Contains($Text)) { continue }
+        $at = [datetime]::MinValue
+        if ([datetime]::TryParseExact($l.Substring(0, 23), 'yyyy-MM-dd HH:mm:ss.fff', [Globalization.CultureInfo]::InvariantCulture,
+                                      [Globalization.DateTimeStyles]::None, [ref]$at) -and $at -ge $from) { return $true }
+      }
+    }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $deadline)
+  return $false
+}
 # Single instance (AC1): a second launch exits 0 and the first, started hidden, shows its window.
+# Review N1 (PR #153): anchored on the first tray being up (its "starting" log line), not on its mutex, which it now takes
+# before anything else (SC-022): on a slow runner a cold tray can need 15 s and more from its mutex to that line.
 function Test-TraySingleInstance([string]$Label) {
   Seed-TraySettings
+  $since = Get-Date
   $first = Start-Tray @('--startup') "$Label first"
+  $up = Wait-TrayLogLine $first.Id "starting (pid $($first.Id), --startup, hidden)" $since 60
+  Write-Host "OBSERVE: [$Label] the first tray logged its start $([math]::Round(((Get-Date) - $since).TotalSeconds, 1)) s after it was launched"
+  if (-not $up) { Show-TrayLog }
+  Assert $up "[$Label] the first tray has started (its log), within 60 s"
   Start-Sleep -Seconds 2
   $first.Refresh()
   Assert ($first.MainWindowHandle -eq [IntPtr]::Zero) "[$Label] --startup starts hidden (no main window)"
@@ -367,7 +393,13 @@ function Test-TraySingleInstance([string]$Label) {
   Assert ($second.WaitForExit(30000)) "[$Label] a second launch exits"
   Assert ($second.ExitCode -eq 0) "[$Label] the second launch exits with 0 (got $($second.ExitCode))"
   Assert (-not $first.HasExited) "[$Label] the first tray is still running"
-  Assert (Wait-MainWindow $first 20) "[$Label] the second launch showed the first tray's window"
+  $asked = Get-Date
+  $signalled = Wait-TrayLogLine $first.Id 'another launch asked for the window' $since 15
+  $shown = $signalled -and (Wait-MainWindow $first 15)
+  Write-Host "OBSERVE: [$Label] the first tray's window opened $([math]::Round(((Get-Date) - $asked).TotalSeconds, 1)) s after the second launch exited"
+  if (-not $shown) { Show-TrayLog }
+  Assert $signalled "[$Label] the first tray got the second launch's signal (another launch asked for the window)"
+  Assert $shown "[$Label] the second launch showed the first tray's window"
   Assert ($first.MainWindowTitle -eq 'RST') "[$Label] the shown window is 'RST' (got '$($first.MainWindowTitle)')"
   Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 1) "[$Label] exactly one RST.Tray process"
 

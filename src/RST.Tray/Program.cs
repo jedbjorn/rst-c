@@ -9,7 +9,13 @@
 //                             new tray; refused unless run as the copy in %LocalAppData%\RST\Tray\updater\
 //
 // Exit code 0 in every normal case, including a second launch.
+//
+// SC-022: the single-instance mutex is the first thing a tray takes, before its log, settings, theme or WPF. Two
+// launches that meet (Restart Manager's restart and the updater's start, Revit's start and a sign-in) decide which
+// one is the tray before either does anything else, and the other exits at once; the time a launch spends as a
+// second RST.Tray.exe process is only the runtime's own start.
 
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Threading;
 using RST.Core.Tray;
@@ -24,35 +30,42 @@ internal static class Program
     public static int Main(string[] argv)
     {
         var args = TrayArguments.Parse(argv);
-        TrayLog.Configure();
+
+        // The updater copy (F17 WU4): installs RST.msi and exits. It takes the tray's mutex its own way (TrayInstanceClaim,
+        // while files are replaced), shows no window and never registers with Restart Manager.
+        if (args.IsApply) return RunUpdater(args);
+
+        // The single instance, before any other work (SC-022). A launch that finds a tray exits right after logging so.
+        var notes = new List<string>();
+        SingleInstance? instance = null;
+        Exception? claimFailure = null;
         try
         {
-            // The updater copy (F17 WU4): installs RST.msi and exits. It takes no mutex, shows no window and never
-            // registers with Restart Manager, so the tray it starts afterwards is the only tray.
-            if (args.IsApply) return RST.Tray.Updates.Updater.Run(args);
+            instance = SingleInstance.TryClaim(SingleInstance.CurrentUserSid(), signalFirst: !args.StartHidden, log: notes.Add);
+        }
+        catch (Exception ex)
+        {
+            claimFailure = ex;
+        }
 
-            string sid;
-            SingleInstance? instance;
+        using (instance)
+        {
+            TrayLog.Configure();
             try
             {
-                sid = SingleInstance.CurrentUserSid();
-                instance = SingleInstance.TryClaim(sid, signalFirst: !args.StartHidden, log: m => Log.Warning("{Message}", m));
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "single-instance check failed; not starting");
-                return 1;
-            }
+                foreach (var note in notes) Log.Warning("{Message}", note);
+                if (claimFailure is not null)
+                {
+                    Log.Error(claimFailure, "single-instance check failed; not starting");
+                    return 1;
+                }
+                if (instance is null)
+                {
+                    Log.Information("RST tray already running for this user (pid {Pid} exits){Signal}", Environment.ProcessId,
+                        args.StartHidden ? "" : "; asked it to show its window");
+                    return 0;
+                }
 
-            if (instance is null)
-            {
-                Log.Information("RST tray already running for this user (pid {Pid} exits){Signal}", Environment.ProcessId,
-                    args.StartHidden ? "" : "; asked it to show its window");
-                return 0;
-            }
-
-            using (instance)
-            {
                 foreach (var unknown in args.Unknown) Log.Warning("ignored argument {Argument}", unknown);
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 app.DispatcherUnhandledException += OnUnhandled;
@@ -62,10 +75,28 @@ internal static class Program
                 Log.Information("RST tray exited ({Code}; {Reason})", code, host.ExitReason);
                 return code;
             }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "RST tray failed");
+                return 1;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
+        }
+    }
+
+    private static int RunUpdater(TrayArguments args)
+    {
+        TrayLog.Configure();
+        try
+        {
+            return RST.Tray.Updates.Updater.Run(args);
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "RST tray failed");
+            Log.Fatal(ex, "RST updater failed");
             return 1;
         }
         finally
