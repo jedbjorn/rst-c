@@ -420,7 +420,14 @@ public sealed class InstallCoordinator : IDisposable
         }
         finally
         {
-            lock (_gate) _running.Remove(product.Id);
+            TaskCompletionSource changed;
+            lock (_gate)
+            {
+                _running.Remove(product.Id);
+                changed = _changed;
+                _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            changed.TrySetResult(); // wake a hand-off waiting for the registered request (SC-017 DN1)
             cts.Dispose();
         }
     }
@@ -570,9 +577,15 @@ public sealed class InstallCoordinator : IDisposable
                     return;
                 }
                 var nowVersion = Highest(now)?.Version;
-                var newer = reinstall && now.Count > 0
-                    ? new CheckResult(InstallProblem.NotNewer, $"{product.Name} is installed again ({Highest(now)!.VersionText})")
-                    : InstallChecks.Newer(version, nowVersion);
+                if (reinstall && now.Count > 0)
+                {
+                    // It came back while we waited: match the pre-download path (SC-017 DN6).
+                    _log($"install: {product.Name} is installed again ({Highest(now)!.VersionText}); no reinstall needed");
+                    InstallCache.ClearFailedUpgrade(_paths.CacheRoot, product.Id, _log);
+                    Set(product, InstallProgress.Idle);
+                    return;
+                }
+                var newer = InstallChecks.Newer(version, nowVersion);
                 if (!newer.Passed)
                 {
                     Refuse(product, version, newer.Problem, newer.Detail, previous);
@@ -653,12 +666,13 @@ public sealed class InstallCoordinator : IDisposable
             var handedOff = false;
             try
             {
+                if (RevitRunning) continue;
                 lock (_gate)
                 {
-                    if (OthersBusyLocked(product.Id)) continue; // one started meanwhile: let it finish first
+                    // A click during the process listing must finish before we quit (SC-017 DN1).
+                    if (OthersBusyLocked(product.Id)) continue;
+                    _handingOff = true; // RunAsync refuses new requests under this same gate
                 }
-                if (RevitRunning) continue;
-                lock (_gate) _handingOff = true;
                 Set(product, new InstallProgress(InstallPhase.HandingOff, version));
                 var why = _self.Start(package.Path);
                 if (why is null)
@@ -723,7 +737,8 @@ public sealed class InstallCoordinator : IDisposable
     }
 
     private bool OthersBusyLocked(string productId) =>
-        _progress.Any(p => p.Key != productId && p.Value.IsBusy);
+        // Include the interval between registration and the first progress notification (SC-017 DN1).
+        _running.Keys.Any(id => id != productId) || _progress.Any(p => p.Key != productId && p.Value.IsBusy);
 
     private static InstalledProduct? Highest(IReadOnlyList<InstalledProduct> found) =>
         found.OrderByDescending(p => p.Version ?? new ReleaseVersion(-1, 0, 0)).FirstOrDefault();
