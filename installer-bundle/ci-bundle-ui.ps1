@@ -257,6 +257,23 @@ Add-Type -Namespace RstCi -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc proc, IntPtr lParam);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder name, int max);
+// The process's visible message box (class #32770). Process.MainWindowHandle skips owned windows, and the box is owned.
+public static IntPtr FindDialog(int processId) {
+  IntPtr found = IntPtr.Zero;
+  EnumWindows(delegate(IntPtr h, IntPtr l) {
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    if (pid != (uint)processId || !IsWindowVisible(h)) return true;
+    System.Text.StringBuilder cls = new System.Text.StringBuilder(32); GetClassName(h, cls, 32);
+    if (cls.ToString() != "#32770") return true;
+    found = h; return false;
+  }, IntPtr.Zero);
+  return found;
+}
 '@
 $userCode = '{AF0331FC-5280-492A-94BD-95EDF108BE74}'
 $machineCode = '{79C25959-C28A-4ED8-8984-85ED525476C3}'
@@ -279,8 +296,11 @@ try {
   $deadline = (Get-Date).AddSeconds(300)
   $box = [IntPtr]::Zero
   while ($box -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) {
-    $h = Get-Process -Name 'RST.RemoveUserRst' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-    if ($h) { $box = $h.MainWindowHandle } else { Start-Sleep -Milliseconds 500 }
+    foreach ($h in @(Get-Process -Name 'RST.RemoveUserRst' -ErrorAction SilentlyContinue)) {
+      $d = [RstCi.Win]::FindDialog($h.Id)
+      if ($d -ne [IntPtr]::Zero) { $box = $d; break }
+    }
+    if ($box -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 500 }
   }
   Assert ($box -ne [IntPtr]::Zero) '(6) the helper shows its "Revit is running" box'
   Start-Sleep -Seconds 2
