@@ -247,7 +247,7 @@ public sealed class HealthService : IHealthService
     }
 
     /// <summary>The active profile's cleanup targets, or the defaults when no profile is loaded or it predates RST-031.</summary>
-    private static List<CleanupTarget> ResolveActiveTargets()
+    internal static List<CleanupTarget> ResolveActiveTargets()
     {
         try
         {

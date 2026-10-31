@@ -119,9 +119,10 @@ internal static class FocusReturn
 /// <summary>
 /// An in-window modal overlay's focus (the Builder's icon picker, Health's Junk modal): where focus was
 /// when it opened, and focus back there once it closes. The window calls <see cref="Opened"/> and
-/// <see cref="Closed"/> as the overlay's open flag changes.
+/// <see cref="Closed"/> as the overlay's open flag changes. Public for the tray's Health → Device page,
+/// which hosts the same Junk modal.
 /// </summary>
-internal sealed class OverlayFocus(Window window)
+public sealed class OverlayFocus(Window window)
 {
     private IInputElement? _previous;
 

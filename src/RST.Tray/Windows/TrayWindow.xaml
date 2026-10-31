@@ -1,7 +1,8 @@
 <!--
     rst-c's own (not vendored). The RST tray's one window (spec #20 §1; F17 WU1), on RST.UI's family kit
-    (Theme.xaml, the Health window's header-tabs layout): Updates, Apps, Add-ins and Settings / About. Updates and
-    Apps are F17 WU3's (UpdatesViewModel), with WU4's installs; Add-ins is F17 WU2's (AddInsView, AddInsViewModel).
+    (Theme.xaml, the Health window's header-tabs layout): Updates, Apps, Add-ins, Health and Settings / About. Updates and
+    Apps are F17 WU3's (UpdatesViewModel), with WU4's installs; Add-ins is F17 WU2's (AddInsView, AddInsViewModel);
+    Health is spec #25's (HealthPageView, TrayHealthViewModel).
     The view-model is TrayViewModel.
 -->
 <Window x:Class="RST.Tray.Windows.TrayWindow" x:ClassModifier="internal"
@@ -147,6 +148,7 @@
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Updates}" AutomationProperties.AutomationId="Tray.TabUpdates" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Apps}" AutomationProperties.AutomationId="Tray.TabApps" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_AddIns}" AutomationProperties.AutomationId="Tray.TabAddIns" />
+                    <TabItem Header="{x:Static res:TrayStrings.Tab_Health}" AutomationProperties.AutomationId="Tray.TabHealth" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Settings}" AutomationProperties.AutomationId="Tray.TabSettings" />
                 </TabControl>
             </StackPanel>
@@ -316,6 +318,11 @@
                       Visibility="{Binding IsAddInsPage, Converter={StaticResource BoolToVisible}}">
             <local:AddInsView x:Name="AddInsView" DataContext="{Binding AddIns}" />
         </ScrollViewer>
+
+        <!-- Health (spec #25, F19 WU2): the Device and Models sub-tabs (HealthPageView). Not in a Page scroller: each
+             sub-tab scrolls itself, under the Junk modal and the overlays that cover the page. -->
+        <local:HealthPageView x:Name="HealthPage" Grid.Row="1" DataContext="{Binding Health}"
+                              Visibility="{Binding DataContext.IsHealthPage, ElementName=Root, Converter={StaticResource BoolToVisible}}" />
 
         <!-- Settings / About. -->
         <ScrollViewer x:Name="SettingsPage" Grid.Row="1" Style="{StaticResource Page}"

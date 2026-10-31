@@ -1,0 +1,177 @@
+<!--
+    rst-c's own (not vendored). The Health snapshot's look, shared by the add-in's Health window and the tray's
+    Health → Device page (spec #25, decision #53: Device mirrors the add-in): the severity dot, a row's value
+    style, the row, the collapsible section (SectionExpander), the Junk dialog's target row and the Junk dialog's
+    content (title, the targets or the empty state, Cancel and Clean Selected). Its data is a HealthViewModel's.
+    Merge it after Theme.xaml.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:res="clr-namespace:RST.UI.Resources"
+                    xmlns:health="clr-namespace:RST.UI.Health"
+                    xmlns:core="clr-namespace:RST.Core.Health;assembly=RST.Core">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- A section's severity dot (the HTML's rst-section__dot classes). -->
+    <Style x:Key="SeverityDot" TargetType="Ellipse">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Margin" Value="0,0,10,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Fill" Value="{StaticResource MutedTextBrush}" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Ok}">
+                <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.WarnSoft}">
+                <Setter Property="Fill" Value="{StaticResource CautionTextBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Warn}">
+                <Setter Property="Fill" Value="{StaticResource WarningTextBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Danger}">
+                <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Dot}" Value="{x:Static core:HealthSeverity.Info}">
+                <Setter Property="Fill" Value="{StaticResource AccentForegroundBrush}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A row's value (rst-section__row-value): severity color, bold total, "—" muted and italic. -->
+    <Style x:Key="RowValue" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding ValueBold}" Value="True">
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.Ok}">
+                <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.WarnSoft}">
+                <Setter Property="Foreground" Value="{StaticResource CautionTextBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.Warn}">
+                <Setter Property="Foreground" Value="{StaticResource WarningTextBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding ValueSeverity}" Value="{x:Static core:HealthSeverity.Danger}">
+                <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="FontStyle" Value="Italic" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- One row: a 160 px label column, the value and its sub-lines; a divider above every row but the first. -->
+    <DataTemplate x:Key="RowTemplate" DataType="{x:Type health:HealthRow}">
+        <Border x:Name="Line" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Label}" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,12,0"
+                           VerticalAlignment="Top" TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}" />
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Value}" Style="{StaticResource RowValue}" AutomationProperties.AutomationId="Health.RowValue" />
+                    <ItemsControl ItemsSource="{Binding Subs}" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock health:HealthText.Runs="{Binding}" Foreground="{StaticResource MutedTextBrush}"
+                                           FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                <Setter TargetName="Line" Property="BorderThickness" Value="0" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- A collapsible section (collapsed by default): the dot and title in the header, the rows in the body. -->
+    <DataTemplate x:Key="SectionTemplate" DataType="{x:Type health:HealthSection}">
+        <Expander Style="{StaticResource SectionExpander}" Header="{Binding}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                  AutomationProperties.AutomationId="Health.Section">
+            <Expander.HeaderTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Style="{StaticResource SeverityDot}"
+                                 Visibility="{Binding HasDot, Converter={StaticResource BoolToVisible}}" />
+                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </DataTemplate>
+            </Expander.HeaderTemplate>
+            <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource RowTemplate}" Focusable="False" />
+        </Expander>
+    </DataTemplate>
+
+    <!-- A cleanup target in the Junk modal: name, path hint, toggle (on by default). -->
+    <DataTemplate x:Key="JunkRowTemplate" DataType="{x:Type health:JunkTargetItem}">
+        <Border x:Name="Line" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="0,10">
+            <DockPanel>
+                <CheckBox DockPanel.Dock="Right" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                          VerticalAlignment="Center" Margin="14,0,0,0"
+                          AutomationProperties.Name="{Binding DisplayName}" AutomationProperties.AutomationId="Health.JunkToggle" />
+                <StackPanel>
+                    <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding PathHint}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                <Setter TargetName="Line" Property="BorderThickness" Value="0" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- The Junk modal's content (the data is the HealthViewModel): the title, every target on by default or the
+         empty state, then Cancel and Clean Selected. The window around it supplies the scrim and the card. -->
+    <DataTemplate x:Key="JunkModalContent" DataType="{x:Type health:HealthViewModel}">
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Top">
+                <TextBlock Text="{x:Static res:UiStrings.Health_JunkTitle}" Style="{StaticResource HeadingText}" FontSize="14" />
+                <TextBlock Text="{x:Static res:UiStrings.Health_JunkSubtitle}" Foreground="{StaticResource MutedTextBrush}"
+                           TextWrapping="Wrap" Margin="0,4,0,12" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="{x:Static res:UiStrings.Health_JunkCancel}" Command="{Binding JunkCancelCommand}" MinWidth="88"
+                        AutomationProperties.AutomationId="Health.JunkCancel" />
+                <Button Content="{x:Static res:UiStrings.Health_JunkRun}" Command="{Binding JunkRunCommand}" Margin="8,0,0,0"
+                        Style="{StaticResource PrimaryButton}" AutomationProperties.AutomationId="Health.JunkRun" />
+            </StackPanel>
+            <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="420" Focusable="False"
+                              Visibility="{Binding HasJunkTargets, Converter={StaticResource BoolToVisible}}">
+                    <ItemsControl ItemsSource="{Binding JunkTargets}" ItemTemplate="{StaticResource JunkRowTemplate}" Focusable="False" />
+                </ScrollViewer>
+                <StackPanel Margin="0,10" Visibility="{Binding HasJunkTargets, Converter={StaticResource BoolToCollapsed}}"
+                            AutomationProperties.AutomationId="Health.JunkEmpty">
+                    <TextBlock Text="{x:Static res:UiStrings.Health_JunkEmptyTitle}" FontSize="13" />
+                    <TextBlock Text="{x:Static res:UiStrings.Health_JunkEmptyHint}" Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
+                </StackPanel>
+            </Grid>
+        </DockPanel>
+    </DataTemplate>
+
+    <!-- Scan System's content: the spinner while it runs, then "Scan System" or "Scanning…". -->
+    <DataTemplate x:Key="ScanButtonContent" DataType="{x:Type health:HealthViewModel}">
+        <StackPanel Orientation="Horizontal">
+            <ProgressBar Style="{StaticResource BusySpinner}" Foreground="{StaticResource OnAccentBrush}" Margin="0,0,8,0"
+                         Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisible}}" />
+            <TextBlock Text="{Binding ScanLabel}" VerticalAlignment="Center" />
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

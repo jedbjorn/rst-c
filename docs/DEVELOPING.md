@@ -378,6 +378,14 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
 - **Opening it:** `HealthLauncher.Show(ownerHwnd, context, telemetryToggled, liveSessionStartUtc)`, after
   `RevitThemeDetector.ApplyToWindows()`. Scan and Clean run off the UI thread (`HealthViewModelOptions.RunInBackground`);
   while either runs, every command and input is disabled.
+- **Shared with the tray** (spec #25, F19 WU2): the severity dot, the row and section templates, the Junk modal's content
+  and Scan System's content live in `Health/HealthResources.xaml`, which the Health window and the tray's Health → Device
+  page (`RST.Tray/Windows/HealthPageView`) both merge after Theme.xaml. The tray runs the same `HealthViewModel` over
+  `DeviceHealthService` with `HealthViewModelOptions.Scope = HealthScope.Tray`: `HealthReport` then swaps the Revit
+  section's rows for one row per installed Revit year (`HealthSnapshot.RevitInstalls`, written only to
+  `tray_health_scan.json`), and the Junk modal lists each `{revit-version}` target once per `Autodesk Revit YYYY`
+  folder found (`CleanupYears`, `CleanupPathResolver.ResolveEach`, `HealthCleaner.Run(CleanupPick…)`). The add-in's
+  window, rows and listing are unchanged.
 - **Screenshots** (`src/RST.RuntimeTests/Health/HealthWindowScreenshotTests`): `health-sections`, `health-empty`,
   `health-scanning`, `junk-modal`, `junk-modal-empty`, `health-cleaning`, `cleanup-result`, `activity-curves`, `activity-small`
   and `activity-sparse`, each `-light` and `-dark`. The sections and curve captures are 900 wide and as tall as

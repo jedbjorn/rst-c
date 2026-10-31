@@ -135,6 +135,7 @@ public class TrayWindowScreenshotTests
                 [TrayPage.Updates] = window.UpdatesPage,
                 [TrayPage.Apps] = window.AppsPage,
                 [TrayPage.AddIns] = window.AddInsPage,
+                [TrayPage.Health] = window.HealthPage,
                 [TrayPage.Settings] = window.SettingsPage,
             };
             foreach (var (p, element) in pages)
@@ -270,6 +271,9 @@ public class TrayViewModelTests
         var vm = new TrayViewModel(host, TrayPage.Updates);
         Assert.True(vm.IsUpdatesPage);
         vm.PageIndex = 3;
+        Assert.Equal(TrayPage.Health, vm.Page); // spec #25: Health sits between Add-ins and Settings
+        Assert.True(vm.IsHealthPage);
+        vm.PageIndex = 4;
         Assert.Equal(TrayPage.Settings, vm.Page);
         Assert.True(vm.IsSettingsPage);
         vm.PageIndex = 9;

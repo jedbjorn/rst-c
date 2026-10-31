@@ -50,8 +50,29 @@
   <data name="Tab_AddIns" xml:space="preserve">
     <value>Add-ins</value>
   </data>
+  <data name="Tab_Health" xml:space="preserve">
+    <value>Health</value>
+  </data>
   <data name="Tab_Settings" xml:space="preserve">
     <value>Settings</value>
+  </data>
+  <data name="Health_TabDevice" xml:space="preserve">
+    <value>Device</value>
+  </data>
+  <data name="Health_TabModels" xml:space="preserve">
+    <value>Models</value>
+  </data>
+  <data name="Health_DeviceHeading" xml:space="preserve">
+    <value>This PC</value>
+  </data>
+  <data name="Health_DeviceDescription" xml:space="preserve">
+    <value>The same snapshot as Health in Revit: hardware, display and network, the Revit versions installed, Windows, and the junk files Revit leaves behind. Revit doesn't need to be open. Nothing is sent anywhere.</value>
+  </data>
+  <data name="Health_ModelsHeading" xml:space="preserve">
+    <value>Models</value>
+  </data>
+  <data name="Health_ModelsPlaceholder" xml:space="preserve">
+    <value>Every model you've worked on, across your Revit versions, will be listed here.</value>
   </data>
   <data name="Updates_Heading" xml:space="preserve">
     <value>Updates</value>
