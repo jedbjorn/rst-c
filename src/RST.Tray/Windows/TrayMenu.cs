@@ -3,11 +3,13 @@
 // Theme.xaml, so it always matches the current theme. Opened at the icon's anchor point; it takes the
 // foreground (the classic notification-menu rule) so a click anywhere else dismisses it.
 
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using RST.Core.Logging;
 using RST.Tray.Resources;
 
 namespace RST.Tray.Windows;
@@ -56,12 +58,20 @@ internal static class TrayMenu
         menu.Placement = PlacementMode.AbsolutePoint;
         menu.HorizontalOffset = dips.X;
         menu.VerticalOffset = dips.Y;
-        _ = SetForegroundWindow(anchor.Handle);
+        // The notification-menu rule: the owner takes the foreground first, so the menu gets the input and a click
+        // anywhere else dismisses it. Explorer lets the icon's process do this while it handles the icon's message.
+        var anchorForeground = SetForegroundWindow(anchor.Handle);
+        var shown = Stopwatch.StartNew();
         menu.Opened += (_, _) =>
         {
-            if (PresentationSource.FromVisual(menu) is HwndSource popup) _ = SetForegroundWindow(popup.Handle);
+            var popupForeground = PresentationSource.FromVisual(menu) is HwndSource popup && SetForegroundWindow(popup.Handle);
             menu.Focus();
+            // SC-020: with the "menu requested" line, the tray log tells a menu that opened from one that never did.
+            Log.Information("tray menu opened at {X},{Y} (foreground: owner {Owner}, menu {Menu})",
+                Math.Round(dips.X), Math.Round(dips.Y), anchorForeground, popupForeground);
+            shown.Restart();
         };
+        menu.Closed += (_, _) => Log.Information("tray menu closed after {Ms} ms", shown.ElapsedMilliseconds);
         menu.IsOpen = true;
     }
 

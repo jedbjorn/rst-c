@@ -16,6 +16,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using RST.Core.Logging;
 
 namespace RST.Tray.Shell;
 
@@ -25,7 +26,8 @@ internal sealed class TrayIcon : IDisposable
     public const string WindowName = "RST.Tray";
 
     private const int IconId = 1;
-    private const int CallbackMessage = 0x8000 + 1; // WM_APP + 1
+    /// <summary>The icon's callback message (WM_APP + 1); internal for the tests, which send it as Explorer does.</summary>
+    internal const int CallbackMessage = 0x8000 + 1;
 
     private const int WM_CLOSE = 0x0010;
     private const int WM_QUERYENDSESSION = 0x0011;
@@ -209,8 +211,11 @@ internal sealed class TrayIcon : IDisposable
                     Activated?.Invoke(this, EventArgs.Empty);
                     break;
                 case WM_CONTEXTMENU:
-                    var w = wParam.ToInt64();
-                    MenuRequested?.Invoke(this, new Point((short)(w & 0xFFFF), (short)((w >> 16) & 0xFFFF)));
+                    // Right click, Shift+F10 or the menu key on the icon. Logged on arrival (SC-020), so a run where
+                    // no menu showed tells "the request never reached the tray" from "the menu did not open".
+                    var anchor = AnchorOf(wParam);
+                    Log.Information("tray icon: menu requested (right click or keyboard) at {X},{Y} screen pixels", anchor.X, anchor.Y);
+                    MenuRequested?.Invoke(this, anchor);
                     break;
                 case NIN_BALLOONUSERCLICK:
                     NotificationClicked?.Invoke(this, EventArgs.Empty);
@@ -251,6 +256,17 @@ internal sealed class TrayIcon : IDisposable
                 break;
         }
         return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// NOTIFYICON_VERSION_4's anchor point for NIN_SELECT, NIN_KEYSELECT and WM_CONTEXTMENU: x in the low word of
+    /// wParam and y in the high word, signed (GET_X_LPARAM / GET_Y_LPARAM), so a monitor left of or above the
+    /// primary gives negative values. Physical screen pixels.
+    /// </summary>
+    internal static Point AnchorOf(IntPtr wParam)
+    {
+        var w = wParam.ToInt64();
+        return new Point((short)(w & 0xFFFF), (short)((w >> 16) & 0xFFFF));
     }
 
     private static bool IsImmersiveColorSet(IntPtr lParam)
