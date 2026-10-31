@@ -348,25 +348,63 @@ public partial class ProfileBuilderWindow : Window
         e.Handled = first.Focus();
     }
 
-    /// <summary>On a focused Custom Tools row: ↑ ↓ move between rows (↓ past the last goes on into the tree), Delete removes it everywhere (asking first).</summary>
+    /// <summary>
+    /// On a focused Custom Tools row: ↑ ↓ move between rows (↑ on the first goes to Filter…, ↓ on the
+    /// last to the first catalogue node, not the row's own ✎: delta review N1); Delete removes it
+    /// everywhere (asking first), then focus goes to the next row, the previous one when it was the
+    /// last, or Filter… when the list is empty (delta review F10); a cancelled remove keeps it.
+    /// </summary>
     private void OnCustomToolKeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not Border { DataContext: CustomToolItemViewModel item } row) return;
+        var rows = CustomToolRows();
+        var at = rows.ToList().IndexOf(row);
         switch (e.Key)
         {
             case Key.Delete:
-                if (item.RemoveCommand.CanExecute(null)) item.RemoveCommand.Execute(null);
                 e.Handled = true;
+                if (!item.RemoveCommand.CanExecute(null)) return;
+                var links = rows.Select(r => ((CustomToolItemViewModel)r.DataContext).Tool.Link).ToList();
+                item.RemoveCommand.Execute(null);
+                // The rows are rebuilt by then: focus once the new ones are laid out.
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => FocusAfterRemove(item.Tool.Link, links, at)));
                 break;
             case Key.Up or Key.Down:
-                var rows = CustomToolRows();
-                var at = rows.ToList().IndexOf(row);
                 var next = at + (e.Key == Key.Down ? 1 : -1);
                 if (next >= 0 && next < rows.Count) e.Handled = rows[next].Focus();
-                else if (next >= rows.Count) e.Handled = row.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+                else if (next >= rows.Count) e.Handled = FirstCatalogItem()?.Focus() ?? false;
                 else e.Handled = FilterBox.Focus();
                 break;
         }
+    }
+
+    /// <summary>The first catalogue node the tree shows (the Custom Tools group is not one).</summary>
+    internal TreeViewItem? FirstCatalogItem() =>
+        TreeItemsIn(CatalogTreeView).FirstOrDefault(t => t.DataContext is CatalogNodeViewModel && t.IsVisible);
+
+    private static IEnumerable<TreeViewItem> TreeItemsIn(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TreeViewItem t) yield return t;
+            foreach (var deeper in TreeItemsIn(child)) yield return deeper;
+        }
+    }
+
+    /// <summary>
+    /// After Delete on a row: the row again when the remove was cancelled; else the row that followed
+    /// it, or the one before when it was the last; else Filter….
+    /// </summary>
+    private void FocusAfterRemove(string removed, IReadOnlyList<string> before, int at)
+    {
+        var rows = CustomToolRows();
+        Border? Row(string link) => rows.FirstOrDefault(r => ((CustomToolItemViewModel)r.DataContext).Tool.Link == link);
+        var target = Row(removed)
+                     ?? before.Skip(at + 1).Select(Row).FirstOrDefault(r => r is not null)
+                     ?? before.Take(at).Reverse().Select(Row).FirstOrDefault(r => r is not null);
+        if (target is not null) target.Focus();
+        else FilterBox.Focus();
     }
 
     // ---- the Panels pane header ---------------------------------------------------------------

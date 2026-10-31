@@ -193,7 +193,8 @@ public sealed class ProfileBuilderCustomToolsScreenshotTests : IDisposable
             });
             h.Model.EditCustomTool(h.Model.CustomToolsGroup.Find(CustomToolFixtures.Help)!);
             Assert.NotNull(edit);
-            var dialog = new CustomToolDialog(edit!);
+            edit!.Label = "BIM help"; // an edit in progress: the warning names what will change
+            var dialog = new CustomToolDialog(edit);
             CaptureDialog(dialog, theme, "f18-builder-edit-tool");
             Assert.Equal("Update in 2 profiles", dialog.ConfirmButton.Content);
             Assert.Contains("Architecture, Structure", dialog.WarningText.Text);
@@ -233,7 +234,8 @@ public sealed class ProfileBuilderCustomToolsScreenshotTests : IDisposable
                 return false;
             });
             h.Model.EditCustomTool(h.Model.CustomToolsGroup.Find(CustomToolFixtures.Help)!);
-            Assert.Equal("Update in 1 profile", edit!.ConfirmText);
+            edit!.Label = "BIM help";
+            Assert.Equal("Update in 1 profile", edit.ConfirmText);
             Assert.Equal(2, edit.Refusals.Count);
             CaptureDialog(new CustomToolDialog(edit), theme, "f18-builder-edit-tool-refused");
         }

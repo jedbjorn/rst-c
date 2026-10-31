@@ -443,8 +443,10 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     (`BuilderDrag.FromCustomTool`, `DragKind.CustomTool`: every drop places a fresh slot,
     `CustomTools.SlotFor`) and double-clicked to add to the selected panel. The pane's count is the
     commands plus the custom tools; Filter… filters the list too (label or link). **Keyboard:** each row is
-    a keyboard stop (↓ from Filter… enters the list, ↑ ↓ move between rows); focus shows ✎ × as hover
-    does, and Delete removes the tool everywhere through the usual confirmation.
+    a keyboard stop (↓ from Filter… enters the list, ↑ ↓ move between rows, ↓ past the last row goes on
+    to the first catalogue node); focus shows ✎ × as hover does, and Delete removes the tool everywhere
+    through the usual confirmation, then focus goes to the next row (the previous one after the last,
+    Filter… when the list is empty).
   - **One scroll region** (decision #25): the tree's `ItemsSource` is a `CompositeCollection` (code-behind)
     of the group, then `CatalogRoots`, so the catalogue keeps its virtualizing tree (AC7). The
     `CatalogItemTemplateSelector` and `CatalogItemStyleSelector` give the group its own template and a
@@ -462,7 +464,9 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     (the one the list shows): names and icons picked on a panel are kept (FnB decision, WU4 review F2).
   - **Edit and Remove everywhere** go through `IProfileBuilderBackend` to `CustomToolEditor`. The
     confirmation comes from `CustomToolEditor.Plan`, the same classification the edit and remove run,
-    so "Update in N profiles" / "Remove from N profiles" is what will be written: profiles that share a
+    so "Update in N profiles" / "Remove from N profiles" is what will be written (for an edit, exactly:
+    `CustomToolPreview.PlanEdit` dry-runs the edit as the dialog stands, so a holder it would leave as
+    it is, its names and icons its own, is listed as not changed and not counted): profiles that share a
     name are not merged, the open unsaved working copy shows under its current name, and id-less and
     shared-id files are listed as not changed. After the change: when the open profile's file was
     written, its clean baseline (`ProfileEditing.FromSnapshot`) gets the same change, so only other

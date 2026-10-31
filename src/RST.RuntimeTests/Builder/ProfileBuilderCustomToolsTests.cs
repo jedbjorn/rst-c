@@ -378,11 +378,14 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
                 Assert.Equal("Edit custom tool", d.Title);
                 Assert.True(d.IsEmail);
                 Assert.Equal(("Help", "bim@studio.example"), (d.Label, d.Address));
+                // As it opens, the edit changes nothing yet: the exact plan says so (delta review F8).
+                Assert.Equal("Nothing to change yet: edit the label, address or icon.", d.Warning);
+                Assert.False(d.CanConfirm);
+                d.Label = "BIM help";
+                d.Address = "help@studio.example";
                 Assert.Equal("Changes apply everywhere this tool is used: Architecture, Structure. Names and icons you gave it on a panel are kept.", d.Warning);
                 Assert.Equal("Update in 2 profiles", d.ConfirmText);
                 Assert.False(d.HasRefusals);
-                d.Label = "BIM help";
-                d.Address = "help@studio.example";
                 d.IconFile = "pack:question_green";
                 return true;
             });
@@ -434,8 +437,8 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             h.Modals.CustomTools.Enqueue(d =>
             {
                 Assert.Equal(("BIM Standards", CustomToolFixtures.Standards), (d.Label, d.Address));
-                Assert.Equal("Update in 1 profile", d.ConfirmText);
                 d.Address = "bim.studio.example/standards-2027";
+                Assert.Equal("Update in 1 profile", d.ConfirmText);
                 return true;
             });
             var edit = WindowCapture.Descendants<Button>(Tile(window, 2, 0)).Single(b => Id(b) == "Builder.EditCustomTool");
@@ -472,11 +475,13 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             var archFiles = Directory.GetFiles(_dir.Path, "Architecture*.json").ToDictionary(f => f, File.ReadAllText);
             h.Modals.CustomTools.Enqueue(d =>
             {
+                Assert.Equal("No profile can be changed.", d.Warning); // nothing typed yet, and the Architecture files are refused
+                Assert.Equal(2, d.Refusals.Count);
+                d.Label = "Desk";
                 Assert.Equal("Update in 1 profile", d.ConfirmText);
                 Assert.Equal("Changes apply everywhere this tool is used: Structure. Names and icons you gave it on a panel are kept.", d.Warning);
                 Assert.Equal(2, d.Refusals.Count);
                 Assert.All(d.Refusals, r => Assert.StartsWith("Architecture (Architecture_", r));
-                d.Label = "Desk";
                 return true;
             });
             Click(RowButton(Row(window, "Help"), "Builder.EditCustomToolEverywhere"));
@@ -509,7 +514,11 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
         var (window, h) = Open(b => b.OnCustomToolChange = _ => throw new IOException("disk gone"));
         try
         {
-            h.Modals.CustomTools.Enqueue(_ => true);
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                d.Label = "Studio wiki";
+                return true;
+            });
             Click(RowButton(Row(window, "Wiki"), "Builder.EditCustomToolEverywhere"));
             Assert.Equal("The tool could not be changed. See the RST log.", h.Model.Toast.Text);
             Assert.Equal(BannerKind.Error, h.Model.Toast.Kind);
@@ -776,9 +785,10 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
 
             h.Modals.CustomTools.Enqueue(d =>
             {
-                Assert.Equal(("Issues", CustomToolFixtures.Issues, "Update in 1 profile"), (d.Label, d.Address, d.ConfirmText));
+                Assert.Equal(("Issues", CustomToolFixtures.Issues), (d.Label, d.Address));
                 d.Label = "Issue tracker";
                 d.Address = "tracker.studio.example";
+                Assert.Equal("Update in 1 profile", d.ConfirmText);
                 return true;
             });
             Click(edit);
@@ -850,6 +860,156 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Key(Row(window, "Help"), System.Windows.Input.Key.Delete);
             Assert.Single(h.Backend.CustomToolChanges);
             Assert.DoesNotContain("Help", Labels(window));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    // ── delta review: N1 (↓ past the last row), N2 (Delete elsewhere), F10 (focus after Delete), F8 (exact count) ──
+
+    [Fact]
+    public void Down_on_the_last_row_goes_on_into_the_catalogue() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            window.Activate();
+            WindowCapture.DoEvents();
+            var wiki = Row(window, "Wiki");
+            Assert.True(wiki.Focus());
+            Key(wiki, System.Windows.Input.Key.Down);
+            var first = Assert.IsType<TreeViewItem>(Focused(window));
+            Assert.IsType<CatalogNodeViewModel>(first.DataContext);
+            Assert.Same(window.FirstCatalogItem(), first);
+
+            // A second ↓ moves within the tree (the TreeView's own keys), not back to the row's ✎.
+            Key(first, System.Windows.Input.Key.Down);
+            var second = Assert.IsType<TreeViewItem>(Focused(window));
+            Assert.IsType<CatalogNodeViewModel>(second.DataContext);
+            Assert.NotSame(first, second);
+
+            // ↑ on the first row goes back to Filter….
+            var bim = Row(window, "BIM Standards");
+            Assert.True(bim.Focus());
+            Key(bim, System.Windows.Input.Key.Up);
+            Assert.Same(window.FilterBox, Focused(window));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void Delete_in_Filter_or_a_tile_s_name_box_removes_nothing_and_asks_nothing() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            window.Activate();
+            WindowCapture.DoEvents();
+            Assert.NotEmpty(Rows(window));
+
+            // In Filter…: Delete edits the text, nothing else.
+            var filter = window.FilterBox;
+            Assert.True(filter.Focus());
+            filter.Text = "wikiz";
+            filter.CaretIndex = 4;
+            Key(filter, System.Windows.Input.Key.Delete);
+            Assert.Equal("wiki", filter.Text);
+
+            // In a tile's name box (Wiki on Links).
+            var box = WindowCapture.Descendants<TextBox>(Tile(window, 2, 0)).Single(t => Id(t) == "Builder.ToolName");
+            Assert.True(box.Focus());
+            box.CaretIndex = 0;
+            Key(box, System.Windows.Input.Key.Delete);
+
+            Assert.Empty(h.Dialogs.ConfirmCalls);
+            Assert.Empty(h.Backend.CustomToolChanges);
+            Assert.Equal(1, CustomToolFixtures.Holding(h.Model.Profile, CustomToolFixtures.Wiki));
+            Assert.Equal(1, CustomToolFixtures.Holding(Disk(LoaderFixtures.StructId), CustomToolFixtures.Wiki));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void After_Delete_focus_goes_to_the_next_row_the_previous_one_or_Filter() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            window.Activate();
+            WindowCapture.DoEvents();
+            h.Dialogs.ConfirmResult = true;
+
+            // Help, in the middle: the next row (Issues) takes focus.
+            var help = Row(window, "Help");
+            Assert.True(help.Focus());
+            Key(help, System.Windows.Input.Key.Delete);
+            WindowCapture.DoEvents();
+            Assert.DoesNotContain("Help", Labels(window));
+            Assert.Same(Row(window, "Issues"), Focused(window));
+
+            // Wiki, the last: the previous row (Support) takes focus.
+            var wiki = Row(window, "Wiki");
+            Assert.True(wiki.Focus());
+            Key(wiki, System.Windows.Input.Key.Delete);
+            WindowCapture.DoEvents();
+            Assert.Same(Row(window, "Support"), Focused(window));
+
+            // Cancelled: the row keeps focus.
+            h.Dialogs.ConfirmResult = false;
+            var support = Row(window, "Support");
+            Key(support, System.Windows.Input.Key.Delete);
+            WindowCapture.DoEvents();
+            Assert.Same(Row(window, "Support"), Focused(window));
+
+            // The only row the filter shows: the list is empty, so Filter… takes focus.
+            h.Dialogs.ConfirmResult = true;
+            h.Model.FilterText = "bim standards";
+            WindowCapture.DoEvents();
+            var bim = Assert.Single(Rows(window));
+            Assert.True(bim.Focus());
+            Key(bim, System.Windows.Input.Key.Delete);
+            WindowCapture.DoEvents();
+            Assert.Empty(Rows(window));
+            Assert.Same(window.FilterBox, Focused(window));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void An_icon_only_edit_counts_only_the_profiles_it_writes() => Sta(() =>
+    {
+        // Help: Architecture's is blue (the list's icon), Structure's is grey (picked on its panel).
+        var (window, h) = Open();
+        try
+        {
+            var structFile = Directory.GetFiles(_dir.Path, "Structure*.json").Single();
+            var structBytes = File.ReadAllText(structFile);
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                d.IconFile = "pack:question_green";
+                Assert.Equal("Update in 1 profile", d.ConfirmText);
+                Assert.Equal("Changes apply everywhere this tool is used: Architecture. Names and icons you gave it on a panel are kept.", d.Warning);
+                Assert.Equal(["Structure: nothing to change there; its names and icons are its own."], d.Refusals);
+                return true;
+            });
+            Click(RowButton(Row(window, "Help"), "Builder.EditCustomToolEverywhere"));
+
+            Assert.Equal("pack:question_green", CustomToolFixtures.Tools(Disk(LoaderFixtures.ArchId)).Single(s => CustomTools.LinkOf(s) == CustomToolFixtures.Help).IconFile);
+            Assert.Equal(structBytes, File.ReadAllText(structFile));
+            Assert.Empty(h.Backend.Loads); // the loaded profile (Structure) was not written
+            Assert.Equal("Updated in 1 profile.", h.Model.Toast.Text);
+            Assert.Empty(h.Dialogs.Messages); // a profile left as it is is not a failure
         }
         finally
         {
