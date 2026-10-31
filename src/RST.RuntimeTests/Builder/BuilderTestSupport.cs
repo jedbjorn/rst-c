@@ -85,9 +85,22 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
         if (string.IsNullOrEmpty(copy.ExportDate)) copy.ExportDate = "2026-10-30";
         Saved.Add(copy);
         var fileName = ProfileStore.CanonicalFileName(copy);
-        Library.RemoveAll(e => e.Profile.Id == copy.Id);
+        Library.RemoveAll(e => e.Profile.Id == copy.Id || e.FileName == fileName); // a write replaces a file of that name
         Library.Add(new ProfileEntry(fileName, copy));
         return new SaveOutcome(true, null, fileName, copy);
+    }
+
+    public List<string> Removed { get; } = [];
+
+    public OpResult RemoveResult { get; set; } = OpResult.Success;
+
+    /// <summary>As the real one: the library entry read from that file goes (unless the removal is scripted to fail).</summary>
+    public OpResult RemoveSupersededFile(string fileName)
+    {
+        Calls.Add("RemoveSupersededFile");
+        Removed.Add(fileName);
+        if (RemoveResult.Ok) Library.RemoveAll(e => e.FileName == fileName);
+        return RemoveResult;
     }
 
     public OpResult Export(Profile profile, string path)
@@ -218,36 +231,81 @@ public static class BuilderFixtures
     }
 }
 
-/// <summary>Scripted answers for the RST Presets and Junk Cleanup modals; the edit runs on the modal's model first.</summary>
+/// <summary>The panel cards' tiles and stacks by position (feature #18, WU3), for the tests.</summary>
+public static class PanelCardTestExtensions
+{
+    /// <summary>The loose tool at <paramref name="slot"/>, or row <paramref name="row"/> of the stack there.</summary>
+    public static ToolTileViewModel Tile(this PanelCardViewModel card, int slot, int row = -1) =>
+        row < 0 ? (ToolTileViewModel)card.Items[slot] : ((StackGroupViewModel)card.Items[slot]).Rows[row];
+
+    /// <summary>The stack at <paramref name="slot"/>.</summary>
+    public static StackGroupViewModel StackAt(this PanelCardViewModel card, int slot) => (StackGroupViewModel)card.Items[slot];
+
+    /// <summary>"Beam,Column,[Warnings Audit Purge],Notes": the panel's slots, a stack as its tools in brackets.</summary>
+    public static string Shape(Profile profile, int panel) => string.Join(",", profile.Panels[panel].Slots.Select(s =>
+        PanelStacks.IsStack(s) ? "[" + string.Join(" ", PanelStacks.ToolsOf(profile, s).Select(t => t.Name)) + "]" : s.Name));
+}
+
+/// <summary>
+/// Scripted answers for the Builder's dialogs. The name dialog types each of <see cref="Names"/> in
+/// turn and presses Confirm, as a user would after a refusal; it answers true at the first name
+/// that passes, and Cancel (false) when the script runs out. Branding records the call.
+/// </summary>
 public sealed class FakeBuilderDialogs : IBuilderDialogs
 {
-    public List<PresetsViewModel> Presets { get; } = [];
+    /// <summary>The names typed in the next name dialog, in order (empty: the dialog is cancelled).</summary>
+    public Queue<string> Names { get; } = new();
 
-    public List<CleanupViewModel> Cleanups { get; } = [];
+    /// <summary>Every name dialog opened, with what it showed first.</summary>
+    public List<(ProfileNameDialogModel Model, string Suggested)> NameDialogs { get; } = [];
 
-    /// <summary>What the user does in the Presets modal before answering.</summary>
-    public Action<PresetsViewModel>? EditPresetsWith { get; set; }
+    /// <summary>The refusals shown in the name dialogs, in order.</summary>
+    public List<string> Refusals { get; } = [];
 
-    public bool PresetsAnswer { get; set; } = true;
+    public List<ProfileBuilderViewModel> Brandings { get; } = [];
 
-    /// <summary>What the user does in the Cleanup modal before answering.</summary>
-    public Action<CleanupViewModel>? EditCleanupWith { get; set; }
+    /// <summary>
+    /// What the next stack dialog does: ticks and orders as a user would, then answers Confirm (true)
+    /// or Cancel (false). Empty: the dialog is cancelled. Confirm is refused while the model cannot
+    /// confirm (New with fewer than 2), as the real button is disabled.
+    /// </summary>
+    public Queue<Func<StackDialogModel, bool>> Stacks { get; } = new();
 
-    public bool CleanupAnswer { get; set; } = true;
+    /// <summary>Every stack dialog opened, with the picks it started with.</summary>
+    public List<(StackDialogModel Model, IReadOnlyList<StackPick> Initial)> StackDialogs { get; } = [];
 
-    public bool EditPresets(PresetsViewModel model)
+    public bool EditStack(StackDialogModel model)
     {
-        Presets.Add(model);
-        EditPresetsWith?.Invoke(model);
-        return PresetsAnswer;
+        StackDialogs.Add((model, model.Picks));
+        if (Stacks.Count == 0) return false;
+        return Stacks.Dequeue()(model) && model.CanConfirm;
     }
 
-    public bool EditCleanup(CleanupViewModel model)
+    /// <summary>Ticks the listed tools by name, in that order (a stack dialog script step).</summary>
+    public static void Tick(StackDialogModel model, params string[] names)
     {
-        Cleanups.Add(model);
-        EditCleanupWith?.Invoke(model);
-        return CleanupAnswer;
+        foreach (var name in names) model.Items.First(i => i.Name == name).IsChecked = true;
     }
+
+    /// <summary>Unticks the listed tools by name.</summary>
+    public static void Untick(StackDialogModel model, params string[] names)
+    {
+        foreach (var name in names) model.Items.First(i => i.Name == name).IsChecked = false;
+    }
+
+    public bool EditName(ProfileNameDialogModel model)
+    {
+        NameDialogs.Add((model, model.Name));
+        while (Names.Count > 0)
+        {
+            model.Name = Names.Dequeue();
+            if (model.TryConfirm()) return true;
+            Refusals.Add(model.Error!);
+        }
+        return false;
+    }
+
+    public void EditBranding(ProfileBuilderViewModel model) => Brandings.Add(model);
 }
 
 /// <summary>A view-model over a backend, with the fake dialogs and clock, ready to drive.</summary>

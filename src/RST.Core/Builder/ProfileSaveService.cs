@@ -60,6 +60,13 @@ public sealed class ProfileSaveService
         foreach (var orphan in ProfileEditing.RemoveOrphanStacks(profile))
             _log.Warning(null, "Builder.save_profile: stack {Stack} is not on any panel; removed from {Name}", orphan, profile.ProfileName);
 
+        // Feature #18 (decision #28): a placed stack of 4+ tools refuses the save, naming its panel.
+        if (PanelStacks.SaveBlocker(profile) is { } blocker)
+        {
+            _log.Warning(null, "Builder.save_profile: {Name} refused: {Blocker}", profile.ProfileName, blocker);
+            return SaveOutcome.Fail(blocker);
+        }
+
         var errors = ProfileSerializer.Validate(profile);
         if (errors.Count > 0)
         {
@@ -78,6 +85,58 @@ public sealed class ProfileSaveService
         {
             _log.Error(ex, "Builder.save_profile: write failed for {Name}", profile.ProfileName);
             return SaveOutcome.Fail("Write failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// After the first save of a profile read from a file with no id (feature #18, WU1 review F6): the
+    /// save gave it an id and wrote it under its canonical name, so the file it came from (which
+    /// <see cref="ProfileStore.Save"/> cannot match by id) is removed, or the profile would be listed
+    /// twice. Only a bare file name in the profiles folder is accepted; one already gone is fine; one
+    /// that has gained an id, or no longer reads as a profile, is kept and logged.
+    /// </summary>
+    public OpResult RemoveSupersededFile(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(['/', '\\']) >= 0 || Path.GetFileName(fileName) != fileName
+            || !fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warning(null, "Builder.save_profile: refused to remove {File}: not a profile file name", fileName);
+            return OpResult.Fail("Not a profile file name: " + fileName);
+        }
+        var path = Path.Combine(_profilesDir, fileName);
+        try
+        {
+            if (!File.Exists(path))
+            {
+                _log.Information("Builder.save_profile: {File} is already gone", fileName);
+                return OpResult.Success;
+            }
+            // The name was recorded when the profile was opened. Delete only what is still that
+            // id-less profile: a file that now has an id, or that no longer reads as a profile, is
+            // something else, and is kept (review N8b). Kept is not a failure: it is not our duplicate.
+            string? id;
+            try
+            {
+                id = ProfileSerializer.ReadString(File.ReadAllText(path)).Id;
+            }
+            catch (Exception ex) when (ex is not (IOException or UnauthorizedAccessException))
+            {
+                _log.Warning(ex, "Builder.save_profile: kept {File}: it no longer reads as a profile", fileName);
+                return OpResult.Success;
+            }
+            if (!string.IsNullOrEmpty(id))
+            {
+                _log.Warning(null, "Builder.save_profile: kept {File}: it has an id now ({Id}), so it is not the profile just saved", fileName, id);
+                return OpResult.Success;
+            }
+            File.Delete(path);
+            _log.Information("Builder.save_profile: removed {File}, superseded by the saved profile", fileName);
+            return OpResult.Success;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.Warning(ex, "Builder.save_profile: could not remove {File}, superseded by the saved profile", fileName);
+            return OpResult.Fail(ex.Message);
         }
     }
 

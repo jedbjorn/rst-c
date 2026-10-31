@@ -1,10 +1,20 @@
 // rst-c's own (not vendored): the unsaved-changes prompt on a real ProfileBuilderWindow (spec #16,
 // Planner default 3; WU4 review B1 and N1). The title-bar ✕ (Window.Close) with Save & Exit,
-// Discard & Exit and Cancel, and the dropdown switch (the ComboBox's SelectedItem) with Save &
+// Discard & Exit and Cancel; Escape, which closes through the same path unless a menu or the icon
+// picker has it (SC-010); and the switch from the header's profile menu (feature #18) with Save &
 // Switch, Discard & Switch and Cancel, driven through WPF with the view-model's real dispatcher
-// posting, so the Closing event and the ComboBox's selection write behave as in Revit.
+// posting, so the Closing event and the menu click behave as in Revit. The ⚙ and profile toggles
+// follow their menus and ignore the mouse while open (the Branding popover's VM finding D2), and
+// ⚙ → Branding… opens the real dialog modally.
 
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using RST.Core.Theming;
 using RST.RuntimeTests.Loader;
@@ -168,11 +178,34 @@ public class ProfileBuilderWindowFlowTests
         Assert.Empty(o.Dialogs.ChooseCalls);
     });
 
-    private static ProfileOptionViewModel Option(Opened o, string name) =>
-        o.Window.Model.ProfileOptions.Single(x => x.Entry?.Profile.ProfileName == name);
+    // ── the profile menu ─────────────────────────────────────────────────────
+
+    /// <summary>The toggle as a click or Space toggles it (its own toggle).</summary>
+    private static void Toggle(ToggleButton button)
+    {
+        var peer = new ToggleButtonAutomationPeer(button);
+        ((IToggleProvider)peer.GetPattern(PatternInterface.Toggle)).Toggle();
+        Settle();
+    }
+
+    private static void Invoke(MenuItem item)
+    {
+        var peer = new MenuItemAutomationPeer(item);
+        ((IInvokeProvider)peer.GetPattern(PatternInterface.Invoke)).Invoke();
+        Settle();
+    }
+
+    /// <summary>Opens the profile menu and clicks <paramref name="name"/> (the click runs its command, then the menu closes).</summary>
+    private static void PickInMenu(Opened o, string name)
+    {
+        var w = o.Window;
+        Toggle(w.ProfileButton);
+        Assert.True(w.ProfileMenu.IsOpen);
+        Invoke(w.ProfileMenuItems.Single(i => ((ProfileOptionViewModel)i.Header).Display == name));
+    }
 
     [Fact]
-    public void Dropdown_switch_then_Save_and_switch_saves_then_shows_the_target() => Sta(() =>
+    public void Menu_switch_then_Save_and_switch_saves_then_shows_the_target() => Sta(() =>
     {
         var o = Open();
         try
@@ -180,14 +213,15 @@ public class ProfileBuilderWindowFlowTests
             o.Window.Model.ProfileName = "Draft";
             o.Window.Model.ProfileTab = "Draft Tab";
             o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Primary);
-            o.Window.ProfileSelector.SelectedItem = Option(o, "Structure");
-            Settle();
+            PickInMenu(o, "Structure");
+            Assert.Equal("Save & Switch", Assert.Single(o.Dialogs.ChooseCalls).PrimaryText);
             Assert.Single(o.Backend.Saved);
             Assert.Equal("Structure", o.Window.Model.ProfileName);
-            var shown = Assert.IsType<ProfileOptionViewModel>(o.Window.ProfileSelector.SelectedItem);
-            Assert.Equal("Structure", shown.Entry?.Profile.ProfileName);
+            Assert.Equal("Structure", o.Window.ProfileButtonName.Text);
             Assert.Contains(o.Window.Model.ProfileOptions, x => x.Display == "Draft");
             Assert.False(o.Window.Model.IsDirty);
+            Assert.False(o.Window.ProfileMenu.IsOpen);
+            Assert.False(o.Window.ProfileButton.IsChecked);
         }
         finally
         {
@@ -196,18 +230,17 @@ public class ProfileBuilderWindowFlowTests
     });
 
     [Fact]
-    public void Dropdown_switch_then_Discard_and_switch_shows_the_target() => Sta(() =>
+    public void Menu_switch_then_Discard_and_switch_shows_the_target() => Sta(() =>
     {
         var o = Open();
         try
         {
             o.Window.Model.ProfileName = "Draft";
             o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
-            o.Window.ProfileSelector.SelectedItem = Option(o, "Structure");
-            Settle();
+            PickInMenu(o, "Structure");
             Assert.Empty(o.Backend.Saved);
             Assert.Equal("Structure", o.Window.Model.ProfileName);
-            Assert.Equal("Structure", ((ProfileOptionViewModel)o.Window.ProfileSelector.SelectedItem).Entry?.Profile.ProfileName);
+            Assert.True(o.Window.Model.SelectedProfileOption!.IsCurrent);
         }
         finally
         {
@@ -216,17 +249,18 @@ public class ProfileBuilderWindowFlowTests
     });
 
     [Fact]
-    public void Dropdown_switch_then_Cancel_snaps_the_dropdown_back() => Sta(() =>
+    public void Menu_switch_then_Cancel_keeps_the_editor() => Sta(() =>
     {
         var o = Open();
         try
         {
             o.Window.Model.ProfileName = "Draft";
             o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Cancel);
-            o.Window.ProfileSelector.SelectedItem = Option(o, "Structure");
-            Settle();
+            PickInMenu(o, "Structure");
+            Assert.Single(o.Dialogs.ChooseCalls);
             Assert.Equal("Draft", o.Window.Model.ProfileName);
-            Assert.True(((ProfileOptionViewModel)o.Window.ProfileSelector.SelectedItem).IsNew, "the dropdown shows + New Profile again");
+            Assert.True(o.Window.Model.SelectedProfileOption!.IsNew, "the editor stays on the new profile");
+            Assert.Equal("Draft", o.Window.ProfileButtonName.Text);
         }
         finally
         {
@@ -234,87 +268,65 @@ public class ProfileBuilderWindowFlowTests
         }
     });
 
-    // ── the Branding popover (VM finding D2: the ToggleButton pattern; the Pick… note, WU5) ──
-
-    /// <summary>Branding ▾ toggled the way a click or Space does (the ToggleButton's own toggle).</summary>
-    private static void ToggleBranding(ProfileBuilderWindow w)
+    [Fact]
+    public void New_profile_with_unsaved_changes_asks_too() => Sta(() =>
     {
-        var peer = new System.Windows.Automation.Peers.ToggleButtonAutomationPeer(w.BrandingButton);
-        ((System.Windows.Automation.Provider.IToggleProvider)peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle)).Toggle();
-        Settle();
-    }
+        var o = Open();
+        try
+        {
+            PickInMenu(o, "Structure");
+            o.Window.Model.MinVersion = "9.9.9";
+            o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+            Toggle(o.Window.ProfileButton);
+            Invoke(o.Window.ProfileMenu.Items.OfType<MenuItem>().Single(i => AutomationProperties.GetAutomationId(i) == "Builder.NewProfile"));
+            Assert.Single(o.Dialogs.ChooseCalls);
+            Assert.True(o.Window.Model.SelectedProfileOption!.IsNew);
+            Assert.Equal("New profile", o.Window.ProfileButtonName.Text);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    // ── the header's toggles (the popover's VM finding D2) ─────────────────────
 
     /// <summary>What a mouse press at the button's centre would hit (null when nothing hit-testable is there).</summary>
-    private static DependencyObject? HitAtBrandingButton(ProfileBuilderWindow w)
+    private static DependencyObject? HitAt(ProfileBuilderWindow w, FrameworkElement button)
     {
-        var centre = w.BrandingButton.TranslatePoint(new Point(w.BrandingButton.ActualWidth / 2, w.BrandingButton.ActualHeight / 2), w);
+        var centre = button.TranslatePoint(new Point(button.ActualWidth / 2, button.ActualHeight / 2), w);
         return w.InputHitTest(centre) as DependencyObject;
     }
 
     private static bool IsUnder(DependencyObject? hit, DependencyObject ancestor)
     {
-        for (var d = hit; d is not null; d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+        for (var d = hit; d is not null; d = VisualTreeHelper.GetParent(d))
             if (ReferenceEquals(d, ancestor)) return true;
         return false;
     }
 
     [Fact]
-    public void Branding_toggle_follows_the_popup_and_ignores_the_mouse_while_it_is_open() => Sta(() =>
+    public void The_menu_toggles_follow_their_menus_and_ignore_the_mouse_while_open() => Sta(() =>
     {
         var o = Open();
         try
         {
             var w = o.Window;
-            Assert.True(IsUnder(HitAtBrandingButton(w), w.BrandingButton), "closed: a press at the button reaches it");
-
-            ToggleBranding(w);
-            Assert.True(w.BrandingPopup.IsOpen, "the toggle opens the popover");
-            Assert.True(w.BrandingButton.IsChecked);
-            Assert.True(w.Model.IsBrandingOpen);
-            Assert.False(w.BrandingButton.IsHitTestVisible, "while open the button ignores the mouse");
-            Assert.False(IsUnder(HitAtBrandingButton(w), w.BrandingButton),
-                "a press at the button cannot reach it, so the press that dismisses the popup cannot reopen it (D2)");
-
-            // That press is an outside click for the StaysOpen=False popup, which closes itself: everything follows.
-            w.BrandingPopup.IsOpen = false;
-            Settle();
-            Assert.False(w.BrandingButton.IsChecked);
-            Assert.False(w.Model.IsBrandingOpen);
-            Assert.True(w.BrandingButton.IsHitTestVisible);
-            Assert.True(IsUnder(HitAtBrandingButton(w), w.BrandingButton));
-
-            // Keyboard (Space / Enter on the focused toggle) opens and closes it too.
-            ToggleBranding(w);
-            Assert.True(w.BrandingPopup.IsOpen);
-            ToggleBranding(w);
-            Assert.False(w.BrandingPopup.IsOpen);
-            Assert.False(w.Model.IsBrandingOpen);
-        }
-        finally
-        {
-            Cleanup(o);
-        }
-    });
-
-    [Fact]
-    public void Escape_in_the_popover_closes_it() => Sta(() =>
-    {
-        var o = Open();
-        try
-        {
-            var w = o.Window;
-            ToggleBranding(w);
-            Assert.True(w.BrandingPopup.IsOpen);
-            var args = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
-                PresentationSource.FromVisual(w.BrandingUrlBox) ?? PresentationSource.FromVisual(w)!, 0, System.Windows.Input.Key.Escape)
+            foreach (var (button, menu) in new[] { (w.SettingsButton, w.SettingsMenu), (w.ProfileButton, w.ProfileMenu) })
             {
-                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
-            };
-            w.BrandingUrlBox.RaiseEvent(args);
-            Settle();
-            Assert.True(args.Handled);
-            Assert.False(w.BrandingPopup.IsOpen);
-            Assert.False(w.BrandingButton.IsChecked);
+                Assert.True(IsUnder(HitAt(w, button), button), "closed: a press at the button reaches it");
+                Toggle(button);
+                Assert.True(menu.IsOpen, "the toggle opens its menu");
+                Assert.True(button.IsChecked);
+                Assert.False(button.IsHitTestVisible, "while open the button ignores the mouse");
+                Assert.False(IsUnder(HitAt(w, button), button), "the press that dismisses the menu cannot reopen it (D2)");
+
+                // That press is an outside click, and the menu closes itself: the toggle follows.
+                menu.IsOpen = false;
+                Settle();
+                Assert.False(button.IsChecked);
+                Assert.True(button.IsHitTestVisible);
+            }
         }
         finally
         {
@@ -323,38 +335,119 @@ public class ProfileBuilderWindowFlowTests
     });
 
     [Fact]
-    public void Opening_the_popover_moves_focus_inside_so_Escape_closes_it_at_once() => Sta(() =>
+    public void The_settings_menu_opens_the_branding_dialog() => Sta(() =>
     {
-        // VM finding (WU5 re-run c89b3d78): opened with a mouse click, the popover left keyboard focus
-        // outside it, so the first Escape never reached it.
-        var o = Open();
+        var modals = new FakeBuilderDialogs();
+        var dialogs = new FakeDialogs();
+        var model = new ProfileBuilderViewModel(BuilderFixtures.Backend(), dialogs, new ManualClock().Schedule, builderDialogs: modals);
+        model.Initialize();
+        var window = new ProfileBuilderWindow(model);
+        WindowCapture.ShowOffScreen(window);
         try
         {
-            var w = o.Window;
-            w.Activate();
-            ToggleBranding(w);
-            Assert.True(w.BrandingPopup.IsOpen);
-            // Where a key press goes: the keyboard focus, or (when the off-screen test window cannot take
-            // keyboard focus) the window's logical focus. Without the fix this is outside the popover.
-            var focused = System.Windows.Input.Keyboard.FocusedElement as DependencyObject;
-            if (focused is null || !IsUnder(focused, w.BrandingPopover))
-                focused = System.Windows.Input.FocusManager.GetFocusedElement(w) as DependencyObject;
-            Assert.NotNull(focused);
-            Assert.True(IsUnder(focused, w.BrandingPopover), "opening moves focus inside the popover");
-            Assert.Same(w.PickLogoButton, focused);
+            Toggle(window.SettingsButton);
+            Invoke(window.BrandingMenuItem);
+            Assert.Same(model, Assert.Single(modals.Brandings));
+            Assert.False(window.SettingsMenu.IsOpen);
+            Assert.False(model.IsDirty, "branding is machine-wide, never a profile change");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 
-            // Escape at the focused element (as a real key press) reaches the popup's own key handler,
-            // which handles it and closes the popover. From outside the popover it would not.
-            var args = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
-                PresentationSource.FromVisual(focused as System.Windows.Media.Visual ?? w)!, 0, System.Windows.Input.Key.Escape)
+    [Fact]
+    public void The_real_branding_dialog_opens_modally_and_owns_the_logo_file_dialog() => Sta(() =>
+    {
+        // BuilderDialogs over a real DialogService: while Branding is open, its Pick… file dialog is
+        // owned by the Branding dialog (one owned by the disabled Builder would re-enable the Builder
+        // when it closed); afterwards the Builder owns its dialogs again.
+        var service = new DialogService();
+        var builderDialogs = new BuilderDialogs(service);
+        var model = new ProfileBuilderViewModel(BuilderFixtures.Backend(), service, new ManualClock().Schedule, builderDialogs: builderDialogs);
+        model.Initialize();
+        var window = new ProfileBuilderWindow(model);
+        service.Owner = window;
+        builderDialogs.Owner = window;
+        WindowCapture.ShowOffScreen(window);
+        BrandingDialog? seen = null;
+        Window? ownerDuring = null;
+        var gaveUp = false;
+        // While the modal dialog runs its loop, look for it among the Builder's owned windows (it is
+        // owned by the Builder), every 100 ms for at most 5 s. Found: note what it shows, close it.
+        // Never found: close whatever the Builder owns, so ShowDialog returns and the asserts fail
+        // instead of the test hanging (review N4).
+        var attempts = 0;
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
+        timer.Tick += (_, _) =>
+        {
+            seen = window.OwnedWindows.OfType<BrandingDialog>().FirstOrDefault();
+            if (seen is null && ++attempts < 50) return;
+            timer.Stop();
+            ownerDuring = service.Owner;
+            if (seen is not null)
             {
-                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
-            };
-            ((System.Windows.IInputElement)focused).RaiseEvent(args);
+                seen.Close();
+                return;
+            }
+            gaveUp = true;
+            foreach (var owned in window.OwnedWindows.OfType<Window>().ToList()) owned.Close();
+        };
+        try
+        {
+            timer.Start();
+            model.BrandingCommand.Execute(null); // returns when the dialog closes
+            timer.Stop();
+            Assert.False(gaveUp, "the Branding dialog was not among the Builder's owned windows within 5 s");
+            Assert.NotNull(seen);
+            Assert.Same(window, seen!.Owner);
+            Assert.False(seen.ShowInTaskbar);
+            Assert.Same(seen, ownerDuring);
+            Assert.Same(window, service.Owner);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // ── Escape (SC-010) ───────────────────────────────────────────────────────
+
+    private static KeyEventArgs Escape(Window w) =>
+        new(Keyboard.PrimaryDevice, PresentationSource.FromVisual(w)!, 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent };
+
+    [Fact]
+    public void Escape_closes_a_clean_window_without_asking() => Sta(() =>
+    {
+        var o = Open();
+        var args = Escape(o.Window);
+        o.Window.RaiseEvent(args);
+        Settle();
+        Assert.True(args.Handled);
+        Assert.True(o.Closed);
+        Assert.Empty(o.Dialogs.ChooseCalls);
+    });
+
+    [Fact]
+    public void Escape_with_unsaved_changes_asks_as_Exit_does() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            o.Window.Model.ProfileName = "Draft";
+            o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Cancel);
+            o.Window.RaiseEvent(Escape(o.Window));
             Settle();
-            Assert.True(args.Handled, "the popover's key handler handled Escape");
-            Assert.False(w.BrandingPopup.IsOpen, "the first Escape closes the popover");
-            Assert.False(w.BrandingButton.IsChecked);
+            Assert.False(o.Closed, "Cancel keeps the window and the edits");
+            Assert.Equal("Save & Exit", Assert.Single(o.Dialogs.ChooseCalls).PrimaryText);
+            Assert.Equal("Draft", o.Window.Model.ProfileName);
+
+            o.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+            o.Window.RaiseEvent(Escape(o.Window));
+            Settle();
+            Assert.True(o.Closed, "Discard & Exit closes");
+            Assert.Empty(o.Backend.Saved);
         }
         finally
         {
@@ -363,24 +456,43 @@ public class ProfileBuilderWindowFlowTests
     });
 
     [Fact]
-    public void The_popover_reopens_after_the_logo_file_dialog() => Sta(() =>
+    public void Escape_on_an_open_menu_only_closes_the_menu() => Sta(() =>
     {
         var o = Open();
         try
         {
-            ToggleBranding(o.Window);
-            Assert.True(o.Window.BrandingPopup.IsOpen);
-            o.Dialogs.OpenResult = @"C:\logo.png";
-            o.Dialogs.DuringOpen = () => o.Window.BrandingPopup.IsOpen = false; // the dialog takes the focus
-            o.Window.Model.PickLogoCommand.Execute(null);
+            o.Window.Model.ProfileName = "Draft";
+            Toggle(o.Window.ProfileButton);
+            Assert.True(o.Window.ProfileMenu.IsOpen);
+            o.Window.RaiseEvent(Escape(o.Window));
             Settle();
-            Assert.True(o.Window.BrandingPopup.IsOpen, "the popover is back for the URL");
-            Assert.True(o.Window.BrandingButton.IsChecked, "the toggle follows the popup");
-            Assert.Equal("branding.png", o.Window.LogoName.Text);
+            Assert.False(o.Closed);
+            Assert.Empty(o.Dialogs.ChooseCalls);
         }
         finally
         {
-            o.Window.Model.IsBrandingOpen = false;
+            o.Window.ProfileMenu.IsOpen = false;
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_while_the_icon_picker_is_open_leaves_the_window() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            PickInMenu(o, "Structure");
+            o.Window.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
+            Settle();
+            Assert.True(o.Window.Model.IsIconPickerOpen);
+            o.Window.RaiseEvent(Escape(o.Window));
+            Settle();
+            Assert.False(o.Closed, "the picker takes Escape, not the window");
+            Assert.Empty(o.Dialogs.ChooseCalls);
+        }
+        finally
+        {
             Cleanup(o);
         }
     });

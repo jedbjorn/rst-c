@@ -21,9 +21,6 @@ namespace RST.UI.Builder;
 public sealed record BrandingState(bool HasLogo, string? FileName, string? Url)
 {
     public static readonly BrandingState None = new(false, null, null);
-
-    /// <summary>The header button's dot is filled when a logo or a URL is set.</summary>
-    public bool IsSet => HasLogo || !string.IsNullOrEmpty(Url);
 }
 
 /// <summary>Everything the Profile Builder reads and writes. Tests pass a fake.</summary>
@@ -45,6 +42,9 @@ public interface IProfileBuilderBackend
     IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup();
 
     SaveOutcome Save(Profile profile);
+
+    /// <summary>After the first save of a profile read from a file with no id: removes that file (WU1 review F6).</summary>
+    OpResult RemoveSupersededFile(string fileName);
 
     OpResult Export(Profile profile, string path);
 
@@ -113,6 +113,8 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     public IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup() => _lookup.Read();
 
     public SaveOutcome Save(Profile profile) => _save.Save(profile);
+
+    public OpResult RemoveSupersededFile(string fileName) => _save.RemoveSupersededFile(fileName);
 
     public OpResult Export(Profile profile, string path) => _save.Export(profile, path);
 

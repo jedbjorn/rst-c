@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): AC6 for the Builder (spec #16, WU4). Each v2.2.0 fixture profile is
 // loaded for editing and saved with no edits through the ported rules (loadIntoProfile,
-// computeRequiredAddins, rename-as-copy, save_profile), and the file is compared byte for byte
+// computeRequiredAddins, the save plan, save_profile), and the file is compared byte for byte
 // with what v2.2.0 wrote (V220BuilderReference: the page's captured payload through v2.2.0's
 // bridge write). Against the input file, exactly two fields change, as they did in v2.2.0:
 // requiredAddins (recomputed from the placed tools at every save) and cleanupTargets (seeded with

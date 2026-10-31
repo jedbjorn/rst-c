@@ -135,6 +135,24 @@
     <RstTrayWxs Condition="'$(RstScope)' != 'machine'">$(MSBuildProjectDirectory)\obj\Tray.g.wxs</RstTrayWxs>
     <RstTrayWxs Condition="'$(RstScope)' == 'machine'">$(MSBuildProjectDirectory)\obj\machine\Tray.g.wxs</RstTrayWxs>
   </PropertyGroup>
+  <!-- RST-Machine.msi only (SC-028): the custom action that ends every
+       signed-in user's tray from Program Files before the files go
+       (helper\EndTrays.cs, Tray.wxs RstEndTrays). Built with the .NET
+       Framework 4 C# compiler that ships in Windows, like the bundle's
+       RemoveUserRst helper: no SDK, no package. It goes into the MSI's
+       Binary table and is never installed. -->
+  <PropertyGroup>
+    <RstFrameworkCsc>$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\csc.exe</RstFrameworkCsc>
+    <RstEndTraysSource>$(MSBuildProjectDirectory)\helper\EndTrays.cs</RstEndTraysSource>
+    <RstEndTraysExe>$(MSBuildProjectDirectory)\obj\machine\helper\RST.EndTrays.exe</RstEndTraysExe>
+    <DefineConstants>$(DefineConstants);RstEndTraysExe=$(RstEndTraysExe)</DefineConstants>
+  </PropertyGroup>
+  <Target Name="RstBuildEndTrays" BeforeTargets="CoreCompile" Condition="'$(RstScope)' == 'machine'" Inputs="$(RstEndTraysSource)" Outputs="$(RstEndTraysExe)">
+    <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstEndTraysExe)'))" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstEndTraysExe)&quot; &quot;$(RstEndTraysSource)&quot;" />
+  </Target>
+
   <Target Name="RstGenerateTray" BeforeTargets="CoreCompile">
     <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-tray.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstTrayWxs)&quot;" />
     <ItemGroup>

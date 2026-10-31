@@ -1,11 +1,12 @@
 // rst-c's own (not vendored): the Profile Builder view-model's flows (spec #16, WU4, AC5) with a
-// fake backend, a manual clock and scripted dialogs: boot, the dropdown (new / existing, the
-// "(loaded)" suffix, the unsaved-changes prompt on a switch), branding (pick, clear, URL), the
-// catalogue (count, filter, the native group, expansion, empty states, double-click), panels and
-// slots (add, select, rename, move, delete with its confirm), the Properties pane (Min Revit,
-// opacity, color, the URL button editor, the summaries), Save (validation, rename-as-copy,
-// collision, required add-ins, the auto-reload), Export ZIP, Exit and the title-bar ✕. Every toast
-// text is checked against profile_builder.html's.
+// fake backend, a manual clock and scripted dialogs: boot, the profile menu (new / existing, the
+// loaded mark, the unsaved-changes prompt on a switch), branding (pick, clear, URL), the catalogue
+// (count, filter, the native group, expansion, empty states, double-click), panels and slots (add,
+// select, rename, move, delete with its confirm), General (Min RST version, colour strength, the tab),
+// the panel colour picker, Save (validation, a rename under the same id, collision, required
+// add-ins, the auto-reload), Export ZIP, Exit and the title-bar ✕. Every toast text is checked
+// against profile_builder.html's. Feature #18's Rename, Duplicate and Profile pane tabs are in
+// ProfileBuilderShellTests.
 
 using FluentAssertions;
 using RST.Core.Builder;
@@ -37,8 +38,12 @@ public class ProfileBuilderViewModelTests
     {
         var h = BuilderHarness.Create();
         h.Backend.Calls.Take(4).Should().Equal("LoadBranding", "GetProfiles", "GetActiveProfile", "GetAddinLookup");
-        h.Model.ProfileOptions.Select(o => o.Display).Should().Equal("+ New Profile", "Architecture  (loaded)", "Structure");
+        h.Model.ProfileOptions.Select(o => o.Display).Should().Equal("Architecture", "Structure");
+        h.Model.ProfileOptions.Select(o => o.IsLoaded).Should().Equal(true, false);
+        h.Model.ProfileOptions.Should().OnlyContain(o => !o.IsCurrent, "a new profile is in the editor");
         h.Model.SelectedProfileOption!.IsNew.Should().BeTrue();
+        h.Model.DisplayName.Should().Be("New profile");
+        h.Model.IsLoadedProfile.Should().BeFalse();
         h.Model.IsEditMode.Should().BeFalse();
         h.Model.Panels.Should().ContainSingle().Which.Name.Should().Be("Panel 1");
         h.Model.SelectedPanel.Should().BeSameAs(h.Model.Panels[0]);
@@ -46,9 +51,12 @@ public class ProfileBuilderViewModelTests
         h.Model.ProfileName.Should().Be("");
         h.Model.MinVersion.Should().Be("0.1.0");
         h.Model.PanelOpacity.Should().Be(100);
-        h.Model.PresetsSummary.Should().Be("No tabs hidden  •  Disable Unused: off");
-        h.Model.CleanupSummary.Should().Be("6 of 6 targets enabled.");
+        h.Model.PanelOpacityText.Should().Be("100%");
+        h.Model.DisableUnused.Should().BeFalse();
+        h.Model.PresetTabs.Should().OnlyContain(t => !t.IsHidden);
+        h.Model.CleanupRows.Should().HaveCount(6).And.OnlyContain(r => r.Enabled);
         h.Model.IsDirty.Should().BeFalse("the auto-added panel is part of the clean baseline");
+        h.Model.SaveCommand.CanExecute(null).Should().BeFalse("Save is enabled only when there are changes");
         h.Model.CatalogCount.Should().Be(15);
     }
 
@@ -59,10 +67,10 @@ public class ProfileBuilderViewModelTests
         var h = BuilderHarness.Create(backend);
         h.Model.Panels.Should().ContainSingle();
         h.Model.CatalogIsEmpty.Should().BeTrue();
-        h.Model.ProfileOptions.Should().ContainSingle();
+        h.Model.ProfileOptions.Should().BeEmpty();
     }
 
-    // ── the dropdown ─────────────────────────────────────────────────────────
+    // ── the profile menu ─────────────────────────────────────────────────────
 
     [Fact]
     public void Picking_a_profile_loads_it_for_editing_with_panel_0_selected()
@@ -76,23 +84,38 @@ public class ProfileBuilderViewModelTests
         h.Model.PanelOpacity.Should().Be(60);
         h.Model.Panels.Select(p => p.Name).Should().Equal("Frame", "Review", "Links");
         h.Model.SelectedPanel!.Name.Should().Be("Frame");
-        h.Model.PresetsSummary.Should().Be("2 tabs hidden  •  Disable Unused: on");
+        h.Model.PresetTabs.Where(t => t.IsHidden).Select(t => t.Tab).Should().Equal("Massing & Site", "Collaborate");
+        h.Model.DisableUnused.Should().BeTrue();
+        h.Model.EditingText.Should().Be("· editing Structure");
+        h.Option("Structure").IsCurrent.Should().BeTrue();
+        h.Option("Structure").Note.Should().Be("tab \"Studio Struct\"");
+        h.Option("Architecture").Note.Should().Be("loaded · tab \"Studio Arch\"");
+        h.Model.IsLoadedProfile.Should().BeFalse("Architecture is the loaded one");
         h.Model.Profile.Branding.Should().BeNull();
         h.Model.IsDirty.Should().BeFalse();
         h.Model.PreviewProfile.Should().BeSameAs(h.Model.Profile);
 
-        // The review row: a stack slot shows its type tag; a tool shows its icon and short id.
+        // The Review card (feature #18, WU3): a tile, a stack of 3 rows, a tile; 5 tools; the source
+        // line and the full command id as the tooltip; a non-pack icon shows the empty frame.
         var review = h.Model.Panels[1];
-        review.SlotCount.Should().Be("3 slots");
-        review.Slots[1].IsTool.Should().BeFalse();
-        review.Slots[1].TypeTag.Should().Be("stack");
-        review.Slots[0].IconLabel.Should().Be("box_open");
-        review.Slots[0].ShortCommandId.Should().Be("ID_KINSHIP");
-        review.Slots[2].IconLabel.Should().Be("Icon", "custom.png is not a pack icon");
+        review.ToolCount.Should().Be("5 tools");
+        review.Items.Select(i => i.GetType()).Should().Equal(typeof(ToolTileViewModel), typeof(StackGroupViewModel), typeof(ToolTileViewModel));
+        review.StackAt(1).Header.Should().Be("STACK · 3/3");
+        review.StackAt(1).Rows.Select(r => r.Name).Should().Equal("Warnings", "Audit", "Purge");
+        review.Tile(0).SourceLine.Should().Be("Kinship Tools");
+        review.Tile(0).ToolTip.Should().Be("ID_KINSHIP");
+        review.Tile(0).HasIcon.Should().BeTrue();
+        review.Tile(2).HasIcon.Should().BeFalse("custom.png is not a pack icon");
+        review.Tile(1, row: 0).HasIcon.Should().BeTrue("a stack row without a pack icon shows the ribbon's default 16 px icon");
 
-        h.Model.SelectedProfileOption = h.Model.ProfileOptions[0];
+        h.Model.NewProfileCommand.Execute(null);
         h.Model.IsEditMode.Should().BeFalse();
         h.Model.Panels.Should().ContainSingle().Which.Name.Should().Be("Panel 1");
+        h.Model.ProfileOptions.Should().OnlyContain(o => !o.IsCurrent);
+
+        h.Model.SwitchProfileCommand.Execute(h.Option("Architecture"));
+        h.Model.ProfileName.Should().Be("Architecture");
+        h.Model.IsLoadedProfile.Should().BeTrue("the editor holds the loaded profile");
     }
 
     [Fact]
@@ -107,7 +130,7 @@ public class ProfileBuilderViewModelTests
         ask.Message.Should().Be("You have unsaved changes to this profile. What would you like to do?");
         ask.PrimaryText.Should().Be("Save & Switch");
         ask.SecondaryText.Should().Be("Discard & Switch");
-        h.Model.SelectedProfileOption!.IsNew.Should().BeTrue("the dropdown snaps back");
+        h.Model.SelectedProfileOption!.IsNew.Should().BeTrue("the editor stays on the new profile");
         h.Model.ProfileName.Should().Be("Draft");
     }
 
@@ -157,7 +180,7 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void Editing_a_loaded_profile_never_changes_the_dropdown_s_copy()
+    public void Editing_a_loaded_profile_never_changes_the_menu_s_copy()
     {
         var h = BuilderHarness.Create();
         h.Model.SelectedProfileOption = h.Option("Structure");
@@ -168,28 +191,27 @@ public class ProfileBuilderViewModelTests
     // ── branding ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Branding_shows_the_machine_default_and_the_dot()
+    public void Branding_shows_the_machine_default()
     {
         var backend = BuilderFixtures.Backend();
         backend.Branding = new BrandingState(true, "branding.png", "https://studio.example");
         var h = BuilderHarness.Create(backend);
-        h.Model.HasBranding.Should().BeTrue();
+        h.Model.HasLogo.Should().BeTrue();
         h.Model.LogoName.Should().Be("branding.png");
         h.Model.BrandingUrl.Should().Be("https://studio.example");
 
         var none = BuilderHarness.Create();
-        none.Model.HasBranding.Should().BeFalse();
+        none.Model.HasLogo.Should().BeFalse();
         none.Model.LogoName.Should().Be("(none)");
         none.Model.BrandingUrl.Should().Be("");
     }
 
     [Fact]
-    public void Done_closes_the_popover()
+    public void The_settings_menu_s_Branding_opens_the_branding_dialog()
     {
         var h = BuilderHarness.Create();
-        h.Model.IsBrandingOpen = true;
-        h.Model.CloseBrandingCommand.Execute(null);
-        h.Model.IsBrandingOpen.Should().BeFalse();
+        h.Model.BrandingCommand.Execute(null);
+        h.Modals.Brandings.Should().ContainSingle().Which.Should().BeSameAs(h.Model);
     }
 
     [Fact]
@@ -199,12 +221,11 @@ public class ProfileBuilderViewModelTests
         h.Model.BrandingUrl = "  studio.example ";
         h.Backend.BrandingUrls.Should().Equal("https://studio.example");
         h.Model.BrandingUrl.Should().Be("https://studio.example");
-        h.Model.HasBranding.Should().BeTrue();
         h.Model.BrandingUrl = "https://studio.example";
         h.Backend.BrandingUrls.Should().ContainSingle("an unchanged value is not saved again");
         h.Model.BrandingUrl = "";
         h.Backend.BrandingUrls.Should().Equal("https://studio.example", "");
-        h.Model.HasBranding.Should().BeFalse();
+        h.Model.BrandingUrl.Should().Be("");
     }
 
     [Fact]
@@ -231,7 +252,6 @@ public class ProfileBuilderViewModelTests
         h.Backend.Logos.Should().Equal(@"C:\logo.png");
         h.Model.HasLogo.Should().BeTrue();
         h.Model.LogoName.Should().Be("branding.png");
-        h.Model.HasBranding.Should().BeTrue();
 
         h.Backend.LogoResult = LogoOutcome.Fail("Copy failed: busy");
         h.Model.PickLogoCommand.Execute(null);
@@ -347,7 +367,7 @@ public class ProfileBuilderViewModelTests
         h.Model.AddCatalogCommand.Execute(wall);
         var slot = h.Model.Profile.Panels[0].Slots.Single();
         slot.Should().BeEquivalentTo(new Slot { SlotType = "tool", Name = "Wall", CommandId = "ID_OBJECTS_WALL", SourceTab = "Architecture", SourcePanel = "Build" });
-        h.Model.Panels[0].SlotCount.Should().Be("1 slot");
+        h.Model.Panels[0].ToolCount.Should().Be("1 tool");
         h.Model.IsDirty.Should().BeTrue();
     }
 
@@ -430,25 +450,21 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void Slots_move_rename_and_remove_without_a_confirm()
+    public void Tiles_rename_and_remove_without_a_confirm()
     {
         var h = BuilderHarness.Create();
         h.Model.SelectedProfileOption = h.Option("Structure");
-        var frame = h.Model.Panels[0];
-        frame.Slots[0].MoveDownCommand.Execute(null);
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Beam", "Brace");
-        h.Model.Panels[0].Slots[0].MoveUpCommand.Execute(null); // first: no-op
-        h.Model.Panels[0].Slots[2].MoveDownCommand.Execute(null); // last: no-op
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Beam", "Brace");
-        h.Model.Panels[0].Slots[1].Name = "Girder";
+        h.Model.Panels[0].Tile(1).Name = "Girder";
         h.Model.Profile.Panels[0].Slots[1].Name.Should().Be("Girder");
-        h.Model.Panels[0].Slots[2].RemoveCommand.Execute(null);
-        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Column", "Girder");
+        h.Model.Panels[0].Tile(2).RemoveCommand.Execute(null);
+        h.Model.Profile.Panels[0].Slots.Select(s => s.Name).Should().Equal("Beam", "Girder");
         h.Dialogs.ConfirmCalls.Should().BeEmpty();
-        h.Model.Panels[0].SlotCount.Should().Be("2 slots");
+        h.Model.Panels[0].ToolCount.Should().Be("2 tools");
+        typeof(ToolTileViewModel).GetProperty("MoveUpCommand").Should().BeNull("the slot ▲ ▼ buttons are retired (spec #19)");
+        typeof(ToolTileViewModel).GetProperty("ShortCommandId").Should().BeNull("the command id moved to the tooltip");
     }
 
-    // ── the Properties pane ──────────────────────────────────────────────────
+    // ── General, and the panel colour picker ──────────────────────────────────
 
     [Fact]
     public void Min_revit_and_opacity_edit_the_profile_and_opacity_redraws_the_preview()
@@ -475,7 +491,23 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void The_color_swatch_opens_the_family_picker_and_writes_lower_case_hex()
+    public void Colour_strength_shows_a_percentage_in_steps_and_bounds()
+    {
+        var h = BuilderHarness.Create();
+        h.Model.PanelOpacity = 60;
+        h.Model.PanelOpacityText.Should().Be("60%");
+        h.Model.PanelOpacity = 5;
+        h.Model.PanelOpacity.Should().Be(10);
+        h.Model.PanelOpacity = 120;
+        h.Model.PanelOpacity.Should().Be(100);
+        h.Model.IsDirty.Should().BeFalse("100 is where it started");
+        h.Model.MinVersion = "3.1.0";
+        h.Model.IsDirty.Should().BeTrue();
+        h.Model.SaveCommand.CanExecute(null).Should().BeTrue("Save is enabled by changes; its checks refuse a nameless profile");
+    }
+
+    [Fact]
+    public void The_color_picker_opens_the_family_picker_and_writes_lower_case_hex()
     {
         var h = BuilderHarness.Create();
         h.Dialogs.PickResults.Enqueue(Rgb.Parse("#10B981"));
@@ -509,58 +541,13 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void The_url_editor_adds_a_normalized_URL_button()
-    {
-        var h = BuilderHarness.Create();
-        h.Model.OpenUrlEditorCommand.Execute(null);
-        h.Model.IsUrlEditorOpen.Should().BeTrue();
-        h.Model.UrlLabel = "  Wiki ";
-        h.Model.UrlAddress = " wiki.example.com ";
-        h.Model.AddUrlCommand.Execute(null);
-        h.Model.Profile.Panels[0].Slots.Single().Should().BeEquivalentTo(
-            new Slot { SlotType = "tool", Name = "Wiki", CommandId = "URL:https://wiki.example.com" });
-        h.Model.IsUrlEditorOpen.Should().BeFalse();
-        h.Model.UrlLabel.Should().Be("");
-        h.Model.Panels[0].Slots.Single().ShortCommandId.Should().Be("URL:http…mple.com");
-    }
-
-    [Fact]
-    public void The_url_editor_requires_a_label_then_a_URL()
-    {
-        var h = BuilderHarness.Create();
-        h.Model.OpenUrlEditorCommand.Execute(null);
-        h.Model.UrlAddress = "x.org";
-        h.Model.AddUrlCommand.Execute(null);
-        AssertToast(h, "Button label required.", BannerKind.Error);
-        h.Model.UrlLabel = "X";
-        h.Model.UrlAddress = "  ";
-        h.Model.AddUrlCommand.Execute(null);
-        AssertToast(h, "URL required.", BannerKind.Error);
-        h.Model.IsUrlEditorOpen.Should().BeTrue();
-        h.Model.Profile.Panels[0].Slots.Should().BeEmpty();
-        h.Model.CancelUrlEditorCommand.Execute(null);
-        h.Model.IsUrlEditorOpen.Should().BeFalse();
-    }
-
-    [Fact]
-    public void The_url_editor_closes_when_the_selection_changes()
-    {
-        var h = BuilderHarness.Create();
-        h.Model.AddPanelCommand.Execute(null);
-        h.Model.OpenUrlEditorCommand.Execute(null);
-        h.Model.Panels[0].SelectCommand.Execute(null);
-        h.Model.IsUrlEditorOpen.Should().BeFalse();
-    }
-
-    [Fact]
-    public void With_no_panel_selected_the_pane_says_so_and_its_commands_are_off()
+    public void With_no_panel_selected_the_colour_picker_is_off()
     {
         var h = BuilderHarness.Create();
         h.Dialogs.ConfirmResult = true;
         h.Model.Panels[0].DeleteCommand.Execute(null);
-        h.Model.HasSelectedPanel.Should().BeFalse();
+        h.Model.SelectedPanel.Should().BeNull();
         h.Model.PickColorCommand.CanExecute(null).Should().BeFalse();
-        h.Model.OpenUrlEditorCommand.CanExecute(null).Should().BeFalse();
     }
 
     // ── save ─────────────────────────────────────────────────────────────────
@@ -578,7 +565,7 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public async Task Saving_a_new_profile_assigns_it_refreshes_the_dropdown_and_resets_the_baseline()
+    public async Task Saving_a_new_profile_assigns_it_refreshes_the_menu_and_resets_the_baseline()
     {
         var h = BuilderHarness.Create();
         h.Model.ProfileName = "Studio MEP";
@@ -595,7 +582,8 @@ public class ProfileBuilderViewModelTests
         h.Model.IsEditMode.Should().BeTrue();
         h.Model.IsDirty.Should().BeFalse();
         h.Model.SelectedProfileOption!.Key.Should().Be("new-1");
-        h.Model.ProfileOptions.Select(o => o.Display).Should().Contain("Studio MEP");
+        h.Model.ProfileOptions.Single(o => o.IsCurrent).Display.Should().Be("Studio MEP");
+        h.Model.SaveCommand.CanExecute(null).Should().BeFalse("nothing left to save");
         AssertToast(h, "Saved as Studio_MEP_new-1.json", BannerKind.Success);
         h.Backend.Loads.Should().BeEmpty("a profile that is not active is not reloaded");
     }
@@ -613,22 +601,23 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public async Task Renaming_in_edit_mode_saves_a_copy_and_keeps_the_original()
+    public async Task Renaming_in_edit_mode_saves_under_the_same_id()
     {
+        // Spec #19: rename-as-copy is retired; a changed name is a rename of the same profile.
         var h = BuilderHarness.Create();
         h.Model.SelectedProfileOption = h.Option("Structure");
         h.Model.ProfileName = "Structure v2";
         (await h.Model.SaveAsync()).Should().BeTrue();
-        var copy = h.Backend.Saved.Single();
-        copy.Id.Should().Be("new-1");
-        copy.ExportDate.Should().Be("2026-10-30", "the export date was cleared and set anew");
-        h.Backend.Library.Select(e => e.Profile.ProfileName).Should().Contain(["Structure", "Structure v2"]);
-        AssertToast(h, "Saved as new profile \"Structure v2\" — original kept.", BannerKind.Success);
+        var renamed = h.Backend.Saved.Single();
+        renamed.Id.Should().Be(BuilderFixtures.StructId);
+        renamed.ExportDate.Should().Be("2026-08-02", "the export date is kept");
+        h.Backend.Library.Select(e => e.Profile.ProfileName).Should().Contain("Structure v2").And.NotContain("Structure");
+        AssertToast(h, "Saved as Structure_v2_" + BuilderFixtures.StructId + ".json", BannerKind.Success);
 
-        // The saved name is the new baseline: saving again updates the copy in place.
+        // The saved name is the new baseline: saving again stays on the same id.
         h.Model.MinVersion = "3.0.0";
         (await h.Model.SaveAsync()).Should().BeTrue();
-        h.Backend.Saved[1].Id.Should().Be("new-1");
+        h.Backend.Saved[1].Id.Should().Be(BuilderFixtures.StructId);
     }
 
     [Fact]
@@ -638,9 +627,94 @@ public class ProfileBuilderViewModelTests
         h.Model.SelectedProfileOption = h.Option("Structure");
         h.Model.ProfileName = " architecture ";
         (await h.Model.SaveAsync()).Should().BeFalse();
-        AssertToast(h, "A profile named \" architecture \" already exists. Choose a different name.", BannerKind.Error);
+        AssertToast(h, "A profile named \"architecture\" already exists. Choose a different name.", BannerKind.Error);
         h.Backend.Saved.Should().BeEmpty();
         h.Model.Profile.Id.Should().Be(BuilderFixtures.StructId);
+    }
+
+    [Fact]
+    public async Task Renaming_the_loaded_profile_keeps_it_loaded_under_its_id()
+    {
+        // "Same profile, new name. Users who have it loaded keep it." (review N2)
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Architecture");
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        h.Modals.Names.Enqueue("Architecture 2027");
+        h.Model.RenameCommand.Execute(null);
+        (await h.Model.SaveAsync()).Should().BeTrue();
+
+        h.Backend.Saved.Single().Id.Should().Be(BuilderFixtures.ArchId);
+        h.Backend.Loads.Single().Should().BeEquivalentTo(new LoadRequest("Architecture 2027", BuilderFixtures.ArchId, true, ["Analyze"]),
+            "the ribbon reloads the same id under its new name");
+        h.Model.IsLoadedProfile.Should().BeTrue("(loaded) stays");
+        var option = h.Option("Architecture 2027");
+        option.IsLoaded.Should().BeTrue();
+        option.IsCurrent.Should().BeTrue();
+        option.Note.Should().Be("loaded · tab \"Studio Arch\"");
+        AssertToast(h, "Saved & ribbon reloaded.", BannerKind.Success);
+    }
+
+    [Fact]
+    public async Task Save_rereads_the_saved_profiles_so_a_name_taken_by_another_session_is_refused()
+    {
+        // Review N1: the list is read again at Save, not only at boot.
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Modals.Names.Enqueue("Site");
+        h.Model.RenameCommand.Execute(null);
+        h.Model.ProfileName.Should().Be("Site");
+
+        // Another Revit session saves a new profile named "Site" meanwhile.
+        h.Backend.With(new Profile { Id = "other-session", ProfileName = "Site", Tab = "T" });
+        (await h.Model.SaveAsync()).Should().BeFalse();
+        AssertToast(h, "A profile named \"Site\" already exists. Choose a different name.", BannerKind.Error);
+        h.Backend.Saved.Should().BeEmpty();
+        h.Model.ProfileOptions.Select(o => o.Display).Should().Contain("Site", "the menu's list was refreshed too");
+    }
+
+    [Fact]
+    public void Rename_and_Duplicate_check_against_a_fresh_list()
+    {
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Backend.With(new Profile { Id = "other-session", ProfileName = "Site", Tab = "T" });
+
+        h.Modals.Names.Enqueue("site");
+        h.Model.RenameCommand.Execute(null);
+        h.Modals.Refusals.Should().Equal("A profile named \"site\" already exists. Choose a different name.");
+
+        h.Modals.Names.Enqueue("SITE");
+        h.Model.DuplicateCommand.Execute(null);
+        h.Modals.Refusals.Should().HaveCount(2);
+        h.Backend.Saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Refreshing_the_menu_lists_new_profiles_and_keeps_the_current_one()
+    {
+        var h = BuilderHarness.Create();
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Backend.With(new Profile { Id = "other-session", ProfileName = "Site", Tab = "T" });
+        h.Backend.Library.RemoveAll(e => e.Profile.Id == BuilderFixtures.StructId); // another session removed the open one
+        h.Model.RefreshProfiles();
+        h.Model.ProfileOptions.Select(o => o.Display).Should().Equal("Architecture", "Site");
+        h.Model.SelectedProfileOption!.Key.Should().Be(BuilderFixtures.StructId, "the editor still holds Structure");
+        h.Model.SelectedProfileOption.IsNew.Should().BeFalse();
+        h.Model.IsEditMode.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_new_profile_named_like_a_saved_one_is_refused_on_its_first_save()
+    {
+        // WU1 review F5: Rename… refuses a taken name; the first save of a new profile checks again
+        // (here the name was set without the dialog, as a name taken since would be).
+        var h = BuilderHarness.Create();
+        h.Model.ProfileName = "STRUCTURE ";
+        h.Model.ProfileTab = "T";
+        (await h.Model.SaveAsync()).Should().BeFalse();
+        AssertToast(h, "A profile named \"STRUCTURE\" already exists. Choose a different name.", BannerKind.Error);
+        h.Backend.Saved.Should().BeEmpty();
+        h.Model.IsEditMode.Should().BeFalse();
     }
 
     [Fact]
@@ -806,7 +880,7 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void Save_and_switch_runs_after_the_dropdown_s_selection_write()
+    public void Save_and_switch_runs_after_the_menu_click()
     {
         var h = BuilderHarness.Create(deferPosts: true);
         h.Model.ProfileName = "Draft";
@@ -815,7 +889,7 @@ public class ProfileBuilderViewModelTests
         h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Primary);
         h.Model.SelectedProfileOption = h.Option("Structure");
         h.Backend.Saved.Should().BeEmpty("the save waits for the selection change to finish");
-        h.Model.ProfileOptions.Should().Equal(optionsBefore, "the dropdown's list is not rebuilt inside its own selection change");
+        h.Model.ProfileOptions.Should().Equal(optionsBefore, "the menu's list is not rebuilt inside the click");
         h.RunPosted();
         h.Backend.Saved.Should().ContainSingle();
         h.Model.ProfileName.Should().Be("Structure");
@@ -823,7 +897,7 @@ public class ProfileBuilderViewModelTests
     }
 
     [Fact]
-    public void Discard_and_switch_runs_after_the_dropdown_s_selection_write()
+    public void Discard_and_switch_runs_after_the_menu_click()
     {
         var h = BuilderHarness.Create(deferPosts: true);
         h.Model.ProfileName = "Draft";
@@ -837,9 +911,9 @@ public class ProfileBuilderViewModelTests
     [Fact]
     public void The_profile_option_shows_loaded_only_for_the_active_id()
     {
-        var entry = new ProfileEntry("x.json", new Profile { Id = "a", ProfileName = "Arch" });
-        ProfileOptionViewModel.For(entry, "a").Display.Should().Be("Arch  (loaded)");
-        ProfileOptionViewModel.For(entry, "b").Display.Should().Be("Arch");
+        var entry = new ProfileEntry("x.json", new Profile { Id = "a", ProfileName = "Arch", Tab = "Studio" });
+        ProfileOptionViewModel.For(entry, "a").Should().Match<ProfileOptionViewModel>(o => o.IsLoaded && o.Display == "Arch" && o.Note == "loaded · tab \"Studio\"");
+        ProfileOptionViewModel.For(entry, "b").Should().Match<ProfileOptionViewModel>(o => !o.IsLoaded && o.Note == "tab \"Studio\"");
         ProfileOptionViewModel.For(new ProfileEntry("y.json", new Profile { ProfileName = "NoId" }), null).Key.Should().Be("NoId");
     }
 
@@ -852,6 +926,7 @@ public class ProfileBuilderViewModelTests
         public ActiveProfile GetActiveProfile() => throw new InvalidOperationException();
         public IReadOnlyDictionary<string, AddinLookupEntry> GetAddinLookup() => throw new InvalidOperationException();
         public SaveOutcome Save(Profile profile) => throw new InvalidOperationException();
+        public OpResult RemoveSupersededFile(string fileName) => throw new InvalidOperationException();
         public OpResult Export(Profile profile, string path) => throw new InvalidOperationException();
         public BrandingState LoadBranding() => throw new InvalidOperationException();
         public OpResult SaveBrandingUrl(string url) => throw new InvalidOperationException();

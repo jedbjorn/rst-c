@@ -152,29 +152,68 @@ falls back to light.
 
 ### Drag and drop, and the TextBox preview routing lesson
 
-The Builder's drag and drop (`ProfileBuilderWindow.xaml.cs`, rules in `RST.Core.Builder.PanelDrops`):
+The Builder's drag and drop (`ProfileBuilderWindow.xaml.cs`; rules in `RST.Core.Builder.TileDrops`
+for tools and stacks, `PanelDrops` for the panel reorder, and `PanelStacks` for every model change):
 
-- `DragDrop.DoDragDrop` with a typed payload (`BuilderDrag`: catalogue row, panel header, slot row),
-  never text, so nothing outside rst-c accepts it.
-- The cards and rows report which half the cursor is over; the view-model sets `DropMarker` on the
-  target, drawn as an overlay border, so the layout never shifts (gantt-it's row-border approach).
+- `DragDrop.DoDragDrop` with a typed payload (`BuilderDrag`: catalogue row, panel header, tile,
+  stack row, stack header), never text, so nothing outside rst-c accepts it.
+- Each card works out what is under the pointer: a tile, a stack group or a stack's row, and where
+  on it (`TileHit`: across the tile or the whole stack; down the row). `TileDrops.Plan` turns that
+  into the drop (feature #18, decisions #18 and #19): a tile's middle makes a stack, its leading or
+  trailing quarter (at most 24 px) inserts before or after it; a stack row's upper or lower half
+  joins the stack before or after that row; the stack's middle joins at the end; a full stack shows
+  the refusal marker ("A stack holds 2–3 tools. This one is full."); a whole stack (dragged by its
+  header) only ever goes beside, by the half it is over; the 10 px gutter after a tile or stack (its
+  `TileCell`'s padding) counts as its nearer edge; the card outside the tiles appends. A tile, row or
+  stack dropped where it already is gets no marker. The view-model sets `DropMarker` on the target,
+  drawn as an overlay border (a left or right line on a tile, a top or bottom line on a row, a ring
+  for a stack forming or joining, an error ring for a refusal), so the layout never shifts
+  (gantt-it's row-border approach).
+- **A refused drop still takes the drop.** OLE does not deliver `Drop` after a `None` effect, so a
+  full stack answers `Move` (with the refusal marker) and the drop refuses it with a toast.
+- **Identity:** a slot drag carries the slot it started from (`BuilderDrag.Source`) and each hit the
+  slot the card showed (`TileHit.Expected`); `TileDrops.Plan` answers `Stale` when either moved, and
+  ×, ✎ and un-stack check the card still matches the profile, so an edit made underneath (WU4's edit
+  or remove everywhere) never lets an index hit another slot. A stale action is logged and the cards
+  are redrawn.
 - **A `TextBox` swallows drags.** Its `TextEditor` marks `DragOver` and `Drop` handled (with no
-  effect) for any non-text payload, so a row's bubbling handlers never run over its name box,
-  which covers most of the row (VM defect D1). The fix is to handle the **preview** events on the
-  boxes (`PreviewDragEnter`, `PreviewDragOver`, `PreviewDrop`): when
-  `e.Data.GetDataPresent(typeof(BuilderDrag))`, forward to the row or card under it and mark the
-  event handled; otherwise leave it, so a text drag still reaches the TextBox.
+  effect) for any non-text payload, so bubbling handlers never run over a name box, and the name
+  boxes cover much of each tile and row (VM defect D1). The fix is to handle the **preview** events
+  (`PreviewDragEnter`, `PreviewDragOver`, `PreviewDrop`) before the TextBox sees them. Since WU3 the
+  card does it for everything inside it: when `e.Data.GetDataPresent(typeof(BuilderDrag))`, the
+  card's preview handler finds the tile or row under the pointer, reports it and marks the event
+  handled; otherwise it leaves it, so a text drag still reaches the TextBox.
 - **Starting a drag:** `PreviewMouseLeftButtonDown` remembers a pending drag unless the press is
-  inside a `TextBoxBase` or `ButtonBase` (`IsInteractive`), so typing, selecting text and clicking
-  ▲ ▼ × never start one.
+  inside a `TextBoxBase` or a `ButtonBase` (`IsInteractive`), so typing, selecting text and
+  clicking ✎, ×, ▲ or ▼ never start one. A tile's or a stack row's icon (`IconHandle`) is the
+  exception: a press there arms a drag that starts once the pointer moves past
+  `SystemParameters.MinimumHorizontal/VerticalDragDistance` (the button's mouse capture is released
+  first, so no Click follows), and a still click opens the icon picker. The move is watched in the
+  **Preview** phase (`PreviewMouseMove`): a button holding the mouse marks the bubbling `MouseMove`
+  handled, so a bubbling handler on the tile or row would never see it. A tile's name box is only as
+  wide as its text, a row's sits left, so the rest of each tile and row can be grabbed; the hover-only
+  × takes no press while hidden (`IsHitTestVisible` follows the hover). The pointer, the button state
+  and the OS drag loop are window seams (`PointerAt`, `LeftPressed`, `RunDragDrop`) so the runtime
+  tests can drive the start gesture with real mouse events and no mouse (`ProfileBuilderDragStartTests`).
+- **Focus selects the card:** focus entering a card (a name box, a button) selects it, so a
+  double-click in Commands adds to the panel being edited.
+- **Fresh slots:** the stack operations find slots by reference, so a catalogue drop or a
+  double-click always places a new slot (`BuilderRules.ToolSlot`; WU1 review F3).
 
-### Popups
+### Popups and menus
 
-The Branding popover is a `StaysOpen="False"` `Popup` opened by a `ToggleButton` bound to
-`IsOpen`, and the toggle is not hit-testable while the popup is open. Otherwise the click that
-dismisses the popup reaches the button and reopens it (VM defect D2). On `Opened`, keyboard focus
-moves into the popup (its first control), because a mouse click leaves focus in the window and
-Escape would never reach the popup's key handler.
+A button that opens a popup or a menu that closes on an outside click is a `ToggleButton`,
+checked while it is open and not hit-testable then. Otherwise the click that dismisses the popup
+reaches the button and reopens it (VM defect D2, found on v3.0's Branding popover). The Builder's
+⚙ and profile buttons (feature #18) use the window's `MenuToggle` style: checking one opens its
+`ContextMenu` under it (code-behind sets the menu's `DataContext` and `PlacementTarget`, since a
+`ContextMenu` is not in the window's tree), and the menu's `Closed` unchecks it.
+
+### Escape
+
+Escape closes the Builder through the same path as Exit, so unsaved changes get the Save /
+Discard / Cancel prompt (SC-010). The window acts only when nothing else has it: an open menu,
+the icon picker overlay and the dialogs handle their own Escape (`ProfileBuilderWindow.OnKeyDown`).
 
 ## Theme keys
 
@@ -221,6 +260,9 @@ rst-c adds the following. Every pairing they draw is a `ContrastRequirement` in
 | `BusySpinner` | ProgressBar | A 16 px turning accent arc. Inside a `PrimaryButton`, set `Foreground="{StaticResource OnAccentBrush}"` |
 | `BusyOverlay` | ContentControl | The `RSTmsgWait` overlay. Content: a `BusyState`. A scrim, then a centred panel with the spinner, `Title` and `Message`. Put it last in the root grid, spanning everything. The view-model also disables its commands while busy |
 | `TransientBanner` | ContentControl | The `RSTmsgInform` / `showToast` toast. Content: a `TransientMessage`. Info/Success/Warning/Error colors by `Kind`, an optional bold `Title`, top-centre, click-through. Put it last in the root grid |
+| `HeaderStrip` | Border | A window's header (feature #18, decision #24): the Tint, `AccentSoftBrush` with an `InfoBorderBrush` bottom line, 54 px tall, 16 px side padding. The Builder's header; the Loader adopts it (F18 WU6). Its pairings are `UiPalette.HeaderRequirements` |
+| `HeaderTitle` | TextBlock | The window title in a `HeaderStrip` ("Profile Builder"): `SectionText` at 14 px, vertically centred |
+| `HeaderDivider` | Rectangle | The 1 × 20 px divider between header groups, 16 px each side |
 
 ### Models (RST.UI.Controls)
 
@@ -332,7 +374,11 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
   (computeRequiredAddins, the port of `tests/ui/required-addins.test.mjs` is
   `RequiredAddinDetectorTests`), `BuilderRules` (shortId, normalizeUrl via `UrlNormalizer`,
   normalizeHex, the slot shapes and summaries), `ProfileEditing` (startFresh, loadIntoProfile, the
-  dirty snapshot, rename-as-copy) and `ProfileSaveService` (save_profile and export_profile's writes).
+  dirty snapshot, the save plan) and `ProfileSaveService` (save_profile and export_profile's writes).
+  Feature #18 (spec #19) adds `CustomTools` / `CustomToolEditor` (the derived Custom Tools list, and
+  edit / remove everywhere with per-profile results), `PanelStacks` (stack authoring on the panel
+  cards, the load normaliser and the 4+ Save refusal) and `ProfileNaming` (Rename keeps the id;
+  Duplicate writes a new one; rename-as-copy is retired).
 - **The window:** `ProfileBuilderWindow` → `ProfileBuilderViewModel`, which talks to
   `IProfileBuilderBackend` and `IDialogService`. The catalogue tree is a virtualizing `TreeView`
   over `CatalogNodeViewModel`s built once; a filter updates counts and each node's
@@ -342,7 +388,7 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
 - **Dialogs:** `IDialogService.Choose` is the three-way prompt (MessageDialog's optional
   `SecondaryText` button) used for Save & Exit / Discard & Exit / Cancel. Every Builder window and
   dialog sets `ShowInTaskbar="False"`.
-- **Stacks (F15):** kept and previewed, not authored; see [Ribbon stacks](#ribbon-stacks-f15).
+- **Stacks:** F15 renders them (see [Ribbon stacks](#ribbon-stacks-f15)); feature #18 (WU3) authors them on the panel cards.
 - **Tests:** `RST.RuntimeTests/Builder`: view-model flows with fakes, screenshots `builder-*`,
   AC6 (`ProfileBuilderDataCompatibilityTests`, over the v2.2.0 fixtures and the captured v2.2.0 save
   payloads in `src/RST.Tests/Fixtures/V220/builder`), and AC7 (`ProfileBuilderPerformanceTests`: 823
@@ -354,9 +400,41 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
   - **Icon picker:** `RST.Core.Builder.IconPickerModel` (the port of `icon-picker.test.mjs`'s
     behavior, as a row model), `Controls/IconPickerViewModel` and the `Controls/IconPicker` overlay
     (a scrim inside the Builder window, so a click outside the card cancels).
-  - **Modals:** `PresetsWindow` and `CleanupWindow` (family dialogs, `ShowInTaskbar="False"`) over
-    `PresetsViewModel` / `CleanupViewModel`, behind `IBuilderDialogs`. The Cleanup modal edits a copy.
-  - **Branding popover:** see [Popups](#popups).
+- **Feature #18 (spec #19), WU2, the window shell:**
+  - **Header:** `HeaderStrip` with ⚙ (its menu: Branding…), the profile button and its menu (the
+    saved profiles, + New profile, Rename…, Duplicate…), Export ZIP, the title, the unsaved-changes
+    indicator (`IsDirty`), Save (enabled only with changes) and Exit. See [Popups and menus](#popups-and-menus)
+    and [Escape](#escape).
+  - **Dialogs** behind `IBuilderDialogs` (family dialogs, `ShowInTaskbar="False"`): `ProfileNameDialog`
+    over `ProfileNameDialogModel` for Rename… and Duplicate… (a required name, unique among the saved
+    profiles: `RST.Core.Builder.ProfileNaming`; Confirm closes only on a passing name), and
+    `BrandingDialog` for the machine-wide logo and link. While Branding is open, `BuilderDialogs` makes
+    it the owner of the family dialogs, so the Pick… file dialog does not re-enable the Builder.
+  - **The Profile pane** (330 px): General, Loader defaults and Junk cleanup tabs, which edit the
+    working copy in place (`PresetTabViewModel`, `CleanupRowViewModel`); the RST Presets and Junk
+    Cleanup modals and the Properties pane are retired.
+- **Feature #18 (spec #19), WU3, the panel cards as tiles** (`PanelCardItems.cs`):
+  - **Pane header:** "Panels on tab [name]"; the name (`TabPill`) opens General on the tab field.
+  - **Card** (`PanelCardViewModel`): the colour stripe; the header with the drag handle, the colour
+    swatch (`Swatch`, the family colour picker), the name edited in place (`InlineName`, its only
+    editor), the tool count, + New Stack, and ▲ ▼ × (`Ghost`, shown on hover, keyboard focus or
+    when the card is selected); then `Items` in ribbon order in a `WrapPanel`. Selecting a card only
+    moves the ring (no rebuild).
+  - **Tile** (`ToolTileViewModel`, 100 px): the 32 px icon (a click opens the icon picker; no pack
+    icon draws a dashed frame), the name box, the muted source line (`BuilderRules.SourceLine`:
+    "tab · panel", or the link without its scheme), × on hover, and the full command id or link as
+    the tooltip. The ▲ ▼ slot buttons and the command id on rows are retired.
+  - **Stack** (`StackGroupViewModel`, 200 px): "STACK · n/3" with ✎ (the stack dialog) and × (un-stack),
+    then a row per tool (`ToolTileViewModel` with `Row` ≥ 0): the 16 px icon, the name box, × on hover.
+  - **WU4's hook:** ✎ on a placed custom tool binds `ProfileBuilderViewModel.EditCustomToolCommand`
+    (null in WU3, so hidden) with the tile as its parameter.
+  - **The stack dialog** (`StackDialog` over `StackDialogModel`, behind `IBuilderDialogs.EditStack`):
+    New lists the panel's loose tools, ticked 2-3 in pick order ("#n"); Edit lists the stack's rows
+    (ticked) then the loose tools, with ▲ ▼ to reorder; a fourth tick is refused; saving an edit
+    below 2 removes the stack.
+  - **Opening a profile** runs `PanelStacks.Normalize` after the clean baseline is taken, so a
+    repaired profile reads as changed and Save can write the repair (WU1 review F2, WU2 review F1);
+    each repair is logged and a toast says so. Save refuses a stack of 4+ (`PanelStacks.SaveBlocker`).
 
 ## Revit API floor
 
@@ -535,11 +613,10 @@ feature #18 (decision #19); the authoring built for #15 is recorded for it at co
 - **Validation:** a stack needs a name and 2-3 items, each `type: "tool"` with a `commandId`
   (`ProfileSerializer.Validate`, so a file breaking it does not load). A stack no panel refers to is
   a warning (`ProfileSerializer.Warnings`), and the save drops it (`ProfileEditing.RemoveOrphanStacks`).
-- **The Builder (guard only):** it keeps a profile's stacks as they are and saves them byte-stable.
-  A stack slot's name box in a panel card is read-only (`SlotRowViewModel.IsStack`; the setter
-  ignores edits), because the name is the only link to `profile.stacks`. Deleting a stack slot
-  leaves an orphan, which `ProfileSaveService` drops from the file and the view-model then drops
-  from the editor. The Live Preview draws the stacks (`RibbonPreview`).
+- **The Builder:** it saves a consistent profile's stacks byte-stable, and authors stacks on the
+  panel cards since feature #18 (WU3; see the Profile Builder section). It never shows a stack's
+  name, the only link between the slot and `profile.stacks`. The Live Preview draws the stacks
+  (`RibbonPreview`).
 - **The default icons:** `Assets/icons/default_16.png` and `default_32.png` (RST.Engine) are the
   icon pack's opaque `#D9D9D9` tile with `#3C3C3C` ≡ bars, readable on any panel colour, opacity
   and theme. `IconAssets.Default16`/`Default32` use them on the ribbon, and `PackIcons.Default16`

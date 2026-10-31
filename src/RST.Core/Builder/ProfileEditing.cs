@@ -1,9 +1,10 @@
 // rst-c's own (not vendored): the Builder's editing rules (spec #16, WU4), ported from
 // profile_builder.html: startFresh (1507-1529), loadIntoProfile (1592-1628), the dirty snapshot
-// (snapshotPristine / isProfileDirty, 1534-1542) and the rename-as-copy check of
-// saveAndMaybeReload (2966-3018). Behavior is unchanged, with one deliberate difference: the JS
-// shared the edited panels with the dropdown's profile list (an edit leaked into the list until a
-// reload); here the editor always works on its own copy.
+// (snapshotPristine / isProfileDirty, 1534-1542) and the checks of saveAndMaybeReload (2966-3018).
+// Behavior is unchanged, with two deliberate differences: the JS shared the edited panels with the
+// dropdown's profile list (an edit leaked into the list until a reload), here the editor always
+// works on its own copy; and rename-as-copy is retired (feature #18, spec #19): Save always writes
+// the open profile's id, so an edited name is a rename (ProfileNaming), and Duplicate makes copies.
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -23,11 +24,8 @@ public enum SavePlanKind
     /// <summary>Renamed onto another profile's name: "A profile named "X" already exists. …"</summary>
     NameCollision,
 
-    /// <summary>Saved over itself (a new profile, or an edit that kept its name).</summary>
+    /// <summary>Saved over itself, under its own id (a new profile, an edit, or a rename).</summary>
     InPlace,
-
-    /// <summary>Renamed in edit mode: saved as a new profile (id and export date cleared), the original kept.</summary>
-    AsCopy,
 }
 
 public static class ProfileEditing
@@ -54,7 +52,7 @@ public static class ProfileEditing
 
     /// <summary>
     /// <c>startFresh</c>'s blank profile (before its first panel is added): schema 1, no id, empty
-    /// name and tab, Min Revit "0.1.0", opacity 100, no presets, and the default cleanup targets.
+    /// name and tab, Min RST version "0.1.0", opacity 100, no presets, and the default cleanup targets.
     /// </summary>
     public static Profile NewProfile() => new()
     {
@@ -76,7 +74,7 @@ public static class ProfileEditing
 
     /// <summary>
     /// <c>loadIntoProfile</c>: a copy of <paramref name="source"/> for editing, with the JS's
-    /// defaults (schema <c>|| 1</c>, Min Revit <c>|| "0.1.0"</c>), branding dropped (it is machine-wide
+    /// defaults (schema <c>|| 1</c>, Min RST version <c>|| "0.1.0"</c>), branding dropped (it is machine-wide
     /// now), presets normalized, and the default cleanup targets for a profile that has none
     /// (pre-RST-031).
     /// </summary>
@@ -117,10 +115,10 @@ public static class ProfileEditing
     /// <summary>
     /// The checks Save makes before writing: name, then tab, then — in edit mode, when the name
     /// changed (trimmed) from the one loaded — the case-insensitive collision with another profile's
-    /// name (by a different id). <see cref="SavePlanKind.AsCopy"/> clears the id and export date of
-    /// <paramref name="profile"/>, so the save mints a new profile.
+    /// name (by a different id, <see cref="ProfileNaming.IsTaken"/>). Otherwise the save is in
+    /// place: the id is kept, so a changed name is a rename. <paramref name="profile"/> is not changed.
     /// </summary>
-    /// <param name="profile">The edited profile (changed in place for a copy).</param>
+    /// <param name="profile">The edited profile.</param>
     /// <param name="editMode">The editor holds a profile loaded from the dropdown, or saved once.</param>
     /// <param name="originalName">The name when it was loaded (or last saved); "" for a new profile.</param>
     /// <param name="library">The profiles on disk (the dropdown's list).</param>
@@ -134,17 +132,6 @@ public static class ProfileEditing
                           && !string.IsNullOrEmpty(originalName)
                           && profile.ProfileName.Trim() != originalName.Trim();
         if (!renamedAway) return SavePlanKind.InPlace;
-
-        var newNameLower = profile.ProfileName.Trim().ToLowerInvariant();
-        var collision = (library ?? []).Any(p =>
-            p is not null
-            && !string.IsNullOrEmpty(p.Id)
-            && p.Id != profile.Id
-            && (p.ProfileName ?? "").Trim().ToLowerInvariant() == newNameLower);
-        if (collision) return SavePlanKind.NameCollision;
-
-        profile.Id = null;
-        profile.ExportDate = "";
-        return SavePlanKind.AsCopy;
+        return ProfileNaming.IsTaken(profile.ProfileName, profile.Id, library) ? SavePlanKind.NameCollision : SavePlanKind.InPlace;
     }
 }

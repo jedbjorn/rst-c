@@ -1,13 +1,18 @@
 <!--
     rst-c's own (not vendored); the window chrome follows splash-it
     src/SplashIt.UI/Settings/SettingsWindow.xaml (splash-it commit ba86a71, MIT, same owner).
-    The Profile Builder (spec #16, WU4), laid out one-for-one with profile_builder.html (1121-1328):
-    the header (profile dropdown, "Profile Builder", Branding ▾ with its popover, Name, Tab, Export ZIP,
-    Save, Exit), three panes (the 340 px Commands tree with its count and filter, the Panels list with
-    + Add Panel and the panel cards, the 340 px Properties pane), the Live Preview strip at the bottom,
-    and the toast on top. WU5 adds drag and drop (catalogue → panel or slot, slot reorder and move,
-    panel reorder, with the drop-before / drop-after / drag-over markers), the icon picker overlay,
-    and the RST Presets and Junk Cleanup modals behind the Configure buttons.
+    The Profile Builder (spec #16, WU4), first laid out one-for-one with profile_builder.html (1121-1328):
+    three panes (the Commands tree with its count and filter, the Panels list with + Add Panel and the
+    panel cards), the Live Preview strip at the bottom, and the toast on top. WU5 adds drag and drop
+    (catalogue → panel or slot, slot reorder and move, panel reorder, with the drop-before / drop-after /
+    drag-over markers) and the icon picker overlay.
+    Feature #18 (spec #19, WU2; the approved layout of decision #25) reorganises it by scope: the header
+    (HeaderStrip, the Tint) with ⚙ (machine settings: Branding…), the profile button and its menu (switch,
+    + New profile, Rename…, Duplicate…), Export ZIP, "Profile Builder", the unsaved-changes indicator, Save
+    and Exit; the Commands pane at 320 px; and the 330 px Profile pane with its General, Loader defaults and
+    Junk cleanup tabs, where the Properties pane, the header's Name and Tab boxes, the Branding ▾ popover
+    and the Presets and Cleanup modals were. WU3 makes the panel cards tiles and stacks ("Panels on tab",
+    the inline colour and name, + New Stack, the stack rules of decisions #18 and #19 for drag and drop).
 -->
 <Window x:Class="RST.UI.Builder.ProfileBuilderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -43,8 +48,13 @@
                 </Style.Triggers>
             </Style>
 
-            <!-- The Branding ▾ toggle: the kit's Button look (flat, bordered, hover, pressed); checked while the popover is open. -->
-            <Style x:Key="BrandingToggle" TargetType="ToggleButton">
+            <!--
+                ⚙ and the profile button: the kit's Button look (flat, bordered, hover, pressed), checked
+                while their menu is open. Each opens its ContextMenu (code-behind) and is not hit-testable
+                while the menu is open, so the click that dismisses the menu cannot reopen it (the
+                Branding popover's VM finding D2, spec #16 WU5).
+            -->
+            <Style x:Key="MenuToggle" TargetType="ToggleButton">
                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                 <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
                 <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
@@ -54,6 +64,9 @@
                 <Setter Property="MinWidth" Value="28" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="ContextMenuService.IsEnabled" Value="False" />
+                <Setter Property="IsHitTestVisible"
+                        Value="{Binding ContextMenu.IsOpen, RelativeSource={RelativeSource Self}, Converter={StaticResource InverseBool}}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
@@ -86,6 +99,34 @@
                 </Style.Triggers>
             </Style>
 
+            <!-- A menu's heading ("This machine — not saved in profiles", "Switch profile"): muted, small, not an item. -->
+            <Style x:Key="MenuHeading" TargetType="MenuItem">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="MenuItem">
+                            <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                       Margin="10,6,10,3" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- A profile in the profile menu: the tick for the one in the editor, then its name. -->
+            <DataTemplate x:Key="ProfileMenuHeader" DataType="{x:Type builder:ProfileOptionViewModel}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="Tick" Text="✓" Width="16" Visibility="Hidden" />
+                    <TextBlock x:Name="ProfileName" Text="{Binding Display}" />
+                </StackPanel>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                        <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                        <Setter TargetName="ProfileName" Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
             <!-- A pane's header row: the label on the left, its count or button on the right. -->
             <Style x:Key="PaneHeader" TargetType="Border">
                 <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
@@ -94,18 +135,19 @@
                 <Setter Property="Height" Value="42" />
             </Style>
 
-            <!-- A Properties section: a divider under each. -->
-            <Style x:Key="PropSection" TargetType="Border">
-                <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />
-                <Setter Property="BorderThickness" Value="0,0,0,1" />
-                <Setter Property="Padding" Value="16,14" />
-            </Style>
-
-            <Style x:Key="PropLabel" TargetType="TextBlock" BasedOn="{StaticResource LabelText}">
+            <!-- The Profile pane's field labels and help lines. -->
+            <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource LabelText}">
                 <Setter Property="Margin" Value="0,0,0,4" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+            </Style>
+            <Style x:Key="FieldHelp" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,3,0,0" />
             </Style>
 
-            <!-- ▲ ▼ × on the panel cards and slot rows. -->
+            <!-- × on a Junk cleanup row. -->
             <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
                 <Setter Property="Padding" Value="5,1" />
                 <Setter Property="MinWidth" Value="22" />
@@ -114,28 +156,6 @@
             </Style>
             <Style x:Key="RowDangerButton" TargetType="Button" BasedOn="{StaticResource RowButton}">
                 <Setter Property="Foreground" Value="{StaticResource DangerForegroundBrush}" />
-            </Style>
-
-            <!-- The panel color swatch (opens the family color picker). -->
-            <Style x:Key="SwatchButton" TargetType="Button">
-                <Setter Property="Width" Value="26" />
-                <Setter Property="Height" Value="26" />
-                <Setter Property="Cursor" Value="Hand" />
-                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Chip" CornerRadius="3" Background="{TemplateBinding Background}"
-                                    BorderBrush="{StaticResource ChipBorderBrush}" BorderThickness="1" />
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource ChipHoverBorderBrush}" />
-                                    <Setter TargetName="Chip" Property="BorderThickness" Value="2" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
             </Style>
 
             <!--
@@ -161,24 +181,292 @@
                         <Setter Property="BorderThickness" Value="2" />
                         <Setter Property="Visibility" Value="Visible" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Refused}">
+                        <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}" />
+                        <Setter Property="BorderThickness" Value="2" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
                 </Style.Triggers>
             </Style>
 
             <!--
-                A slot row's name box. A stack slot's name is the link to its stack (spec #17): read-only,
-                drawn without its box so it reads as a label (review N2; the styling of 39d92255).
+                The marker over a tile or a stack group (feature #18, WU3). Tiles run left to right, so
+                before and after are a 3 px line on the left or right edge; over (a stack forms, or the
+                tool joins the stack) rings it; refused (a full stack) rings it in the error colour.
             -->
-            <Style x:Key="SlotNameBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Style x:Key="TileDropMarker" TargetType="Border">
+                <Setter Property="IsHitTestVisible" Value="False" />
+                <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Visibility" Value="Collapsed" />
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsStack}" Value="True">
-                        <Setter Property="IsReadOnly" Value="True" />
-                        <Setter Property="Background" Value="Transparent" />
-                        <Setter Property="BorderBrush" Value="Transparent" />
-                        <Setter Property="Cursor" Value="Arrow" />
-                        <Setter Property="Focusable" Value="False" />
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Before}">
+                        <Setter Property="BorderThickness" Value="3,0,0,0" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.After}">
+                        <Setter Property="BorderThickness" Value="0,0,3,0" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Over}">
+                        <Setter Property="BorderThickness" Value="2" />
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Refused}">
+                        <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}" />
+                        <Setter Property="BorderThickness" Value="2" />
+                        <Setter Property="Visibility" Value="Visible" />
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
+
+            <!-- ✎ × ▲ ▼ on the cards, tiles and stacks (the spike's ghost buttons). -->
+            <Style x:Key="Ghost" TargetType="Button" BasedOn="{StaticResource IconButton}">
+                <Setter Property="Padding" Value="4,0" />
+                <Setter Property="MinWidth" Value="20" />
+                <Setter Property="MinHeight" Value="20" />
+                <Setter Property="FontSize" Value="11" />
+            </Style>
+            <Style x:Key="GhostDanger" TargetType="Button" BasedOn="{StaticResource Ghost}">
+                <Setter Property="Foreground" Value="{StaticResource DangerForegroundBrush}" />
+                <Setter Property="FontSize" Value="13" />
+            </Style>
+
+            <!-- A tile's or a stack row's icon: a flat button around the image (a click opens the icon picker). -->
+            <Style x:Key="IconSlot" TargetType="Button" BasedOn="{StaticResource IconButton}">
+                <Setter Property="Padding" Value="2" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+            </Style>
+
+            <!-- The card's colour swatch: the panel colour, a click opens the family colour picker. -->
+            <Style x:Key="Swatch" TargetType="Button">
+                <Setter Property="Width" Value="22" />
+                <Setter Property="Height" Value="22" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Chip" CornerRadius="4" Background="{TemplateBinding Background}"
+                                    BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1" SnapsToDevicePixels="True" />
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource TextBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- The pane header's tab name: a pill; a click takes you to the tab field on General. -->
+            <Style x:Key="TabPill" TargetType="Button">
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Pill" Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource AccentForegroundBrush}"
+                                    BorderThickness="1" CornerRadius="3" Padding="10,2" SnapsToDevicePixels="True">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- A name edited in place (a panel's, a tile's, a stack row's): borderless until hovered or focused. -->
+            <Style x:Key="InlineName" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="MinHeight" Value="20" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True">
+                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- The card's drag handle. -->
+            <Style x:Key="Handle" TargetType="TextBlock">
+                <Setter Property="Text" Value="⠿" />
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="SizeAll" />
+            </Style>
+
+            <!--
+                A loose tool's tile (feature #18, WU3): the 32 px icon (the icon picker), the name box (this
+                panel's label for the tool), the muted source line; ✎ (custom tools, WU4) and × on hover; the
+                full command id or link as the tooltip. Tiles are drag sources and drop targets: the card's
+                preview handlers work out where the pointer is (OnCardDragOver).
+            -->
+            <DataTemplate DataType="{x:Type builder:ToolTileViewModel}">
+                <Border x:Name="TileCell" Background="Transparent" Padding="0,0,10,10" VerticalAlignment="Top">
+                <Grid x:Name="Tile" Width="100" VerticalAlignment="Top" Background="Transparent"
+                      ToolTip="{Binding ToolTip}" PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                      AutomationProperties.AutomationId="Builder.Tile" AutomationProperties.Name="{Binding Name}">
+                    <Border x:Name="TileFace" Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" CornerRadius="4" Padding="4,7,4,5" SnapsToDevicePixels="True">
+                        <StackPanel>
+                            <Button x:Name="IconHandle" Style="{StaticResource IconSlot}" Command="{Binding PickIconCommand}" HorizontalAlignment="Center"
+                                    ToolTip="{x:Static res:UiStrings.Builder_PickIconTip}"
+                                    AutomationProperties.AutomationId="Builder.PickIcon"
+                                    AutomationProperties.Name="{x:Static res:UiStrings.Builder_PickIconTip}">
+                                <Grid Width="32" Height="32">
+                                    <Image Source="{Binding Icon}" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" />
+                                    <Rectangle x:Name="NoIcon" Stroke="{StaticResource StrongBorderBrush}" StrokeDashArray="3 2" RadiusX="3" RadiusY="3"
+                                               Visibility="Collapsed" />
+                                </Grid>
+                            </Button>
+                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource InlineName}" TextAlignment="Center" HorizontalAlignment="Center" MinWidth="40"
+                                     FontSize="11" Padding="2,0" Margin="0,3,0,0"
+                                     AutomationProperties.AutomationId="Builder.ToolName"
+                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_ToolName}" />
+                            <TextBlock Text="{Binding SourceLine}" Style="{StaticResource MutedText}" FontSize="9" HorizontalAlignment="Center"
+                                       MaxWidth="90" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
+                                       AutomationProperties.AutomationId="Builder.ToolSource" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel x:Name="Corner" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0" Opacity="0" IsHitTestVisible="False">
+                        <!-- WU4's hook: ✎ on a placed custom tool (shown only when WU4 provides the command). -->
+                        <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCustomCommand}" CommandParameter="{Binding}"
+                                Visibility="{Binding ShowsEditCustom, Converter={StaticResource BoolToVisible}}"
+                                ToolTip="{x:Static res:UiStrings.Builder_EditCustomToolTip}"
+                                AutomationProperties.AutomationId="Builder.EditCustomTool"
+                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_EditCustomToolTip}" />
+                        <Button Content="×" Style="{StaticResource GhostDanger}" Command="{Binding RemoveCommand}"
+                                ToolTip="{x:Static res:UiStrings.Builder_RemoveSlotTip}"
+                                AutomationProperties.AutomationId="Builder.RemoveTool"
+                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_RemoveSlotTip}" />
+                    </StackPanel>
+                    <Border Style="{StaticResource TileDropMarker}" CornerRadius="4" AutomationProperties.AutomationId="Builder.TileDropMarker" />
+                </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding HasIcon}" Value="False">
+                        <Setter TargetName="NoIcon" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <Trigger SourceName="Tile" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Corner" Property="Opacity" Value="1" />
+                        <Setter TargetName="Corner" Property="IsHitTestVisible" Value="True" />
+                        <Setter TargetName="TileFace" Property="BorderBrush" Value="{StaticResource StrongBorderBrush}" />
+                    </Trigger>
+                    <Trigger SourceName="Tile" Property="IsKeyboardFocusWithin" Value="True">
+                        <Setter TargetName="Corner" Property="Opacity" Value="1" />
+                        <Setter TargetName="Corner" Property="IsHitTestVisible" Value="True" />
+                    </Trigger>
+                    <DataTrigger Binding="{Binding IsDragSource}" Value="True">
+                        <Setter TargetName="Tile" Property="Opacity" Value="0.4" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!-- A stack's row: the 16 px icon (the icon picker), the name box; ✎ (custom tools, WU4) and × on hover. -->
+            <DataTemplate x:Key="StackRowTemplate" DataType="{x:Type builder:ToolTileViewModel}">
+                <Grid x:Name="StackRow" Margin="0,0,0,3" Background="Transparent" ToolTip="{Binding ToolTip}"
+                      PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                      AutomationProperties.AutomationId="Builder.StackRow" AutomationProperties.Name="{Binding Name}">
+                    <Border x:Name="RowFace" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" CornerRadius="3" Padding="2,1,2,1" SnapsToDevicePixels="True">
+                        <DockPanel>
+                            <StackPanel x:Name="Corner" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False">
+                                <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCustomCommand}" CommandParameter="{Binding}"
+                                        Visibility="{Binding ShowsEditCustom, Converter={StaticResource BoolToVisible}}"
+                                        ToolTip="{x:Static res:UiStrings.Builder_EditCustomToolTip}"
+                                        AutomationProperties.AutomationId="Builder.EditCustomTool"
+                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_EditCustomToolTip}" />
+                                <Button Content="×" Style="{StaticResource GhostDanger}" Command="{Binding RemoveCommand}"
+                                        ToolTip="{x:Static res:UiStrings.Builder_RemoveSlotTip}"
+                                        AutomationProperties.AutomationId="Builder.RemoveTool"
+                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_RemoveSlotTip}" />
+                            </StackPanel>
+                            <Button x:Name="IconHandle" DockPanel.Dock="Left" Style="{StaticResource IconSlot}" Padding="1" Margin="0,0,3,0" Command="{Binding PickIconCommand}" VerticalAlignment="Center"
+                                    ToolTip="{x:Static res:UiStrings.Builder_PickIconTip}"
+                                    AutomationProperties.AutomationId="Builder.PickIcon"
+                                    AutomationProperties.Name="{x:Static res:UiStrings.Builder_PickIconTip}">
+                                <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
+                            </Button>
+                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource InlineName}" FontSize="11"
+                                     Padding="0" Margin="0" HorizontalAlignment="Left" MinWidth="40"
+                                     AutomationProperties.AutomationId="Builder.ToolName"
+                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_ToolName}" />
+                        </DockPanel>
+                    </Border>
+                    <Border Style="{StaticResource DropMarkerBorder}" CornerRadius="3" AutomationProperties.AutomationId="Builder.StackRowDropMarker" />
+                </Grid>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="StackRow" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Corner" Property="Opacity" Value="1" />
+                        <Setter TargetName="Corner" Property="IsHitTestVisible" Value="True" />
+                        <Setter TargetName="RowFace" Property="BorderBrush" Value="{StaticResource StrongBorderBrush}" />
+                    </Trigger>
+                    <Trigger SourceName="StackRow" Property="IsKeyboardFocusWithin" Value="True">
+                        <Setter TargetName="Corner" Property="Opacity" Value="1" />
+                        <Setter TargetName="Corner" Property="IsHitTestVisible" Value="True" />
+                    </Trigger>
+                    <DataTrigger Binding="{Binding IsDragSource}" Value="True">
+                        <Setter TargetName="StackRow" Property="Opacity" Value="0.4" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!--
+                A stack (feature #18, WU3; decision #19): "STACK · n/3" with ✎ (the stack dialog) and ×
+                (un-stack) on its right edge, then its 2-3 rows. Dragged by its header, the whole stack
+                moves. A full stack refusing a fourth tool shows the refusal marker and its message.
+            -->
+            <DataTemplate DataType="{x:Type builder:StackGroupViewModel}">
+                <Border x:Name="TileCell" Background="Transparent" Padding="0,0,10,10" VerticalAlignment="Top">
+                <Grid x:Name="StackGroup" Width="200" VerticalAlignment="Top" Background="Transparent"
+                      AutomationProperties.AutomationId="Builder.Stack" AutomationProperties.Name="{Binding Header}">
+                    <Border Background="{StaticResource SurfaceAltBrush}" BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1,3,1,1"
+                            CornerRadius="4" Padding="6,2,6,3" SnapsToDevicePixels="True">
+                        <StackPanel>
+                            <DockPanel x:Name="StackHeader" Margin="0,0,0,2" Background="Transparent" Cursor="SizeAll"
+                                       PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                                       AutomationProperties.AutomationId="Builder.StackHeader">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCommand}"
+                                            ToolTip="{x:Static res:UiStrings.Builder_EditStackTip}"
+                                            AutomationProperties.AutomationId="Builder.EditStack"
+                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_EditStackTip}" />
+                                    <Button Content="×" Style="{StaticResource GhostDanger}" Command="{Binding UnstackCommand}"
+                                            ToolTip="{x:Static res:UiStrings.Builder_UnstackTip}"
+                                            AutomationProperties.AutomationId="Builder.Unstack"
+                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_UnstackTip}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Header}" Style="{StaticResource MutedText}" FontSize="9" VerticalAlignment="Center"
+                                           AutomationProperties.AutomationId="Builder.StackHeaderText" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource StackRowTemplate}" Focusable="False" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource TileDropMarker}" CornerRadius="4" AutomationProperties.AutomationId="Builder.StackDropMarker" />
+                    <Border x:Name="FullNote" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource ErrorBrush}" BorderThickness="1"
+                            CornerRadius="3" Padding="6,3" Margin="8,0,8,6" VerticalAlignment="Bottom" IsHitTestVisible="False" Visibility="Collapsed"
+                            AutomationProperties.AutomationId="Builder.StackFull">
+                        <TextBlock Text="{x:Static res:UiStrings.Builder_StackFull}" Foreground="{StaticResource ErrorBrush}" FontSize="11"
+                                   TextWrapping="Wrap" TextAlignment="Center" />
+                    </Border>
+                </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding DropMarker}" Value="{x:Static core:DropMarker.Refused}">
+                        <Setter TargetName="FullNote" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsDragSource}" Value="True">
+                        <Setter TargetName="StackGroup" Property="Opacity" Value="0.4" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
 
             <!-- A catalogue node: groups (native group, tab, panel) with a count pill; commands with their short id. -->
             <HierarchicalDataTemplate x:Key="CatalogNodeTemplate" DataType="{x:Type builder:CatalogNodeViewModel}"
@@ -193,7 +481,7 @@
                                    TextTrimming="CharacterEllipsis" />
                     </DockPanel>
                     <DockPanel x:Name="CommandRow" Background="Transparent" Visibility="Collapsed" ToolTip="{Binding ToolTip}"
-                               PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove">
+                               PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove">
                         <DockPanel.InputBindings>
                             <MouseBinding Gesture="LeftDoubleClick"
                                           Command="{Binding DataContext.AddCatalogCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -227,138 +515,93 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- Header -->
-            <Border Style="{StaticResource LoaderStrip}" BorderThickness="0,0,0,1" Height="54" Padding="16,0">
+            <!--
+                Header (feature #18, decisions #22-#24): the shared HeaderStrip (Tint). Left to right: ⚙ (machine
+                settings), the profile button and its menu, Export ZIP, a divider, "Profile Builder"; on the right,
+                the unsaved-changes dot and text, Save (the Primary; only with changes) and Exit.
+            -->
+            <Border x:Name="Header" Style="{StaticResource HeaderStrip}" AutomationProperties.AutomationId="Builder.Header">
                 <DockPanel VerticalAlignment="Center" LastChildFill="False">
                     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                        <ComboBox x:Name="ProfileSelector" Width="220" ItemsSource="{Binding ProfileOptions}"
-                                  SelectedItem="{Binding SelectedProfileOption, Mode=TwoWay}" DisplayMemberPath="Display"
-                                  ToolTip="{x:Static res:UiStrings.Builder_ProfileSelectorTip}"
-                                  AutomationProperties.AutomationId="Builder.ProfileSelector"
-                                  AutomationProperties.Name="{x:Static res:UiStrings.Builder_ProfileSelectorTip}" />
-                        <Rectangle Width="1" Height="20" Fill="{StaticResource DividerBrush}" Margin="16,0" />
-                        <TextBlock Text="{x:Static res:UiStrings.Builder_Title}" Style="{StaticResource SectionText}" FontSize="14"
-                                   Margin="0" VerticalAlignment="Center" AutomationProperties.AutomationId="Builder.Title" />
-                        <Rectangle Width="1" Height="20" Fill="{StaticResource DividerBrush}" Margin="16,0" />
-
-                        <!-- Branding ▾ and its popover (machine-wide branding, not part of the profile). -->
-                        <!--
-                            The standard WPF pattern for a button that opens a StaysOpen=False popup: a ToggleButton
-                            checked with the popup, and not hit-testable while it is open, so the click that
-                            dismisses the popup cannot reach the button and reopen it (VM finding D2).
-                        -->
-                        <ToggleButton x:Name="BrandingButton" Style="{StaticResource BrandingToggle}"
-                                      IsChecked="{Binding IsOpen, ElementName=BrandingPopup, Mode=TwoWay}"
-                                      IsHitTestVisible="{Binding IsOpen, ElementName=BrandingPopup, Converter={StaticResource InverseBool}}"
-                                      ToolTip="{x:Static res:UiStrings.Builder_BrandingTip}" AutomationProperties.AutomationId="Builder.Branding"
-                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_Branding}">
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse x:Name="BrandingDot" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
-                                         StrokeThickness="1" AutomationProperties.AutomationId="Builder.BrandingDot">
-                                    <Ellipse.Style>
-                                        <Style TargetType="Ellipse">
-                                            <Setter Property="Fill" Value="Transparent" />
-                                            <Setter Property="Stroke" Value="{StaticResource StrongBorderBrush}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding HasBranding}" Value="True">
-                                                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
-                                                    <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Ellipse.Style>
-                                </Ellipse>
-                                <TextBlock Text="{x:Static res:UiStrings.Builder_Branding}" VerticalAlignment="Center" />
-                                <TextBlock Text="▾" Margin="6,0,0,0" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
-                            </StackPanel>
+                        <ToggleButton x:Name="SettingsButton" Style="{StaticResource MenuToggle}" Width="30" MinWidth="30" Padding="0"
+                                      Checked="OnMenuToggleChecked"
+                                      ToolTip="{x:Static res:UiStrings.Builder_SettingsTip}" AutomationProperties.AutomationId="Builder.Settings"
+                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_SettingsTip}">
+                            <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="14"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ToggleButton.ContextMenu>
+                                <ContextMenu x:Name="SettingsMenu" Closed="OnMenuClosed" AutomationProperties.AutomationId="Builder.SettingsMenu">
+                                    <MenuItem Style="{StaticResource MenuHeading}" Header="{x:Static res:UiStrings.Builder_SettingsHeading}" />
+                                    <MenuItem x:Name="BrandingMenuItem" Header="{x:Static res:UiStrings.Builder_BrandingMenu}"
+                                              InputGestureText="{x:Static res:UiStrings.Builder_BrandingMenuNote}" Command="{Binding BrandingCommand}"
+                                              AutomationProperties.AutomationId="Builder.BrandingMenu" />
+                                </ContextMenu>
+                            </ToggleButton.ContextMenu>
                         </ToggleButton>
-                        <Popup x:Name="BrandingPopup" PlacementTarget="{Binding ElementName=BrandingButton}" Placement="Bottom"
-                               VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" Opened="OnBrandingOpened" Closed="OnBrandingClosed"
-                               PreviewKeyDown="OnBrandingPopoverKey"
-                               IsOpen="{Binding IsBrandingOpen, Mode=TwoWay}">
-                            <Border x:Name="BrandingPopover" Width="320" Background="{StaticResource SurfaceBrush}"
-                                    BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1" CornerRadius="5" Padding="16,14"
-                                    Margin="0,0,8,8" TextElement.Foreground="{StaticResource TextBrush}" TextElement.FontFamily="Segoe UI"
-                                    TextElement.FontSize="12" AutomationProperties.AutomationId="Builder.BrandingPopover">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.3" />
-                                </Border.Effect>
-                                <StackPanel>
-                                    <TextBlock Text="{x:Static res:UiStrings.Builder_BrandingHeading}" Style="{StaticResource SectionText}" />
-                                    <TextBlock Text="{x:Static res:UiStrings.Builder_Logo}" Style="{StaticResource PropLabel}" />
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button x:Name="PickLogoButton" Content="{x:Static res:UiStrings.Builder_PickLogo}" Command="{Binding PickLogoCommand}"
-                                                AutomationProperties.AutomationId="Builder.PickLogo" />
-                                        <Button Content="{x:Static res:UiStrings.Builder_ClearLogo}" Command="{Binding ClearLogoCommand}"
-                                                Style="{StaticResource IconButton}" Margin="4,0,0,0"
-                                                ToolTip="{x:Static res:UiStrings.Builder_ClearLogoTip}"
-                                                AutomationProperties.AutomationId="Builder.ClearLogo"
-                                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_ClearLogoTip}" />
-                                        <TextBlock x:Name="LogoName" Text="{Binding LogoName}" Margin="8,0,0,0" VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis" MaxWidth="170" AutomationProperties.AutomationId="Builder.LogoName">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasLogo}" Value="True">
-                                                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </StackPanel>
-                                    <TextBlock Text="{x:Static res:UiStrings.Builder_Url}" Style="{StaticResource PropLabel}" Margin="0,12,0,4" />
-                                    <Grid>
-                                        <TextBox x:Name="BrandingUrlBox" mvvm:Behaviors.CommitOnEnter="True"
-                                                 Text="{Binding BrandingUrl, UpdateSourceTrigger=LostFocus}"
-                                                 AutomationProperties.AutomationId="Builder.BrandingUrl"
-                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_Url}" />
-                                        <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_UrlPlaceholder}"
-                                                   Tag="{Binding Text, ElementName=BrandingUrlBox}" />
-                                    </Grid>
-                                    <Border BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Margin="0,14,0,0" Padding="0,10,0,0">
-                                        <Button Content="{x:Static res:UiStrings.Builder_Done}" Command="{Binding CloseBrandingCommand}"
-                                                Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right" MinWidth="72"
-                                                AutomationProperties.AutomationId="Builder.BrandingDone" />
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-                        </Popup>
 
-                        <TextBlock Text="{x:Static res:UiStrings.Builder_Name}" Style="{StaticResource LabelText}" Margin="20,0,6,0" VerticalAlignment="Center" />
-                        <Grid Width="200">
-                            <TextBox x:Name="NameBox" Text="{Binding ProfileName, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.AutomationId="Builder.Name" AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
-                            <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_NamePlaceholder}"
-                                       Tag="{Binding Text, ElementName=NameBox}" />
-                        </Grid>
-                        <TextBlock Text="{x:Static res:UiStrings.Builder_Tab}" Style="{StaticResource LabelText}" Margin="14,0,6,0" VerticalAlignment="Center" />
-                        <Grid Width="170">
-                            <TextBox x:Name="TabBox" Text="{Binding ProfileTab, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.AutomationId="Builder.Tab" AutomationProperties.Name="{x:Static res:UiStrings.Builder_Tab}" />
-                            <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_TabPlaceholder}"
-                                       Tag="{Binding Text, ElementName=TabBox}" />
-                        </Grid>
+                        <ToggleButton x:Name="ProfileButton" Style="{StaticResource MenuToggle}" Width="250" Margin="10,0,0,0"
+                                      HorizontalContentAlignment="Stretch" Checked="OnMenuToggleChecked"
+                                      ToolTip="{x:Static res:UiStrings.Builder_ProfileSelectorTip}"
+                                      AutomationProperties.AutomationId="Builder.ProfileButton"
+                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_ProfileSelectorTip}">
+                            <!-- The name, "(loaded)" right after it (as the spike), the chevron at the right edge. -->
+                            <DockPanel LastChildFill="False">
+                                <TextBlock DockPanel.Dock="Right" Text="▾" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                <TextBlock x:Name="ProfileButtonName" DockPanel.Dock="Left" Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis"
+                                           AutomationProperties.AutomationId="Builder.ProfileButtonName" />
+                                <TextBlock DockPanel.Dock="Left" Text="{x:Static res:UiStrings.Builder_LoadedMark}" Style="{StaticResource MutedText}"
+                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                           Visibility="{Binding IsLoadedProfile, Converter={StaticResource BoolToVisible}}"
+                                           AutomationProperties.AutomationId="Builder.LoadedMark" />
+                            </DockPanel>
+                            <ToggleButton.ContextMenu>
+                                <ContextMenu x:Name="ProfileMenu" Closed="OnMenuClosed" MinWidth="300"
+                                             AutomationProperties.AutomationId="Builder.ProfileMenu">
+                                    <MenuItem x:Name="ProfileMenuHeading" Style="{StaticResource MenuHeading}"
+                                              Header="{x:Static res:UiStrings.Builder_SwitchProfileHeading}" />
+                                    <!-- The profiles go here (code-behind, from ProfileOptions, each time the menu opens). -->
+                                    <Separator x:Name="ProfileMenuDivider" />
+                                    <MenuItem Header="{x:Static res:UiStrings.Builder_NewProfile}" Command="{Binding NewProfileCommand}"
+                                              AutomationProperties.AutomationId="Builder.NewProfile" />
+                                    <MenuItem Header="{x:Static res:UiStrings.Builder_RenameMenu}" InputGestureText="{x:Static res:UiStrings.Builder_RenameNote}"
+                                              Command="{Binding RenameCommand}" AutomationProperties.AutomationId="Builder.RenameMenu" />
+                                    <MenuItem Header="{x:Static res:UiStrings.Builder_DuplicateMenu}" InputGestureText="{x:Static res:UiStrings.Builder_DuplicateNote}"
+                                              Command="{Binding DuplicateCommand}" AutomationProperties.AutomationId="Builder.DuplicateMenu" />
+                                </ContextMenu>
+                            </ToggleButton.ContextMenu>
+                        </ToggleButton>
+
+                        <Button Content="{x:Static res:UiStrings.Builder_ExportZip}" Command="{Binding ExportCommand}" Margin="10,0,0,0"
+                                AutomationProperties.AutomationId="Builder.Export" />
+                        <Rectangle Style="{StaticResource HeaderDivider}" />
+                        <TextBlock Text="{x:Static res:UiStrings.Builder_Title}" Style="{StaticResource HeaderTitle}"
+                                   AutomationProperties.AutomationId="Builder.Title" />
                     </StackPanel>
 
-                    <!-- The family button bar: Export ZIP, then Save (the Primary), Exit rightmost. -->
+                    <!-- The unsaved-changes indicator, then the family button bar: Save (the Primary), Exit rightmost. -->
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="{x:Static res:UiStrings.Builder_ExportZip}" Command="{Binding ExportCommand}"
-                                AutomationProperties.AutomationId="Builder.Export" />
-                        <Button Content="{x:Static res:UiStrings.Builder_Save}" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}"
-                                Margin="8,0,0,0" MinWidth="72" AutomationProperties.AutomationId="Builder.Save" />
+                        <StackPanel x:Name="UnsavedIndicator" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0"
+                                    Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisible}}"
+                                    AutomationProperties.AutomationId="Builder.Unsaved">
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource WarningTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <TextBlock Text="{x:Static res:UiStrings.Builder_UnsavedIndicator}" Foreground="{StaticResource WarningTextBrush}"
+                                       FontSize="11" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button x:Name="SaveButton" Content="{x:Static res:UiStrings.Builder_Save}" Command="{Binding SaveCommand}"
+                                Style="{StaticResource PrimaryButton}" MinWidth="72" AutomationProperties.AutomationId="Builder.Save" />
                         <Button Content="{x:Static res:UiStrings.Builder_Exit}" Command="{Binding ExitCommand}" Margin="8,0,0,0" MinWidth="72"
                                 ToolTip="{x:Static res:UiStrings.Builder_ExitTip}" AutomationProperties.AutomationId="Builder.Exit" />
                     </StackPanel>
                 </DockPanel>
             </Border>
 
-            <!-- Body: Commands | Panels | Properties -->
-            <Grid Grid.Row="1">
+            <!-- Body: Commands | Panels | Profile -->
+            <Grid x:Name="Panes" Grid.Row="1">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="340" />
+                    <ColumnDefinition Width="320" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="340" />
+                    <ColumnDefinition Width="330" />
                 </Grid.ColumnDefinitions>
 
                 <!-- Commands -->
@@ -405,14 +648,30 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Panels -->
+                <!--
+                    Panels on tab [tab name] (feature #18, WU3; decision #25): the cards in ribbon order. Each card:
+                    the colour stripe; a header with the drag handle, the colour swatch, the name edited in place,
+                    the tool count, + New Stack and ▲ ▼ × (on hover, or when selected); then its tiles and stacks,
+                    wrapping. The card's preview drag handlers see every drag over it first, the name boxes
+                    included (a TextBox swallows drags: the TextBox lesson in docs/DEVELOPING.md).
+                -->
                 <DockPanel Grid.Column="1">
                     <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
                         <DockPanel VerticalAlignment="Center">
                             <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Builder_AddPanel}" Command="{Binding AddPanelCommand}"
                                     AutomationProperties.AutomationId="Builder.AddPanel" />
-                            <TextBlock Text="{x:Static res:UiStrings.Builder_Panels}" Style="{StaticResource SectionText}" Margin="0"
-                                       VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Static res:UiStrings.Builder_Panels}" Style="{StaticResource SectionText}" Margin="0"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{x:Static res:UiStrings.Builder_PanelsOnTab}" Style="{StaticResource MutedText}" FontSize="11"
+                                           Margin="8,0,8,0" VerticalAlignment="Center" />
+                                <Button x:Name="TabNameButton" Style="{StaticResource TabPill}" Click="OnTabNameClick" VerticalAlignment="Center"
+                                        ToolTip="{x:Static res:UiStrings.Builder_TabNameTip}"
+                                        AutomationProperties.AutomationId="Builder.PanelsTab"
+                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_TabNameTip}">
+                                    <TextBlock Text="{Binding PanelsTabName}" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+                                </Button>
+                            </StackPanel>
                         </DockPanel>
                     </Border>
                     <ScrollViewer x:Name="CanvasScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -428,111 +687,69 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type builder:PanelCardViewModel}">
                                         <Grid x:Name="CardRoot" Margin="0,0,0,14" AutomationProperties.Name="{Binding Name}" AllowDrop="True"
-                                              DragOver="OnPanelDragOver" DragLeave="OnDragLeave" Drop="OnPanelDrop">
+                                              PreviewGotKeyboardFocus="OnCardFocus" PreviewDragEnter="OnCardDragOver" PreviewDragOver="OnCardDragOver" PreviewDrop="OnCardDrop"
+                                              DragLeave="OnDragLeave">
                                             <Border x:Name="Card" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                                                     BorderThickness="1" CornerRadius="6" SnapsToDevicePixels="True">
                                                 <Border.InputBindings>
                                                     <MouseBinding Gesture="LeftClick" Command="{Binding SelectCommand}" />
                                                 </Border.InputBindings>
                                                 <StackPanel>
-                                                    <Border Height="3" Background="{Binding ColorBrush}" CornerRadius="5,5,0,0"
+                                                    <Border Height="4" Background="{Binding ColorBrush}" CornerRadius="5,5,0,0"
                                                             AutomationProperties.AutomationId="Builder.PanelStripe" />
-                                                    <Border Background="{StaticResource SurfaceAltBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                                            BorderThickness="0,0,0,1" Padding="12,8" Cursor="SizeAll"
-                                                            PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove"
+                                                    <Border Background="{StaticResource SurfaceAltBrush}" BorderBrush="{StaticResource DividerBrush}"
+                                                            BorderThickness="0,0,0,1" Padding="10,6"
+                                                            PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
                                                             AutomationProperties.AutomationId="Builder.PanelHeader">
                                                         <DockPanel>
                                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding SlotCount}" Style="{StaticResource MutedText}" FontSize="11"
-                                                                           Margin="8,0,6,0" VerticalAlignment="Center" />
-                                                                <Button Content="▲" Command="{Binding MoveUpCommand}" Style="{StaticResource RowButton}"
-                                                                        ToolTip="{x:Static res:UiStrings.Builder_MoveUp}"
-                                                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_MoveUp}" />
-                                                                <Button Content="▼" Command="{Binding MoveDownCommand}" Style="{StaticResource RowButton}"
-                                                                        ToolTip="{x:Static res:UiStrings.Builder_MoveDown}"
-                                                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_MoveDown}" />
-                                                                <Button Content="×" Command="{Binding DeleteCommand}" Style="{StaticResource RowDangerButton}"
-                                                                        ToolTip="{x:Static res:UiStrings.Builder_DeletePanelTip}"
-                                                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_DeletePanelTip}" />
+                                                                <Button Content="{x:Static res:UiStrings.Builder_NewStack}" Command="{Binding NewStackCommand}"
+                                                                        ToolTip="{x:Static res:UiStrings.Builder_NewStackTip}" ToolTipService.ShowOnDisabled="True"
+                                                                        AutomationProperties.AutomationId="Builder.NewStack" />
+                                                                <StackPanel x:Name="HoverActs" Orientation="Horizontal" Margin="8,0,0,0" Opacity="0"
+                                                                            VerticalAlignment="Center">
+                                                                    <Button Content="▲" Command="{Binding MoveUpCommand}" Style="{StaticResource Ghost}"
+                                                                            ToolTip="{x:Static res:UiStrings.Builder_MoveUp}"
+                                                                            AutomationProperties.AutomationId="Builder.MovePanelUp"
+                                                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_MoveUp}" />
+                                                                    <Button Content="▼" Command="{Binding MoveDownCommand}" Style="{StaticResource Ghost}"
+                                                                            ToolTip="{x:Static res:UiStrings.Builder_MoveDown}"
+                                                                            AutomationProperties.AutomationId="Builder.MovePanelDown"
+                                                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_MoveDown}" />
+                                                                    <Button Content="×" Command="{Binding DeleteCommand}" Style="{StaticResource GhostDanger}"
+                                                                            ToolTip="{x:Static res:UiStrings.Builder_DeletePanelTip}"
+                                                                            AutomationProperties.AutomationId="Builder.DeletePanel"
+                                                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_DeletePanelTip}" />
+                                                                </StackPanel>
                                                             </StackPanel>
-                                                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" FontWeight="SemiBold" FontSize="13"
-                                                                     PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
+                                                            <TextBlock Style="{StaticResource Handle}" Margin="0,0,8,0" ToolTip="{x:Static res:UiStrings.Builder_DragPanelTip}" />
+                                                            <Button Style="{StaticResource Swatch}" Background="{Binding ColorBrush}" Command="{Binding PickColorCommand}"
+                                                                    Margin="0,0,6,0" VerticalAlignment="Center" ToolTip="{x:Static res:UiStrings.Builder_PanelColorTip}"
+                                                                    AutomationProperties.AutomationId="Builder.PanelColor"
+                                                                    AutomationProperties.Name="{x:Static res:UiStrings.Builder_PanelColorTip}" />
+                                                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource InlineName}"
+                                                                     Width="220" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"
                                                                      AutomationProperties.AutomationId="Builder.PanelName"
-                                                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
+                                                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_PanelName}" />
+                                                            <TextBlock Text="{Binding ToolCount}" Style="{StaticResource MutedText}" FontSize="11"
+                                                                       Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                       AutomationProperties.AutomationId="Builder.ToolCount" />
                                                         </DockPanel>
                                                     </Border>
-                                                    <Border Padding="12,10" MinHeight="56">
-                                                        <Grid>
-                                                            <TextBlock Text="{x:Static res:UiStrings.Builder_PanelEmpty}" Style="{StaticResource MutedText}"
-                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                       Visibility="{Binding HasSlots, Converter={StaticResource BoolToCollapsed}}" />
-                                                            <ItemsControl ItemsSource="{Binding Slots}" Focusable="False">
-                                                                <ItemsControl.ItemTemplate>
-                                                                    <DataTemplate DataType="{x:Type builder:SlotRowViewModel}">
-                                                                        <Grid x:Name="SlotRow" Margin="0,0,0,6" AllowDrop="True" Background="Transparent"
-                                                                              DragOver="OnSlotDragOver" DragLeave="OnDragLeave" Drop="OnSlotDrop"
-                                                                              PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove">
-                                                                        <Border Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                                                                BorderThickness="1" CornerRadius="4" Padding="8,4"
-                                                                                AutomationProperties.Name="{Binding Name}">
-                                                                            <DockPanel>
-                                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                    <Button Content="▲" Command="{Binding MoveUpCommand}" Style="{StaticResource RowButton}"
-                                                                                            ToolTip="{x:Static res:UiStrings.Builder_MoveUp}"
-                                                                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_MoveUp}" />
-                                                                                    <Button Content="▼" Command="{Binding MoveDownCommand}" Style="{StaticResource RowButton}"
-                                                                                            ToolTip="{x:Static res:UiStrings.Builder_MoveDown}"
-                                                                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_MoveDown}" />
-                                                                                    <Button Content="×" Command="{Binding RemoveCommand}" Style="{StaticResource RowDangerButton}"
-                                                                                            ToolTip="{x:Static res:UiStrings.Builder_RemoveSlotTip}"
-                                                                                            AutomationProperties.Name="{x:Static res:UiStrings.Builder_RemoveSlotTip}" />
-                                                                                </StackPanel>
-                                                                                <TextBlock DockPanel.Dock="Right" Text="{Binding ShortCommandId}" ToolTip="{Binding CommandId}"
-                                                                                           Style="{StaticResource MutedText}" FontSize="10" MaxWidth="200"
-                                                                                           TextTrimming="CharacterEllipsis" Margin="8,0,4,0" VerticalAlignment="Center"
-                                                                                           Visibility="{Binding ShowsCommandId, Converter={StaticResource BoolToVisible}}" />
-                                                                                <!-- Tools: the Pick-icon button (thumbnail or "+", then the icon name or "Icon"). -->
-                                                                                <Button DockPanel.Dock="Left" Command="{Binding PickIconCommand}" Padding="5,1" MinHeight="24"
-                                                                                        Margin="0,0,8,0" ToolTip="{x:Static res:UiStrings.Builder_PickIconTip}"
-                                                                                        Visibility="{Binding IsTool, Converter={StaticResource BoolToVisible}}"
-                                                                                        AutomationProperties.AutomationId="Builder.PickIcon"
-                                                                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_PickIconTip}">
-                                                                                    <StackPanel Orientation="Horizontal">
-                                                                                        <Image Source="{Binding IconThumbnail}" Width="14" Height="14" Margin="0,0,5,0"
-                                                                                               RenderOptions.BitmapScalingMode="HighQuality"
-                                                                                               Visibility="{Binding HasIconThumbnail, Converter={StaticResource BoolToVisible}}" />
-                                                                                        <TextBlock Text="+" Width="14" TextAlignment="Center" Margin="0,0,5,0" Style="{StaticResource MutedText}"
-                                                                                                   Visibility="{Binding HasIconThumbnail, Converter={StaticResource BoolToCollapsed}}" />
-                                                                                        <TextBlock Text="{Binding IconLabel}" Foreground="{StaticResource AccentForegroundBrush}"
-                                                                                                   MaxWidth="110" TextTrimming="CharacterEllipsis" />
-                                                                                    </StackPanel>
-                                                                                </Button>
-                                                                                <!-- Other slot types: the type tag. -->
-                                                                                <Border DockPanel.Dock="Left" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                                                                        CornerRadius="3" Padding="6,1" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                                                        Visibility="{Binding IsTool, Converter={StaticResource BoolToCollapsed}}">
-                                                                                    <TextBlock Text="{Binding TypeTag}" Style="{StaticResource MutedText}" FontSize="10" />
-                                                                                </Border>
-                                                                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                                                                         Style="{StaticResource SlotNameBox}" ToolTip="{Binding NameToolTip}"
-                                                                                         PreviewDragEnter="OnNameBoxDragOver" PreviewDragOver="OnNameBoxDragOver" PreviewDrop="OnNameBoxDrop"
-                                                                                         AutomationProperties.AutomationId="Builder.SlotName"
-                                                                                         AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
-                                                                            </DockPanel>
-                                                                        </Border>
-                                                                        <Border Style="{StaticResource DropMarkerBorder}" CornerRadius="4"
-                                                                                AutomationProperties.AutomationId="Builder.SlotDropMarker" />
-                                                                        </Grid>
-                                                                        <DataTemplate.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsDragSource}" Value="True">
-                                                                                <Setter TargetName="SlotRow" Property="Opacity" Value="0.4" />
-                                                                            </DataTrigger>
-                                                                        </DataTemplate.Triggers>
-                                                                    </DataTemplate>
-                                                                </ItemsControl.ItemTemplate>
-                                                            </ItemsControl>
-                                                        </Grid>
-                                                    </Border>
+                                                    <Grid Margin="12,10,2,0" MinHeight="56">
+                                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PanelEmpty}" Style="{StaticResource MutedText}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,10"
+                                                                   Visibility="{Binding HasItems, Converter={StaticResource BoolToCollapsed}}"
+                                                                   AutomationProperties.AutomationId="Builder.PanelEmpty" />
+                                                        <ItemsControl ItemsSource="{Binding Items}" Focusable="False"
+                                                                      AutomationProperties.AutomationId="Builder.Tiles">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                        </ItemsControl>
+                                                    </Grid>
                                                 </StackPanel>
                                             </Border>
                                             <!-- The selected card's ring, over the border (no layout shift). -->
@@ -544,7 +761,14 @@
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                 <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+                                                <Setter TargetName="HoverActs" Property="Opacity" Value="1" />
                                             </DataTrigger>
+                                            <Trigger SourceName="CardRoot" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="HoverActs" Property="Opacity" Value="1" />
+                                            </Trigger>
+                                            <Trigger SourceName="CardRoot" Property="IsKeyboardFocusWithin" Value="True">
+                                                <Setter TargetName="HoverActs" Property="Opacity" Value="1" />
+                                            </Trigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -553,26 +777,44 @@
                     </ScrollViewer>
                 </DockPanel>
 
-                <!-- Properties -->
-                <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0" Background="{StaticResource SurfaceBrush}">
+                <!-- Profile pane (feature #18): General | Loader defaults | Junk cleanup, every edit an unsaved change. -->
+                <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0" Background="{StaticResource SurfaceBrush}"
+                        AutomationProperties.AutomationId="Builder.ProfilePane">
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
-                            <TextBlock Text="{x:Static res:UiStrings.Builder_Properties}" Style="{StaticResource SectionText}" Margin="0"
-                                       VerticalAlignment="Center" />
+                            <DockPanel VerticalAlignment="Center">
+                                <TextBlock Text="{x:Static res:UiStrings.Builder_ProfileSection}" Style="{StaticResource SectionText}" Margin="0"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding EditingText}" Style="{StaticResource MutedText}" Margin="6,0,0,0" VerticalAlignment="Center"
+                                           AutomationProperties.AutomationId="Builder.EditingName" />
+                            </DockPanel>
                         </Border>
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-                            <StackPanel>
-                                <!-- Profile -->
-                                <Border Style="{StaticResource PropSection}">
-                                    <StackPanel>
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_ProfileSection}" Style="{StaticResource SectionText}" />
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_MinRevitVersion}" Style="{StaticResource PropLabel}" />
-                                        <TextBox Text="{Binding MinVersion, UpdateSourceTrigger=PropertyChanged}"
-                                                 AutomationProperties.AutomationId="Builder.MinVersion"
-                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_MinRevitVersion}" />
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PanelOpacity}" Style="{StaticResource PropLabel}" Margin="0,10,0,4" />
+                        <TabControl x:Name="ProfileTabs" Padding="0" Margin="0,4,0,0" AutomationProperties.AutomationId="Builder.ProfileTabs">
+                            <TabItem x:Name="GeneralTab" Header="{x:Static res:UiStrings.Builder_TabGeneral}" Margin="10,0,0,0"
+                                     AutomationProperties.AutomationId="Builder.GeneralTab">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                                    <StackPanel Margin="16,14,16,14">
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_ProfileName}" Style="{StaticResource FieldLabel}" />
                                         <DockPanel>
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding PanelOpacity}" MinWidth="28" TextAlignment="Right"
+                                            <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Builder_RenameMenu}" Command="{Binding RenameCommand}"
+                                                    Margin="6,0,0,0" AutomationProperties.AutomationId="Builder.Rename" />
+                                            <Grid>
+                                                <TextBox x:Name="ProfileNameBox" Text="{Binding ProfileName, Mode=OneWay}" IsReadOnly="True"
+                                                         AutomationProperties.AutomationId="Builder.ProfileName"
+                                                         AutomationProperties.Name="{x:Static res:UiStrings.Builder_ProfileName}" />
+                                                <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_UnnamedHint}"
+                                                           Tag="{Binding Text, ElementName=ProfileNameBox}" />
+                                            </Grid>
+                                        </DockPanel>
+
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_RibbonTabName}" Style="{StaticResource FieldLabel}" Margin="0,12,0,4" />
+                                        <TextBox x:Name="TabBox" Text="{Binding ProfileTab, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.AutomationId="Builder.Tab"
+                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_RibbonTabName}" />
+
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PanelOpacity}" Style="{StaticResource FieldLabel}" Margin="0,12,0,4" />
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding PanelOpacityText}" MinWidth="36" TextAlignment="Right"
                                                        VerticalAlignment="Center" AutomationProperties.AutomationId="Builder.OpacityValue" />
                                             <Slider Minimum="10" Maximum="100" SmallChange="5" LargeChange="10" TickFrequency="5"
                                                     IsSnapToTickEnabled="True" VerticalAlignment="Center"
@@ -580,93 +822,89 @@
                                                     AutomationProperties.AutomationId="Builder.Opacity"
                                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_PanelOpacity}" />
                                         </DockPanel>
-                                    </StackPanel>
-                                </Border>
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PanelOpacityHelp}" Style="{StaticResource FieldHelp}" />
 
-                                <!-- Selected Panel -->
-                                <Border Style="{StaticResource PropSection}">
-                                    <StackPanel>
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_SelectedPanel}" Style="{StaticResource SectionText}" />
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_NoPanelSelected}" Style="{StaticResource MutedText}"
-                                                   Visibility="{Binding HasSelectedPanel, Converter={StaticResource BoolToCollapsed}}"
-                                                   AutomationProperties.AutomationId="Builder.NoPanelSelected" />
-                                        <StackPanel Visibility="{Binding HasSelectedPanel, Converter={StaticResource BoolToVisible}}"
-                                                    AutomationProperties.AutomationId="Builder.SelectedPanel">
-                                            <TextBlock Text="{x:Static res:UiStrings.Builder_Name}" Style="{StaticResource PropLabel}" />
-                                            <TextBox Text="{Binding SelectedPanel.Name, UpdateSourceTrigger=PropertyChanged}"
-                                                     AutomationProperties.AutomationId="Builder.SelectedPanelName"
-                                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_Name}" />
-                                            <TextBlock Text="{x:Static res:UiStrings.Builder_Color}" Style="{StaticResource PropLabel}" Margin="0,10,0,4" />
-                                            <StackPanel Orientation="Horizontal">
-                                                <Button x:Name="ColorSwatch" Style="{StaticResource SwatchButton}" Background="{Binding SelectedPanel.ColorBrush}"
-                                                        Command="{Binding PickColorCommand}" ToolTip="{Binding SelectedPanel.ColorHex}"
-                                                        AutomationProperties.AutomationId="Builder.ColorSwatch"
-                                                        AutomationProperties.Name="{x:Static res:UiStrings.Builder_Color}" />
-                                                <TextBox Width="96" Margin="8,0,0,0" mvvm:Behaviors.CommitOnEnter="True"
-                                                         Text="{Binding SelectedPanel.ColorHex, UpdateSourceTrigger=LostFocus}"
-                                                         AutomationProperties.AutomationId="Builder.ColorHex"
-                                                         AutomationProperties.Name="{x:Static res:UiStrings.Color_Hex}" />
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_MinRevitVersion}" Style="{StaticResource FieldLabel}" Margin="0,12,0,4" />
+                                        <TextBox Text="{Binding MinVersion, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.AutomationId="Builder.MinVersion"
+                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_MinRevitVersion}" />
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_MinRevitHelp}" Style="{StaticResource FieldHelp}" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+
+                            <TabItem x:Name="LoaderDefaultsTab" Header="{x:Static res:UiStrings.Builder_TabLoaderDefaults}"
+                                     AutomationProperties.AutomationId="Builder.LoaderDefaultsTab">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                                    <StackPanel Margin="16,12,16,14">
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsBody}" Style="{StaticResource FieldHelp}" Margin="0,0,0,10" />
+                                        <DockPanel Margin="0,0,0,4">
+                                            <CheckBox DockPanel.Dock="Right" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding DisableUnused}"
+                                                      VerticalAlignment="Center" AutomationProperties.AutomationId="Builder.DisableUnused"
+                                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_PresetsDisableUnused}" />
+                                            <StackPanel>
+                                                <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsDisableUnused}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsDisableUnusedHelp}" Style="{StaticResource FieldHelp}"
+                                                           Margin="0,1,0,0" />
                                             </StackPanel>
-                                            <TextBlock Text="{x:Static res:UiStrings.Builder_UrlButtons}" Style="{StaticResource PropLabel}" Margin="0,10,0,4" />
-                                            <Button Content="{x:Static res:UiStrings.Builder_AddUrlButton}" Command="{Binding OpenUrlEditorCommand}"
-                                                    HorizontalAlignment="Left" AutomationProperties.AutomationId="Builder.AddUrlButton" />
-                                            <!-- The inline URL button editor. -->
-                                            <Border x:Name="UrlEditor" Style="{StaticResource Panel}" Padding="10" Margin="0,8,0,0"
-                                                    Visibility="{Binding IsUrlEditorOpen, Converter={StaticResource BoolToVisible}}"
-                                                    AutomationProperties.AutomationId="Builder.UrlEditor">
-                                                <StackPanel>
-                                                    <Grid>
-                                                        <TextBox x:Name="UrlLabelBox" Text="{Binding UrlLabel, UpdateSourceTrigger=PropertyChanged}"
-                                                                 AutomationProperties.AutomationId="Builder.UrlLabel"
-                                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_UrlLabelPlaceholder}" />
-                                                        <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_UrlLabelPlaceholder}"
-                                                                   Tag="{Binding Text, ElementName=UrlLabelBox}" />
-                                                    </Grid>
-                                                    <Grid Margin="0,6,0,0">
-                                                        <TextBox x:Name="UrlAddressBox" Text="{Binding UrlAddress, UpdateSourceTrigger=PropertyChanged}"
-                                                                 AutomationProperties.AutomationId="Builder.UrlAddress"
-                                                                 AutomationProperties.Name="{x:Static res:UiStrings.Builder_Url}" />
-                                                        <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_UrlPlaceholder}"
-                                                                   Tag="{Binding Text, ElementName=UrlAddressBox}" />
-                                                    </Grid>
-                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                                                        <Button Content="{x:Static res:UiStrings.Builder_UrlAdd}" Command="{Binding AddUrlCommand}"
-                                                                Style="{StaticResource PrimaryButton}" MinWidth="64"
-                                                                AutomationProperties.AutomationId="Builder.UrlAdd" />
-                                                        <Button Content="{x:Static res:UiStrings.Common_Cancel}" Command="{Binding CancelUrlEditorCommand}"
-                                                                Margin="8,0,0,0" MinWidth="64" AutomationProperties.AutomationId="Builder.UrlCancel" />
-                                                    </StackPanel>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
+                                        </DockPanel>
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsHideTabs}" Style="{StaticResource FieldLabel}" Margin="0,12,0,2" />
+                                        <ItemsControl ItemsSource="{Binding PresetTabs}" Focusable="False" AutomationProperties.AutomationId="Builder.PresetTabs">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type builder:PresetTabViewModel}">
+                                                    <DockPanel Margin="0,4">
+                                                        <CheckBox DockPanel.Dock="Right" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsHidden}"
+                                                                  VerticalAlignment="Center" AutomationProperties.Name="{Binding Tab}" />
+                                                        <TextBlock Text="{Binding Tab}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsNoTabs}" Style="{StaticResource FieldHelp}"
+                                                   Visibility="{Binding HasPresetTabs, Converter={StaticResource BoolToCollapsed}}"
+                                                   AutomationProperties.AutomationId="Builder.PresetsNoTabs" />
                                     </StackPanel>
-                                </Border>
+                                </ScrollViewer>
+                            </TabItem>
 
-                                <!-- RST Presets -->
-                                <Border Style="{StaticResource PropSection}">
-                                    <StackPanel>
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_Presets}" Style="{StaticResource SectionText}" />
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_PresetsHelp}" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding PresetsSummary}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                                   AutomationProperties.AutomationId="Builder.PresetsSummary" />
-                                        <Button x:Name="ConfigurePresets" Content="{x:Static res:UiStrings.Builder_Configure}" Command="{Binding ConfigurePresetsCommand}"
-                                                HorizontalAlignment="Left" Margin="0,10,0,0" AutomationProperties.AutomationId="Builder.ConfigurePresets" />
+                            <TabItem x:Name="JunkCleanupTab" Header="{x:Static res:UiStrings.Builder_TabJunkCleanup}"
+                                     AutomationProperties.AutomationId="Builder.JunkCleanupTab">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                                    <StackPanel Margin="16,12,16,14">
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_CleanupHelp}" Style="{StaticResource FieldHelp}" Margin="0,0,0,10" />
+                                        <ItemsControl ItemsSource="{Binding CleanupRows}" Focusable="False" AutomationProperties.AutomationId="Builder.CleanupRows">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type builder:CleanupRowViewModel}">
+                                                    <DockPanel Margin="0,0,0,6" AutomationProperties.Name="{Binding Name}">
+                                                        <CheckBox DockPanel.Dock="Left" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Enabled}"
+                                                                  VerticalAlignment="Center" Margin="0,0,10,0"
+                                                                  ToolTip="{x:Static res:UiStrings.Builder_CleanupEnableTip}"
+                                                                  AutomationProperties.Name="{x:Static res:UiStrings.Builder_CleanupEnableTip}" />
+                                                        <Button DockPanel.Dock="Right" Content="×" Command="{Binding RemoveCommand}" Style="{StaticResource RowDangerButton}"
+                                                                Margin="4,0,0,0" ToolTip="{x:Static res:UiStrings.Builder_CleanupRemoveTip}"
+                                                                AutomationProperties.Name="{x:Static res:UiStrings.Builder_CleanupRemoveTip}" />
+                                                        <Grid>
+                                                            <TextBox x:Name="CleanupNameBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                     ToolTip="{Binding PathTip}"
+                                                                     AutomationProperties.AutomationId="Builder.CleanupName"
+                                                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_CleanupNamePlaceholder}" />
+                                                            <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_CleanupNamePlaceholder}"
+                                                                       Tag="{Binding Text, ElementName=CleanupNameBox}" />
+                                                        </Grid>
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="{x:Static res:UiStrings.Builder_CleanupEmpty}" Style="{StaticResource FieldHelp}" Margin="0,0,0,6"
+                                                   Visibility="{Binding HasCleanupTargets, Converter={StaticResource BoolToCollapsed}}"
+                                                   AutomationProperties.AutomationId="Builder.CleanupEmpty" />
+                                        <Button Content="{x:Static res:UiStrings.Builder_RestoreDefaults}" Command="{Binding RestoreCleanupDefaultsCommand}"
+                                                ToolTip="{x:Static res:UiStrings.Builder_RestoreDefaultsTip}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                                AutomationProperties.AutomationId="Builder.RestoreDefaults" />
                                     </StackPanel>
-                                </Border>
-
-                                <!-- Junk Cleanup -->
-                                <Border Style="{StaticResource PropSection}" BorderThickness="0">
-                                    <StackPanel>
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_Cleanup}" Style="{StaticResource SectionText}" />
-                                        <TextBlock Text="{x:Static res:UiStrings.Builder_CleanupHelp}" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding CleanupSummary}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                                   AutomationProperties.AutomationId="Builder.CleanupSummary" />
-                                        <Button Content="{x:Static res:UiStrings.Builder_Configure}" Command="{Binding ConfigureCleanupCommand}"
-                                                HorizontalAlignment="Left" Margin="0,10,0,0" AutomationProperties.AutomationId="Builder.ConfigureCleanup" />
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </ScrollViewer>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
                     </DockPanel>
                 </Border>
             </Grid>

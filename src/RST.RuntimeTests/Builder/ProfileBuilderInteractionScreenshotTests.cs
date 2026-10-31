@@ -1,10 +1,10 @@
 // rst-c's own (not vendored); the capture helpers follow ProfileBuilderScreenshotTests.
 // AC3 for the Profile Builder's WU5 surfaces (spec #16, WU5): the icon picker overlay (grid with
-// the current selection, then a design's variant row open under its tile's row), the RST Presets
-// modal, the Junk Cleanup modal (and its empty state), and a drag in progress with the drop marker
-// (DoDragDrop runs the OS drag loop, so the capture sets the drag state through the view-model the
-// drag handlers drive). The keyboard test sends real key events to the picker overlay. The new
-// dialogs stay out of the taskbar.
+// the current selection, then a design's variant row open under its tile's row) and a drag in
+// progress with the drop marker (DoDragDrop runs the OS drag loop, so the capture sets the drag
+// state through the view-model the drag handlers drive). The keyboard test sends real key events to
+// the picker overlay. The Builder's dialogs stay out of the taskbar. (The RST Presets and Junk
+// Cleanup modals are retired by feature #18; their tabs are captured in ProfileBuilderShellScreenshotTests.)
 
 using System.Windows;
 using System.Windows.Controls;
@@ -99,16 +99,14 @@ public class ProfileBuilderInteractionScreenshotTests
     public void The_new_dialogs_stay_out_of_the_taskbar() => Sta(() =>
     {
         RstTheme.Apply(UiTheme.Light);
-        var presets = new PresetsWindow(new PresetsViewModel([], null, null));
-        var cleanup = new CleanupWindow(new CleanupViewModel(null));
-        Assert.False(presets.ShowInTaskbar, "RST Presets");
-        Assert.False(cleanup.ShowInTaskbar, "Junk Cleanup Targets");
-        Assert.Equal("RST Presets", presets.Title);
-        Assert.Equal("Junk Cleanup Targets", cleanup.Title);
-        Assert.Equal(WindowStartupLocation.CenterOwner, presets.WindowStartupLocation);
-        Assert.Equal(WindowStartupLocation.CenterOwner, cleanup.WindowStartupLocation);
-        presets.Close();
-        cleanup.Close();
+        var name = new ProfileNameDialog(ProfileNameDialogModel.ForRename("Structure", _ => NameCheck.Ok));
+        var branding = new BrandingDialog(BuilderHarness.Create().Model);
+        Assert.False(name.ShowInTaskbar, "Rename / Duplicate");
+        Assert.False(branding.ShowInTaskbar, "Branding");
+        Assert.Equal(WindowStartupLocation.CenterOwner, name.WindowStartupLocation);
+        Assert.Equal(WindowStartupLocation.CenterOwner, branding.WindowStartupLocation);
+        name.Close();
+        branding.Close();
     });
 
     [Theory]
@@ -116,7 +114,7 @@ public class ProfileBuilderInteractionScreenshotTests
     public void The_icon_picker_shows_its_grid_with_the_current_selection(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
-        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        var (window, h) = Open(x => x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null));
         try
         {
             WindowCapture.DoEvents();
@@ -151,7 +149,7 @@ public class ProfileBuilderInteractionScreenshotTests
         RstTheme.Apply(theme);
         var (window, h) = Open(x =>
         {
-            x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null);
+            x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
             x.Model.IconPicker!.TileCommand.Execute("parallel");
         });
         try
@@ -179,7 +177,7 @@ public class ProfileBuilderInteractionScreenshotTests
     public void The_icon_picker_answers_the_keyboard_and_escape_closes_in_two_steps() => Sta(() =>
     {
         RstTheme.Apply(UiTheme.Light);
-        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        var (window, h) = Open(x => x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null));
         try
         {
             var overlay = window.IconPickerOverlay;
@@ -225,62 +223,14 @@ public class ProfileBuilderInteractionScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void The_presets_modal_renders(UiTheme theme) => Sta(() =>
-    {
-        RstTheme.Apply(theme);
-        var presets = new ProfilePresets { HiddenTabs = ["Massing & Site", "Collaborate", "Lumion"], DisableUnusedAddins = true };
-        var dialog = new PresetsWindow(new PresetsViewModel(LoaderFixtures.Ribbon, presets, "Studio Struct"));
-        Assert.True(((Button)dialog.FindName("ApplyButton")).IsDefault);
-        CaptureDialog(dialog, theme, "builder-presets");
-
-        var none = new PresetsWindow(new PresetsViewModel(["Modify", "View"], null, "T"));
-        WindowCapture.ShowOffScreen(none);
-        try
-        {
-            Assert.Contains(WindowCapture.Descendants<TextBlock>(none), t => t.IsVisible && t.Text == "No tabs available to hide on this machine.");
-        }
-        finally
-        {
-            none.Close();
-        }
-    });
-
-    [Theory]
-    [MemberData(nameof(Themes))]
-    public void The_cleanup_modal_renders_with_rows_and_empty(UiTheme theme) => Sta(() =>
-    {
-        RstTheme.Apply(theme);
-        var targets = CleanupDefaults.Build();
-        targets[1].Enabled = false;
-        targets[2].Name = "Revit Journals";
-        var dialog = new CleanupWindow(new CleanupViewModel(targets));
-        CaptureDialog(dialog, theme, "builder-cleanup");
-
-        var model = new CleanupViewModel(targets);
-        foreach (var row in model.Rows.ToList()) row.RemoveCommand.Execute(null);
-        var empty = new CleanupWindow(model);
-        WindowCapture.ShowOffScreen(empty);
-        try
-        {
-            var text = WindowCapture.Descendants<TextBlock>(empty).Single(t => t.IsVisible && t.Text.StartsWith("No targets.", StringComparison.Ordinal));
-            Assert.Equal("No targets. Use \"Restore Defaults\".", text.Text);
-            Assert.DoesNotContain("Add Target", text.Text);
-        }
-        finally
-        {
-            empty.Close();
-        }
-    });
-
-    [Theory]
-    [MemberData(nameof(Themes))]
     public void A_drag_in_progress_shows_its_marker_and_faded_source(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
         var (window, h) = Open(x =>
         {
+            // Beam over the leading edge of Review's Notes tile: inserted before it (feature #18, WU3).
             x.Model.BeginDrag(BuilderDrag.FromSlot(0, 0));
-            x.Model.DragOverSlot(1, 1, upperHalf: true);
+            x.Model.DragOverTile(TileHit.On(1, 2, 4, 100));
         });
         try
         {
@@ -288,12 +238,12 @@ public class ProfileBuilderInteractionScreenshotTests
             var bitmap = WindowCapture.Content(window, BuilderSize);
             Screenshots.Save(bitmap, Name("builder-drag", theme));
             var marker = WindowCapture.Descendants<Border>(window.PanelCards)
-                .Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "Builder.SlotDropMarker"
-                             && b.DataContext is SlotRowViewModel { Panel.Index: 1, Index: 1 });
+                .Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "Builder.TileDropMarker"
+                             && b.DataContext is ToolTileViewModel { Panel.Index: 1, Index: 2 });
             Assert.Equal(Visibility.Visible, marker.Visibility);
-            Assert.Equal(new Thickness(0, 2, 0, 0), marker.BorderThickness);
-            AssertColor(Palette(theme, UiPalette.Success), At(bitmap, marker, window.Root, marker.ActualWidth / 2, 0.5), "drop-before line");
-            var source = WindowCapture.Descendants<Grid>(window.PanelCards).Single(g => g.Name == "SlotRow" && g.DataContext is SlotRowViewModel { Panel.Index: 0, Index: 0 });
+            Assert.Equal(new Thickness(3, 0, 0, 0), marker.BorderThickness);
+            AssertColor(Palette(theme, UiPalette.Success), At(bitmap, marker, window.Root, 1.5, marker.ActualHeight / 2), "drop-before line");
+            var source = WindowCapture.Descendants<Grid>(window.PanelCards).Single(g => g.Name == "Tile" && g.DataContext is ToolTileViewModel { Panel.Index: 0, Index: 0 });
             Assert.Equal(0.4, source.Opacity, 3);
         }
         finally
@@ -310,11 +260,10 @@ public class ProfileBuilderInteractionScreenshotTests
         RstTheme.Apply(theme);
         var (window, h) = Open(x =>
         {
-            x.Model.Panels[1].Slots[2].PickIconCommand.Execute(null);
+            x.Model.Panels[1].Tile(2).PickIconCommand.Execute(null);
             x.Model.IconPicker!.TileCommand.Execute("move");
             x.Model.IconPicker!.VariantCommand.Execute("purple");
-            x.Modals.EditPresetsWith = m => m.Tabs.Single(t => t.Tab == "Enscape").IsHidden = true;
-            x.Model.ConfigurePresetsCommand.Execute(null);
+            x.Model.PresetTabs.Single(t => t.Tab == "Enscape").IsHidden = true;
             x.Model.Panels[1].SelectCommand.Execute(null);
         });
         try
@@ -322,8 +271,9 @@ public class ProfileBuilderInteractionScreenshotTests
             var bitmap = WindowCapture.Content(window, BuilderSize);
             Screenshots.Save(bitmap, Name("builder-full", theme));
             Assert.Equal("RST — Profile Builder", window.Title);
-            Assert.Equal("3 tabs hidden  •  Disable Unused: on", h.Model.PresetsSummary);
-            Assert.True(window.ConfigurePresets.IsEnabled);
+            Assert.Equal(["Massing & Site", "Collaborate", "Enscape"], h.Model.Profile.Presets!.HiddenTabs);
+            Assert.Equal(Visibility.Visible, window.UnsavedIndicator.Visibility);
+            Assert.True(window.SaveButton.IsEnabled, "Save is enabled with changes");
             // 7 pack icons; the Checks stack's 3 tools have none and draw the default 16 px icon (spec #17).
             var images = WindowCapture.Descendants<Image>(window.Preview).Where(i => i.Source is not null).ToList();
             Assert.Equal(7, images.Count(i => !ReferenceEquals(i.Source, PackIcons.Default16)));
@@ -339,7 +289,7 @@ public class ProfileBuilderInteractionScreenshotTests
     public void A_click_inside_the_card_keeps_the_picker_and_a_click_on_the_scrim_cancels() => Sta(() =>
     {
         RstTheme.Apply(UiTheme.Light);
-        var (window, h) = Open(x => x.Model.Panels[0].Slots[0].PickIconCommand.Execute(null));
+        var (window, h) = Open(x => x.Model.Panels[0].Tile(0).PickIconCommand.Execute(null));
         try
         {
             WindowCapture.DoEvents();
