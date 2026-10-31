@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the Builder's catalogue index and filter (spec #16, WU4), a port of
 // profile_builder.html indexCatalog / buildTabEl / renderCatalog (1769-1928). The grouping, order,
-// keys, match rule and counts are unchanged:
+// match rule and grouping follow the original page; SC-030 keeps every placement:
 //   - origin=Native commands go under the "Autodesk Native" group, every other command under its
 //     own top-level tab (sourceTab, the host-tab-promoted group);
 //   - tabs and panels are sorted (JS Array.prototype.sort: ordinal), commands keep catalogue order;
@@ -45,7 +45,7 @@ public sealed class CatalogNode
     /// <summary>The group, tab or panel name, or the command's <c>displayName || id</c>.</summary>
     public string Label { get; }
 
-    /// <summary>The collapse key: <c>tab:&lt;tab&gt;</c>, <c>panel:&lt;tab&gt;/&lt;panel&gt;</c>, <c>native</c>, or the command id.</summary>
+    /// <summary>The collapse key: <c>tab:&lt;tab&gt;</c>, <c>panel:&lt;tab&gt;/&lt;panel&gt;</c>, <c>native</c>, or <c>cmd:&lt;tab&gt;/&lt;panel&gt;/&lt;id&gt;</c>.</summary>
     public string Key { get; }
 
     /// <summary>The command (command nodes only).</summary>
@@ -85,7 +85,7 @@ public sealed class CatalogTree
     /// <summary>The native group, or null when no command is native.</summary>
     public CatalogNode? NativeGroup { get; private set; }
 
-    /// <summary>The catalogue's size (the "Commands" count: every command, filtered or not).</summary>
+    /// <summary>The catalogue's size (the "Commands" count: distinct ids, filtered or not).</summary>
     public int CommandCount { get; private set; }
 
     /// <summary>Every node in the tree (groups, tabs, panels, commands).</summary>
@@ -97,10 +97,11 @@ public sealed class CatalogTree
         var tree = new CatalogTree();
         var native = new Dictionary<string, Dictionary<string, List<CatalogCommand>>>(StringComparer.Ordinal);
         var other = new Dictionary<string, Dictionary<string, List<CatalogCommand>>>(StringComparer.Ordinal);
+        var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var c in catalog ?? [])
         {
             if (c is null) continue;
-            tree.CommandCount++;
+            if (ids.Add(c.Id)) tree.CommandCount++;
             var bucket = c.Origin == CatalogCommand.NativeOrigin ? native : other;
             var tab = string.IsNullOrEmpty(c.SourceTab) ? Unknown : c.SourceTab;
             var panel = string.IsNullOrEmpty(c.SourcePanel) ? Unknown : c.SourcePanel;
@@ -158,6 +159,9 @@ public sealed class CatalogTree
             n = 0;
             foreach (var child in node.Children) n += Count(child, query, counts);
         }
+        if (node.Kind == CatalogNodeKind.NativeGroup)
+            n = node.Children.SelectMany(t => t.Children).SelectMany(p => p.Children)
+                .Where(c => counts[c.Index] > 0).Select(c => c.Command!.Id).Distinct(StringComparer.Ordinal).Count();
         counts[node.Index] = n;
         return n;
     }
@@ -168,7 +172,7 @@ public sealed class CatalogTree
         foreach (var panel in panels.Keys.OrderBy(k => k, StringComparer.Ordinal))
         {
             var panelNode = Node(CatalogNodeKind.Panel, panel, "panel:" + tab + "/" + panel, null);
-            foreach (var c in panels[panel]) panelNode.Add(Node(CatalogNodeKind.Command, c.Label, c.Id, c));
+            foreach (var c in panels[panel]) panelNode.Add(Node(CatalogNodeKind.Command, c.Label, "cmd:" + (c.HostTab ?? c.SourceTab ?? Unknown) + "/" + (c.LiteralPanel ?? c.SourcePanel ?? Unknown) + "/" + c.Id, c));
             tabNode.Add(panelNode);
         }
         return tabNode;

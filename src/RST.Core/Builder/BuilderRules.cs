@@ -41,7 +41,7 @@ public static partial class BuilderRules
         Slots = [],
     };
 
-    /// <summary>The tool slot a catalogue command becomes (double-click, or a drop).</summary>
+    /// <summary>The tool slot the dragged catalogue placement becomes, keeping its own label, tab and panel.</summary>
     public static Slot ToolSlot(CatalogCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);

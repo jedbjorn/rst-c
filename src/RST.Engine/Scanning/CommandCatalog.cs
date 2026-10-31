@@ -1,32 +1,7 @@
 // CommandCatalog.cs — single in-memory catalog joining the scan sources.
 //
-// Sources and merge rules:
-//   1. BuiltinCommandScanner — seed: PostableCommand → "ID_BUTTON_*"
-//      entries. Authoritative for displayName + Native origin tag, but
-//      carries no SourceTab/SourcePanel (PostableCommand is just an enum;
-//      tab/panel placement is what the ribbon decides).
-//   2. RibbonScanner         — live ribbon walk, given the seed's ids so it
-//                              leaves out every button Revit won't let an
-//                              add-in post (SC-051: not a PostableCommand,
-//                              not an external command). For every button:
-//        - if Id is new        → add as a fresh entry (3rd-party content).
-//        - if Id is in seed    → ENRICH: copy SourceTab/SourcePanel onto
-//                                the existing entry. This is how Revit's
-//                                built-ins get "Architecture > Build > Wall"
-//                                instead of landing in a "(unknown)" group.
-//        - if seed already has tab/panel → skip (redundant confirmation).
-//   3. AddinManifestParser   — XML scan; supplies fallback entries for
-//                              add-ins that declare commands without a
-//                              visible ribbon presence (zero-doc commands).
-//
-// Filter pipeline (applied after merge):
-//   raw → drop ModeRestrictedCommandIds (hard, code-defined)
-//       → drop BanList entries (admin-curated, %AppData%\RST\bans.json)
-//       → drop headless (no SourceTab or no SourcePanel) — if the user
-//         can't see it on the ribbon, it doesn't belong in the catalog
-//       → catalog
-//
-// The catalog is the only surface RST-004 (Loader) talks to.
+// Core's CatalogMerge joins the PostableCommand seed with every ribbon placement, names each
+// placement and drops headless ids. This layer supplies Revit, manifests, bans and logging.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -84,74 +59,28 @@ public sealed class CommandCatalog
         var assemblyToManifest = BuildAssemblyIndex(manifests);
         Log.Debug("AssemblyIndex: {Count} unique assembly paths", assemblyToManifest.Count);
 
-        var byId = new Dictionary<string, ScannedCommand>();
+        var seed = BuiltinCommandScanner.Enumerate().ToList();
+        var postableIds = new HashSet<string>(seed.Select(c => c.Id), System.StringComparer.Ordinal);
+        Log.Information("BuiltinCommandScanner: {Count} commands", seed.Count);
 
-        var builtinCount = 0;
-        var postableIds = new HashSet<string>(System.StringComparer.Ordinal);
-        foreach (var c in BuiltinCommandScanner.Enumerate())
-        {
-            byId[c.Id] = c;
-            postableIds.Add(c.Id);
-            builtinCount++;
-        }
-        Log.Information("BuiltinCommandScanner: {Count} commands", builtinCount);
+        var hits = RibbonScanner.Enumerate(postableIds).ToList();
+        var merged = CatalogMerge.Merge(seed, hits);
+        var headlessDropped = postableIds.Count - merged.Count(c => postableIds.Contains(c.Id));
+        Log.Information("RibbonScanner: {Hits} hits → {Commands} commands, {Placements} placements (headless={Headless})",
+                        hits.Count, merged.Count, merged.Sum(c => c.Placements?.Count ?? 0), headlessDropped);
 
-        var ribbonAdded = 0;
-        var ribbonEnriched = 0;
-        var ribbonRedundant = 0;
-        int? revitYear = int.TryParse(revitVersion, out var year) ? year : null;
-        foreach (var c in RibbonScanner.Enumerate(postableIds, revitYear))
-        {
-            if (byId.TryGetValue(c.Id, out var existing))
-            {
-                // Same Id already in the catalog (BuiltinCommandScanner entry).
-                // If existing has no tab/panel and the ribbon walk gives us
-                // one, upgrade — that's the whole reason we walk built-in
-                // tabs. Otherwise the ribbon walk is just confirming.
-                if (string.IsNullOrEmpty(existing.SourceTab) && !string.IsNullOrEmpty(c.SourceTab))
-                {
-                    byId[c.Id] = existing with
-                    {
-                        SourceTab = c.SourceTab,
-                        SourcePanel = c.SourcePanel,
-                    };
-                    ribbonEnriched++;
-                }
-                else
-                {
-                    ribbonRedundant++;
-                }
-                continue;
-            }
-            byId[c.Id] = EnrichFromManifests(c, assemblyToManifest);
-            ribbonAdded++;
-        }
-        Log.Information("RibbonScanner: added {Added} new, enriched {Enriched} builtins with tab/panel, {Redundant} redundant",
-                        ribbonAdded, ribbonEnriched, ribbonRedundant);
-
-        var preFilter = byId.Values.Count;
+        var preFilter = merged.Count;
         var modeDropped = 0;
         var bansDropped = 0;
-        var headlessDropped = 0;
         var filtered = new List<ScannedCommand>(preFilter);
-        foreach (var c in byId.Values)
+        foreach (var c in merged)
         {
             if (ModeRestrictedCommandIds.Contains(c.Id)) { modeDropped++; continue; }
             if (bans.IsBanned(c.Id))                      { bansDropped++; continue; }
-            // Headless commands — PostableCommand entries (or manifest-only
-            // hits) that don't surface anywhere on the live ribbon. If the
-            // user can't see it in Revit they can't expect to find it in the
-            // builder catalog either, and they wouldn't recognise it by Id
-            // alone if they did. Drop them to keep the catalog tidy.
-            if (string.IsNullOrEmpty(c.SourceTab) || string.IsNullOrEmpty(c.SourcePanel))
-            {
-                headlessDropped++;
-                continue;
-            }
-            filtered.Add(c);
+            filtered.Add(EnrichFromManifests(c, assemblyToManifest));
         }
-        Log.Information("Filter pipeline: {Pre} → {Post} (mode-restricted={Mode}, banned={Banned}, headless={Headless})",
-                        preFilter, filtered.Count, modeDropped, bansDropped, headlessDropped);
+        Log.Information("Filter pipeline: {Pre} → {Post} (mode-restricted={Mode}, banned={Banned})",
+                        preFilter, filtered.Count, modeDropped, bansDropped);
 
         return new CommandCatalog(filtered, manifests);
     }

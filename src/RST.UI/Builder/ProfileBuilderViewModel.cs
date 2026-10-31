@@ -239,7 +239,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         _activeDisable = active is { IsBlank: false } && active.DisableNonRequired;
         _lookup = Safe(_backend.GetAddinLookup, new Dictionary<string, AddinLookupEntry>(), "get_addin_lookup");
         Log.Information("Builder boot: catalog={Catalog} profiles={Profiles} active={Active} lookup={Lookup} tabs={Tabs}",
-            catalog.Count, _library.Count, _activeId, _lookup.Count, _backend.AllTabs.Count);
+            _tree.CommandCount, _library.Count, _activeId, _lookup.Count, _backend.AllTabs.Count);
 
         PopulateOptions();
         OpenOnLoaded(libraryRead: library is not null);

@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures\Ribbon\*.tsv" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\**\*.addin" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\**\*.addin.RSTdisabled" CopyToOutputDirectory="PreserveNewest" />
