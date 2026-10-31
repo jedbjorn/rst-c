@@ -167,9 +167,12 @@ internal sealed class AddInsFixture : IDisposable
 }
 
 /// <summary>
-/// What the page's profile picker (a WPF ComboBox, SelectedItem two-way) does with the view-model, without a window:
-/// it holds its own selected item; when Profiles is replaced by a list that does not contain that item, it clears its
-/// selection and writes null back, then reads the view-model's value again (SC-019).
+/// What the page's profile picker (a WPF ComboBox, SelectedItem two-way) does with the view-model, without a window.
+/// It holds its SelectedItem and, apart from it, the item it shows. When Profiles is replaced by a list that does not
+/// contain its item, it clears its selection and writes null back, then reads the view-model's value again (SC-019).
+/// That re-read lands while the ComboBox is still inside its own selection change, so the value becomes SelectedItem
+/// but the box does not show it, and a later SelectedProfile change with the same value changes nothing: the picker
+/// is blank although SelectedItem is right (SC-048, as the real page rendered it on CI and on the VM).
 /// </summary>
 internal sealed class PickerLike
 {
@@ -179,23 +182,32 @@ internal sealed class PickerLike
     {
         _vm = vm;
         Selected = vm.SelectedProfile;
+        Shown = Selected;
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AddInsViewModel.SelectedProfile))
             {
+                // A dependency property set to the value it holds changes nothing.
+                if (ReferenceEquals(_vm.SelectedProfile, Selected)) return;
                 Selected = _vm.SelectedProfile;
+                Shown = Selected is not null && _vm.Profiles.Contains(Selected) ? Selected : null;
             }
             else if (e.PropertyName == nameof(AddInsViewModel.Profiles) && Selected is not null && !_vm.Profiles.Contains(Selected))
             {
                 Selected = null;
+                Shown = null;
                 NullsWritten++;
                 _vm.SelectedProfile = null;
-                Selected = _vm.SelectedProfile;
+                Selected = _vm.SelectedProfile; // the re-read, mid selection change: not shown
             }
         };
     }
 
+    /// <summary>The ComboBox's SelectedItem.</summary>
     public ProfileOption? Selected { get; private set; }
+
+    /// <summary>What the closed ComboBox shows (its SelectionBoxItem).</summary>
+    public ProfileOption? Shown { get; private set; }
 
     public int NullsWritten { get; private set; }
 }
@@ -343,6 +355,59 @@ public class AddInsViewModelTests
 
         Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
         Assert.False(vm.DisableUnused); // nothing saved for the active profile
+    }
+
+    [Fact]
+    public async Task The_picker_shows_the_picked_profile_after_Apply_and_after_Refresh()
+    {
+        // SC-048 (v3.1 rc.3 F3, v3.1.1): after Apply the picker was blank, though the view-model still held the pick.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        var picker = new PickerLike(vm);
+        var lean = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        vm.SelectedProfile = lean;
+        Assert.Same(lean, picker.Shown);
+
+        await vm.ApplyAsync(); // reads the page again afterwards: new profile objects
+
+        Assert.Equal("F16 Lean", vm.SelectedProfile!.Name);
+        Assert.NotSame(lean, vm.SelectedProfile);
+        Assert.Contains(vm.SelectedProfile, vm.Profiles);
+        Assert.Same(vm.SelectedProfile, picker.Selected);
+        Assert.Same(vm.SelectedProfile, picker.Shown);
+        Assert.Equal(0, picker.NullsWritten); // the picker never held an item that was not in the list
+
+        await vm.RefreshAsync();
+
+        Assert.Equal("F16 Lean", vm.SelectedProfile!.Name);
+        Assert.Same(vm.SelectedProfile, picker.Shown);
+        Assert.True(vm.DisableUnused);
+    }
+
+    [Fact]
+    public async Task When_the_picked_profile_is_deleted_the_picker_shows_the_active_one_and_with_none_left_says_so()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        var picker = new PickerLike(vm);
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, vm.SelectedProfile!.Entry.FileName));
+
+        await vm.RefreshAsync();
+
+        Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name); // the active profile
+        Assert.Same(vm.SelectedProfile, picker.Shown);
+
+        foreach (var p in vm.Profiles) File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, p.Entry.FileName));
+        await vm.RefreshAsync();
+
+        Assert.Null(vm.SelectedProfile);
+        Assert.Null(picker.Shown);
+        Assert.False(vm.HasProfiles); // the picker is hidden and the page says there are no profiles
+        Assert.True(vm.ShowNoProfiles);
+        Assert.False(vm.CanApply);
     }
 
     [Fact]
@@ -809,6 +874,66 @@ public class AddInsPageScreenshotTests
             Assert.True(second.Disable);
             Assert.False(second.Plan!.HasChanges, "a second Apply switches nothing back on");
             Assert.True(page.DisableUnusedToggle.IsChecked);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    /// <summary>What the closed picker shows: its selection, and the text drawn in its box.</summary>
+    private static void AssertPickerShows(AddInsView page, AddInsViewModel vm, string name, string when)
+    {
+        WindowCapture.DoEvents();
+        page.UpdateLayout();
+        var picker = page.ProfilePicker;
+        Assert.True(picker.IsVisible, $"the picker {when}");
+        Assert.Same(vm.SelectedProfile, picker.SelectedItem);
+        Assert.Equal(name, Assert.IsType<ProfileOption>(picker.SelectedItem).Name);
+        Assert.True(picker.SelectedIndex >= 0, $"the picker's selected index {when}: {picker.SelectedIndex}");
+        Assert.Same(picker.SelectedItem, picker.Items[picker.SelectedIndex]);
+        Assert.True(picker.SelectionBoxItem is not null and not "", $"the picker's box is empty {when}");
+        Assert.Equal(name, picker.SelectionBoxItem.ToString());
+        Assert.Contains(name, Visible(picker).Select(t => t.Text));
+    }
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void On_screen_the_picker_keeps_its_profile_after_Apply_and_Refresh(UiTheme theme) => Sta(theme, () =>
+    {
+        // SC-048 (v3.1 rc.3 F3, v3.1.1) through the real page: the profile picked in the window is still shown in
+        // the picker after Apply and after Refresh; a picked profile deleted meanwhile falls back to the active one.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        vm.RefreshAsync().GetAwaiter().GetResult();
+        var window = new TrayWindow(new TrayViewModel(new FakeTrayHost(), TrayPage.AddIns, addIns: vm));
+        try
+        {
+            WindowCapture.ShowOffScreen(window);
+            var page = window.AddInsView;
+            AssertPickerShows(page, vm, "F16 Needs Probe", "before Apply");
+            page.ProfilePicker.SelectedItem = page.ProfilePicker.Items.Cast<ProfileOption>().Single(p => p.Name == "F16 Lean");
+            Assert.Equal("F16 Lean", vm.SelectedProfile!.Name);
+            Assert.True(page.DisableUnusedToggle.IsChecked); // F16 Lean's saved choice
+
+            vm.ApplyAsync().GetAwaiter().GetResult(); // the Apply button's command
+            WindowCapture.DoEvents();
+
+            Assert.Equal("F16 Lean", Assert.Single(f.Backend.Applied).Entry.Profile.ProfileName);
+            Assert.Equal("F16 Lean", page.ActiveProfile.Text);
+            AssertPickerShows(page, vm, "F16 Lean", "after Apply");
+            Assert.True(page.DisableUnusedToggle.IsChecked);
+            Screenshots.Save(WindowCapture.Content(window, PageSize), Name("applied-picker", theme));
+
+            vm.RefreshAsync().GetAwaiter().GetResult(); // the Refresh link's command
+            AssertPickerShows(page, vm, "F16 Lean", "after Refresh");
+
+            // Picked, then deleted on disk: the next read shows the active profile (now F16 Lean), not a blank box.
+            var probe = page.ProfilePicker.Items.Cast<ProfileOption>().Single(p => p.Name == "F16 Needs Probe");
+            page.ProfilePicker.SelectedItem = probe;
+            File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, probe.Entry.FileName));
+            vm.RefreshAsync().GetAwaiter().GetResult();
+            AssertPickerShows(page, vm, "F16 Lean", "after the picked profile was deleted");
         }
         finally
         {
