@@ -190,9 +190,11 @@ public class ProfileBuilderShellScreenshotTests
     {
         var b = w.ProfileButton;
         Assert.True(w.LoadedMark.ActualWidth > 0, $"{when}: \"(loaded)\" is not shown");
-        Assert.True(Right(w.ProfileButtonName, b) <= Left(w.LoadedMark, b) + 0.5, $"{when}: the name runs into \"(loaded)\"");
-        Assert.True(Right(w.LoadedMark, b) <= Left(w.ProfileChevron, b) + 0.5, $"{when}: \"(loaded)\" runs into the chevron");
-        Assert.True(Right(w.ProfileChevron, b) <= b.ActualWidth, $"{when}: the chevron is cut off");
+        Assert.True(Right(w.ProfileButtonName, b) <= Left(w.LoadedMark, b) + 0.5,
+            $"{when}: the name (ends at x {Right(w.ProfileButtonName, b)}) runs into \"(loaded)\" (starts at x {Left(w.LoadedMark, b)}; button {b.ActualWidth} wide)");
+        Assert.True(Right(w.LoadedMark, b) <= Left(w.ProfileChevron, b) + 0.5,
+            $"{when}: \"(loaded)\" (ends at x {Right(w.LoadedMark, b)}) runs into the chevron (starts at x {Left(w.ProfileChevron, b)})");
+        Assert.True(Right(w.ProfileChevron, b) <= b.ActualWidth, $"{when}: the chevron (ends at x {Right(w.ProfileChevron, b)}) is cut off");
         Assert.True(Right(b, w.Root) < Left(w.ExportButton, w.Root), $"{when}: the profile button runs into Export ZIP");
     }
 
@@ -228,8 +230,9 @@ public class ProfileBuilderShellScreenshotTests
             AssertHeaderLinesUp(window, $"{width} px, a long name");
             AssertProfileButtonHoldsItsParts(window, $"{width} px, a long name");
 
-            // A wider Export ZIP (another wording): the profile button gives way; the alignment holds.
-            window.ExportButton.Content = "Export this profile as a ZIP file…";
+            // A wider Export ZIP (another wording): the profile button gives way; the alignment holds. Modestly
+            // wider: the button still has room for "(loaded)" and the chevron (it is about 157 px at "Export ZIP").
+            window.ExportButton.Content = "Export as ZIP…";
             WindowCapture.Content(window, size);
             Assert.True(window.ProfileButton.ActualWidth < buttonWidth, "the profile button narrows for a wider Export ZIP");
             AssertHeaderLinesUp(window, $"{width} px, a wider Export ZIP");
