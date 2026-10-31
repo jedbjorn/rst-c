@@ -15,22 +15,28 @@ public class XamlStoryboardTriggerLintTests
 {
     private const string TargetNameAttribute = "Storyboard.TargetName";
 
-    [Fact]
-    public void NoTemplateOrStyleEventTrigger_BeginsAStoryboardOnANamedPart()
+    private static List<string> XamlFiles()
     {
         var src = Path.Combine(RepoRoot(), "src");
         var files = Directory.EnumerateFiles(src, "*.xaml", SearchOption.AllDirectories)
             .Where(f => !IsBuildOutput(src, f))
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToList();
-
         files.Should().Contain(f => f.EndsWith(Path.Combine("RST.UI", "Theme.xaml"), StringComparison.Ordinal),
             "the scan must reach Theme.xaml, where the busy styles live");
+        return files;
+    }
 
-        var violations = files
-            .SelectMany(f => Violations(XDocument.Load(f, LoadOptions.SetLineInfo))
+    private static List<string> Scan(Func<XDocument, IEnumerable<string>> rule) =>
+        XamlFiles()
+            .SelectMany(f => rule(XDocument.Load(f, LoadOptions.SetLineInfo))
                 .Select(v => $"{Path.GetRelativePath(RepoRoot(), f).Replace('\\', '/')}:{v}"))
             .ToList();
+
+    [Fact]
+    public void NoTemplateOrStyleEventTrigger_BeginsAStoryboardOnANamedPart()
+    {
+        var violations = Scan(Violations);
 
         violations.Should().BeEmpty(
             "an EventTrigger in ControlTemplate.Triggers, DataTemplate.Triggers or Style.Triggers fires before the " +
@@ -99,6 +105,100 @@ public class XamlStoryboardTriggerLintTests
             """;
         Violations(XDocument.Parse(fixedXaml, LoadOptions.SetLineInfo)).Should().BeEmpty();
     }
+
+    [Fact]
+    public void EveryTargetAndSourceNameInATemplate_NamesAnElementOfThatTemplate()
+    {
+        var violations = Scan(UnresolvedNames);
+
+        violations.Should().BeEmpty(
+            "a TargetName, SourceName or Storyboard.TargetName in a template resolves in that template's name scope; " +
+            "a name the template does not define fails only at run time, on the UI thread inside Revit");
+    }
+
+    [Fact]
+    public void TheNameCheck_FindsANameTheTemplateDoesNotDefine()
+    {
+        const string xaml = """
+            <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <ControlTemplate x:Key="A" TargetType="Button">
+                <Border x:Name="Bd">
+                  <ContentPresenter />
+                </Border>
+                <ControlTemplate.Triggers>
+                  <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Opacity" Value="0.5" />
+                    <Setter TargetName="Chrome" Property="Opacity" Value="0.5" />
+                  </Trigger>
+                  <Trigger SourceName="Missing" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Opacity" Value="1" />
+                  </Trigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+              <DataTemplate x:Key="B">
+                <Grid>
+                  <ContentControl>
+                    <ContentControl.ContentTemplate>
+                      <DataTemplate>
+                        <Border Name="Inner" />
+                      </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                  </ContentControl>
+                </Grid>
+                <DataTemplate.Triggers>
+                  <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Inner" Property="Opacity" Value="0.4" />
+                  </Trigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ResourceDictionary>
+            """;
+
+        // Chrome and Missing are not in A; Inner is in B's nested template, a scope of its own.
+        UnresolvedNames(XDocument.Parse(xaml, LoadOptions.SetLineInfo)).Should().HaveCount(3)
+            .And.Contain(v => v.Contains("\"Chrome\""))
+            .And.Contain(v => v.Contains("\"Missing\""))
+            .And.Contain(v => v.Contains("\"Inner\""));
+    }
+
+    private static readonly string[] NameReferences = ["TargetName", "SourceName", TargetNameAttribute];
+
+    /// <summary>"line N: …" for each TargetName/SourceName/Storyboard.TargetName in a template that its template does not define.</summary>
+    private static IEnumerable<string> UnresolvedNames(XDocument doc)
+    {
+        foreach (var template in doc.Descendants().Where(e => IsTemplate(e.Name.LocalName)))
+        {
+            var own = OwnScope(template).ToList();
+            var names = own
+                .SelectMany(e => e.Attributes().Where(a => a.Name.LocalName == "Name"))
+                .Select(a => a.Value)
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var e in own)
+            {
+                foreach (var a in e.Attributes().Where(a => NameReferences.Contains(a.Name.LocalName) && !names.Contains(a.Value)))
+                {
+                    yield return $"line {((System.Xml.IXmlLineInfo)e).LineNumber}: <{e.Name.LocalName} {a.Name.LocalName}=\"{a.Value}\"> " +
+                                 $"names nothing in its <{template.Name.LocalName}>";
+                }
+            }
+        }
+    }
+
+    /// <summary>The template's descendants outside any template nested in it (each template is its own name scope).</summary>
+    private static IEnumerable<XElement> OwnScope(XElement template)
+    {
+        foreach (var child in template.Elements())
+        {
+            if (IsTemplate(child.Name.LocalName)) continue;
+            yield return child;
+            foreach (var deeper in OwnScope(child)) yield return deeper;
+        }
+    }
+
+    /// <summary>ControlTemplate, DataTemplate, HierarchicalDataTemplate, ItemsPanelTemplate (not their property elements).</summary>
+    private static bool IsTemplate(string localName) =>
+        !localName.Contains('.') && localName.EndsWith("Template", StringComparison.Ordinal);
 
     /// <summary>"line N: …" for each storyboard element naming a target inside a template's or style's EventTrigger.</summary>
     private static IEnumerable<string> Violations(XDocument doc) =>
