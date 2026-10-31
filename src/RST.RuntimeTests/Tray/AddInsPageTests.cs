@@ -166,6 +166,40 @@ internal sealed class AddInsFixture : IDisposable
     public void Dispose() => Root.Dispose();
 }
 
+/// <summary>
+/// What the page's profile picker (a WPF ComboBox, SelectedItem two-way) does with the view-model, without a window:
+/// it holds its own selected item; when Profiles is replaced by a list that does not contain that item, it clears its
+/// selection and writes null back, then reads the view-model's value again (SC-019).
+/// </summary>
+internal sealed class PickerLike
+{
+    private readonly AddInsViewModel _vm;
+
+    public PickerLike(AddInsViewModel vm)
+    {
+        _vm = vm;
+        Selected = vm.SelectedProfile;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AddInsViewModel.SelectedProfile))
+            {
+                Selected = _vm.SelectedProfile;
+            }
+            else if (e.PropertyName == nameof(AddInsViewModel.Profiles) && Selected is not null && !_vm.Profiles.Contains(Selected))
+            {
+                Selected = null;
+                NullsWritten++;
+                _vm.SelectedProfile = null;
+                Selected = _vm.SelectedProfile;
+            }
+        };
+    }
+
+    public ProfileOption? Selected { get; private set; }
+
+    public int NullsWritten { get; private set; }
+}
+
 public class AddInsViewModelTests
 {
     [Fact]
@@ -252,6 +286,63 @@ public class AddInsViewModelTests
         Assert.Equal(new[] { "RST-Probe", "DiRoots.One", "Enscape" }, vm.Years[0].SwitchedOff);
         Assert.Equal(new[] { "RST-Probe", "Kinship" }, vm.Years[1].SwitchedOff);
         Assert.Equal("F16 Lean", ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).ProfileName);
+    }
+
+    [Fact]
+    public async Task After_Apply_Disable_unused_stays_on_and_a_second_Apply_changes_nothing()
+    {
+        // SC-019 (v3.1 VM Pass A, N1): the switch showed off after an Apply that saved it on, so a second Apply
+        // planned to switch the add-ins back on.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        var picker = new PickerLike(vm);
+        Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
+        Assert.False(vm.DisableUnused); // nothing saved for it yet
+        vm.DisableUnused = true;
+
+        await vm.ApplyAsync(); // reads the page again afterwards, as on screen
+
+        var first = Assert.Single(f.Backend.Applied);
+        Assert.True(first.Disable);
+        Assert.True(first.Plan!.HasChanges);
+        Assert.True(UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.ProbeId)!.DisableUnusedAddins);
+        Assert.True(picker.NullsWritten > 0, "the picker lost its item when the list was read again, as WPF's does");
+        Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
+        Assert.Same(vm.SelectedProfile, picker.Selected);
+        Assert.True(vm.DisableUnused, "Disable unused add-ins after Apply");
+
+        await vm.RefreshAsync(); // Refresh
+        Assert.True(vm.DisableUnused, "Disable unused add-ins after Refresh");
+        Assert.Same(vm.SelectedProfile, picker.Selected);
+
+        await vm.ApplyAsync();
+
+        var second = f.Backend.Applied[1];
+        Assert.True(second.Disable);
+        Assert.False(second.Plan!.HasChanges, "a second Apply switches nothing back on");
+        Assert.Empty(f.Dialogs.AddinChanges[1].SwitchingOff);
+        Assert.True(vm.DisableUnused);
+    }
+
+    [Fact]
+    public async Task A_read_after_the_picked_profile_was_deleted_seeds_the_switch_from_the_new_pick()
+    {
+        // SC-019's other side: the picker's null is ignored only while the page swaps its own list; a profile that is
+        // gone still falls back to the active one, seeded from that one's saved choice.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        _ = new PickerLike(vm);
+        var lean = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        vm.SelectedProfile = lean;
+        Assert.True(vm.DisableUnused); // F16 Lean's saved choice
+        File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, lean.Entry.FileName));
+
+        await vm.RefreshAsync();
+
+        Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
+        Assert.False(vm.DisableUnused); // nothing saved for the active profile
     }
 
     [Fact]
@@ -676,6 +767,53 @@ public class AddInsPageScreenshotTests
         });
         CaptureDialog(new ConfirmAddinChangesWindow(f.Dialogs.AddinChanges.Single()), theme, "confirm");
         CaptureDialog(new AddinReportWindow(f.Dialogs.AddinReports.Single()), theme, "report-apply");
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void On_screen_Apply_keeps_Disable_unused_on(UiTheme theme) => Sta(theme, () =>
+    {
+        // SC-019 (v3.1 VM Pass A, N1) through the real page: the switch is turned on in the window, Apply reads the
+        // page again with the picker bound, and the switch, the picker and a second Apply all agree with what was saved.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        vm.RefreshAsync().GetAwaiter().GetResult();
+        var window = new TrayWindow(new TrayViewModel(new FakeTrayHost(), TrayPage.AddIns, addIns: vm));
+        try
+        {
+            WindowCapture.ShowOffScreen(window);
+            var page = window.AddInsView;
+            Assert.Equal("F16 Needs Probe", Assert.IsType<ProfileOption>(page.ProfilePicker.SelectedItem).Name);
+            Assert.False(page.DisableUnusedToggle.IsChecked);
+            page.DisableUnusedToggle.IsChecked = true;
+            Assert.True(vm.DisableUnused);
+
+            vm.ApplyAsync().GetAwaiter().GetResult();
+            WindowCapture.DoEvents();
+
+            Assert.True(Assert.Single(f.Backend.Applied).Disable);
+            Assert.True(UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.ProbeId)!.DisableUnusedAddins);
+            Assert.True(vm.DisableUnused, "the view-model's switch after Apply");
+            Assert.True(page.DisableUnusedToggle.IsChecked, "the page's switch after Apply");
+            Assert.Same(vm.SelectedProfile, page.ProfilePicker.SelectedItem);
+            Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name);
+            Screenshots.Save(WindowCapture.Content(window, PageSize), Name("applied-switch-kept", theme));
+
+            vm.RefreshAsync().GetAwaiter().GetResult();
+            WindowCapture.DoEvents();
+            Assert.True(page.DisableUnusedToggle.IsChecked, "the page's switch after Refresh");
+
+            vm.ApplyAsync().GetAwaiter().GetResult();
+            WindowCapture.DoEvents();
+            var second = f.Backend.Applied[1];
+            Assert.True(second.Disable);
+            Assert.False(second.Plan!.HasChanges, "a second Apply switches nothing back on");
+            Assert.True(page.DisableUnusedToggle.IsChecked);
+        }
+        finally
+        {
+            window.Close();
+        }
     });
 
     [Theory]
