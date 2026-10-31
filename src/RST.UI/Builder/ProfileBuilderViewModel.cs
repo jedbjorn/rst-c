@@ -194,7 +194,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
 
     /// <summary>
     /// bootAfterBridge: the machine-wide branding first, then the catalogue, the profiles, the active
-    /// profile, the lookup and the tabs, then a fresh profile with one panel.
+    /// profile, the lookup and the tabs, then the loaded profile in the editor (<see cref="OpenOnLoaded"/>),
+    /// or a fresh profile with one panel when there is none to open.
     /// </summary>
     public void Initialize()
     {
@@ -221,7 +222,47 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
             catalog.Count, _library.Count, _activeId, _lookup.Count, _backend.AllTabs.Count);
 
         PopulateOptions();
-        StartFresh();
+        OpenOnLoaded();
+    }
+
+    /// <summary>
+    /// The Builder opens on the loaded profile (VM finding F5, FnB decision): the one active_profile.json
+    /// names, matched by id, or by its file for a legacy profile with no id. It opens as picking it from
+    /// the menu does, a stack repair included (its toast; the repair is an unsaved change). No loaded
+    /// profile, one that is not in the library, or one that fails to open: a new profile, as before.
+    /// </summary>
+    private void OpenOnLoaded()
+    {
+        var loaded = _activeId is { } id
+            ? ProfileOptions.FirstOrDefault(o => o.Entry is { } e && e.Profile.Id == id)
+            : _activeIdlessFile is { } file
+                ? ProfileOptions.FirstOrDefault(o => o.Entry is { } e && string.IsNullOrEmpty(e.Profile.Id)
+                                                     && string.Equals(e.FileName, file, StringComparison.OrdinalIgnoreCase))
+                : null;
+        if (loaded?.Entry is not { } entry)
+        {
+            if (_activeId is null && _activeIdlessFile is null)
+                Log.Information("Builder: no profile is loaded; opening on a new profile");
+            else
+                Log.Information("Builder: the loaded profile ({Active}) is not in the library; opening on a new profile",
+                    _activeId ?? _activeIdlessFile);
+            StartFresh();
+            return;
+        }
+        try
+        {
+            SetCurrent(loaded);
+            LoadIntoEditor(entry.Profile, entry.FileName);
+            Log.Information("Builder: opened on the loaded profile {Name} ({Id}, {File})", entry.Profile.ProfileName,
+                entry.Profile.Id ?? "no id", entry.FileName);
+        }
+        catch (Exception ex)
+        {
+            Log.Information(ex, "Builder: the loaded profile {Name} ({File}) could not be opened; opening on a new profile",
+                entry.Profile.ProfileName, entry.FileName);
+            SetCurrent(ProfileOptionViewModel.New());
+            StartFresh();
+        }
     }
 
     // ---- the profile menu -----------------------------------------------------------------------

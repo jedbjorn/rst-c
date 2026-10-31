@@ -24,7 +24,7 @@ Live profile switching (no Revit restart) is part of the same system: the profil
 
 Click **Builder** on the **RST** panel of the **Add-Ins** tab. The window, titled **RST — Profile Builder**, opens centred over Revit, belongs to Revit (no taskbar button of its own; Revit waits until you close it) and uses Revit's light or dark theme as it was when the window opened.
 
-The Builder starts on **+ New Profile**: a blank profile with one empty panel, "Panel 1".
+The Builder opens on the profile that is loaded in the Loader, ready to edit. With no profile loaded, or when the loaded one is no longer among the saved profiles, it starts on **+ New Profile**: a blank profile with one empty panel, "Panel 1".
 
 ### The window
 
