@@ -378,8 +378,9 @@ public class CrashPathHardeningTests
     public void R6_the_Loaders_card_setter_logs_a_failure()
     {
         var backend = LoaderFixtures.Backend();
+        backend.Prefs.Profiles.Remove(LoaderFixtures.StructId); // Structure has presets: never picked here, it asks to adopt them
         var dialogs = new LoaderTestDialogs();
-        // The adopt question (a profile with presets, never picked here) cannot open.
+        // The adopt question cannot open.
         var model = new ProfileLoaderViewModel(backend, new BrokenConfirmDialogs(), dialogs, new ManualClock().Schedule, _ => { });
         model.LoadData();
         var withPresets = model.Profiles.First(p => p.Profile.Presets is not null && p.Id is not null && backend.Prefs.Get(p.Id) is null);
