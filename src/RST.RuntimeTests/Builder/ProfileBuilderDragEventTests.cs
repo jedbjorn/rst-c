@@ -646,10 +646,15 @@ public class ProfileBuilderDragStartTests
 
     private static string Id(DependencyObject d) => AutomationProperties.GetAutomationId(d);
 
+    /// <summary>
+    /// A left press as the input system raises it: the tunnelling PreviewMouseDown, then the bubbling
+    /// MouseDown. Each element on the route re-raises them as its own (direct) Preview/MouseLeftButtonDown,
+    /// which is what the tile's and row's handlers listen to.
+    /// </summary>
     private static void Press(UIElement on)
     {
-        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent });
-        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseDownEvent });
+        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseDownEvent });
     }
 
     private static void Move(UIElement on) =>
@@ -772,8 +777,9 @@ public class ProfileBuilderDragStartTests
             Press(remove);
             Assert.Null(rig.Window.PendingDrag);
 
-            // Not hovered: the × (and WU4's ✎) are invisible and take no press.
-            var corner = WindowCapture.Descendants<StackPanel>(tile).Single(s => s.Name == "Corner");
+            // Not hovered and not focused (Brace; the presses above focused Beam): the × (and WU4's ✎)
+            // are invisible and take no press.
+            var corner = WindowCapture.Descendants<StackPanel>(Tile(rig.Window, 0, 2)).Single(s => s.Name == "Corner");
             Assert.Equal(0, corner.Opacity);
             Assert.False(corner.IsHitTestVisible);
             var rowCorner = WindowCapture.Descendants<StackPanel>(StackRow(rig.Window, 1, 1, 0)).Single(s => s.Name == "Corner");
