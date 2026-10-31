@@ -855,16 +855,11 @@ public class ProfileBuilderDragStartTests
 
     /// <summary>
     /// The element a real press at <paramref name="at"/> (a point on <paramref name="on"/>) lands on: the
-    /// window's own hit test, as the input system does it, up to the nearest UIElement.
+    /// window's input hit test, the one the mouse uses (it skips what is hidden, disabled or not hit-test
+    /// visible, such as the hover-only ×; VisualTreeHelper.HitTest would not).
     /// </summary>
-    private static UIElement HitAt(ProfileBuilderWindow w, FrameworkElement on, Point at)
-    {
-        var result = VisualTreeHelper.HitTest(w, on.TranslatePoint(at, w));
-        Assert.NotNull(result); // something is hit at the point
-        DependencyObject? d = result.VisualHit;
-        while (d is not null and not UIElement) d = VisualTreeHelper.GetParent(d);
-        return Assert.IsAssignableFrom<UIElement>(d);
-    }
+    private static UIElement HitAt(ProfileBuilderWindow w, FrameworkElement on, Point at) =>
+        Assert.IsAssignableFrom<UIElement>(w.InputHitTest(on.TranslatePoint(at, w)));
 
     private static bool IsInside(DependencyObject? d, DependencyObject ancestor)
     {
