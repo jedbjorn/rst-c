@@ -548,7 +548,7 @@
             -->
             <DataTemplate DataType="{x:Type builder:CustomToolItemViewModel}">
                 <Border x:Name="Row" Padding="20,2,4,2" CornerRadius="3" Background="Transparent" MinHeight="24" ToolTip="{Binding ToolTip}"
-                        PreviewMouseLeftButtonDown="OnDragSourceDown" MouseMove="OnDragSourceMove"
+                        PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
                         AutomationProperties.AutomationId="Builder.CustomTool" AutomationProperties.Name="{Binding Label}">
                     <Border.InputBindings>
                         <MouseBinding Gesture="LeftDoubleClick" Command="{Binding AddCommand}" />
