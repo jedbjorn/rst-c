@@ -164,7 +164,32 @@ public sealed class UpdateCheckLoop : IDisposable
         _stop.Dispose();
     }
 
+    // SC-046 (T1): the timer callback runs on a thread-pool thread with no handler above it, so anything it throws
+    // ends the tray. It never throws now: a failure is logged and the loop tries to keep its next slot armed.
     private void OnTimer()
+    {
+        try
+        {
+            OnTimerCore();
+        }
+        catch (Exception ex)
+        {
+            Say("update checks: the timer failed unexpectedly (" + ex.Message + "); the next slot is kept");
+            try
+            {
+                lock (_gate)
+                {
+                    if (!_disposed) ArmLocked(_nextDue ?? _time.GetUtcNow() + Interval);
+                }
+            }
+            catch (Exception)
+            {
+                // Nothing more can be done from the timer thread; Check now and Resync still work.
+            }
+        }
+    }
+
+    private void OnTimerCore()
     {
         lock (_gate)
         {
@@ -234,7 +259,7 @@ public sealed class UpdateCheckLoop : IDisposable
         }
         catch (Exception ex)
         {
-            _log("update checks: the check failed unexpectedly: " + ex.Message);
+            Say("update checks: the check failed unexpectedly: " + ex.Message);
         }
         finally
         {
@@ -242,12 +267,39 @@ public sealed class UpdateCheckLoop : IDisposable
         }
     }
 
+    /// <summary>
+    /// The longest single wait the timer is armed for. A slot further away (the clock was set back) is reached in
+    /// steps: the timer fires early, OnTimer sees the slot is not due yet and arms the next step. Timer.Change
+    /// refuses a wait over about 49.7 days (uint.MaxValue - 1 ms) and a negative one, on the timer thread, which
+    /// ended the tray when the clock moved back by about 48 days or more (SC-046, T1).
+    /// </summary>
+    internal static readonly TimeSpan MaxWait = Interval;
+
     private void ArmLocked(DateTimeOffset due)
     {
         _nextDue = due;
+        _timer?.Change(WaitUntil(due), Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>The wait to arm for <paramref name="due"/>: never negative, never over <see cref="MaxWait"/>.</summary>
+    private TimeSpan WaitUntil(DateTimeOffset due)
+    {
         var wait = due - _time.GetUtcNow();
-        if (wait < TimeSpan.Zero) wait = TimeSpan.Zero;
-        _timer?.Change(wait, Timeout.InfiniteTimeSpan);
+        if (wait < TimeSpan.Zero) return TimeSpan.Zero;
+        return wait > MaxWait ? MaxWait : wait;
+    }
+
+    /// <summary>The loop's own log line; a log that throws never reaches the timer thread.</summary>
+    private void Say(string message)
+    {
+        try
+        {
+            _log(message);
+        }
+        catch (Exception)
+        {
+            // Nothing to report it to.
+        }
     }
 
     private TimeSpan ClampFirstDelay()

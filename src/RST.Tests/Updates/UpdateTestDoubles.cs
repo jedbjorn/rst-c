@@ -71,7 +71,15 @@ internal sealed class ManualTimeProvider : TimeProvider
     /// The PC sleeps for <paramref name="by"/>: the wall clock moves on, and every armed timer is pushed back by the
     /// same amount, as Windows timers pause in sleep. Nothing fires.
     /// </summary>
-    public void Sleep(TimeSpan by)
+    public void Sleep(TimeSpan by) => Shift(by);
+
+    /// <summary>
+    /// The wall clock is set forward (or, negative, back) by <paramref name="by"/>: a timer's wait is relative, so
+    /// every armed timer is still the same time away. Nothing fires (SC-046).
+    /// </summary>
+    public void JumpClock(TimeSpan by) => Shift(by);
+
+    private void Shift(TimeSpan by)
     {
         lock (_gate)
         {
@@ -80,6 +88,9 @@ internal sealed class ManualTimeProvider : TimeProvider
                 if (t.Due is { } due) t.Due = due + by;
         }
     }
+
+    /// <summary>The longest wait System.Threading.Timer accepts (uint.MaxValue - 1 ms, about 49.7 days).</summary>
+    public static readonly TimeSpan MaxTimerWait = TimeSpan.FromMilliseconds(uint.MaxValue - 1.0);
 
     private sealed class ManualTimer : ITimer
     {
@@ -100,6 +111,11 @@ internal sealed class ManualTimeProvider : TimeProvider
 
         public bool Change(TimeSpan dueTime, TimeSpan period)
         {
+            // As the real timer: a wait over about 49.7 days, or negative (other than infinite), throws.
+            if (dueTime != Timeout.InfiniteTimeSpan && (dueTime < TimeSpan.Zero || dueTime > MaxTimerWait))
+                throw new ArgumentOutOfRangeException(nameof(dueTime), dueTime, "the timer refuses this wait");
+            if (period != Timeout.InfiniteTimeSpan && (period < TimeSpan.Zero || period > MaxTimerWait))
+                throw new ArgumentOutOfRangeException(nameof(period), period, "the timer refuses this period");
             lock (_owner._gate)
             {
                 Period = period == Timeout.InfiniteTimeSpan ? TimeSpan.Zero : period;

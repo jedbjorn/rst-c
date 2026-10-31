@@ -610,6 +610,93 @@ public sealed class UpdateCheckLoopTests
         runs.Should().HaveCount(3);
     }
 
+    // SC-046 (T1): Timer.Change refuses a wait over about 49.7 days. A slot more than that away (the clock set back by
+    // about 48 days or more) threw on the timer thread and ended the tray. ManualTimeProvider's timer refuses such a
+    // wait as the real one does.
+    [Fact]
+    public void The_clock_set_back_60_days_never_arms_a_wait_the_timer_refuses_and_the_slot_still_comes()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        runs.Should().HaveCount(1);
+        var due = loop.NextDueUtc!.Value;
+
+        time.JumpClock(TimeSpan.FromDays(-60));
+        var resync = () => loop.Resync();
+        resync.Should().NotThrow("the slot is 61 days away, and the timer is armed for at most a day of it");
+        loop.NextDueUtc.Should().Be(due, "the slot keeps its wall-clock time");
+        time.ArmedTimers.Should().Be(1);
+
+        // The timer fires at most a day apart, early, and is armed again until the slot comes: no check before it.
+        Advance(time, loop, TimeSpan.FromDays(60));
+        runs.Should().HaveCount(1);
+        Advance(time, loop, TimeSpan.FromDays(1));
+        runs.Should().HaveCount(2);
+        runs[1].At.Should().Be(due);
+        loop.NextDueUtc.Should().Be(due.AddHours(24));
+    }
+
+    [Fact]
+    public void The_clock_set_back_60_days_with_no_resync_is_caught_on_the_timer_thread_too()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        var due = loop.NextDueUtc!.Value;
+
+        // No Resync: the timer fires a day later, sees the slot 60 days off and arms itself again from its callback.
+        time.JumpClock(TimeSpan.FromDays(-60));
+        var advance = () => Advance(time, loop, TimeSpan.FromDays(2));
+        advance.Should().NotThrow();
+        runs.Should().HaveCount(1);
+        loop.NextDueUtc.Should().Be(due);
+        time.ArmedTimers.Should().Be(1);
+    }
+
+    [Fact]
+    public void The_clock_set_forward_60_days_runs_the_missed_slot_soon_then_daily()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+
+        time.JumpClock(TimeSpan.FromDays(60));
+        loop.Resync();
+        loop.NextDueUtc.Should().Be(time.GetUtcNow().AddMinutes(7), "the slot was missed: it runs once the network is back");
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        runs.Should().HaveCount(2);
+        loop.NextDueUtc.Should().Be(time.GetUtcNow().AddHours(24));
+        Advance(time, loop, TimeSpan.FromHours(24));
+        runs.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void The_clock_set_forward_60_days_with_no_resync_still_checks_when_the_timer_fires()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        time.JumpClock(TimeSpan.FromDays(60));
+        var advance = () => Advance(time, loop, TimeSpan.FromHours(24));
+        advance.Should().NotThrow();
+        runs.Should().HaveCount(2, "the slot is long past when the timer fires");
+        loop.NextDueUtc.Should().Be(time.GetUtcNow().AddHours(24));
+    }
+
+    [Fact]
+    public void A_timer_callback_that_fails_never_escapes_the_timer_thread()
+    {
+        var time = new ManualTimeProvider(Start);
+        using var loop = new UpdateCheckLoop(time, () => false, (_, _) => Task.CompletedTask, () => TimeSpan.FromMinutes(7),
+            log: _ => throw new IOException("the log is locked"));
+        loop.Start();
+        var advance = () => time.Advance(TimeSpan.FromHours(48));
+        advance.Should().NotThrow("the timer thread has no handler above it: an exception there ends the tray");
+        loop.NextDueUtc.Should().Be(Start.AddMinutes(7).AddHours(48), "the schedule is kept");
+        time.ArmedTimers.Should().Be(1);
+    }
+
     [Fact]
     public async Task Check_now_during_a_running_check_joins_it()
     {
