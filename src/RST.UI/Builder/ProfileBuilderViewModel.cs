@@ -228,7 +228,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         OnPropertyChanged(nameof(CommandsCount));
         OnPropertyChanged(nameof(CatalogIsEmpty));
 
-        _library = Safe(_backend.GetProfiles, [], "get_profiles");
+        var library = Safe<IReadOnlyList<ProfileEntry>?>(_backend.GetProfiles, null, "get_profiles");
+        _library = library ?? [];
         var active = Safe<ActiveProfile?>(_backend.GetActiveProfile, null, "get_active_profile");
         _activeId = active is { IsBlank: false } && !string.IsNullOrEmpty(active.ProfileId) ? active.ProfileId : null;
         _activeIdlessFile = active is { IsBlank: false } && _activeId is null ? active.ProfileFile : null;
@@ -239,30 +240,32 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
             catalog.Count, _library.Count, _activeId, _lookup.Count, _backend.AllTabs.Count);
 
         PopulateOptions();
-        OpenOnLoaded();
+        OpenOnLoaded(libraryRead: library is not null);
     }
 
     /// <summary>
     /// The Builder opens on the loaded profile (VM finding F5, FnB decision): the one active_profile.json
-    /// names, matched by id, or by its file for a legacy profile with no id. It opens as picking it from
-    /// the menu does, a stack repair included (its toast; the repair is an unsaved change). No loaded
-    /// profile, one that is not in the library, or one that fails to open: a new profile, as before.
+    /// names, matched by id, or by its file for a legacy profile with no id (the menu's loaded option). It
+    /// opens as picking it from the menu does, a stack repair included (the repair is an unsaved change;
+    /// its toast waits for the window: <see cref="ShowBootToast"/>). No loaded profile, one that is not in
+    /// the library (or a library that could not be read), or one that fails to open: a new profile, as before.
     /// </summary>
-    private void OpenOnLoaded()
+    private void OpenOnLoaded(bool libraryRead)
     {
-        var loaded = _activeId is { } id
-            ? ProfileOptions.FirstOrDefault(o => o.Entry is { } e && e.Profile.Id == id)
-            : _activeIdlessFile is { } file
-                ? ProfileOptions.FirstOrDefault(o => o.Entry is { } e && string.IsNullOrEmpty(e.Profile.Id)
-                                                     && string.Equals(e.FileName, file, StringComparison.OrdinalIgnoreCase))
-                : null;
+        var loaded = ProfileOptions.FirstOrDefault(o => o.IsLoaded);
         if (loaded?.Entry is not { } entry)
         {
-            if (_activeId is null && _activeIdlessFile is null)
+            var named = _activeId ?? _activeIdlessFile;
+            if (named is null)
                 Log.Information("Builder: no profile is loaded; opening on a new profile");
+            else if (!libraryRead)
+                Log.Information("Builder: the profile library could not be read, so the loaded profile ({Active}) cannot open; "
+                                + "opening on a new profile", named);
+            else if (_library.Count == 0)
+                Log.Information("Builder: the profile library is empty, so the loaded profile ({Active}) cannot open; "
+                                + "opening on a new profile", named);
             else
-                Log.Information("Builder: the loaded profile ({Active}) is not in the library; opening on a new profile",
-                    _activeId ?? _activeIdlessFile);
+                Log.Information("Builder: the loaded profile ({Active}) is not in the library; opening on a new profile", named);
             StartFresh();
             return;
         }
@@ -275,7 +278,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         }
         catch (Exception ex)
         {
-            Log.Information(ex, "Builder: the loaded profile {Name} ({File}) could not be opened; opening on a new profile",
+            Log.Warning(ex, "Builder: the loaded profile {Name} ({File}) could not be opened; opening on a new profile",
                 entry.Profile.ProfileName, entry.FileName);
             SetCurrent(ProfileOptionViewModel.New());
             StartFresh();
