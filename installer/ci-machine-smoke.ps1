@@ -48,7 +48,9 @@
         nothing pending deletion at the next restart
     (j) the same from this elevated session, with another process holding
         R26\app\RST.Core.dll open (a stand-in for Revit with RST loaded):
-        RstEndTrays finds it in use; the exit code is printed (OBSERVED)
+        RstEndTrays (as SYSTEM, in this session) finds it in use -> exit
+        3010; the next install in this session also returns 3010 (WiX's
+        restart marker stays set until the restart, by design)
     (i) as (h), with that process holding the file -> exit 3010 (restart
         needed), not 0; the holder is left running
 #>
@@ -558,7 +560,8 @@ try {
 
 # ================================================================ (j) an administrator in their own session, a file held
 # A stand-in for Revit holds R26\app\RST.Core.dll. The tray on this desktop closes on WM_CLOSE; RstEndTrays finds the
-# file in use. Whether the restart marker reaches this session's msiexec is printed, not asserted (see (i)).
+# file in use and returns 3010. (Run from this session, the deferred action runs as SYSTEM in this session, so WiX's
+# CheckRebootRequired sees its marker here too.)
 $core = Join-Path (Get-MachineEngineDir '2026') 'RST.Core.dll'
 Invoke-Msiexec '/i' $Msi (Join-Path $LogDir 'machine-j-install.log') | Out-Null
 $t = Start-MachineTray '(j)'
@@ -567,8 +570,7 @@ try {
   $logJ = Join-Path $LogDir 'machine-j-uninstall.log'
   $codeJ = Invoke-Msiexec '/x' $Msi $logJ -ExpectFail
   $blockJ = Get-EndTraysLog $logJ 'machine-j'
-  Write-Host "OBSERVED: (j) uninstall from this elevated session with RST.Core.dll held: exit $codeJ"
-  Assert ($codeJ -eq 0 -or $codeJ -eq 3010) "(j) the uninstall succeeded (exit $codeJ)"
+  Assert ($codeJ -eq 3010) "(j) the uninstall from this elevated session returns 3010 (restart needed), not 0 (exit $codeJ)"
   Assert ($t.WaitForExit(15000)) '(j) the tray on this desktop was closed'
   Assert (@($blockJ | Where-Object { $_ -like "* still in use: * (pid $($holder.Id), *" }).Count -ge 1) "(j) RstEndTrays found RST.Core.dll in use by the holder (pid $($holder.Id))"
   Assert ((Get-Related $MachineUpgradeCode).Count -eq 0) '(j) no RST-Machine product after the uninstall'

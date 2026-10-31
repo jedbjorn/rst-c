@@ -31,6 +31,7 @@
 param(
   [Parameter(Mandatory)][string]$Bundle,
   [string]$RstMachineMsi,
+  [string]$RstMsi,
   [string]$Registry = 'companions/companions.json',
   [string]$OutDir = $(Join-Path $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }) 'bundle-ui')
 )
@@ -248,7 +249,7 @@ if ($RstMachineMsi) {
   Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $machineCode) -eq 0) "RST-Machine.msi removed (exit $($x.ExitCode))"
 }
 
-# 6. SC-029 (VM Pass B N2): "Everyone on this PC" while Revit runs. The helper's "Revit is running" box opened behind
+# 6. SC-029 (VM Pass B N2, needs -RstMsi): "Everyone on this PC" while Revit runs. The helper's "Revit is running" box opened behind
 # Revit and the setup window, so setup looked hung. It must belong to the setup window and come to the front. Cancel
 # then rolls back: the user keeps their own RST, and RST-Machine is not installed.
 Add-Type -Namespace RstCi -Name Win -MemberDefinition @'
@@ -259,8 +260,9 @@ Add-Type -Namespace RstCi -Name Win -MemberDefinition @'
 '@
 $userCode = '{AF0331FC-5280-492A-94BD-95EDF108BE74}'
 $machineCode = '{79C25959-C28A-4ED8-8984-85ED525476C3}'
-$x = Start-Process $Bundle -ArgumentList @('/quiet', '/norestart', '/log', "`"$LogDir\bundle-ui-6-user.log`"") -Wait -PassThru
-Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $userCode) -eq 1) "(6) RST installed just for this user first (exit $($x.ExitCode))"
+# RST.msi installed bare, as on the VM (a bundle install would reopen the setup on its Modify page).
+$x = Start-Process msiexec.exe -ArgumentList "/i `"$((Resolve-Path $RstMsi).Path)`" /qn /norestart /l*v `"$LogDir\ui-6-user.log`"" -Wait -PassThru
+Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $userCode) -eq 1) "(6) RST.msi installed just for this user first (exit $($x.ExitCode))"
 $fakeDir = New-Item -ItemType Directory -Force (Join-Path $LogDir 'ui-fake-revit')
 $fakeRevit = Join-Path $fakeDir 'Revit.exe'
 Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $fakeRevit -Force
@@ -309,6 +311,9 @@ try {
   $revit | Stop-Process -Force -ErrorAction SilentlyContinue
   $p | Stop-Process -Force -ErrorAction SilentlyContinue
 }
-$x = Start-Process $Bundle -ArgumentList @('/uninstall', '/quiet', '/norestart', '/log', "`"$LogDir\bundle-ui-6-uninstall.log`"") -Wait -PassThru
-Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $userCode) -eq 0) "(6) RST removed again (exit $($x.ExitCode))"
+$list = $Installer.GetType().InvokeMember('RelatedProducts', 'GetProperty', $null, $Installer, @($userCode))
+$pc = $list.GetType().InvokeMember('Item', 'GetProperty', $null, $list, @(0))
+$x = Start-Process msiexec.exe -ArgumentList "/x $pc /qn /norestart" -Wait -PassThru
+Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $userCode) -eq 0) "(6) RST.msi removed again (exit $($x.ExitCode))"
 exit 0
