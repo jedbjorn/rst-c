@@ -736,6 +736,7 @@ public class ProfileBuilderDragStartTests
                 rig.Pointer = new Point(200, 200);
                 Press(icon);
                 var captured = icon.CaptureMouse();
+                Assert.True(captured, "the runner granted the capture, so the test is not vacuous");
                 rig.Pointer = new Point(230, 200);
                 Move(icon);
 
@@ -845,6 +846,52 @@ public class ProfileBuilderDragStartTests
             rig.Pointer = new Point(230, 200);
             Move(source);
             Assert.Single(rig.Started);
+        }
+        finally
+        {
+            Close(rig);
+        }
+    });
+
+    /// <summary>A left release as the input system raises it: PreviewMouseUp, then MouseUp (each element cracks its own left-button event).</summary>
+    private static void Release(UIElement on)
+    {
+        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseUpEvent });
+        on.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent });
+    }
+
+    [Fact]
+    public void A_still_click_disarms_the_drag_so_a_later_move_does_not_drag_that_tile() => Sta(() =>
+    {
+        // WU3 review leftover (folded into WU4): the armed drag is cleared on the button's release.
+        var rig = Open();
+        try
+        {
+            var beam = Tile(rig.Window, 0, 0);
+            var face = WindowCapture.Descendants<Border>(beam).Single(b => b.Name == "TileFace");
+            rig.Pointer = new Point(200, 200);
+            Press(face);
+            Assert.NotNull(rig.Window.PendingDrag);
+            Release(face);
+            Assert.Null(rig.Window.PendingDrag);
+
+            // A press elsewhere that arms nothing (the card's empty area), then a move over Beam: no drag.
+            var empty = WindowCapture.Descendants<FrameworkElement>(rig.Window.PanelCards).First(e => e.Name == "CardRoot");
+            Press(empty);
+            rig.Pointer = new Point(240, 200);
+            Move(face);
+            Assert.Empty(rig.Started);
+
+            // A release the window never saw (outside it): the next move with the button up disarms it.
+            Press(face);
+            Assert.NotNull(rig.Window.PendingDrag);
+            rig.Window.LeftPressed = _ => false;
+            rig.Pointer = new Point(280, 200);
+            Move(face);
+            Assert.Null(rig.Window.PendingDrag);
+            rig.Window.LeftPressed = _ => true;
+            Move(face);
+            Assert.Empty(rig.Started);
         }
         finally
         {

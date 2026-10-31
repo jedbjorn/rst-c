@@ -54,6 +54,10 @@ public partial class ProfileBuilderWindow : Window
         // A drag that leaves the window straight from a card, a row or a name box (whose own DragLeave
         // the TextBox handles) still clears its marker.
         AddHandler(DragDrop.DragLeaveEvent, new DragEventHandler((_, _) => Model.ClearDropMarkers()), handledEventsToo: true);
+        // A press arms a drag that only a move with the button still down starts. The release disarms
+        // it wherever it happens (a still click on a tile, then a press-and-move elsewhere, must not
+        // drag that tile: WU3 review leftover), so the window watches every left-button release.
+        AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler((_, _) => _pendingDrag = null), handledEventsToo: true);
     }
 
     public ProfileBuilderViewModel Model { get; }
@@ -182,7 +186,13 @@ public partial class ProfileBuilderWindow : Window
     // see the move that should start the drag. The tunnelling move reaches the tile first.
     private void OnDragSourceMove(object sender, MouseEventArgs e)
     {
-        if (_pendingDrag is null || !LeftPressed(e) || !Model.IsIdle) return;
+        if (_pendingDrag is null || !Model.IsIdle) return;
+        if (!LeftPressed(e))
+        {
+            // The button came up where the window did not see it (outside it): the armed drag is stale.
+            _pendingDrag = null;
+            return;
+        }
         var p = PointerAt(e, this);
         if (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
