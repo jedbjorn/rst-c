@@ -72,6 +72,67 @@ function Invoke-MsiexecOwn([string]$Arguments) {
   return $m
 }
 
+# What Restart Manager says uses RST.msi's files: the list behind WixStdBA's "Files In Use" prompt (recorded, not asserted).
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class RstCiRm
+{
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RmUniqueProcess { public int ProcessId; public System.Runtime.InteropServices.ComTypes.FILETIME StartTime; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct RmProcessInfo
+    {
+        public RmUniqueProcess Process;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string AppName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string ServiceShortName;
+        public int ApplicationType;
+        public uint AppStatus;
+        public uint TSSessionId;
+        [MarshalAs(UnmanagedType.Bool)] public bool Restartable;
+    }
+
+    [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)] private static extern int RmStartSession(out uint session, int flags, StringBuilder key);
+    [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)] private static extern int RmRegisterResources(uint session, uint nFiles, string[] files, uint nApps, IntPtr apps, uint nServices, IntPtr services);
+    [DllImport("rstrtmgr.dll")] private static extern int RmGetList(uint session, out uint needed, ref uint count, [In, Out] RmProcessInfo[] infos, out uint reasons);
+    [DllImport("rstrtmgr.dll")] private static extern int RmEndSession(uint session);
+
+    public static string[] Users(string[] files)
+    {
+        List<string> result = new List<string>();
+        uint session;
+        if (RmStartSession(out session, 0, new StringBuilder(64)) != 0) return new[] { "(Restart Manager did not start)" };
+        try
+        {
+            if (RmRegisterResources(session, (uint)files.Length, files, 0, IntPtr.Zero, 0, IntPtr.Zero) != 0) return new[] { "(files not registered)" };
+            uint needed, count = 0, reasons;
+            RmProcessInfo[] infos = new RmProcessInfo[0];
+            int r = RmGetList(session, out needed, ref count, infos, out reasons);
+            if (r == 234) { infos = new RmProcessInfo[needed + 4]; count = (uint)infos.Length; r = RmGetList(session, out needed, ref count, infos, out reasons); }
+            if (r != 0) return new[] { "(RmGetList failed: " + r + ")" };
+            for (int i = 0; i < count; i++)
+                result.Add(infos[i].AppName + " (pid " + infos[i].Process.ProcessId + ", type " + infos[i].ApplicationType + ", session " + infos[i].TSSessionId + ")");
+            return result.ToArray();
+        }
+        finally { RmEndSession(session); }
+    }
+}
+'@
+function Show-FilesInUse([string]$Label) {
+  $files = @()
+  foreach ($d in @((Join-Path $env:LOCALAPPDATA 'Programs\RST'), (Join-Path $env:APPDATA 'RST\R25\app'), (Join-Path $env:APPDATA 'RST\R26\app'), (Join-Path $env:APPDATA 'RST\R27\app'))) {
+    if (Test-Path $d) { $files += @(Get-ChildItem $d -Recurse -File | ForEach-Object { $_.FullName }) }
+  }
+  foreach ($y in '2025', '2026', '2027') { $files += @(Get-ChildItem (Join-Path $env:APPDATA "Autodesk\Revit\Addins\$y") -Filter 'RST*' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) }
+  $users = if ($files.Count) { [RstCiRm]::Users([string[]]$files) } else { @() }
+  Write-Host "OBSERVE: [$Label] Restart Manager: $($users.Count) process(es) use RST.msi's $($files.Count) files"
+  foreach ($u in $users) { Write-Host "OBSERVE:   $u" }
+}
+
 $Root = [Windows.Automation.AutomationElement]::RootElement
 # The window belongs to the BA, which Burn v5+ runs as its own child
 # process, so find it by its caption ("RST Setup"), not by process id.
@@ -209,6 +270,11 @@ Assert (-not (Select-String -Path "$LogDir\bundle-ui-install.log" -Pattern 'Laun
 foreach ($c in $companions) { Assert ((Get-RelatedCount "{$($c.release.upgradeCode)}") -eq 1) "$($c.name) installed through its checkbox" }
 
 # 3. Uninstall through the UI, Success page.
+# SC-044: the install above started the tray, and a running tray holds RST.msi's files, so a full-UI uninstall stops at
+# WixStdBA's "Files In Use" prompt (Restart Manager), as it does for a user whose tray runs since sign-in. That prompt is
+# not what this step checks: record which processes Restart Manager names, then end the tray first.
+Show-FilesInUse 'before the UI uninstall'
+Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "ending tray pid $($_.Id) before the UI uninstall"; $_ | Stop-Process -Force; $_.WaitForExit(15000) | Out-Null }
 $p = Start-Process $Bundle -ArgumentList @('/uninstall', '/log', "`"$LogDir\bundle-ui-uninstall.log`"") -PassThru
 $w = Find-Window
 # /uninstall with full UI may first show the Modify page (Repair / Uninstall).
