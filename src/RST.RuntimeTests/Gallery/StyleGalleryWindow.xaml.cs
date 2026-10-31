@@ -32,7 +32,7 @@ public partial class StyleGalleryWindow : Window
         Heading.Text = $"RST style gallery — {theme}";
 
         ToastInfo.Content = Toast("Imported Architecture.zip", BannerKind.Info, "Profile Imported");
-        ToastSuccess.Content = Toast("Saved & ribbon reloaded.", BannerKind.Success);
+        ToastSuccess.Content = Toast("Saved. The ribbon updates when you close the Builder.", BannerKind.Success);
         ToastWarning.Content = Toast("Restart Revit to finish disabling 3 add-ins.", BannerKind.Warning, "Please Restart Revit");
         ToastError.Content = Toast("Button label required.", BannerKind.Error);
 

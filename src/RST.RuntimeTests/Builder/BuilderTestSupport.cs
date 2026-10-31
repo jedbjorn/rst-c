@@ -12,6 +12,7 @@ using RST.RuntimeTests.Loader;
 using RST.RuntimeTests.Support;
 using RST.Core.Ribbon;
 using RST.UI.Builder;
+using RST.UI.Dialogs;
 using RST.UI.Loader;
 
 namespace RST.RuntimeTests.Builder;
@@ -392,7 +393,12 @@ public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuild
 
     /// <param name="backend">The backend; null is the realistic fixture set.</param>
     /// <param name="deferPosts">Queue what the view-model posts (run with <see cref="RunPosted"/>) instead of running it at once.</param>
-    public static BuilderHarness Create(IProfileBuilderBackend? backend = null, bool deferPosts = false)
+    /// <param name="startOnNew">
+    /// The Builder opens on the loaded profile (VM finding F5); most tests begin from a blank profile,
+    /// so by default the harness then picks + New profile, as a user would (discarding the changes a
+    /// profile can open with: a legacy file with no id, a stack repair). False: the editor as it opened.
+    /// </param>
+    public static BuilderHarness Create(IProfileBuilderBackend? backend = null, bool deferPosts = false, bool startOnNew = true)
     {
         var b = backend ?? BuilderFixtures.Backend();
         var dialogs = new FakeDialogs();
@@ -401,7 +407,16 @@ public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuild
         var modals = new FakeBuilderDialogs();
         var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: posted is null ? a => a() : posted.Enqueue, builderDialogs: modals);
         model.Initialize();
-        return new BuilderHarness(model, b, dialogs, clock, posted, modals);
+        var h = new BuilderHarness(model, b, dialogs, clock, posted, modals);
+        if (startOnNew && model.SelectedProfileOption is { IsNew: false })
+        {
+            if (model.IsDirty) dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+            model.NewProfileCommand.Execute(null);
+            h.RunPosted();
+            dialogs.ChooseCalls.Clear();
+            if (!model.SelectedProfileOption!.IsNew) throw new InvalidOperationException("the harness could not start on + New profile");
+        }
+        return h;
     }
 
     /// <summary>Runs every posted action (the dispatcher turn after the current event).</summary>

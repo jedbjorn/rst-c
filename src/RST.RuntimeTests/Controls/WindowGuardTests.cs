@@ -507,7 +507,7 @@ public class WindowGuardTests
         Assert.Single(h.Backend.Saved);  // no second save
         Assert.Single(h.Backend.Loads);  // no further reload
         Assert.Equal("Architecture", h.Model.ProfileName); // no switch to Structure
-        Assert.False(h.Model.Toast.IsOpen && h.Model.Toast.Text == "Saved & ribbon reloaded.", "the save went on after the fault");
+        Assert.False(h.Model.Toast.IsOpen && h.Model.Toast.Text == "Saved. The ribbon updates when you close the Builder.", "the save went on after the fault");
     });
 
     [Fact]
