@@ -62,12 +62,16 @@ public sealed class FakeHealthService : IHealthService
 
     public int? LoadThreadId { get; private set; }
 
+    /// <summary>Runs on the reading thread as the read starts (before <see cref="LoadGate"/>): what the test sees at that moment.</summary>
+    public Action? BeforeLoad { get; set; }
+
     private int _loadCalls;
 
     public HealthSnapshot? LoadSnapshot()
     {
         LoadThreadId = Environment.CurrentManagedThreadId;
         Interlocked.Increment(ref _loadCalls);
+        BeforeLoad?.Invoke();
         LoadGate?.Wait(TimeSpan.FromSeconds(30));
         return Snapshot;
     }

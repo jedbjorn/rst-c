@@ -401,9 +401,12 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   launcher calls `HealthViewModel.BeginLoading()`, so the first frame is the themed chrome and a spinner with no section
   to lay out; on that frame (`ContentRendered`) the window starts `LoadAsync`, which reads `health_scan.json` off the UI
   thread, and Scan and Clean wait for it. In the dark theme `FirstFrame.Attach` (RST.UI/Theming) keeps the window
-  cloaked until its first frame is drawn, so it never shows white (a 2 s fallback uncloaks it regardless). The log
+  cloaked until its first frame is drawn, so it never shows white; a thread-pool watchdog uncloaks it after 2 s
+  even while the UI thread is still busy (a DispatcherTimer could not fire then), and does nothing once the window has
+  drawn or closed. The log
   times both: `Health window: first frame drawn <ms> ms after it was built` and `Health window: snapshot shown <ms> ms
-  after it was built` (`HealthFirstOpenTests`). Synchronous `Load()` stays for the tray and the tests.
+  after it was built` (`HealthFirstOpenTests`, which also stalls the UI thread to check the watchdog, and closes the
+  window mid-read: the late result is dropped). Synchronous `Load()` stays for the tray and the tests.
 - **Junk rows in Revit** (SC-018): `HealthService.RunScan` passes the running Revit's year
   (`CleanupYears.RunningYear(HealthContext.RevitVersion)`) to `HealthScanner.MeasureCleanup`, so a `{revit-version}`
   target (Journals, Collaboration Cache, Recent File List) is measured and shown in that year's folder only

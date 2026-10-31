@@ -34,6 +34,7 @@ public partial class HealthWindow : Window
         viewModel.PropertyChanged += OnViewModelChanged;
         Closed += (_, _) => UiGuard.Run("Health window: closed", () =>
         {
+            _closed = true;
             viewModel.RequestClose -= OnRequestClose;
             viewModel.PropertyChanged -= OnViewModelChanged;
             viewModel.Dispose();
@@ -43,6 +44,8 @@ public partial class HealthWindow : Window
     public HealthViewModel ViewModel { get; }
 
     private readonly Stopwatch _built = Stopwatch.StartNew();
+
+    private bool _closed;
 
     /// <summary>WPF has drawn the window's first frame (ContentRendered).</summary>
     internal bool FirstFrameDrawn { get; private set; }
@@ -62,6 +65,7 @@ public partial class HealthWindow : Window
     private async Task LoadAfterFirstFrame()
     {
         await ViewModel.LoadAsync();
+        if (_closed) return;
         // Logged once the sections are laid out and drawn (ContextIdle runs after layout and render).
         _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => UiGuard.Run("Health window: snapshot shown", () =>
             Log.Information("Health window: snapshot shown {Ms} ms after it was built", _built.ElapsedMilliseconds)));

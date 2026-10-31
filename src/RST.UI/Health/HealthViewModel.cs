@@ -60,6 +60,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     private int _selectedTab;
     private bool _isScanning;
     private bool _isLoading;
+    private bool _disposed;
     private bool _isJunkOpen;
     private IReadOnlyList<JunkTargetItem> _junkTargets = [];
     private int _rangeDays = ActivityRanges.Default;
@@ -305,7 +306,8 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     /// <summary>
     /// Open, off the UI thread: reads the last saved snapshot with <see cref="HealthViewModelOptions.RunInBackground"/>,
-    /// then renders it (null or unreadable renders every value as "—") and ends the loading state. Never throws. Call on
+    /// then renders it (null or unreadable renders every value as "—") and ends the loading state; after
+    /// <see cref="Dispose"/> (the window closed meanwhile) the result is dropped. Never throws. Call on
     /// the UI thread, inside its dispatcher loop (the window does, on its first frame), so the render comes back to it.
     /// </summary>
     public async Task LoadAsync()
@@ -320,6 +322,12 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         {
             Log.Warning(ex, "Health: reading the snapshot failed");
             snap = null;
+        }
+        if (_disposed)
+        {
+            // The window closed while the read ran: a late result is dropped, nothing renders.
+            Log.Debug("Health: the snapshot read finished after the window closed; ignored");
+            return;
         }
         try
         {
@@ -454,6 +462,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _service.WorkFinished -= OnWorkFinished;
         Toast.Dismiss();
     }
