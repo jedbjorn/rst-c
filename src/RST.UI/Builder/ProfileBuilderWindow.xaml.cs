@@ -45,6 +45,8 @@ public partial class ProfileBuilderWindow : Window
         {
             if (IsVisible) Close();
         });
+        // The loaded profile's stack-repair toast waits for the first render, so its time runs while it shows.
+        ContentRendered += (_, _) => UiGuard.Run("Builder window: boot toast", model.ShowBootToast);
         // A ContextMenu is not in the window's tree: it takes the view-model and its toggle directly.
         foreach (var (toggle, menu) in new[] { (SettingsButton, SettingsMenu), (ProfileButton, ProfileMenu) })
         {

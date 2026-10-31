@@ -145,7 +145,23 @@ public class ProfileBuilderViewModelTests
         h.Model.IsLoadedProfile.Should().BeTrue();
         h.Model.Profile.Stacks.Should().HaveCount(2, "the shared stack is split, as when it is picked");
         h.Model.IsDirty.Should().BeTrue("the repair is an unsaved change");
+        // The toast waits for the window (its first render calls ShowBootToast), so its time runs while it shows.
+        h.Model.Toast.IsOpen.Should().BeFalse();
+        h.Model.ShowBootToast();
         AssertToast(h, "This profile's stacks were repaired when it opened (1). Save to keep the repair.", BannerKind.Info);
+        h.Model.Toast.Dismiss();
+        h.Model.ShowBootToast();
+        h.Model.Toast.IsOpen.Should().BeFalse("it shows once");
+    }
+
+    [Fact]
+    public void A_held_back_boot_toast_is_dropped_when_another_profile_opens_first()
+    {
+        var backend = BuilderFixtures.Backend().With(StackFixtures.Shared());
+        backend.Active = ActiveProfile.FromProfile(StackFixtures.Shared(), ProfileStore.CanonicalFileName(StackFixtures.Shared()));
+        var h = BuilderHarness.Create(backend); // + New profile picked after boot (the repair discarded)
+        h.Model.ShowBootToast();
+        h.Model.Toast.IsOpen.Should().BeFalse("the repair toast was about the profile that is no longer open");
     }
 
     [Fact]

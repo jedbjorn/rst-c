@@ -111,6 +111,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     // SC-045: set when the window safety net closed the Builder after an error (Abandon).
     private bool _abandoned;
 
+    // While Initialize runs (before the window shows), a toast is held back for ShowBootToast.
+    private bool _booting;
+    private (string Text, BannerKind Kind)? _bootToast;
+
     /// <param name="backend">The Builder's data and writes (a fake in tests).</param>
     /// <param name="dialogs">The family dialogs: confirm, the three-way prompt, the color picker, the file dialogs.</param>
     /// <param name="schedule">Runs an action once after a delay (the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
@@ -198,6 +202,19 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// or a fresh profile with one panel when there is none to open.
     /// </summary>
     public void Initialize()
+    {
+        _booting = true;
+        try
+        {
+            Boot();
+        }
+        finally
+        {
+            _booting = false;
+        }
+    }
+
+    private void Boot()
     {
         _branding = Safe(_backend.LoadBranding, BrandingState.None, "load_default_branding");
         RaiseBranding();
@@ -357,6 +374,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     private void ApplySwitch(ProfileOptionViewModel target)
     {
         if (_abandoned) return;
+        _bootToast = null; // a toast held back at boot was about the profile that opened
         SetCurrent(target);
         if (target.Entry is null)
         {
@@ -1721,7 +1739,26 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         }
     }
 
-    private void ShowToast(string text, BannerKind kind) => Toast.Show(text, kind, TransientMessage.ToastDuration);
+    private void ShowToast(string text, BannerKind kind)
+    {
+        if (_booting)
+        {
+            _bootToast = (text, kind);
+            return;
+        }
+        Toast.Show(text, kind, TransientMessage.ToastDuration);
+    }
+
+    /// <summary>
+    /// Shows the toast Initialize held back (the loaded profile's stack repair), once: the window calls it
+    /// when it has rendered, so the toast's time starts when it can be seen. Nothing held back: nothing.
+    /// </summary>
+    public void ShowBootToast()
+    {
+        if (_bootToast is not { } held) return;
+        _bootToast = null;
+        ShowToast(held.Text, held.Kind);
+    }
 
     private static T Safe<T>(Func<T> read, T fallback, string what)
     {
