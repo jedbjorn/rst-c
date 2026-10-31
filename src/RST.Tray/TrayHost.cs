@@ -2,7 +2,9 @@
 // (built lazily on first open, rebuilt on a theme change, released when closed), the settings and the one-time
 // "installed twice" notice, and it ends the process cleanly on Quit, on WM_CLOSE (Windows Installer's
 // util:CloseApplication) and at sign-out. Event-driven: no polling. Besides the icon's short add retries at sign-in,
-// its one timer is the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing.
+// its timers are the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing;
+// and the activity fold worker's (F19 #24 WU3, ActivityFoldWorker): folds the add-in's local session logs into rollups
+// on its own below-normal thread, 1–3 minutes after start, then every 15 minutes; it reads and writes local files only.
 // Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, never while Revit runs, msiexec for
 // a companion, and for RST itself the updater copy (SelfUpdater), after which the tray quits.
 
@@ -13,6 +15,8 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
 using RST.Core.Configuration;
+using RST.Core.Telemetry;
+using RST.Core.Telemetry.Rollups;
 using RST.Core.Tray;
 using RST.Core.Updates;
 using RST.Tray.AddIns;
@@ -43,6 +47,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private InstallCoordinator? _installs;
     private RevitWatch? _revit;
     private SelfUpdater? _selfUpdater;
+    private ActivityFoldWorker? _fold;
     private CancellationTokenSource? _revitPageWatch;
     private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
@@ -67,6 +72,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     public string Version { get; } = CurrentVersion();
 
     public string LogFolder => TrayPaths.LogsDir;
+
+    /// <summary>The activity fold worker (spec #24 Tray Worker): the Health page asks it for a pass and listens for
+    /// the end of one. Null when it did not start.</summary>
+    internal IActivityFoldService? ActivityFold => _fold;
 
     /// <summary>Why the tray ended, for the exit log line.</summary>
     public string ExitReason { get; private set; } = "dispatcher stopped";
@@ -168,6 +177,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         ExitReason = "could not start: " + failed;
         _quitting = true;
         StopUpdates();
+        StopActivityFold();
         _icon?.Dispose();
         _icon = null;
         Application.Current?.Shutdown(TrayStartup.FatalExitCode);
@@ -184,6 +194,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         new("update checks", StartUpdateChecks),
         new("installs", StartInstalls),
         new("update loop", StartUpdateLoop),
+        new("activity fold", StartActivityFold),
         new("window", () =>
         {
             if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
@@ -292,6 +303,39 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _updates.Start();
         if (_updates.Loop.NextDueUtc is { } due)
             Log.Information("first update check slot at {Due:u}{Off}", due, _checks.Enabled ? "" : " (checks are off: it will make no request)");
+    }
+
+    // The activity fold (spec #24, Tray Worker): the tray is the only writer of rollups. It runs whatever the
+    // update-check setting and whether collection is on (files already recorded still fold); it sends nothing.
+    private void StartActivityFold()
+    {
+        var engine = new ActivityFoldEngine(new RollupStoreOptions { Log = m => Log.Warning("{Message}", m) });
+        _fold = ActivityFoldWorker.ForEngine(
+            engine,
+            backstopPrune: () => RetentionPruner.Prune(
+                AppDataPaths.TelemetryOutboxDir,
+                TelemetryPrefs.Read().RetentionDays,
+                DateTimeOffset.UtcNow,
+                m => Log.Warning("{Message}", m)).Count,
+            TimeProvider.System,
+            info: m => Log.Information("{Message}", m),
+            warn: m => Log.Warning("{Message}", m));
+        _fold.Start();
+    }
+
+    /// <summary>Stops the fold worker: a running pass stops after its current step; waits at most 2 s. Idempotent.</summary>
+    private void StopActivityFold()
+    {
+        var fold = _fold;
+        _fold = null;
+        try
+        {
+            fold?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "stopping the activity fold");
+        }
     }
 
     /// <summary>
@@ -412,6 +456,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     public void Dispose()
     {
         StopUpdates();
+        StopActivityFold();
         _icon?.Dispose();
         _icon = null;
     }
@@ -527,6 +572,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         Log.Information("quitting ({Reason})", reason);
         WaitForAddinWork();
         StopUpdates();
+        StopActivityFold();
         try
         {
             _icon?.Hide();
@@ -567,6 +613,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         Log.Information("Windows asked the tray to close: {Reason}", ExitReason);
         WaitForAddinWork();
         StopUpdates();
+        StopActivityFold();
         try
         {
             _icon?.Hide();

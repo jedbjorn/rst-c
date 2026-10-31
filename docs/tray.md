@@ -71,7 +71,7 @@ Only full releases count. A release candidate such as `v3.2.0-rc.1` is never off
 ### Privacy: what is sent, and to whom
 
 - **Only GitHub.** For each of RST, Gantt-It and Splash-It, the tray sends one request to `https://github.com/<owner>/<repo>/releases/latest`, which answers with the name of the latest release. That is three small requests per check.
-- **Nothing about you.** The requests carry no account, no ID, no version, nothing about your PC, your models or your projects: only the address above and the User-Agent `RST-Tray`. GitHub sees your network's IP address, as it does for any web request. The tray has no telemetry.
+- **Nothing about you.** The requests carry no account, no ID, no version, nothing about your PC, your models or your projects: only the address above and the User-Agent `RST-Tray`. GitHub sees your network's IP address, as it does for any web request. The tray sends no telemetry: it reads and folds the add-in's local activity records on this PC into rollups ([Activity rollups](activity-rollups.md)) and sends nothing.
 - **No sign-in.** The tray never sends credentials to GitHub and keeps no cookies. If your network uses a proxy, the tray uses the Windows proxy settings (as Edge does), and your Windows sign-in only to authenticate to that proxy.
 - **Installs:** when you click Install or Update, the tray downloads that release's `SHA256SUMS.txt` and the installer from `github.com` (redirected to GitHub's release-asset host), and makes one `api.github.com` call to read GitHub's checksum. Nothing else.
 
