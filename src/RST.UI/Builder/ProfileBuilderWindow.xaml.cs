@@ -123,20 +123,32 @@ public partial class ProfileBuilderWindow : Window
     /// <summary>
     /// Escape closes the Builder the way Exit does, through the unsaved-changes prompt (SC-010). Only
     /// a fresh press (not a key-repeat), and only when nothing else takes it: an open menu (⚙, the
-    /// profile menu) or popup, a dialog, and the icon picker handle their own Escape (EscapeGuard,
-    /// shared with the Loader and Health), and a drag in progress ends on it.
+    /// profile menu) or popup and a dialog handle their own Escape (EscapeGuard, shared with the
+    /// Loader and Health), and a drag in progress ends on it. While the icon picker is open, Escape is
+    /// the picker's (decision #62): its variant row, then the picker, one per press; the picker takes it
+    /// itself while it holds the focus, and the window does the same for a press from outside it.
     /// </summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
         UiGuard.Run("Builder window: Escape", () =>
         {
-            if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled) || !EscapeCloses) return;
+            if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled)) return;
+            if (EscapeClosesIconPicker)
+            {
+                e.Handled = true;
+                Model.IconPicker?.Escape();
+                return;
+            }
+            if (!EscapeCloses) return;
             e.Handled = true;
             // Exit's own command, so a failed exit is logged and toasted like a click on Exit (SC-046, R5).
             Model.ExitCommand.Execute(null);
         });
     }
+
+    private bool EscapeClosesIconPicker =>
+        Model.IsIconPickerOpen && Model.IsIdle && Model.CurrentDrag is null && !EscapeGuard.HasSomethingOpen(this);
 
     private bool EscapeCloses =>
         Model.IsIdle && !Model.IsIconPickerOpen && Model.CurrentDrag is null && !EscapeGuard.HasSomethingOpen(this);

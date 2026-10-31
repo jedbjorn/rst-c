@@ -211,9 +211,34 @@ reaches the button and reopens it (VM defect D2, found on v3.0's Branding popove
 
 ### Escape
 
-Escape closes the Builder through the same path as Exit, so unsaved changes get the Save /
-Discard / Cancel prompt (SC-010). The window acts only when nothing else has it: an open menu,
-the icon picker overlay and the dialogs handle their own Escape (`ProfileBuilderWindow.OnKeyDown`).
+Escape closes every RST modal the add-in shows, the same way its Cancel, Close or Done does
+(SC-010; decision #62: "escape should close all modals yes. not the tray app."). The rules live in
+`EscapeGuard` (`src/RST.UI/Dialogs/EscapeGuard.cs`):
+
+- **The windows.** The Builder, Loader and Health close as Exit or Close does
+  (their own `OnKeyDown`). The Builder goes through the Save / Discard / Cancel prompt, and nothing
+  happens while Close or Exit is disabled (a load, scan, clean or save).
+- **The dialogs.** Each dialog opts in with `EscapeGuard.CancelOnEscape(dialog)`. Escape then closes it
+  with no result, which every RST dialog reads as Cancel; never as a confirming or destructive
+  action. On Save / Discard / Cancel, Escape is Cancel. The Builder's own dialogs opt in from their
+  constructors. The shared family dialogs (`MessageDialog`, the colour picker, Confirm Add-in Changes
+  and the add-in report) opt in through `DialogService.EscapeCancels` and
+  `LoaderDialogs.EscapeCancels`. The add-in launchers turn those on; they are off by default, so
+  the tray app, which opens the same dialogs, keeps WPF's own Escape. **A new RST dialog must
+  opt in** and get an Escape test: `DialogEscapeTests.Every_RST_UI_window_has_its_Escape_covered`
+  lists every `Window` in RST.UI and fails on one it does not know.
+- **In-window modals.** Health's Junk modal takes Escape as its Cancel, only while Cancel is
+  enabled. The Builder's icon picker overlay takes it from anywhere in the Builder, not only from
+  inside the picker: first its variant row, then the picker. The tool keeps its icon, and the Builder
+  stays open.
+- **Innermost first, one per press.** Nothing acts on Escape while something in front of it has the
+  press: an open dialog it owns, an open menu or popup, the icon picker, or a drag. A press that a
+  text box or drop-down already used (to close its list, say) is left alone.
+- **A fresh press only.** A key-repeat never closes anything. `CancelOnEscape` swallows a held
+  Escape in the tunnelling phase, because WPF's `IsCancel` button acts on repeats. Without that, the
+  press that closed the icon picker would, held, cancel the Custom Tool dialog behind it as well.
+- **Left alone.** Native dialogs (file, colour, Revit's `TaskDialog`) keep Windows' own Cancel.
+  The eyedropper overlay is cancelled by `ScreenColorPicker` on a fresh press.
 
 ## Theme keys
 

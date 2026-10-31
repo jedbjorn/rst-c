@@ -1,5 +1,5 @@
 // rst-c's own (not vendored): the icon picker overlay's view plumbing (spec #16, WU5). Behavior is
-// in IconPickerViewModel / RST.Core's IconPickerModel; here: Escape (two-stage), the variant row's
+// in IconPickerViewModel / RST.Core's IconPickerModel; here: Escape (two-stage, a fresh press each), the variant row's
 // arrow, Home and End keys, the backdrop click, and moving keyboard focus to the model's focused
 // variant or tile after each change (the rows are rebuilt, so focus is placed again).
 
@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using RST.Core.Builder;
+using RST.UI.Dialogs;
 using RST.UI.Mvvm;
 
 namespace RST.UI.Controls;
@@ -46,7 +47,9 @@ public partial class IconPicker : UserControl
         if (_model is null) return;
         if (e.Key == Key.Escape)
         {
-            _model.Escape();
+            // A fresh press only (decision #62): held, the press that closed the variant row must not
+            // close the picker too.
+            if (EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled)) _model.Escape();
             e.Handled = true;
             return;
         }

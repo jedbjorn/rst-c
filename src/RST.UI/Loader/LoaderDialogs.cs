@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Windows;
 using RST.Core.Activation;
 using RST.Core.Loader;
+using RST.UI.Dialogs;
 using RST.UI.Mvvm;
 using RST.UI.Resources;
 using RST.Core.Logging;
@@ -35,15 +36,24 @@ public sealed class LoaderDialogs : ILoaderDialogs
 {
     public Window? Owner { get; set; }
 
+    /// <summary>
+    /// Escape cancels the confirm and closes the report, on a fresh press only
+    /// (EscapeGuard.CancelOnEscape). The Loader turns it on (decision #62); the tray app, which shares
+    /// these dialogs and which the decision leaves out, keeps WPF's own Escape.
+    /// </summary>
+    public bool EscapeCancels { get; init; }
+
     public bool ConfirmAddinChanges(ConfirmAddinChangesModel model)
     {
         var dialog = new ConfirmAddinChangesWindow(model) { Owner = Owner };
+        if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
         return dialog.ShowDialog() == true;
     }
 
     public void ShowAddinReport(AddinReportModel model)
     {
         var dialog = new AddinReportWindow(model) { Owner = Owner };
+        if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
         dialog.ShowDialog();
     }
 }
