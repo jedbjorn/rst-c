@@ -480,8 +480,40 @@ public class ProfileBuilderWindowFlowTests
         }
     });
 
+    /// <summary>
+    /// Decision #62: with the icon picker open, Escape from outside it (the focus is behind the
+    /// overlay) is the picker's Cancel, not the window's Exit: that press closes the picker only, and
+    /// the tool keeps its icon.
+    /// </summary>
     [Fact]
-    public void Escape_while_the_icon_picker_is_open_leaves_the_window() => Sta(() =>
+    public void Escape_while_the_icon_picker_is_open_closes_the_picker_and_leaves_the_window() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            PickInMenu(o, "Structure");
+            var tile = o.Window.Model.Panels[0].Tile(0);
+            var icon = tile.Model.IconFile;
+            tile.PickIconCommand.Execute(null);
+            Settle();
+            Assert.True(o.Window.Model.IsIconPickerOpen);
+            var args = Escape(o.Window);
+            o.Window.RaiseEvent(args);
+            Settle();
+            Assert.True(args.Handled);
+            Assert.False(o.Window.Model.IsIconPickerOpen, "Escape cancels the picker");
+            Assert.Equal(icon, tile.Model.IconFile);
+            Assert.False(o.Closed, "one press closes the innermost modal only");
+            Assert.Empty(o.Dialogs.ChooseCalls);
+        }
+        finally
+        {
+            Cleanup(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_inside_the_icon_picker_is_the_pickers_and_leaves_the_window() => Sta(() =>
     {
         var o = Open();
         try
@@ -490,9 +522,16 @@ public class ProfileBuilderWindowFlowTests
             o.Window.Model.Panels[0].Tile(0).PickIconCommand.Execute(null);
             Settle();
             Assert.True(o.Window.Model.IsIconPickerOpen);
-            o.Window.RaiseEvent(Escape(o.Window));
+            // The picker takes Escape in the tunnelling phase, as a real key press from its focused tile.
+            var preview = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(o.Window)!, 0, Key.Escape)
+            {
+                RoutedEvent = Keyboard.PreviewKeyDownEvent,
+            };
+            o.Window.IconPickerOverlay.RaiseEvent(preview);
             Settle();
-            Assert.False(o.Closed, "the picker takes Escape, not the window");
+            Assert.True(preview.Handled);
+            Assert.False(o.Window.Model.IsIconPickerOpen);
+            Assert.False(o.Closed);
             Assert.Empty(o.Dialogs.ChooseCalls);
         }
         finally
