@@ -294,9 +294,14 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     /// <summary>
     /// The open in Revit (SC-011): shows the loading state from before the window is built, so its first frame is the
     /// themed chrome and the spinner, with no section to lay out. The window then calls <see cref="LoadAsync"/>.
-    /// Reads nothing.
+    /// Reads nothing. The sections are emptied, not only hidden: a collapsed ItemsControl still generates its items'
+    /// templates, which is the layout this keeps out of the first frame.
     /// </summary>
-    public void BeginLoading() => IsLoading = true;
+    public void BeginLoading()
+    {
+        Sections = [];
+        IsLoading = true;
+    }
 
     /// <summary>
     /// Open, off the UI thread: reads the last saved snapshot with <see cref="HealthViewModelOptions.RunInBackground"/>,
