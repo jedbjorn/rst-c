@@ -2,6 +2,7 @@
 // the user. An exception that recurs on every dispatcher pass (a layout or render fault, a timer that throws each
 // tick) then loops for ever, filling the log and spinning the CPU. This tells the tray when the same exception has
 // come back too often in too short a time, so it can log that and quit cleanly instead.
+// SC-046 / #166 N7: changing values in a message must not evade the same throwing site.
 
 using System;
 using System.Collections.Generic;
@@ -46,7 +47,7 @@ public sealed class RepeatingFault
     }
 
     /// <summary>
-    /// Records <paramref name="exception"/>; true when the same exception (type, message and throwing frame) has now
+    /// Records <paramref name="exception"/>; true when the same exception (type and throwing frame) has now
     /// been seen more than the limit within the window. A different exception starts the count again.
     /// </summary>
     public bool Record(Exception exception)
@@ -67,12 +68,12 @@ public sealed class RepeatingFault
         }
     }
 
-    /// <summary>The exception's type, message and first stack line: what makes two throws "the same".</summary>
+    /// <summary>The exception's type and first stack line: what makes two throws "the same".</summary>
     internal static string Signature(Exception exception)
     {
         var stack = exception.StackTrace ?? "";
         var newline = stack.IndexOf('\n');
         var top = (newline >= 0 ? stack[..newline] : stack).Trim();
-        return exception.GetType().FullName + "|" + exception.Message + "|" + top;
+        return exception.GetType().FullName + "|" + top;
     }
 }
