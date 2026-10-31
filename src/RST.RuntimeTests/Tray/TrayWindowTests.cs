@@ -1,5 +1,5 @@
-// rst-c's own (not vendored): the RST tray's window, menu and notice rendered off-screen in light and dark (spec #20
-// AC11; F17 WU1), plus the view-model's Settings behavior, the strings, the icon loader and the single-instance
+// rst-c's own (not vendored): the RST tray's window and notice rendered off-screen in light and dark (spec #20
+// AC11; F17 WU1; the icon's menu is a native Win32 menu since SC-043, tested in TrayMenuTests), plus the view-model's Settings behavior, the strings, the icon loader and the single-instance
 // hand-off on a real Windows runtime. Each screenshot test also checks what it shows (the visible page, the
 // header color, the toggle's state), so a broken template fails here as well as in review. The PNGs land in
 // TestResults/screenshots; CI uploads them as RST-screenshots (R25 leg).
@@ -216,106 +216,6 @@ public class TrayWindowScreenshotTests
             dialog.Close();
         }
     });
-
-    [Theory]
-    [MemberData(nameof(Themes))]
-    public void The_tray_menu(UiTheme theme) => Sta(theme, () =>
-    {
-        var menu = TrayMenu.Build(new TrayMenuActions(() => { }, () => { }, () => { }, () => { }));
-        var bitmap = Screenshots.Render(menu);
-        Screenshots.Save(bitmap, Name("menu", theme));
-        Assert.True(Screenshots.DistinctPixels(bitmap) > 10, "the menu looks blank");
-
-        var items = menu.Items.OfType<MenuItem>().ToList();
-        Assert.Equal(new[] { TrayStrings.Menu_Open, TrayStrings.Menu_CheckForUpdates, TrayStrings.Menu_Settings, TrayStrings.Menu_Quit },
-                     items.Select(i => (string)i.Header));
-        Assert.All(items, i => Assert.True(i.IsEnabled)); // Check for updates is wired (F17 WU3).
-        AssertColor(Palette(theme, UiPalette.Surface), Screenshots.PixelAt(bitmap, bitmap.PixelWidth / 2, 3), "menu background");
-    });
-
-    /// <summary>
-    /// SC-020 (v3.1 VM Pass A, F1): the icon's callback message, sent as Explorer sends it under NOTIFYICON_VERSION_4,
-    /// reaches the menu, the menu opens, and the tray log says so at each step, so a VM run with no menu on screen can
-    /// tell "the request never arrived" from "the menu did not open".
-    /// </summary>
-    [Fact]
-    public void A_context_menu_request_is_logged_and_opens_the_menu() => Sta(UiTheme.Light, () =>
-    {
-        var events = new List<RST.Core.Logging.LogEvent>();
-        var previous = RST.Core.Logging.Log.Logger;
-        RST.Core.Logging.Log.Logger = new RST.Core.Logging.Logger(RST.Core.Logging.LogLevel.Information, new ListSink(events));
-        var failures = new List<string>();
-        using var icon = new TrayIcon(TrayAssets.IconFile(), "RST", failures.Add);
-        try
-        {
-            var requested = new List<Point>();
-            var activated = 0;
-            icon.Activated += (_, _) => activated++;
-            icon.MenuRequested += (_, p) => requested.Add(p);
-
-            // The event is LOWORD(lParam) and the icon id HIWORD(lParam); the anchor is wParam, signed x and y.
-            Send(icon, WmRButtonUp, -1200, 850); // v4 also sends the mouse messages: not a menu request
-            Send(icon, WmContextMenu, -1200, 850); // a monitor left of the primary
-            Send(icon, NinSelect, 10, 20);
-            Assert.Equal(new[] { new Point(-1200, 850) }, requested);
-            Assert.Equal(1, activated);
-            Assert.Equal(new Point(-1200, 850), TrayIcon.AnchorOf(MakeLong(-1200, 850)));
-            var request = Assert.Single(Lines(events, "tray icon: menu requested"));
-            Assert.Contains("-1200", request);
-
-            // The tray's own handler: build the menu and open it at the anchor.
-            ContextMenu? menu = null;
-            var opened = 0;
-            icon.MenuRequested += (_, p) =>
-            {
-                menu = TrayMenu.Build(new TrayMenuActions(() => { }, () => { }, () => { }, () => { }));
-                menu.Opened += (_, _) => opened++;
-                TrayMenu.Open(menu, p, icon.Source);
-            };
-            Send(icon, WmContextMenu, 200, 200);
-            WindowCapture.DoEvents();
-            Assert.NotNull(menu);
-            Assert.Equal(1, opened);
-            Assert.Single(Lines(events, "tray menu opened"));
-            menu!.IsOpen = false;
-            WindowCapture.DoEvents();
-            Assert.Single(Lines(events, "tray menu closed"));
-            Assert.Empty(failures);
-        }
-        finally
-        {
-            RST.Core.Logging.Log.Logger = previous;
-        }
-    });
-
-    private const int WmContextMenu = 0x007B;
-    private const int WmRButtonUp = 0x0205;
-    private const int NinSelect = 0x0400;
-
-    private static IntPtr MakeLong(int low, int high) => new((long)(uint)(((high & 0xFFFF) << 16) | (low & 0xFFFF)));
-
-    private static void Send(TrayIcon icon, int notifyEvent, int x, int y) =>
-        SendMessageW(icon.Handle, TrayIcon.CallbackMessage, MakeLong(x, y), MakeLong(notifyEvent, 1));
-
-    private static List<string> Lines(List<RST.Core.Logging.LogEvent> events, string start)
-    {
-        lock (events) return events.Select(e => e.RenderMessage()).Where(m => m.StartsWith(start, StringComparison.Ordinal)).ToList();
-    }
-
-    private sealed class ListSink(List<RST.Core.Logging.LogEvent> events) : RST.Core.Logging.ILogSink
-    {
-        public void Emit(RST.Core.Logging.LogEvent logEvent, IReadOnlyDictionary<string, object?> properties)
-        {
-            lock (events) events.Add(logEvent);
-        }
-
-        public void Dispose()
-        {
-        }
-    }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr SendMessageW(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
 }
 
 public class TrayViewModelTests

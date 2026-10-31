@@ -343,15 +343,16 @@ public class TrayUpdatesScreenshotTests
     });
 
     [Fact]
-    public void The_menu_enables_Check_for_updates() => Sta(UiTheme.Light, () =>
+    public void The_menu_enables_Check_for_updates()
     {
         var checks = 0;
-        var menu = TrayMenu.Build(new TrayMenuActions(() => { }, () => checks++, () => { }, () => { }));
-        var item = menu.Items.OfType<MenuItem>().Single(i => (string)i.Header == TrayStrings.Menu_CheckForUpdates);
-        Assert.True(item.IsEnabled);
-        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        var actions = new TrayMenuActions(() => { }, () => checks++, () => { }, () => { });
+        var item = TrayMenu.Entries(actions).Single(e => e.Command == TrayMenuCommand.CheckForUpdates);
+        Assert.Equal(TrayStrings.Menu_CheckForUpdates, item.Text);
+        Assert.True(item.Enabled);
+        TrayMenu.Run(actions, TrayMenuCommand.CheckForUpdates);
         Assert.Equal(1, checks);
-    });
+    }
 }
 
 public class UpdatesViewModelTests

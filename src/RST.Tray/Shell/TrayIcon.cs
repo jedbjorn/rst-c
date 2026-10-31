@@ -113,7 +113,7 @@ internal sealed class TrayIcon : IDisposable
     /// <summary>The hidden window's handle (the menu's foreground anchor).</summary>
     public IntPtr Handle => _window.Handle;
 
-    /// <summary>The hidden window, for converting the menu point from pixels to WPF units.</summary>
+    /// <summary>The hidden window: the native menu's owner (SC-043).</summary>
     public HwndSource Source => _window;
 
     /// <summary>Whether the icon is in the notification area now.</summary>

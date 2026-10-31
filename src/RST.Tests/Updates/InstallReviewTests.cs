@@ -504,8 +504,9 @@ public sealed class SelfUpdateApplyTests : IDisposable
 
     private SelfUpdateResult Result() => SelfUpdateResult.TryParse(File.ReadAllText(Paths.SelfUpdateResultFile))!;
 
-    private InstallCoordinator Tray() => new(ProductCatalog.Default.Products, new HttpClient(new FakeGitHub()), new FakeInstalledProducts(),
-        FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, new FakeRevit(), new FakeSelfUpdater(), Paths, TimeProvider.System,
+    /// <param name="time">The tray's clock: the one the result was stamped with, as it ignores a result over a day old.</param>
+    private InstallCoordinator Tray(TimeProvider? time = null) => new(ProductCatalog.Default.Products, new HttpClient(new FakeGitHub()), new FakeInstalledProducts(),
+        FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, new FakeRevit(), new FakeSelfUpdater(), Paths, time ?? TimeProvider.System,
         a => a(), _log.Add, () => { }, () => { });
 
     private async Task AdvanceThroughRetries(int runs)
@@ -587,7 +588,8 @@ public sealed class SelfUpdateApplyTests : IDisposable
         await AdvanceThroughRetries(3);
         (await run).Should().Be(SelfUpdateApply.InstallFailed);
         _msiexec.Calls.Should().HaveCount(3);
-        using var tray = Tray();
+        // The result is stamped by _time (2026-10-30): a tray on the real clock ignored it from 2026-10-31 on.
+        using var tray = Tray(_time);
         tray.For("rst").Problem.Should().Be(InstallProblem.InstallerBusy);
     }
 
