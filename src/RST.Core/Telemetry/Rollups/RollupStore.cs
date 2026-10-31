@@ -99,12 +99,11 @@ internal sealed class RollupStore
         {
             var index = new RollupIndexFile { SchemaVersion = doc.SchemaVersion, UpdatedUtc = doc.UpdatedUtc };
             var skipped = 0;
-            var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var element in elements)
             {
                 var row = TryReadRow(element);
                 if (row is null) skipped++;
-                else if (ids.Add(row.ModelId)) index.Models.Add(row);
+                else if (index.Models.All(m => m.ModelId != row.ModelId)) index.Models.Add(row);
             }
             if (skipped > 0) SafeLog("rollup index: skipped " + skipped + " unreadable row(s)");
             return index;
