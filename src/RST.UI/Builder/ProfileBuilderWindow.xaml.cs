@@ -9,8 +9,11 @@
 // over it in the Preview phase: it reports the tile, stack or stack row under the pointer and where
 // on it (TileHit) to the view-model, which owns the markers and the rules (RST.Core TileDrops and
 // PanelStacks; PanelDrops for the panel reorder). "on tab [name]" opens General on the tab field.
+// Feature #18, WU4: the Commands tree's items are the Custom Tools group then the catalogue (one
+// CompositeCollection, so both scroll together); a Custom Tools row is a drag source like a command.
 
 using System.ComponentModel;
+using System.Windows.Data;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -31,6 +34,11 @@ public partial class ProfileBuilderWindow : Window
         DarkTitleBar.Attach(this);
         Model = model ?? throw new ArgumentNullException(nameof(model));
         DataContext = model;
+        CatalogTreeView.ItemsSource = new CompositeCollection
+        {
+            model.CustomToolsGroup,
+            new CollectionContainer { Collection = model.CatalogRoots },
+        };
         model.CloseRequested += () =>
         {
             if (IsVisible) Close();
@@ -145,13 +153,14 @@ public partial class ProfileBuilderWindow : Window
         (source, data, effects) => DragDrop.DoDragDrop(source, data, effects);
 
     /// <summary>
-    /// The drag a source element would start, from its view-model: a catalogue command, a panel (its
-    /// header), a tile or a stack's row, or a whole stack (its header). A slot drag carries the slot
-    /// it was started from, so the drop can check it is still there (WU3 review N1).
+    /// The drag a source element would start, from its view-model: a catalogue command, a Custom Tools
+    /// row, a panel (its header), a tile or a stack's row, or a whole stack (its header). A slot drag
+    /// carries the slot it was started from, so the drop can check it is still there (WU3 review N1).
     /// </summary>
     internal static BuilderDrag? DragFor(object? dataContext) => dataContext switch
     {
         CatalogNodeViewModel { Command: { } command } => BuilderDrag.FromCatalog(command),
+        CustomToolItemViewModel row => BuilderDrag.FromCustomTool(row.Tool),
         PanelCardViewModel card => BuilderDrag.FromPanel(card.Index),
         ToolTileViewModel tile => BuilderDrag.FromSlot(tile.Panel.Index, tile.Index, tile.Row, tile.Model),
         StackGroupViewModel stack => BuilderDrag.FromSlot(stack.Panel.Index, stack.Index, -1, stack.Model),
@@ -185,7 +194,7 @@ public partial class ProfileBuilderWindow : Window
         Model.BeginDrag(drag);
         try
         {
-            var effects = drag.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+            var effects = drag.IsNew ? DragDropEffects.Copy : DragDropEffects.Move;
             RunDragDrop((DependencyObject)sender, new DataObject(typeof(BuilderDrag), drag), effects);
         }
         finally
@@ -205,7 +214,7 @@ public partial class ProfileBuilderWindow : Window
     }
 
     private DragDropEffects DropEffect(bool accepted) =>
-        !accepted ? DragDropEffects.None : Model.CurrentDrag?.Kind == DragKind.Catalog ? DragDropEffects.Copy : DragDropEffects.Move;
+        !accepted ? DragDropEffects.None : Model.CurrentDrag?.IsNew == true ? DragDropEffects.Copy : DragDropEffects.Move;
 
     // The card's handlers run in the Preview phase, before anything inside the card sees the drag.
     // A TextBox takes every drag that passes over it (TextEditor marks DragOver handled, with no

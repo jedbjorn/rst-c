@@ -26,6 +26,9 @@ public interface IBuilderDialogs
 
     /// <summary>+ New Stack, or ✎ on a stack (feature #18, WU3): true when the user confirmed the picks.</summary>
     bool EditStack(StackDialogModel model);
+
+    /// <summary>+ Create new, or ✎ on a custom tool (feature #18, WU4): true when the user confirmed a label and an address.</summary>
+    bool EditCustomTool(CustomToolDialogModel model);
 }
 
 /// <summary>Opens the Builder's dialogs, owned by the Builder window.</summary>
@@ -44,6 +47,8 @@ public sealed class BuilderDialogs : IBuilderDialogs
     public bool EditName(ProfileNameDialogModel model) => new ProfileNameDialog(model) { Owner = Owner }.ShowDialog() == true;
 
     public bool EditStack(StackDialogModel model) => new StackDialog(model) { Owner = Owner }.ShowDialog() == true;
+
+    public bool EditCustomTool(CustomToolDialogModel model) => new CustomToolDialog(model) { Owner = Owner }.ShowDialog() == true;
 
     public void EditBranding(ProfileBuilderViewModel model)
     {
