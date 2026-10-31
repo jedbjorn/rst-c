@@ -297,7 +297,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     {
         var previous = selectKey ?? _selectedOption?.Key;
         ProfileOptions.Clear();
-        foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId));
+        foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId, _activeIdlessFile));
         // The profile in the editor stays current even when its file is gone from the list (another session removed it).
         var current = ProfileOptions.FirstOrDefault(o => o.Key == previous)
                       ?? (_selectedOption is { } held && held.Key == previous ? held : ProfileOptionViewModel.New());
@@ -407,6 +407,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         ProfileChanged();
         ProfileEdited();
         _supersededFile = superseded;
+        OnPropertyChanged(nameof(IsLoadedProfile)); // a loaded legacy profile is known by that file
         if (repaired.Changed) ShowToast(UiStrings.Builder_StacksRepaired(repaired.Notes.Count), BannerKind.Info);
     }
 
@@ -482,8 +483,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// <summary>The Profile pane's header: "· editing &lt;name&gt;".</summary>
     public string EditingText => UiStrings.Builder_EditingName(DisplayName);
 
-    /// <summary>The header button's green "Loaded" dot: the editor holds the profile the Loader has loaded.</summary>
-    public bool IsLoadedProfile => _editMode && !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
+    /// <summary>
+    /// The header button's green "Loaded" dot: the editor holds the profile the Loader has loaded: by id, or,
+    /// for a legacy profile with no id, the one read from the file the active pointer names (until its first
+    /// save gives it an id, which the pointer then follows).
+    /// </summary>
+    public bool IsLoadedProfile => _editMode && (string.IsNullOrEmpty(_profile.Id)
+        ? _supersededFile is { } file && _activeIdlessFile is { } active && string.Equals(file, active, StringComparison.OrdinalIgnoreCase)
+        : _profile.Id == _activeId);
 
     private void RaiseName()
     {
@@ -1530,6 +1537,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
             Log.Information("Builder: the loaded profile had no id; it is now {Id}", _profile.Id);
             _activeId = _profile.Id;
             _activeIdlessFile = null;
+            OnPropertyChanged(nameof(IsLoadedProfile)); // now known by its id
         }
         var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
         // The loaded legacy profile's old file goes only once the reload has re-pointed

@@ -41,7 +41,7 @@ public sealed class ProfileOptionViewModel : ObservableObject
     /// <summary>The profile's name ("+ New profile" for <see cref="New"/>).</summary>
     public string Display { get; }
 
-    /// <summary>The Loader has this profile loaded (its id is the active one).</summary>
+    /// <summary>The Loader has this profile loaded (its id is the active one; with no id, its file is).</summary>
     public bool IsLoaded { get; }
 
     /// <summary>The menu row's right-hand note: "loaded · tab "X"" or "tab "X"".</summary>
@@ -63,12 +63,17 @@ public sealed class ProfileOptionViewModel : ObservableObject
 
     public static ProfileOptionViewModel New() => new(NewKey, UiStrings.Builder_NewProfile, false, "", null);
 
-    /// <summary>populateProfileSelector's option: the name, marked loaded when its id is the active one.</summary>
-    public static ProfileOptionViewModel For(ProfileEntry entry, string? activeId)
+    /// <summary>
+    /// populateProfileSelector's option: the name, marked loaded when its id is the active one, or, for a
+    /// legacy profile with no id, when its file is the one the active pointer names (<paramref name="activeIdlessFile"/>).
+    /// </summary>
+    public static ProfileOptionViewModel For(ProfileEntry entry, string? activeId, string? activeIdlessFile = null)
     {
         var p = entry.Profile;
         var key = string.IsNullOrEmpty(p.Id) ? p.ProfileName : p.Id!;
-        var loaded = !string.IsNullOrEmpty(p.Id) && p.Id == activeId;
+        var loaded = string.IsNullOrEmpty(p.Id)
+            ? activeIdlessFile is { } file && string.Equals(entry.FileName, file, StringComparison.OrdinalIgnoreCase)
+            : p.Id == activeId;
         var note = loaded ? UiStrings.Builder_ProfileRowLoaded(p.Tab ?? "") : UiStrings.Builder_ProfileRowTab(p.Tab ?? "");
         return new ProfileOptionViewModel(key, p.ProfileName ?? "", loaded, note, entry);
     }

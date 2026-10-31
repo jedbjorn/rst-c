@@ -119,6 +119,20 @@ public class ProfileBuilderViewModelTests
         h.Model.IsEditMode.Should().BeTrue();
         h.Model.ProfileName.Should().Be("Legacy");
         h.Model.IsDirty.Should().BeTrue("a profile with no id counts as changed until Save gives it one (review N7)");
+        // The green dot and the menu's mark: it is the loaded one, known by its file until it has an id.
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        h.Option("Legacy").IsLoaded.Should().BeTrue();
+        h.Option("Legacy").Note.Should().Be("loaded · tab \"Studio Struct\"");
+        h.Option("Architecture").IsLoaded.Should().BeFalse();
+
+        h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.IsLoadedProfile.Should().BeFalse("Structure is not the loaded one");
+        var raised = new List<string?>();
+        h.Model.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        raised.Should().Contain(nameof(ProfileBuilderViewModel.IsLoadedProfile));
     }
 
     [Fact]
