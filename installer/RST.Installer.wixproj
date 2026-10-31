@@ -40,7 +40,7 @@
   -->
   <PropertyGroup>
     <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
-    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">3.0.99</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">3.1.99</RstMsiVersionEffective>
     <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 
