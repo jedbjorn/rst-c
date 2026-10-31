@@ -1328,4 +1328,15 @@ The other profiles were changed and stay changed.</value>
     <value>{0} ({1}): {2}</value>
     <comment>{0} the profile name; {1} its file; {2} why.</comment>
   </data>
+  <data name="Builder_ToolNotAnEmail" xml:space="preserve">
+    <value>That is not an email address. In Email mode, type an address such as bim@studio.example.</value>
+  </data>
+  <data name="Builder_ToolTargetOpenOnly" xml:space="preserve">
+    <value>{0} (open here; only its unsaved copy changes)</value>
+    <comment>{0} the open profile's name: its file is not changed (it shares its id with another file).</comment>
+  </data>
+  <data name="Builder_ToolTargetFile" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>{0} the profile name; {1} its file, when two profiles in the list share a name.</comment>
+  </data>
 </root>

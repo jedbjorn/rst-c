@@ -1263,7 +1263,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             _dialogs.ShowMessage(UiStrings.Builder_RemoveToolTitle, UiStrings.Builder_ToolNothingToChange + Environment.NewLine + Environment.NewLine + text, RemoveCustomToolDialogId);
             return;
         }
-        var names = plan.Changing.Select(CustomToolDialogModel.TargetName).ToList();
+        var names = CustomToolDialogModel.TargetNames(plan.Changing);
         if (!_dialogs.Confirm(UiStrings.Builder_RemoveToolTitle, text, names,
                 UiStrings.Builder_RemoveFrom(CustomToolDialogModel.ProfileCount(plan.Count)), danger: true, RemoveCustomToolDialogId))
             return;

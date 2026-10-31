@@ -140,9 +140,14 @@ public static class CustomTools
     /// <summary>The dialog's "Opens: …" line: the address normalised ("" while it is blank).</summary>
     public static string Opens(string? address) => Normalize(address);
 
+    /// <summary>The check's answer for an email link that is not an email address (WU4 review F4).</summary>
+    public const string NotAnEmail = "Not an email address";
+
     /// <summary>
     /// The dialog's checks: a label, then an address (a bare scheme such as "mailto:" or "https://"
-    /// is not one). Null when both are given.
+    /// is not one), and a <c>mailto:</c> link must hold a plausible email address
+    /// (<see cref="IsEmailAddress"/>: "mailto:https://wiki…" is refused before it is written to every
+    /// profile; WU4 review F4). Null when all pass.
     /// </summary>
     public static string? Check(CustomToolEdit edit)
     {
@@ -152,7 +157,25 @@ public static class CustomTools
         var colon = link.IndexOf(':');
         var rest = colon < 0 ? link : link[(colon + 1)..].TrimStart('/');
         if (rest.Trim().Length == 0) return "Address required";
+        if (KindOf(link) == CustomToolKind.Email && !IsEmailAddress(link["mailto:".Length..])) return NotAnEmail;
         return null;
+    }
+
+    /// <summary>
+    /// A plausible email address (what follows "mailto:"): one "@" with something on each side, no
+    /// spaces, no "/" or ":" in the part before the "@" (so not a URL), and no "/", ":" or "\" in the
+    /// domain; a "?subject=…" query after the domain is allowed. Not a full RFC 5322 check: it refuses
+    /// links and typos, not rare addresses.
+    /// </summary>
+    public static bool IsEmailAddress(string? address)
+    {
+        var a = (address ?? "").Trim();
+        var query = a.IndexOf('?');
+        if (query >= 0) a = a[..query];
+        var at = a.IndexOf('@');
+        if (at <= 0 || at != a.LastIndexOf('@') || at == a.Length - 1) return false;
+        if (a.Any(char.IsWhiteSpace)) return false;
+        return a[..at].IndexOfAny(['/', ':']) < 0 && a[(at + 1)..].IndexOfAny(['/', ':', '\\']) < 0;
     }
 
     /// <summary>

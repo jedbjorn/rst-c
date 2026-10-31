@@ -849,4 +849,10 @@ public static class UiStrings
     public static string Builder_ToolsPartialText(object? arg0) => Format(nameof(Builder_ToolsPartialText), arg0);
 
     public static string Builder_ToolFailedLine(object? arg0, object? arg1, object? arg2) => Format(nameof(Builder_ToolFailedLine), arg0, arg1, arg2);
+
+    public static string Builder_ToolNotAnEmail => Get(nameof(Builder_ToolNotAnEmail));
+
+    public static string Builder_ToolTargetOpenOnly(object? arg0) => Format(nameof(Builder_ToolTargetOpenOnly), arg0);
+
+    public static string Builder_ToolTargetFile(object? arg0, object? arg1) => Format(nameof(Builder_ToolTargetFile), arg0, arg1);
 }

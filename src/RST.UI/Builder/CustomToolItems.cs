@@ -196,7 +196,8 @@ public sealed class CustomToolDialogModel : ObservableObject
         {
             Plan = plan,
             Tool = tool,
-            Warning = UiStrings.Builder_ToolEditWarning(string.Join(", ", plan.Changing.Select(TargetName))),
+            // With nothing to change, the warning says so instead of naming no profile (review F5).
+            Warning = plan.Count > 0 ? UiStrings.Builder_ToolEditWarning(string.Join(", ", TargetNames(plan.Changing))) : UiStrings.Builder_ToolNothingToChange,
             Refusals = plan.Refused.Select(RefusalLine).ToList(),
         };
     }
@@ -352,6 +353,7 @@ public sealed class CustomToolDialogModel : ObservableObject
         {
             null => null,
             "Label required" => UiStrings.Builder_ToolLabelRequired,
+            CustomTools.NotAnEmail => UiStrings.Builder_ToolNotAnEmail,
             _ => UiStrings.Builder_ToolAddressRequired,
         };
         return Error is null;
@@ -360,11 +362,25 @@ public sealed class CustomToolDialogModel : ObservableObject
     /// <summary>"1 profile", "3 profiles" (the Custom Tool confirmations and toasts).</summary>
     internal static string ProfileCount(int count) => count == 1 ? UiStrings.Builder_ProfileCountOne : UiStrings.Builder_ProfileCountMany(count);
 
-    /// <summary>A profile in the confirmation: its name; the open, unsaved working copy marked (a blank name is "New profile").</summary>
-    internal static string TargetName(CustomToolTarget target)
+    /// <summary>
+    /// The profiles in a confirmation, in order: each by name (a blank name is "New profile"); a name
+    /// two of them share gets its file, so they can be told apart (review F5); the open profile's
+    /// working copy, when only it changes, is marked: "not saved yet" with no file, else "only its
+    /// unsaved copy changes" (its file shares its id with another and is refused).
+    /// </summary>
+    internal static IReadOnlyList<string> TargetNames(IEnumerable<CustomToolTarget> targets)
     {
-        var name = string.IsNullOrWhiteSpace(target.ProfileName) ? UiStrings.Builder_UnnamedProfile : target.ProfileName;
-        return target.State == CustomToolTargetState.WorkingCopy ? UiStrings.Builder_ToolTargetUnsaved(name) : name;
+        var list = targets.ToList();
+        static string NameOf(CustomToolTarget t) => string.IsNullOrWhiteSpace(t.ProfileName) ? UiStrings.Builder_UnnamedProfile : t.ProfileName;
+        var shared = list.GroupBy(NameOf, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return list.Select(t =>
+        {
+            var name = NameOf(t);
+            if (t.State == CustomToolTargetState.WorkingCopy)
+                return string.IsNullOrEmpty(t.ProfileId) ? UiStrings.Builder_ToolTargetUnsaved(name) : UiStrings.Builder_ToolTargetOpenOnly(name);
+            return shared.Contains(name) && t.FileName.Length > 0 ? UiStrings.Builder_ToolTargetFile(name, t.FileName) : name;
+        }).ToList();
     }
 
     /// <summary>A profile that will not change, and why.</summary>

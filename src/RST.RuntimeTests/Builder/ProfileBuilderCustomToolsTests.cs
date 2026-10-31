@@ -648,4 +648,57 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Close(window, h);
         }
     });
+
+    // ── review F4, F5: the dialog's refusals and the confirmation's names ──
+
+    [Fact]
+    public void Email_mode_refuses_a_URL_before_anything_is_written() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var before = Directory.GetFiles(_dir.Path).ToDictionary(f => f, File.ReadAllText);
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                d.IsEmail = true; // the URL tool's address stays "https://wiki.studio.example"
+                Assert.Equal("Opens: mailto:https://wiki.studio.example", d.Opens);
+                return true;
+            });
+            Click(RowButton(Row(window, "Wiki"), "Builder.EditCustomToolEverywhere"));
+
+            var dialog = h.Modals.CustomToolDialogs.Single();
+            Assert.Equal("That is not an email address. In Email mode, type an address such as bim@studio.example.", dialog.Error);
+            Assert.Empty(h.Backend.CustomToolChanges);
+            foreach (var (file, bytes) in before) Assert.Equal(bytes, File.ReadAllText(file));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
+
+    [Fact]
+    public void The_confirmation_tells_profiles_that_share_a_name_apart_and_says_when_nothing_can_change() => Sta(() =>
+    {
+        var tool = new CustomTool(CustomToolFixtures.Wiki, "Wiki", null, CustomToolKind.Url, ["Arch", "Struct"]);
+        var plan = new CustomToolPlan(
+        [
+            new CustomToolTarget("Arch", "a1", "Arch_2026-01-01.json", CustomToolTargetState.Write, null, false),
+            new CustomToolTarget("arch", "a2", "arch (2).json", CustomToolTargetState.Write, null, false),
+            new CustomToolTarget("Struct", "s1", "Struct_2026-01-01.json", CustomToolTargetState.SharedId, "2 files share this profile's id", true),
+            new CustomToolTarget("Struct", "s1", "", CustomToolTargetState.WorkingCopy, null, true),
+            new CustomToolTarget("", null, "", CustomToolTargetState.WorkingCopy, null, true),
+        ]);
+        Assert.Equal(
+            ["Arch (Arch_2026-01-01.json)", "arch (arch (2).json)", "Struct (open here; only its unsaved copy changes)", "New profile (open, not saved yet)"],
+            CustomToolDialogModel.TargetNames(plan.Changing));
+        var edit = CustomToolDialogModel.ForEdit(tool, plan, [], null);
+        Assert.Equal("Update in 4 profiles", edit.ConfirmText);
+        Assert.StartsWith("Changes apply everywhere this tool is used: Arch (Arch_2026-01-01.json), arch (arch (2).json), ", edit.Warning);
+
+        var none = CustomToolDialogModel.ForEdit(tool, new CustomToolPlan([plan.Targets[2]]), [], null);
+        Assert.Equal("No profile can be changed.", none.Warning);
+        Assert.False(none.CanConfirm);
+        Assert.Equal(["Struct (Struct_2026-01-01.json): files share this profile's id. Remove the stale copy."], none.Refusals);
+    });
 }

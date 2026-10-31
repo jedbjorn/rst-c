@@ -533,4 +533,46 @@ public sealed class CustomToolsTests : IDisposable
         CustomTools.LinkOf(a).Should().Be(tool.Link, "a placed copy is the same tool");
         CustomTools.SlotFor(tool).Should().NotBeSameAs(a);
     }
+
+    // ── an email tool holds an email address (WU4 review F4) ──
+
+    [Theory]
+    [InlineData("mailto:https://wiki.example.com")]
+    [InlineData("mailto:wiki.example.com")]
+    [InlineData("mailto:bob")]
+    [InlineData("mailto:bob@")]
+    [InlineData("mailto:@example.com")]
+    [InlineData("mailto:bob@@example.com")]
+    [InlineData("mailto:bob smith@example.com")]
+    [InlineData("MAILTO:http://x@y.com")]
+    [InlineData("mailto:bob@example.com/page")]
+    public void An_email_link_that_is_not_an_email_address_is_refused(string address)
+    {
+        CustomTools.Check(new CustomToolEdit("Help", address, null)).Should().Be(CustomTools.NotAnEmail);
+        // Edit everywhere refuses it before anything is written.
+        var editor = Editor();
+        var wiki = editor.Derive(null).Single(t => t.Link == Wiki);
+        var before = Files().ToDictionary(f => f, f => File.ReadAllText(Path.Combine(_dir, f)));
+        FluentActions.Invoking(() => editor.Edit(wiki, new CustomToolEdit("Wiki", address, null), null, null)).Should().Throw<ArgumentException>();
+        Files().Should().OnlyContain(f => File.ReadAllText(Path.Combine(_dir, f)) == before[f]);
+    }
+
+    [Theory]
+    [InlineData("mailto:bim@studio.example")]
+    [InlineData("bim@studio.example")]
+    [InlineData("MAILTO:Bob.Smith+rst@Example.co.uk")]
+    [InlineData("mailto:help@example.com?subject=RST%20help")]
+    public void A_plausible_email_address_passes(string address)
+    {
+        CustomTools.Check(new CustomToolEdit("Help", address, null)).Should().BeNull();
+        CustomTools.KindOf(CustomTools.Opens(address)).Should().Be(CustomToolKind.Email);
+    }
+
+    [Fact]
+    public void Links_that_are_not_email_are_not_held_to_the_email_rule()
+    {
+        CustomTools.Check(new CustomToolEdit("Wiki", "https://wiki.example.com/a@b", null)).Should().BeNull();
+        CustomTools.Check(new CustomToolEdit("Call", "tel:+4412345", null)).Should().BeNull();
+        CustomTools.Check(new CustomToolEdit("Share", "file://server/share", null)).Should().BeNull();
+    }
 }
