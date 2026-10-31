@@ -433,9 +433,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         var presets = profile.Presets ?? new ProfilePresets();
         var yes = _dialogs.Confirm(RstifyRules.AdoptPresetsTitle, RstifyRules.AdoptPresetsMessage(profile), [],
             UiStrings.Loader_Continue, danger: false, AdoptPresetsDialogId);
-        List<string> hidden = yes
-            ? [.. RstifyRules.ReconcileHiddenTabs(profile, _session.AllTabs, _catalog, presets.HiddenTabs ?? [])]
-            : [];
+        List<string> hidden = yes ? [.. presets.HiddenTabs ?? []] : [];
         var disableUnused = yes && presets.DisableUnusedAddins;
         try
         {
