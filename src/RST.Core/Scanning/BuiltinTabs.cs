@@ -23,7 +23,7 @@ public static class BuiltinTabs
 {
     private static readonly HashSet<string> _names = new(StringComparer.Ordinal)
     {
-        "Architecture", "Structure", "Systems", "Steel", "Precast",
+        "Architecture", "Structure", "Systems", "Steel", "Precast", "Concrete",
         "Insert", "Annotate", "Analyze", "Massing & Site", "Collaborate",
         "View", "Manage", "Modify", "Create", "RST",
         "Modify | Walls", "Modify | Floors", "Modify | Roofs",

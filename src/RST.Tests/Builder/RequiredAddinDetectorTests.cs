@@ -306,6 +306,19 @@ public class RequiredAddinDetectorTests
         profile.Panels[0].Slots.Should().HaveCount(7, "the saved buttons stay in the profile");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Concrete_tool_missing_from_catalogue_or_with_unknown_origin_is_not_an_add_in(bool inCatalog)
+    {
+        // SC-052: older 2027 catalogues recorded Reinforcement Numbers as Unknown.
+        const string id = "ID_NUMBERING_REINF_PARTITIONS";
+        var profile = new Profile { Panels = [new Panel { Slots = [Tool(id, "Concrete", "Reinforcement")] }] };
+        CatalogCommand[] catalog = inCatalog ? [Cmd(id, "Concrete", "Reinforcement", "Unknown")] : [];
+
+        RequiredAddinDetector.Compute(profile, catalog, ShippedLookup()).Should().BeEmpty();
+    }
+
     [Fact]
     public void An_unknown_origin_command_on_a_host_tab_is_still_an_add_in()
     {

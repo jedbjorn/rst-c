@@ -7,6 +7,7 @@ using System.IO;
 using System.Text.Json;
 using FluentAssertions;
 using RST.Core.Activation;
+using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Tests.Loader;
 using Xunit;
@@ -300,6 +301,32 @@ public class ActivationPlannerTests
             .Should().Equal("Kinship", "Kinship Library");
         RequiredAddinMatch.Match(new RequiredAddin { TabName = "Architecture" }, items).Should().BeEmpty("a built-in tab is never an add-in");
         RequiredAddinMatch.Match(new RequiredAddin { TabName = "" }, items).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("AcmeConcrete.addin", "d4c6e3e0-0000-4000-8000-525354500001", true)]
+    [InlineData(" ", " ", false)]
+    public void Concrete_is_native_and_keeps_no_add_ins_on(string? file, string? id, bool native)
+    {
+        foreach (var year in new[] { 2025, 2026, 2027 })
+        {
+            var item = Item(year, "Acme Concrete", fileName: "AcmeConcrete.addin",
+                id: "d4c6e3e0-0000-4000-8000-525354500001");
+            var decoy = Item(year, "Concrete Extras", fileName: "ConcreteExtras.addin");
+            var inventory = InventoryOf(item, decoy);
+            var required = new RequiredAddin { TabName = "Concrete", AddinFile = file, AddinId = id, Native = native };
+            var normalized = RequiredAddinRules.Normalize([required]).Single();
+            var session = new AddinSessionContext(["Concrete"], null, year, inventory.Items);
+
+            RequiredAddinMatch.IsAddinRequirement(required).Should().BeFalse();
+            RequiredAddinMatch.Match(required, inventory.Items).Should().BeEmpty();
+            RequiredAddinRules.Matches(normalized, session).Should().BeEmpty();
+            RequiredAddinRules.Describe(normalized, session).Status.Should().Be(AddinRowStatus.Native);
+
+            var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.Load([required], true), new ActivationLedger());
+            plan.Entries.Should().OnlyContain(e => !e.Required && e.Action == PlanAction.Disable);
+        }
     }
 
     // ── the property: the plan shown is the operations executed (T-B3) ───────

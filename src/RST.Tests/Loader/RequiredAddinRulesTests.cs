@@ -75,6 +75,7 @@ public class RequiredAddinRulesTests
 
     [Theory]
     [InlineData("Architecture")]
+    [InlineData("Concrete")]
     [InlineData("Add-Ins")]
     [InlineData("RST")]
     [InlineData("FormIt Converter")]
