@@ -248,7 +248,8 @@ public class ProfileBuilderScreenshotTests
         {
             CaptureBuilder(nomatch, theme, "builder-catalog-nomatch");
             Assert.Contains(WindowCapture.Descendants<TextBlock>(nomatch.Window.Root), t => t.IsVisible && t.Text == "No matches for \"zzz\".");
-            Assert.Empty(WindowCapture.Descendants<TreeViewItem>(nomatch.Window.CatalogTreeView));
+            // The tree's only other item, the Custom Tools group (feature #18, WU4), hides too: none of its tools match.
+            Assert.DoesNotContain(WindowCapture.Descendants<TreeViewItem>(nomatch.Window.CatalogTreeView), t => t.IsVisible);
         }
         finally
         {

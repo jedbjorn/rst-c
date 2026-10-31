@@ -1,7 +1,10 @@
 // rst-c's own (not vendored): fakes and fixtures for the Profile Builder view-model and window
 // tests (spec #16, WU4): a scripted backend that keeps a profile library in memory, a realistic
 // catalogue and profile set, and the 823-command catalogue for the performance budget (AC7).
+// Feature #18 (WU4): the backend can keep its profiles in a real folder (OnDisk), where the Custom
+// Tools' edit and remove everywhere run RST.Core's CustomToolEditor on the files themselves.
 
+using System.IO;
 using RST.Core.Builder;
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -57,10 +60,26 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
 
     private int _nextId = 1;
 
+    /// <summary>The profiles folder when the library is on disk (<see cref="OnDisk"/>), else null.</summary>
+    public string? ProfilesDir { get; private set; }
+
+    /// <summary>
+    /// Moves the library into <paramref name="dir"/>: the profiles are written there, and from then on
+    /// GetProfiles reads the folder and Save writes it (ProfileSaveService), as the real backend does.
+    /// </summary>
+    public FakeBuilderBackend OnDisk(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        foreach (var entry in Library) ProfileStore.Save(entry.Profile, dir);
+        Library.Clear();
+        ProfilesDir = dir;
+        return this;
+    }
+
     public IReadOnlyList<ProfileEntry> GetProfiles()
     {
         Calls.Add("GetProfiles");
-        return [.. Library];
+        return ProfilesDir is { } dir ? ProfileStore.List(dir) : [.. Library];
     }
 
     public ActiveProfile GetActiveProfile()
@@ -80,6 +99,12 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
     {
         Calls.Add("Save");
         if (SaveError is not null) return SaveOutcome.Fail(SaveError);
+        if (ProfilesDir is { } dir)
+        {
+            var outcome = new ProfileSaveService(dir).Save(profile);
+            if (outcome.Saved is { } written) Saved.Add(written);
+            return outcome;
+        }
         var copy = ProfileEditing.Clone(profile);
         if (string.IsNullOrEmpty(copy.Id)) copy.Id = "new-" + _nextId++;
         if (string.IsNullOrEmpty(copy.ExportDate)) copy.ExportDate = "2026-10-30";
@@ -99,6 +124,7 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
     {
         Calls.Add("RemoveSupersededFile");
         Removed.Add(fileName);
+        if (ProfilesDir is { } dir && RemoveResult.Ok) return new ProfileSaveService(dir).RemoveSupersededFile(fileName);
         if (RemoveResult.Ok) Library.RemoveAll(e => e.FileName == fileName);
         return RemoveResult;
     }
@@ -158,8 +184,43 @@ public sealed class FakeBuilderBackend : IProfileBuilderBackend
 
     public FakeBuilderBackend With(params Profile[] profiles)
     {
-        foreach (var p in profiles) Library.Add(new ProfileEntry(ProfileStore.CanonicalFileName(p), p));
+        foreach (var p in profiles)
+        {
+            if (ProfilesDir is { } dir) ProfileStore.Save(p, dir);
+            else Library.Add(new ProfileEntry(ProfileStore.CanonicalFileName(p), p));
+        }
         return this;
+    }
+
+    // ── Custom Tools (feature #18, WU4): the real editor over the folder ──
+
+    /// <summary>Replaces the custom tool operations (a backend that throws, for instance).</summary>
+    public Func<string, CustomToolUpdate>? OnCustomToolChange { get; set; }
+
+    /// <summary>Every edit and remove, in order: (verb, link, the working copy's id).</summary>
+    public List<(string Verb, string Link, string? WorkingId)> CustomToolChanges { get; } = [];
+
+    private CustomToolEditor Editor() => new(ProfilesDir ?? throw new InvalidOperationException("custom tool edits run on a profiles folder: call OnDisk first"),
+        new ProfileSaveService(ProfilesDir));
+
+    public CustomToolPlan PlanCustomTool(string link, Profile? working)
+    {
+        Calls.Add("PlanCustomTool");
+        return Editor().Plan(link, working);
+    }
+
+    public CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId)
+    {
+        Calls.Add("EditCustomTool");
+        CustomToolChanges.Add(("edit", tool.Link, working?.Id));
+        return OnCustomToolChange?.Invoke("edit") ?? Editor().Edit(tool, edit, working, activeProfileId);
+    }
+
+    public CustomToolUpdate RemoveCustomTool(string link, Profile? working, string? activeProfileId)
+    {
+        Calls.Add("RemoveCustomTool");
+        CustomToolChanges.Add(("remove", link, working?.Id));
+        return OnCustomToolChange?.Invoke("remove") ?? Editor().Remove(link, working, activeProfileId);
     }
 }
 
@@ -306,6 +367,22 @@ public sealed class FakeBuilderDialogs : IBuilderDialogs
     }
 
     public void EditBranding(ProfileBuilderViewModel model) => Brandings.Add(model);
+
+    /// <summary>
+    /// What the next Custom Tool dialog does: fills it in as a user would, then answers Confirm (true,
+    /// which passes only when the model's checks pass, as the real button) or Cancel. Empty: Cancel.
+    /// </summary>
+    public Queue<Func<CustomToolDialogModel, bool>> CustomTools { get; } = new();
+
+    /// <summary>Every Custom Tool dialog opened.</summary>
+    public List<CustomToolDialogModel> CustomToolDialogs { get; } = [];
+
+    public bool EditCustomTool(CustomToolDialogModel model)
+    {
+        CustomToolDialogs.Add(model);
+        if (CustomTools.Count == 0) return false;
+        return CustomTools.Dequeue()(model) && model.TryConfirm();
+    }
 }
 
 /// <summary>A view-model over a backend, with the fake dialogs and clock, ready to drive.</summary>
