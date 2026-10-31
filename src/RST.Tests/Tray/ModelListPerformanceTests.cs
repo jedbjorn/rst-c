@@ -1,9 +1,9 @@
 // ModelListPerformanceTests.cs — spec #25 AC 9 (logic) and the list's read path (F19 #25 WU1).
 // AC 9 is inferred from synthetic timing (CI is a guard, not a lab): with a 500-model index,
-// index load + filter ≤ 150 ms and changing a chip ≤ 100 ms. The JIT is warmed on a separate
-// small index first: the tray has parsed index rows before the page opens (its fold worker
-// writes them), so a cold first JIT is not what the user waits for. Also: an index the real
-// fold wrote lists with the same active time the model detail reads.
+// index load + filter ≤ 150 ms (asserted on the first 500-model load) and changing a chip
+// ≤ 100 ms. The JIT is warmed on a separate small index first; warm 500-model loads are
+// logged as supplementary evidence.
+// Also: an index the real fold wrote lists with the same active time the model detail reads.
 
 using System;
 using System.Collections.Generic;
@@ -122,18 +122,18 @@ public sealed class ModelListPerformanceTests : IDisposable
         var bytes = WriteIndex(_f.Rollups, 500);
         _out.WriteLine($"index.json: {bytes:N0} bytes for 500 models");
 
-        // The first 500-row load in the process still runs much of the read path as tier-0 JIT
-        // code; it is reported, not asserted. The tray loads the index on every Health page
-        // open and after every freshness pass, so the budget applies to the warm load: three
-        // untimed loads with a pause for tiered compilation, then the median of five timed ones
-        // (the median keeps one GC pause on a shared runner from deciding the result).
+        // The budget is asserted on the first 500-model load and filter after the small-index
+        // warm-up. Warm loads (three untimed ones with a pause for tiered compilation, then five
+        // timed) are logged as supplementary evidence only.
         var sw = Stopwatch.StartNew();
         var index = ModelListIndex.Load(Options(_f.Rollups));
         var first = index.Query(ModelListQuery.Default, Today);
         sw.Stop();
-        _out.WriteLine($"cold first load + filter: {sw.Elapsed.TotalMilliseconds:F1} ms ({first.Cards.Count} cards on Recent)");
+        var firstMs = sw.Elapsed.TotalMilliseconds;
+        _out.WriteLine($"first load + filter: {firstMs:F1} ms ({first.Cards.Count} cards on Recent)");
         index.Count.Should().Be(500);
         first.Cards.Should().NotBeEmpty();
+        firstMs.Should().BeLessThanOrEqualTo(150);
         for (var i = 0; i < 3; i++)
         {
             ModelListIndex.Load(Options(_f.Rollups)).Query(ModelListQuery.Default, Today);
@@ -150,7 +150,6 @@ public sealed class ModelListPerformanceTests : IDisposable
         }
         loads.Sort();
         _out.WriteLine($"warm load + filter: median {loads[2]:F1} ms (all: {string.Join(", ", loads.Select(l => l.ToString("F1")))})");
-        loads[2].Should().BeLessThanOrEqualTo(150);
 
         var queries = new List<ModelListQuery>();
         foreach (var chip in Enum.GetValues<ModelTimeChip>())
