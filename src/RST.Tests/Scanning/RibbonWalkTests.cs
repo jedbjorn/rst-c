@@ -403,6 +403,148 @@ public sealed class RibbonWalkTests
             "tabs 2/3; collected 12 (panel=2, stack=2, splitButton=3, menuButton=0, checklist=2, radioGroup=0, " +
             "listButton=0, subMenu=2, dialogLauncher=1; menu items 7); excluded as toggles 4 (panel=0, stack=0, " +
             "splitButton=0, menuButton=0, checklist=3, radioGroup=1, listButton=0, subMenu=0, dialogLauncher=0); " +
-            "not postable 0; cycles 0; depth capped 0; skipped tabs 0, panels 0, items 0");
+            "not postable 0 (outside PostableCommand 0, unresolved 0); cycles 0; depth capped 0; skipped tabs 0, panels 0, items 0");
+    }
+
+    // ---- SC-051 (decision #63): only what Revit lets an add-in post --------------------------------
+
+    // Ids the rc.3 dumps show as PostableCommand members (BuiltinCommandScanner's seed) in 2026 and
+    // 2027 (shared/evidence/v31-rc3/c1/20xx/catalog.tsv): their catalogue names are enum names.
+    private static readonly HashSet<string> PostableCommandIds = new(StringComparer.Ordinal)
+    {
+        "ID_OBJECTS_WALL", "ID_OBJECTS_TEXT_NOTE", "ID_SETTINGS_MATERIALS", "ID_SETTINGS_OBJECTSTYLES",
+        "ID_SETTINGS_SNAPPING", "ID_SETTINGS_LINE_STYLES", "ID_SETTINGS_PENS", "ID_SETTINGS_ANNOTATIONS_LEADERS",
+        "ID_VIEWTAGSTYLES_SECTIONTAGS", "ID_SETTINGS_HALFTONE", "ID_BROWSER_ORGANIZATION",
+        "ID_KEYBOARD_SHORTCUT_DIALOG", "ID_STRUCTURAL_SETTINGS", "ID_THIN_LINES",
+    };
+
+    private static RibbonWalker<N> RuleWalker(Func<string, bool>? resolves = null, RibbonScanCounts? counts = null) =>
+        new(Describe, resolves ?? (_ => true), counts, PostableCommandIds.Contains);
+
+    [Fact]
+    public void Text_Types_and_every_other_id_Revit_wont_let_add_ins_post_is_left_out_of_every_kind()
+    {
+        var walker = RuleWalker();
+        N[] annotateText = [Button("ID_OBJECTS_TEXT_NOTE")];
+        N[] architecture =
+        [
+            Button("ID_BUTTON_SELECT"),                                            // Modify, on a panel
+            Box(RibbonContainerKind.SplitButton, null, "Wall").With(
+                Button("ID_OBJECTS_WALL"), Button("ID_INPLACE_WALL")),             // In-Place Wall, in a split button
+            Box(RibbonContainerKind.Stack).With(Toggle("ID_THIN_LINES"), Toggle("ID_SHOW_MASS")),
+            Box(RibbonContainerKind.MenuButton, "manage_views", "Switch  Windows"), // a menu button's header
+            UserInterfaceChecklist(),                                              // its header, and two commands
+            Button("CustomCtrl_%CustomCtrl_%Add-Ins%Acme%Go"),                     // an add-in's button
+            Box(RibbonContainerKind.SplitButton).With(MenuItem("CustomCtrl_%CustomCtrl_%Add-Ins%Acme%More")),
+        ];
+
+        var ids = walker.WalkPanel(annotateText, Button("ID_SETTINGS_TEXT")).Select(h => h.Id).ToList();
+        ids.AddRange(walker.WalkPanel(ManageSettings(), Button("ID_STRUCTURAL_SETTINGS")).Select(h => h.Id));
+        ids.AddRange(walker.WalkPanel(architecture, null).Select(h => h.Id));
+
+        ids.Should().Equal(
+            "ID_OBJECTS_TEXT_NOTE",
+            "ID_SETTINGS_MATERIALS", "ID_SETTINGS_OBJECTSTYLES", "ID_SETTINGS_SNAPPING",
+            "ID_SETTINGS_LINE_STYLES", "ID_SETTINGS_PENS",
+            "ID_SETTINGS_ANNOTATIONS_LEADERS", "ID_VIEWTAGSTYLES_SECTIONTAGS", "ID_SETTINGS_HALFTONE",
+            "ID_STRUCTURAL_SETTINGS",
+            "ID_OBJECTS_WALL", "ID_THIN_LINES",
+            "ID_BROWSER_ORGANIZATION", "ID_KEYBOARD_SHORTCUT_DIALOG",
+            "CustomCtrl_%CustomCtrl_%Add-Ins%Acme%Go", "CustomCtrl_%CustomCtrl_%Add-Ins%Acme%More");
+        walker.Counts.OutsidePostableCommand.Should().Be(6);
+        walker.Counts.Unresolved.Should().Be(0);
+        walker.Counts.NotPostable.Should().Be(6);
+        walker.Counts.NotPostableIds.Should().Equal(
+            "ID_SETTINGS_TEXT", "ID_BUTTON_SELECT", "ID_INPLACE_WALL", "ID_SHOW_MASS",
+            "manage_views", "HID_APPLICATION_ELEMENTS_RibbonListButton");
+        walker.Counts.Collected(RibbonContainerKind.DialogLauncher).Should().Be(1, "Structural Settings stays; Text Types goes");
+        walker.Counts.ExcludedAsToggle(RibbonContainerKind.Checklist).Should().Be(3, "a toggle is still counted as a toggle first");
+    }
+
+    [Fact]
+    public void An_id_met_on_two_panels_is_counted_twice_and_listed_once()
+    {
+        // Text Types is the arrow of both Annotate > Text and the family editor's Create > Text.
+        var walker = RuleWalker();
+
+        walker.WalkPanel([Button("ID_OBJECTS_TEXT_NOTE")], Button("ID_SETTINGS_TEXT")).Should().ContainSingle();
+        walker.WalkPanel([Button("ID_OBJECTS_TEXT_NOTE")], Button("ID_SETTINGS_TEXT")).Should().ContainSingle();
+
+        walker.Counts.OutsidePostableCommand.Should().Be(2);
+        walker.Counts.NotPostableIds.Should().Equal("ID_SETTINGS_TEXT");
+    }
+
+    [Fact]
+    public void The_lookup_check_still_applies_to_newly_reached_ids_after_the_PostCommand_rule()
+    {
+        var asked = new List<string>();
+        var walker = RuleWalker(id => { asked.Add(id); return id != "ID_SETTINGS_PENS" && id != "CustomCtrl_%Acme%Gone"; });
+        N[] items =
+        [
+            Box(RibbonContainerKind.SplitButton).With(
+                MenuItem("ID_SETTINGS_LINE_STYLES"), MenuItem("ID_SETTINGS_PENS"),
+                MenuItem("ID_NOT_POSTABLE_MENU_ITEM"), MenuItem("CustomCtrl_%Acme%Gone")),
+            Button("CustomCtrl_%Acme%Panel"),
+        ];
+
+        var ids = walker.WalkPanel(items, null).Select(h => h.Id).ToList();
+
+        ids.Should().Equal("ID_SETTINGS_LINE_STYLES", "CustomCtrl_%Acme%Panel");
+        asked.Should().Equal(new[] { "ID_SETTINGS_LINE_STYLES", "ID_SETTINGS_PENS", "CustomCtrl_%Acme%Gone" },
+            "an id the rule refuses is not looked up, and kinds reached before SC-027 are not looked up at all");
+        walker.Counts.OutsidePostableCommand.Should().Be(1);
+        walker.Counts.Unresolved.Should().Be(2);
+        walker.Counts.NotPostableIds.Should().Equal("ID_SETTINGS_PENS", "ID_NOT_POSTABLE_MENU_ITEM", "CustomCtrl_%Acme%Gone");
+        // RibbonScanner logs one line per reason.
+        walker.Counts.OutsidePostableCommandIds.Should().Equal("ID_NOT_POSTABLE_MENU_ITEM");
+        walker.Counts.UnresolvedIds.Should().Equal("ID_SETTINGS_PENS", "CustomCtrl_%Acme%Gone");
+    }
+
+    [Fact]
+    public void A_manifest_command_with_a_GUID_id_is_admitted_like_any_external_command()
+    {
+        // <AddIn Type="Command"> entries (Add-Ins > External Tools) may carry their ClientId as the id.
+        var walker = RuleWalker();
+        N[] items =
+        [
+            Box(RibbonContainerKind.SplitButton, null, "External Tools").With(
+                MenuItem("{3F7C4A9E-2B1D-4E8F-9A6C-5D0E1F2A3B4C}"), MenuItem("3f7c4a9e-2b1d-4e8f-9a6c-5d0e1f2a3b4d")),
+        ];
+
+        walker.WalkPanel(items, null).Select(h => h.Id).Should().Equal(
+            "{3F7C4A9E-2B1D-4E8F-9A6C-5D0E1F2A3B4C}", "3f7c4a9e-2b1d-4e8f-9a6c-5d0e1f2a3b4d");
+        walker.Counts.NotPostable.Should().Be(0);
+    }
+
+    [Fact]
+    public void Without_PostableCommand_ids_the_rule_is_off_and_the_walk_is_as_before()
+    {
+        var ids = Walker().WalkPanel([Button("ID_BUTTON_SELECT")], Button("ID_SETTINGS_TEXT")).Select(h => h.Id).ToList();
+
+        ids.Should().Equal("ID_BUTTON_SELECT", "ID_SETTINGS_TEXT");
+    }
+
+    [Fact]
+    public void A_PostableCommand_check_that_throws_leaves_the_item_out_and_walks_on()
+    {
+        var walker = new RibbonWalker<N>(Describe, _ => true, null,
+            id => id == "ID_BROKEN" ? throw new InvalidOperationException("broke") : true);
+
+        var ids = walker.WalkPanel([Button("ID_BROKEN"), Button("ID_FINE")], null).Select(h => h.Id).ToList();
+
+        ids.Should().Equal("ID_FINE");
+        walker.Counts.OutsidePostableCommand.Should().Be(1);
+        walker.Counts.ItemsSkipped.Should().Be(0);
+    }
+
+    [Fact]
+    public void The_summary_splits_not_postable_into_its_two_reasons()
+    {
+        var counts = new RibbonScanCounts();
+        var walker = RuleWalker(id => id != "ID_SETTINGS_PENS", counts);
+
+        walker.WalkPanel(ManageSettings(), Button("ID_SETTINGS_TEXT"));
+
+        counts.Summary().Should().Contain("; not postable 2 (outside PostableCommand 1, unresolved 1); cycles 0;");
     }
 }

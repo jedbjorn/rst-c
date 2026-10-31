@@ -121,7 +121,9 @@ public class RequiredAddinDetectorTests
         {
             Panels =
             [
-                new Panel { Slots = [Tool("a", "Architecture", "DiRoots Suite"), Tool("b", "pyRevit", "Analysis"), Tool("c", "Kinship"), Tool("d", "pyRevit", "Other")] },
+                // An add-in's panel on a built-in tab: its id is an add-in's (CustomCtrl_), since SC-051
+                // gives a command the catalogue doesn't list the origin the ribbon scan would.
+                new Panel { Slots = [Tool("CustomCtrl_%Architecture%DiRoots Suite%a", "Architecture", "DiRoots Suite"), Tool("b", "pyRevit", "Analysis"), Tool("c", "Kinship"), Tool("d", "pyRevit", "Other")] },
             ],
         };
         var result = RequiredAddinDetector.Compute(profile, [], ShippedLookup());
@@ -264,6 +266,44 @@ public class RequiredAddinDetectorTests
             ("Enscape", "Enscape.addin", "https://enscape3d.com"),
             ("Kinship", "Kinship.addin", ""));
         catalog.Where(c => c.Origin == "Native").Select(c => c.Id).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_FLOOR");
+    }
+
+    /// <summary>
+    /// SC-051 (decision #63): the catalogue leaves out Revit tools that Revit won't let add-ins run
+    /// (Text Types, In-Place Wall, Modify, …). A profile saved with v3.1.0 keeps their buttons, so at
+    /// the next save they are not in the catalogue. They must not come back as required add-ins
+    /// named after their panels ("Text", "Build", "Select"), as SC-007 fixed for v3.1.
+    /// </summary>
+    [Fact]
+    public void Saved_revit_tools_the_catalogue_no_longer_lists_never_become_required_add_ins()
+    {
+        var profile = new Profile
+        {
+            Panels =
+            [
+                new Panel
+                {
+                    Slots =
+                    [
+                        Tool("ID_SETTINGS_TEXT", "Annotate", "Text"),
+                        Tool("ID_INPLACE_WALL", "Architecture", "Build"),
+                        Tool("ID_BUTTON_SELECT", "Modify", "Select"),
+                        Tool("ID_OBJECTS_WALL", "Architecture", "Build"),
+                        // Not in the catalogue either, but an add-in's: still a dependency.
+                        Tool("CustomCtrl_%CustomCtrl_%Add-Ins%Kinship%Open", "Add-Ins", "Kinship"),
+                        Tool("CustomCtrl_%CustomCtrl_%Architecture%Acme Tools%Go", "Architecture", "Acme Tools"),
+                        // An add-in's own tab: as before, whatever its id.
+                        Tool("Enscape.Start", "Enscape", "Enscape"),
+                    ],
+                },
+            ],
+        };
+        var catalog = new[] { Cmd("ID_OBJECTS_WALL", "Architecture", "Build", "Native") };
+
+        var result = RequiredAddinDetector.Compute(profile, catalog, ShippedLookup());
+
+        result.Select(r => r.TabName).Should().Equal("Enscape", "Kinship", "Acme Tools");
+        profile.Panels[0].Slots.Should().HaveCount(7, "the saved buttons stay in the profile");
     }
 
     [Fact]

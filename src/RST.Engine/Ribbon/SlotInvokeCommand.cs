@@ -13,6 +13,21 @@
 // is the entire operation. For Command slots we still need to bounce
 // into Revit's main loop, which PostCommand handles for us; PostCommand
 // is safe to call off-transaction and queues the command.
+//
+// SC-051 (decision #63): PostCommand throws Autodesk.Revit.Exceptions.
+// ArgumentException when Revit doesn't let add-ins post the command (it
+// is neither a PostableCommand nor an external command; Text Types was
+// one). The catalogue leaves those out now, but a profile saved earlier
+// may still hold one: its click logs a Warning and shows the plain
+// SlotMessages.NotPostable message, not "failed unexpectedly", once
+// UIApplication.CanPostCommand confirms Revit won't post it (otherwise
+// the exception takes the failure path, ERR). Revit itself is asked, not
+// a list, so a working button can never be stopped by a wrong guess here.
+// An id LookupCommandId can't find gets SlotMessages.NotFound: "the
+// add-in doesn't appear to be installed" for an add-in's id (CustomCtrl_
+// or a manifest GUID), the plain message for any other (a Revit tool).
+//
+// The dialog texts live in RST.Core.Ribbon.SlotMessages (unit-tested).
 
 using System;
 using System.Diagnostics;
@@ -61,10 +76,23 @@ internal sealed class SlotInvokeCommand : ICommand
                     {
                         Log.Warning("SlotInvokeCommand: Revit command id not found ({CommandId}, display={DisplayName})",
                                     _target.Payload, _target.DisplayName);
-                        ShowMissingAddinDialog(_target.DisplayName);
+                        // An add-in's id: its add-in is missing. Any other id: a Revit tool add-ins can't run.
+                        Show(SlotMessages.NotFound(_target.Payload, _target.DisplayName), "not-found");
                         return;
                     }
-                    _ui.PostCommand(id);
+                    try
+                    {
+                        _ui.PostCommand(id);
+                    }
+                    // Plain message only when Revit itself confirms it won't post this id; any other
+                    // ArgumentException goes on to the failure path below (ERR).
+                    catch (Autodesk.Revit.Exceptions.ArgumentException ex) when (CanPost(id) == false)
+                    {
+                        // "The commandId must be in Autodesk.Revit.UI.PostableCommand or an external command."
+                        Log.Warning("SlotInvokeCommand: Revit doesn't let add-ins run {CommandId} (display={DisplayName}): {Error}",
+                                    _target.Payload, _target.DisplayName, ex.Message);
+                        Show(SlotMessages.NotPostable(_target.DisplayName), "not-postable");
+                    }
                     return;
             }
         }
@@ -72,52 +100,44 @@ internal sealed class SlotInvokeCommand : ICommand
         {
             Log.Error(ex, "SlotInvokeCommand failed (kind={Kind}, payload={Payload}, display={DisplayName})",
                       _target.Kind, _target.Payload, _target.DisplayName);
-            ShowFailureDialog(_target.DisplayName, ex.Message);
+            Show(SlotMessages.Failure(_target.DisplayName, ex.Message), "failure");
         }
     }
 
     /// <summary>
-    /// Surface a missing-target click via Revit's TaskDialog. The most
-    /// common cause is the source add-in not being installed (or disabled
-    /// in the Add-In Manager) for this Revit major. Defensive try/catch
-    /// around .Show() — a click handler that throws while reporting an
-    /// error is worse than the silent failure we're trying to fix.
+    /// UIApplication.CanPostCommand, guarded: it runs inside an exception filter, so it must never
+    /// throw. Null when Revit couldn't answer (then the click takes the failure path).
     /// </summary>
-    private static void ShowMissingAddinDialog(string displayName)
+    private bool? CanPost(RevitCommandId id)
     {
-        try
-        {
-            var dlg = new TaskDialog("RST")
-            {
-                MainInstruction = $"“{displayName}” couldn’t run.",
-                MainContent =
-                    "The add-in this button needs doesn’t appear to be installed in this Revit version " +
-                    "(or it is disabled in Revit’s Add-In Manager). Install or enable the add-in and try again.",
-                CommonButtons = TaskDialogCommonButtons.Close,
-            };
-            dlg.Show();
-        }
+        try { return _ui.CanPostCommand(id); }
         catch (Exception ex)
         {
-            Log.Debug(ex, "SlotInvokeCommand: missing-addin TaskDialog failed (display={DisplayName})", displayName);
+            Log.Debug(ex, "SlotInvokeCommand: CanPostCommand threw ({CommandId})", _target.Payload);
+            return null;
         }
     }
 
-    private static void ShowFailureDialog(string displayName, string error)
+    /// <summary>
+    /// Surface a click that couldn't run via Revit's TaskDialog. Defensive
+    /// try/catch around .Show() — a click handler that throws while
+    /// reporting an error is worse than the silent failure we're trying to fix.
+    /// </summary>
+    private static void Show(SlotMessage message, string kind)
     {
         try
         {
             var dlg = new TaskDialog("RST")
             {
-                MainInstruction = $"“{displayName}” couldn’t run.",
-                MainContent = $"The button failed unexpectedly: {error}\n\nDetails are in %AppData%\\RST\\logs\\.",
+                MainInstruction = message.MainInstruction,
+                MainContent = message.MainContent,
                 CommonButtons = TaskDialogCommonButtons.Close,
             };
             dlg.Show();
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "SlotInvokeCommand: failure TaskDialog failed (display={DisplayName})", displayName);
+            Log.Debug(ex, "SlotInvokeCommand: {Kind} TaskDialog failed ({Instruction})", kind, message.MainInstruction);
         }
     }
 }
