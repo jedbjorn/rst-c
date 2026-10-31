@@ -367,7 +367,14 @@ function Test-TraySingleInstance([string]$Label) {
   Assert ($second.WaitForExit(30000)) "[$Label] a second launch exits"
   Assert ($second.ExitCode -eq 0) "[$Label] the second launch exits with 0 (got $($second.ExitCode))"
   Assert (-not $first.HasExited) "[$Label] the first tray is still running"
-  Assert (Wait-MainWindow $first 20) "[$Label] the second launch showed the first tray's window"
+  # The signal waits (a named event) until the first tray has started; a cold tray right after the install can take
+  # 15 s and more on a slow runner to open its window (6-15 s, once over 20 s, on one runner image before SC-022, whose
+  # tray also takes its mutex earlier in its start). The tray log shows a lost signal if it ever comes to that.
+  $asked = Get-Date
+  $shown = Wait-MainWindow $first 60
+  Write-Host "OBSERVE: [$Label] the first tray's window opened $([math]::Round(((Get-Date) - $asked).TotalSeconds, 1)) s after the second launch exited"
+  if (-not $shown) { Show-TrayLog }
+  Assert $shown "[$Label] the second launch showed the first tray's window"
   Assert ($first.MainWindowTitle -eq 'RST') "[$Label] the shown window is 'RST' (got '$($first.MainWindowTitle)')"
   Assert (@(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue).Count -eq 1) "[$Label] exactly one RST.Tray process"
 
