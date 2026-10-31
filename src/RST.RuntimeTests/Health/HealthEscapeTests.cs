@@ -60,7 +60,6 @@ public class HealthEscapeTests
                 work();
                 return Task.CompletedTask;
             }),
-            StartTimer = (_, _) => new NoTimer(),
             Now = () => Now,
             Culture = CultureInfo.GetCultureInfo("en-US"),
             Zone = TimeZoneInfo.Utc,

@@ -238,9 +238,14 @@ public static class UiStrings
 
     public static string Health_CollectionFailedTitle => Get(nameof(Health_CollectionFailedTitle));
 
-    public static string Health_StatSessionTimer => Get(nameof(Health_StatSessionTimer));
+    /// <summary>Activity (Session): active time on the current model since it was opened in this Revit session (spec #24).</summary>
+    public static string Health_StatActivitySession => Get(nameof(Health_StatActivitySession));
 
-    public static string Health_StatSessionTotal => Get(nameof(Health_StatSessionTotal));
+    /// <summary>Activity (Total): the model's active time over the range (spec #24).</summary>
+    public static string Health_StatActivityTotal => Get(nameof(Health_StatActivityTotal));
+
+    /// <summary>Activity (Session)'s sub-line: when the model was opened in this session.</summary>
+    public static string Health_OpenedAt(object? arg0) => Format(nameof(Health_OpenedAt), arg0);
 
     public static string Health_StatLongestSync => Get(nameof(Health_StatLongestSync));
 
@@ -250,15 +255,34 @@ public static class UiStrings
 
     public static string Health_StatFileSize => Get(nameof(Health_StatFileSize));
 
-    public static string Health_FileOpen(object? arg0) => Format(nameof(Health_FileOpen), arg0);
-
-    public static string Health_ChartSession => Get(nameof(Health_ChartSession));
+    public static string Health_ChartActive => Get(nameof(Health_ChartActive));
 
     public static string Health_ChartOpen => Get(nameof(Health_ChartOpen));
 
     public static string Health_ChartSync => Get(nameof(Health_ChartSync));
 
+    /// <summary>The Health trend chart (spec #24, Model Health).</summary>
+    public static string Health_ChartHealth => Get(nameof(Health_ChartHealth));
+
     public static string Health_ChartPoint(object? arg0, object? arg1) => Format(nameof(Health_ChartPoint), arg0, arg1);
+
+    /// <summary>A weekly dot's tooltip at 6M and 1Y: the week's Monday and its total.</summary>
+    public static string Health_ChartWeekPoint(object? arg0, object? arg1) => Format(nameof(Health_ChartWeekPoint), arg0, arg1);
+
+    /// <summary>A weekly average dot's tooltip at 6M and 1Y: the week's Monday, the average, and how many it averages.</summary>
+    public static string Health_ChartWeekAverage(object? arg0, object? arg1, object? arg2) =>
+        Format(nameof(Health_ChartWeekAverage), arg0, arg1, arg2);
+
+    /// <summary>The model health colour names (decision #55), shown in the trend chart's tooltips.</summary>
+    public static string Health_ColourGreen => Get(nameof(Health_ColourGreen));
+
+    public static string Health_ColourYellow => Get(nameof(Health_ColourYellow));
+
+    public static string Health_ColourAmber => Get(nameof(Health_ColourAmber));
+
+    public static string Health_ColourRed => Get(nameof(Health_ColourRed));
+
+    public static string Health_ColourGrey => Get(nameof(Health_ColourGrey));
 
     public static string Health_NoModelTitle => Get(nameof(Health_NoModelTitle));
 

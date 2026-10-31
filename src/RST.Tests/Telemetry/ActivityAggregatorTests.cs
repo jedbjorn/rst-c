@@ -1546,12 +1546,12 @@ public sealed class ActivityAggregatorTests : IDisposable
     [Fact]
     public void ReadStatus_empty_or_missing_dir_is_empty()
     {
-        ActivityAggregator.ReadStatus(Path.Combine(_root, "missing")).Should().Be(OutboxStatus.Empty);
-        ActivityAggregator.ReadStatus(_root).Should().Be(OutboxStatus.Empty);
+        OutboxFiles.ReadStatus(Path.Combine(_root, "missing")).Should().Be(OutboxStatus.Empty);
+        OutboxFiles.ReadStatus(_root).Should().Be(OutboxStatus.Empty);
     }
 
     [Fact]
-    public void ReadStatus_counts_files_bytes_and_oldest_event()
+    public void ReadStatus_counts_files_and_bytes()
     {
         var s1 = Guid.NewGuid().ToString();
         var s2 = Guid.NewGuid().ToString();
@@ -1562,22 +1562,9 @@ public sealed class ActivityAggregatorTests : IDisposable
             Event(s2, 1, TelemetryEventTypes.SessionStart, D(12, 7)),
             Event(s2, 2, TelemetryEventTypes.SessionEnd, D(12, 8)));
 
-        var status = ActivityAggregator.ReadStatus(_root);
+        var status = OutboxFiles.ReadStatus(_root);
 
         status.FileCount.Should().Be(2);
         status.TotalSizeBytes.Should().Be(new FileInfo(p1).Length + new FileInfo(p2).Length);
-        status.OldestEventTs.Should().Be(D(12, 7));
-    }
-
-    [Fact]
-    public void ReadStatus_skips_corrupt_leading_lines_for_oldest()
-    {
-        var s = Guid.NewGuid().ToString();
-        var path = Path.Combine(_root, OutboxFiles.SessionFileName(InstallId, s));
-        File.WriteAllText(path,
-            "{not json\n" +
-            TelemetryJson.SerializeLine(Event(s, 2, TelemetryEventTypes.SessionStart, D(14, 6))) + "\n");
-
-        ActivityAggregator.ReadStatus(_root).OldestEventTs.Should().Be(D(14, 6));
     }
 }

@@ -17,13 +17,10 @@ public static class HealthLauncher
     /// </summary>
     /// <param name="context">The Revit context captured before the window opens (<see cref="HealthContext.Empty"/> outside Revit).</param>
     /// <param name="telemetryToggled">Called with the clicked value on every successful collection toggle (the collector seam). Null: persist only.</param>
-    /// <param name="liveSessionStartUtc">A live read of the collector's session start. Null: the context's captured value.</param>
-    public static bool Show(IntPtr ownerHwnd, HealthContext context,
-                            Action<bool>? telemetryToggled = null,
-                            Func<DateTimeOffset?>? liveSessionStartUtc = null)
+    public static bool Show(IntPtr ownerHwnd, HealthContext context, Action<bool>? telemetryToggled = null)
     {
         var dialogs = new DialogService { EscapeCancels = true, ReturnsFocus = true }; // decision #62; rc.3 VM finding F2
-        var viewModel = new HealthViewModel(new HealthService(context, telemetryToggled, liveSessionStartUtc), dialogs);
+        var viewModel = new HealthViewModel(new HealthService(context, telemetryToggled), dialogs);
         viewModel.Load();
         var window = new HealthWindow(viewModel);
         dialogs.Owner = window;

@@ -4,6 +4,7 @@
 using RST.Core.Health;
 using RST.Core.Profiles;
 using RST.Core.Telemetry;
+using RST.Core.Telemetry.Rollups;
 using RST.UI.Health;
 
 namespace RST.RuntimeTests.Health;
@@ -24,7 +25,7 @@ public sealed class FakeHealthService : IHealthService
 
     public Exception? CleanError { get; set; }
 
-    public Func<int, ActivityData>? Activity { get; set; }
+    public Func<ActivityData>? Activity { get; set; }
 
     public Exception? ActivityError { get; set; }
 
@@ -36,7 +37,8 @@ public sealed class FakeHealthService : IHealthService
 
     public List<IReadOnlyCollection<string>> CleanCalls { get; } = [];
 
-    public List<int> ActivityCalls { get; } = [];
+    /// <summary>How many times the window read the activity.</summary>
+    public int ActivityCalls { get; private set; }
 
     public List<bool> ToggleCalls { get; } = [];
 
@@ -70,11 +72,11 @@ public sealed class FakeHealthService : IHealthService
         return CleanResult;
     }
 
-    public ActivityData GetActivity(int rangeDays)
+    public ActivityData GetActivity()
     {
-        ActivityCalls.Add(rangeDays);
+        ActivityCalls++;
         if (ActivityError is not null) throw ActivityError;
-        return Activity?.Invoke(rangeDays) ?? HealthSamples.Activity(DateTimeOffset.UtcNow);
+        return Activity?.Invoke() ?? HealthSamples.Activity(DateTimeOffset.UtcNow);
     }
 
     public TelemetryToggleResult SetTelemetryEnabled(bool enabled)
@@ -169,87 +171,132 @@ public static class HealthSamples
         new() { Id = "recent-files", Name = "Recent files list", Path = @"%AppData%\Autodesk\Revit\Autodesk Revit 2026\Revit.ini", Kind = CleanupTarget.KindIniRecentFiles, Enabled = true },
     ];
 
-    /// <summary>Two weeks of history for a workshared model: curve charts in every card.</summary>
-    public static ActivityData Activity(DateTimeOffset now, int rangeDays = 7)
+    // Health inputs that land in each band (open and sync medians only: score 100, 59, 30, 0).
+    private static readonly HealthInputs Green = new(null, null, 20, 20);
+    private static readonly HealthInputs Yellow = new(null, null, 140, 140);
+    private static readonly HealthInputs Amber = new(null, null, 220, 220);
+    private static readonly HealthInputs Red = new(null, null, 300, 300);
+
+    /// <summary>
+    /// Six months of a workshared model's history, the way ModelActivityReader returns it: daily rows
+    /// back to 189 days ago (every third day before the last two weeks, most days within them),
+    /// timed opens and syncs for the last 90 days, health improving from red to green over the
+    /// months with every colour and a grey day in the last week, and a live session (47 min active
+    /// since it was opened 1 h 03 min ago). Deterministic for a given <paramref name="now"/>.
+    /// </summary>
+    public static ActivityData Activity(DateTimeOffset now)
     {
         var today = DateOnly.FromDateTime(now.UtcDateTime);
-        double[] hours = [3.2, 0, 5.5, 6.1, 2.4, 0, 4.8, 7.2, 1.1, 0, 3.9, 5.0, 6.6, 2.2];
-        var days = Math.Min(rangeDays, hours.Length);
-        var perDay = Enumerable.Range(0, days)
-            .Select(i => new DayOpenHoursPoint(today.AddDays(i - days + 1), hours[hours.Length - days + i]))
-            .ToList();
-        double[] opens = [48, 52.5, 61, 39, 44, 95, 50];
-        double[] syncs = [12, 18, 9.5, 41, 22, 15, 64, 19, 11];
+        HealthInputs[] lastWeek = [Green, Yellow, HealthInputs.None, Green, Amber, Red, Yellow]; // today, yesterday, … (3 days ago is a gap)
+        var days = new List<RollupDay>();
+        var opens = new List<DurationPoint>();
+        var syncs = new List<DurationPoint>();
+        for (var back = 189; back >= 0; back--)
+        {
+            if (back > 14 ? back % 3 != 0 : back % 7 == 3) continue; // sparser before the last two weeks; a gap in them
+            var date = today.AddDays(-back);
+            var midnight = new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var dayOpens = Enumerable.Range(0, 1 + back % 2).Select(i => 35.0 + (back * 13 + i * 29) % 70).ToList();
+            var daySyncs = Enumerable.Range(0, 2 + back % 3).Select(i => 9.5 + (back * 7 + i * 17) % 55).ToList();
+            var activeMs = back == 0 ? (47 * 60 + 10) * 1000L : (25 + back * 37 % 190) * 60_000L;
+            days.Add(new RollupDay
+            {
+                Date = date,
+                ActiveMs = activeMs,
+                OpenMs = activeMs + 95 * 60_000L,
+                Opens = dayOpens.Count,
+                OpenSumMs = (long)(dayOpens.Sum() * 1000),
+                OpenMaxMs = (long)(dayOpens.Max() * 1000),
+                Syncs = daySyncs.Count,
+                SyncSumMs = (long)(daySyncs.Sum() * 1000),
+                SyncMaxMs = (long)(daySyncs.Max() * 1000),
+                RevitVersions = ["2026"],
+                RevitSubversions = ["2026.4"],
+                Health = back < lastWeek.Length ? lastWeek[back] : back > 120 ? Red : back > 70 ? Amber : back > 30 ? Yellow : Green,
+            });
+            if (back > 90) continue; // the event window
+            for (var i = 0; i < dayOpens.Count; i++) opens.Add(new DurationPoint(midnight.AddHours(8 + i * 4), dayOpens[i]));
+            for (var i = 0; i < daySyncs.Count; i++) syncs.Add(new DurationPoint(midnight.AddHours(10 + i * 2), daySyncs[i]));
+        }
         return new ActivityData
         {
-            RangeDays = rangeDays,
-            SessionStartUtc = now.AddHours(-2).AddMinutes(-14).AddSeconds(-9),
-            CurrentFileOpenUtc = now.AddHours(-1).AddMinutes(-3).AddSeconds(-41),
-            File = new ActivityFile
+            Model = new ModelActivity
             {
-                MatchedKeys = ActivityMatchKinds.Central,
-                IsWorkshared = true,
-                IsCloud = false,
-                WarningsCount = 612,
-                FileSizeMb = 1740.5,
-                PerDayOpenHours = perDay,
-                OpenEvents = opens.Select((s, i) => new DurationPoint(now.AddDays(i - opens.Length).AddHours(9), s)).ToList(),
-                SyncEvents = syncs.Select((s, i) => new DurationPoint(now.AddDays((i - syncs.Length) * 0.7).AddHours(11), s)).ToList(),
+                MatchedKeyKind = ActivityMatchKinds.CentralPath,
+                ModelIds = ["5f0c1a7e9b3d4c2a8e6f1b0d3c5a7e9f"],
+                Days = days,
+                Opens = opens,
+                Syncs = syncs,
+                LiveOpenSinceUtc = now.AddHours(-1).AddMinutes(-3).AddSeconds(-41),
+                SessionActiveSeconds = 47 * 60 + 10,
+                Zone = TimeZoneInfo.Utc,
             },
-            Status = new TelemetryStatus(true, 23, 1_482_113, now.AddDays(-41)),
+            IsWorkshared = true,
+            IsCloud = false,
+            WarningsCount = 612,
+            FileSizeBytes = 1740.5 * 1024 * 1024,
+            Status = new TelemetryStatus(true, 23, 1_482_113),
         };
     }
 
-    /// <summary>A new, non-workshared model: one open (a single dot), no time recorded, sync not applicable; collection off.</summary>
+    /// <summary>The VM's case: a fresh cloud model with a few minutes a day, a few opens and sub-second syncs.</summary>
     public static ActivityData SmallActivity(DateTimeOffset now)
     {
-        // The VM's case: a fresh workshared model with a few minutes a day and sub-second syncs.
         var today = DateOnly.FromDateTime(now.UtcDateTime);
-        double[] hours = [0.02, 0.1, 0, 0.05, 0.08, 0.01, 0.06];
+        double[] minutes = [1, 6, 0, 3, 5, 1, 4];
         double[] opens = [4.2, 6.8, 3.1];
         double[] syncs = [0.31, 0.12, 0.44, 0.27];
         return new ActivityData
         {
-            RangeDays = 7,
-            SessionStartUtc = now.AddMinutes(-9).AddSeconds(-35),
-            CurrentFileOpenUtc = now.AddMinutes(-6).AddSeconds(-58),
-            File = new ActivityFile
+            Model = new ModelActivity
             {
-                MatchedKeys = ActivityMatchKinds.Cloud,
-                IsWorkshared = true,
-                IsCloud = true,
-                WarningsCount = 0,
-                FileSizeMb = 6.5,
-                PerDayOpenHours = hours.Select((h, i) => new DayOpenHoursPoint(today.AddDays(i - 6), h)).ToList(),
-                OpenEvents = opens.Select((s, i) => new DurationPoint(now.AddDays(i - 3), s)).ToList(),
-                SyncEvents = syncs.Select((s, i) => new DurationPoint(now.AddDays(i - 4).AddHours(2), s)).ToList(),
+                MatchedKeyKind = ActivityMatchKinds.Cloud,
+                Days = minutes.Select((m, i) => new RollupDay
+                {
+                    Date = today.AddDays(i - 6),
+                    ActiveMs = (long)(m * 60_000),
+                    OpenMs = (long)((m + 3) * 60_000),
+                    Health = i < 3 ? new HealthInputs(null, null, 5, null) : new HealthInputs(null, null, 5, 0.3),
+                }).ToList(),
+                Opens = opens.Select((s, i) => new DurationPoint(now.AddDays(i - 3), s)).ToList(),
+                Syncs = syncs.Select((s, i) => new DurationPoint(now.AddDays(i - 4).AddHours(2), s)).ToList(),
+                LiveOpenSinceUtc = now.AddMinutes(-6).AddSeconds(-58),
+                SessionActiveSeconds = 4 * 60,
+                Zone = TimeZoneInfo.Utc,
             },
-            Status = new TelemetryStatus(true, 2, 18_432, now.AddDays(-6)),
+            IsWorkshared = true,
+            IsCloud = true,
+            WarningsCount = 0,
+            FileSizeBytes = 6.5 * 1024 * 1024,
+            Status = new TelemetryStatus(true, 2, 18_432),
         };
     }
 
+    /// <summary>A local model opened once today and not yet edited: no active time, a single open (one dot),
+    /// one health dot, sync not applicable; collection off, so no live session.</summary>
     public static ActivityData SparseActivity(DateTimeOffset now)
     {
         var today = DateOnly.FromDateTime(now.UtcDateTime);
         return new ActivityData
         {
-            RangeDays = 7,
-            SessionStartUtc = null,
-            CurrentFileOpenUtc = null,
-            File = new ActivityFile
+            Model = new ModelActivity
             {
-                MatchedKeys = null,
-                IsWorkshared = false,
-                IsCloud = false,
-                WarningsCount = 3,
-                FileSizeMb = 18.25,
-                PerDayOpenHours = Enumerable.Range(0, 7).Select(i => new DayOpenHoursPoint(today.AddDays(i - 6), 0)).ToList(),
-                OpenEvents = [new DurationPoint(now.AddHours(-3), 6.4)],
-                SyncEvents = [],
+                MatchedKeyKind = ActivityMatchKinds.Creation,
+                Days = [new RollupDay { Date = today, OpenMs = 40 * 60_000, Opens = 1, OpenSumMs = 6400, OpenMaxMs = 6400,
+                    Health = new HealthInputs(null, null, 6.4, null) }],
+                Opens = [new DurationPoint(now.AddHours(-3), 6.4)],
+                Zone = TimeZoneInfo.Utc,
             },
-            Status = new TelemetryStatus(false, 0, 0, null),
+            IsWorkshared = false,
+            IsCloud = false,
+            WarningsCount = 3,
+            FileSizeBytes = 18.25 * 1024 * 1024,
+            Status = new TelemetryStatus(false, 0, 0),
         };
     }
+
+    /// <summary>No model open in Revit.</summary>
+    public static ActivityData NoModel() => new() { Status = new TelemetryStatus(true, 23, 1_482_113) };
 
     /// <summary>A cleanup result: journals fully deleted, two cache files locked.</summary>
     public static CleanResult CleanResult()
