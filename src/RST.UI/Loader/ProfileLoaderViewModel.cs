@@ -22,7 +22,7 @@ using RST.Core.Logging;
 
 namespace RST.UI.Loader;
 
-public sealed class ProfileLoaderViewModel : ObservableObject
+public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
 {
     /// <summary>How long "Loading …" / "Unloading" shows before the window closes (showLoadingAndClose: 3000 ms).</summary>
     public static readonly TimeSpan CloseDelay = TimeSpan.FromSeconds(3);
@@ -83,7 +83,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         };
 
         ImportCommand = new RelayCommand(Import, () => IsIdle);
-        LoadCommand = new RelayCommand(RunLoad, () => IsIdle);
+        LoadCommand = new AsyncRelayCommand(RunLoadAsync, () => IsIdle);
         UnloadCommand = new RelayCommand(Unload, () => IsIdle);
         DeleteCommand = new RelayCommand(Delete, () => IsIdle);
         RestoreCommand = new RelayCommand(RestoreAll, () => IsIdle);
@@ -135,8 +135,12 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         set
         {
             if (ReferenceEquals(value, _selected)) return;
-            if (value is null) ClearDetail();
-            else Select(value);
+            // The ListBox's two-way binding: WPF would swallow an exception here without a trace (SC-046, R6).
+            UiGuard.Run("Loader: select a profile", () =>
+            {
+                if (value is null) ClearDetail();
+                else Select(value);
+            });
         }
     }
 
@@ -485,7 +489,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject
         private set => SetField(ref _isWorking, value);
     }
 
-    private async void RunLoad()
+    private async Task RunLoadAsync()
     {
         try
         {

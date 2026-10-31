@@ -46,7 +46,13 @@ public sealed class InstallQueueTests : IDisposable
 
     private InstallCoordinator Make() => new(
         ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec,
-        _revit, _self, Paths, _time, action => action(), _log.Add, () => { lock (_events) _events.Add("quit"); }, () => { });
+        _revit, _self, Paths, _time, action => action(), AddLog, () => { lock (_events) _events.Add("quit"); }, () => { });
+
+    // Installs log from their own threads at once (two leave the Revit wait together): List.Add is not thread-safe.
+    private void AddLog(string line)
+    {
+        lock (_log) _log.Add(line);
+    }
 
     public void Dispose()
     {
@@ -90,14 +96,29 @@ public sealed class InstallQueueTests : IDisposable
     [Fact]
     public async Task B1_RST_shows_Queued_while_another_install_is_under_way_and_goes_last()
     {
+        // SC-041: both installs wait for Revit, and Revit's close releases them together. The fake msiexec returns at
+        // once, so Splash-It could finish before RST looked at the queue; RST then had nothing to wait for and never
+        // showed Queued. Splash-It's msiexec now "runs" until RST shows Queued, as a real one would still be running.
+        var rstQueued = new ManualResetEventSlim();
+        var splashHeld = false;
         _revit.Open();
         using var c = Make();
+        c.Changed += (_, _) =>
+        {
+            if (c.For("rst").Phase == InstallPhase.Queued) rstQueued.Set();
+        };
+        _msiexec.BeforeRun = msi =>
+        {
+            if (!Path.GetFileName(msi).StartsWith("SplashIt", StringComparison.Ordinal)) return;
+            splashHeld = rstQueued.Wait(TimeSpan.FromSeconds(30)); // a backstop: the assertion below says if it ran out
+        };
         var splash = c.InstallAsync(_splash, V110);
         await WaitFor(() => c.For("splash-it").Phase == InstallPhase.WaitingForRevit);
         var rst = c.InstallAsync(_rst, V311);
         await WaitFor(() => c.For("rst").Phase is InstallPhase.WaitingForRevit or InstallPhase.Queued);
         _revit.Close();
         await Task.WhenAll(splash, rst);
+        splashHeld.Should().BeTrue("RST showed Queued while Splash-It's msiexec ran");
         _events.Should().Equal("msiexec SplashIt-1.1.0.msi 0", "quit");
         _log.Should().Contain(l => l.Contains("RST 3.1.1 waits until the other installs have finished"));
     }

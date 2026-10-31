@@ -113,7 +113,8 @@ public sealed class UpdateCheckLoop : IDisposable
 
     /// <summary>
     /// The PC woke up (or the clock jumped): a slot that came due while it slept runs 2–10 minutes from now,
-    /// once the network is back; otherwise the timer is re-armed for the slot's wall-clock time.
+    /// once the network is back; a slot the clock was set back from (more than a day away) is re-anchored the
+    /// same way; otherwise the timer is re-armed for the slot's wall-clock time.
     /// </summary>
     public void Resync()
     {
@@ -121,7 +122,7 @@ public sealed class UpdateCheckLoop : IDisposable
         {
             if (_disposed || _timer is null || _nextDue is not { } due) return;
             var now = _time.GetUtcNow();
-            ArmLocked(due <= now ? now + ClampFirstDelay() : due);
+            ArmLocked(due <= now ? now + ClampFirstDelay() : SlotAfterClockChangeLocked(due, now));
         }
     }
 
@@ -135,9 +136,10 @@ public sealed class UpdateCheckLoop : IDisposable
         {
             if (_disposed) return Task.CompletedTask;
             if (_running is { IsCompleted: false } running) return running;
-            if (_lastRunEnded is { } ended && _time.GetUtcNow() - ended < CheckNowMinGap)
+            // A last run "in the future" (the clock was set back since) is no recent run: the user's check goes ahead.
+            if (_lastRunEnded is { } ended && _time.GetUtcNow() - ended is var since && since >= TimeSpan.Zero && since < CheckNowMinGap)
             {
-                _log($"update checks: Check now {(_time.GetUtcNow() - ended).TotalSeconds:0} s after the last check; showing its result, no request made");
+                _log($"update checks: Check now {since.TotalSeconds:0} s after the last check; showing its result, no request made");
                 return Task.CompletedTask;
             }
         }
@@ -164,7 +166,33 @@ public sealed class UpdateCheckLoop : IDisposable
         _stop.Dispose();
     }
 
+    // SC-046 (T1): the timer callback runs on a thread-pool thread with no handler above it, so anything it throws
+    // ends the tray. It never throws now: a failure is logged and the loop tries to keep its next slot armed.
     private void OnTimer()
+    {
+        try
+        {
+            OnTimerCore();
+        }
+        catch (Exception ex)
+        {
+            Say("update checks: the timer failed unexpectedly (" + ex.Message + "); the next slot is kept");
+            try
+            {
+                lock (_gate)
+                {
+                    if (!_disposed) ArmLocked(_nextDue ?? _time.GetUtcNow() + Interval);
+                }
+            }
+            catch (Exception)
+            {
+                // Nothing more can be done from the timer thread. Check now still works, and Resync (on resume)
+                // arms the timer again.
+            }
+        }
+    }
+
+    private void OnTimerCore()
     {
         lock (_gate)
         {
@@ -172,8 +200,9 @@ public sealed class UpdateCheckLoop : IDisposable
             var now = _time.GetUtcNow();
             if (_nextDue is { } due && now < due)
             {
-                // Fired before its wall-clock slot (re-armed after a clock change): wait for the slot.
-                ArmLocked(due);
+                // Fired before its wall-clock slot (a wait is at most a day, or the clock changed): wait for the
+                // slot, unless the clock was set back from it.
+                ArmLocked(SlotAfterClockChangeLocked(due, now));
                 return;
             }
             // The next slot is fixed before the check runs, so a slow or failed check never shifts the schedule.
@@ -234,7 +263,7 @@ public sealed class UpdateCheckLoop : IDisposable
         }
         catch (Exception ex)
         {
-            _log("update checks: the check failed unexpectedly: " + ex.Message);
+            Say("update checks: the check failed unexpectedly: " + ex.Message);
         }
         finally
         {
@@ -242,12 +271,53 @@ public sealed class UpdateCheckLoop : IDisposable
         }
     }
 
+    /// <summary>
+    /// The longest single wait the timer is armed for. A slot further away (the clock was set back) is reached in
+    /// steps: the timer fires early, OnTimer sees the slot is not due yet and arms the next step. Timer.Change
+    /// refuses a wait over about 49.7 days (uint.MaxValue - 1 ms) and a negative one, on the timer thread, which
+    /// ended the tray when the clock moved back by about 48 days or more (SC-046, T1).
+    /// </summary>
+    internal static readonly TimeSpan MaxWait = Interval;
+
     private void ArmLocked(DateTimeOffset due)
     {
         _nextDue = due;
+        _timer?.Change(WaitUntil(due), Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>
+    /// <paramref name="due"/>, unless it is more than <see cref="Interval"/> away: no slot is ever armed further
+    /// ahead than that (the start and turned-on slots are 2–10 minutes, the rest now + 24 hours), so the clock was
+    /// set back. Keeping it would stop automatic checks until the clock caught up (61 days after a 60-day jump); the
+    /// slot is re-anchored as at start, 2–10 minutes from now (SC-046 review N1).
+    /// </summary>
+    private DateTimeOffset SlotAfterClockChangeLocked(DateTimeOffset due, DateTimeOffset now)
+    {
+        if (due - now <= Interval) return due;
+        var slot = now + ClampFirstDelay();
+        Say($"update checks: the next slot was {(due - now).TotalDays:0.#} days away, so the clock was set back; next check at {slot:u}");
+        return slot;
+    }
+
+    /// <summary>The wait to arm for <paramref name="due"/>: never negative, never over <see cref="MaxWait"/>.</summary>
+    private TimeSpan WaitUntil(DateTimeOffset due)
+    {
         var wait = due - _time.GetUtcNow();
-        if (wait < TimeSpan.Zero) wait = TimeSpan.Zero;
-        _timer?.Change(wait, Timeout.InfiniteTimeSpan);
+        if (wait < TimeSpan.Zero) return TimeSpan.Zero;
+        return wait > MaxWait ? MaxWait : wait;
+    }
+
+    /// <summary>The loop's own log line; a log that throws never reaches the timer thread.</summary>
+    private void Say(string message)
+    {
+        try
+        {
+            _log(message);
+        }
+        catch (Exception)
+        {
+            // Nothing to report it to.
+        }
     }
 
     private TimeSpan ClampFirstDelay()

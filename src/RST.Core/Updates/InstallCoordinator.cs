@@ -37,6 +37,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using RST.Core.Logging;
 using RST.Core.Tray;
 
 namespace RST.Core.Updates;
@@ -750,7 +751,7 @@ public sealed class InstallCoordinator : IDisposable
         }
         _post(() => Changed?.Invoke(this, EventArgs.Empty));
         _installsChanged();
-        _ = ResumeDeferredSelfUpdateAsync();
+        ResumeDeferredSelfUpdateAsync().Forget("installs: resume the deferred self-update");
     }
 
     /// <summary>The updater's result from the last self-update, shown once on RST's row, then removed.</summary>
