@@ -15,4 +15,6 @@ public sealed record ScannedCommand(
     string? AddinFile,
     string? AssemblyPath,
     string? SourceTab,
-    string? SourcePanel);
+    string? SourcePanel,
+    IReadOnlyList<CommandPlacement>? Placements = null,
+    string? EnumName = null);

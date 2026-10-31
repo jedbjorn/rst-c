@@ -42,12 +42,13 @@ internal static class BuiltinCommandScanner
             emitted++;
             yield return new ScannedCommand(
                 Id: id!,
-                DisplayName: cmd.ToString(),
+                DisplayName: RibbonWalkRules.DisplayNameFor(null, null, id!, native: true, enumName: cmd.ToString()),
                 Origin: CommandOrigin.Native,
                 AddinFile: null,
                 AssemblyPath: null,
                 SourceTab: null,
-                SourcePanel: null);
+                SourcePanel: null,
+                EnumName: cmd.ToString());
         }
         Log.Debug("BuiltinCommandScanner: enum={EnumCount}, emitted={Emitted}, " +
                   "skippedEmpty={Empty}, skippedThrew={Threw}",

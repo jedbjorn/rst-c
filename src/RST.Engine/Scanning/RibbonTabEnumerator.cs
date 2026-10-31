@@ -45,7 +45,7 @@ internal static class RibbonTabEnumerator
             if (string.IsNullOrEmpty(title)) continue;
             if (tab.IsContextualTab) { skippedContextual++; continue; }
             if (RstManagedTabs.Contains(title)) { skippedRst++; continue; }
-            if (ModeRestrictedTabs.Contains(title)) { skippedRestricted++; continue; }
+            if (ModeRestrictedTabs.Contains(title) || ModeRestrictedTabs.ContainsId(tab.Id)) { skippedRestricted++; continue; }
             if (!seen.Add(title!)) continue;
             ordered.Add(title!);
         }
