@@ -20,7 +20,9 @@
       tables; every custom action is one of WiX's own XmlFile,
       CloseApplication or WixUI actions, or RstEndTrays (SC-028: the
       Binary-table helper, deferred as SYSTEM, Return=ignore, before
-      RemoveFiles, aimed at [TrayDir]RST.Tray.exe), and WiX's
+      RemoveFiles, aimed at [TrayDir]RST.Tray.exe), or RstStartTray (SC-044:
+      immediate, Return=ignore, after InstallFinalize, never on REMOVE=ALL
+      nor under RST-Setup.exe), and WiX's
       CheckRebootRequired also runs on uninstall; the only registry row is
       the Run value
   Install checks:
@@ -29,20 +31,26 @@
     (c) no Revit -> refused by the launch condition
     (a) Revit 2026 + 2027 -> only those years, per machine, each manifest's
         <Assembly> absolute; tray in Program Files, HKLM Run; nothing per
-        user; the installer starts no tray (N8); ACLs: every folder and the
+        user; the installer starts exactly one tray for this administrator
+        (SC-044), through their Explorer: --startup, as this user, in this
+        session, not elevated (N8), not msiexec's child, no window; ACLs: every folder and the
         Run key that existed before are unchanged (SDDL), and everything the
         install created only inherits (no explicit entry): nothing granted;
         no service or scheduled task added
-    (d) Revit 2025 added, Repair -> 2025 added; ACLs still unchanged
-    (e) uninstall -> nothing left, ACLs unchanged
-    (g) the same commit built at 1.0.0 (-OlderMsi) installed, a tray started
-        from Program Files, then this build over it: one product at the new
-        version, the tray closed cleanly by WM_CLOSE and NOT restarted
-        (Restart Manager may not restart it elevated, N8); uninstall clean
+    (d) Revit 2025 added, Repair -> 2025 added; ACLs still unchanged; the
+        running tray closed and exactly one new one started, unelevated
+    (e) uninstall -> nothing left, ACLs unchanged, no tray, no RstStartTray
+    (g) the same commit built at 1.0.0 (-OlderMsi) installed (its own tray
+        running), then this build over it: one product at the new version,
+        the tray closed cleanly by WM_CLOSE and NOT restarted by Restart
+        Manager (it would be elevated, N8); RstStartTray starts exactly one
+        new tray, unelevated; uninstall clean, no tray
     SC-028, msiexec as SYSTEM in session 0 (a scheduled task, the way SCCM
     and Intune run it), with this package's tray running in the runner's
     own session, where CloseApplication's WM_CLOSE cannot reach it:
-    (h) uninstall -> exit 0; the tray was ended by RstEndTrays (exit code
+    (h) installed as SYSTEM -> no tray is started (RstStartTray's log: a
+        service account); then a tray started in this session, and the
+        uninstall -> exit 0; the tray was ended by RstEndTrays (exit code
         1), a per-user tray stand-in of the same name in
         %LocalAppData%\Programs\RST\Tray\ was left running; nothing left,
         nothing pending deletion at the next restart
@@ -53,7 +61,8 @@
         restart marker stays set until the restart, by design)
     (i) with that process holding the file, as SYSTEM: a repair that
         replaces nothing (REINSTALLMODE=omus) -> exit 0, the in-use check
-        is for a full uninstall only (review N2); then as (h) -> exit 3010
+        is for a full uninstall only (review N2), and it ends the tray the
+        install started and starts none (SC-044); then as (h) -> exit 3010
         (restart needed), not 0; the holder is left running
 #>
 param(
@@ -78,6 +87,7 @@ function Assert([bool]$Cond, [string]$What) {
   Write-Host "PASS: $What"
 }
 . (Join-Path $PSScriptRoot 'ci-machine-layout.ps1')
+. (Join-Path $PSScriptRoot 'ci-tray-start.ps1')
 
 $Installer = New-Object -ComObject WindowsInstaller.Installer
 function Get-ComProp($Obj, [string]$Name, [object[]]$ArgList = @()) {
@@ -415,8 +425,14 @@ $trayFolderCas = @((Get-MsiQuery $Msi 'SELECT `Action`, `Target` FROM `CustomAct
 Assert ($trayFolderCas.Count -eq 0) "and no SetProperty for RSTTRAYCACHEDIR or RSTTRAYLOCALDIR ($(($trayFolderCas | ForEach-Object { $_[0] }) -join ', '))"
 $cas = @((Get-MsiQuery $Msi 'SELECT `Action`, `Type`, `Source`, `Target` FROM `CustomAction`' 4))
 $cas | ForEach-Object { Write-Host "  CustomAction: $($_ -join ' | ')" }
-$unexpected = @($cas | Where-Object { $_[0] -notmatch '^(Wix4(Sched|Exec)XmlFile.*|Wix4ExecXmlFileRollback.*|Wix4CloseApplications.*|Wix4CheckRebootRequired.*|WixUI.*|WIXUI.*|RstEndTrays)$' })
-Assert ($unexpected.Count -eq 0) "every custom action is one of WiX's XmlFile, CloseApplication or WixUI actions, or RstEndTrays ($($unexpected | ForEach-Object { $_[0] }))"
+$unexpected = @($cas | Where-Object { $_[0] -notmatch '^(Wix4(Sched|Exec)XmlFile.*|Wix4ExecXmlFileRollback.*|Wix4CloseApplications.*|Wix4CheckRebootRequired.*|WixUI.*|WIXUI.*|RstEndTrays|RstStartTray)$' })
+Assert ($unexpected.Count -eq 0) "every custom action is one of WiX's XmlFile, CloseApplication or WixUI actions, RstEndTrays or RstStartTray ($($unexpected | ForEach-Object { $_[0] }))"
+# SC-044: RstStartTray. 66 = 2 (exe from the Binary table) + 64 (Return=ignore); immediate, so impersonated: it runs as
+# the installing user (as SYSTEM under a deployment tool, where it starts none), never as a deferred elevated action.
+$startCa = @($cas | Where-Object { $_[0] -eq 'RstStartTray' })
+Assert ($startCa.Count -eq 1 -and $startCa[0][1] -eq '66' -and $startCa[0][2] -eq 'RstStartTrayExe') "RstStartTray is an immediate, Return=ignore exe from the Binary table (type 66, source RstStartTrayExe; got $(if ($startCa.Count) { $startCa[0][1] + ' ' + $startCa[0][2] }))"
+Assert ($startCa[0][3] -eq '"[TrayDir]RST.Tray.exe" "[TempFolder]RST-StartTray.log"') "RstStartTray starts [TrayDir]RST.Tray.exe (target: $($startCa[0][3]))"
+Assert ((Get-MsiQuery $Msi "SELECT ``Name`` FROM ``Binary`` WHERE ``Name`` = 'RstStartTrayExe'").Count -eq 1) 'its exe is in the Binary table (nothing of it is installed)'
 # SC-028: RstEndTrays, RST's one custom action of its own. 3138 = 2 (exe from the Binary table) + 64 (Return=ignore:
 # it never stops an uninstall) + 1024 (deferred) + 2048 (not impersonated: SYSTEM, which reaches every session).
 $endCa = @($cas | Where-Object { $_[0] -eq 'RstEndTrays' })
@@ -430,6 +446,9 @@ Assert ($endRow[0][1] -eq 'NOT Installed OR REINSTALL OR REMOVE OR UPGRADINGPROD
 $rebootRow = @($seqRows | Where-Object { $_[0] -like 'Wix4CheckRebootRequired*' })
 $rebootRow | ForEach-Object { Write-Host "  InstallExecuteSequence: $($_ -join ' | ')" }
 Assert ($rebootRow.Count -eq 1 -and [int]$rebootRow[0][2] -gt $seq['InstallFinalize'] -and $rebootRow[0][1] -notmatch 'REMOVE') "WiX's CheckRebootRequired runs after InstallFinalize on uninstall too, so RstEndTrays' restart marker becomes 3010"
+$startRow = @($seqRows | Where-Object { $_[0] -eq 'RstStartTray' })
+Assert ($startRow.Count -eq 1 -and [int]$startRow[0][2] -gt $seq['InstallFinalize']) "RstStartTray runs after InstallFinalize, once the install is committed ($(if ($startRow.Count) { $startRow[0][2] }))"
+Assert ($startRow[0][1] -eq 'NOT REMOVE~="ALL" AND NOT RSTFROMSETUP') "RstStartTray never runs on an uninstall, nor under RST-Setup.exe, whose helper starts the tray (condition '$($startRow[0][1])')"
 $reg = Get-MsiQuery $Msi 'SELECT `Root`, `Key`, `Name`, `Value` FROM `Registry`' 4   # not @(...): a one-row result must stay one row
 $reg | ForEach-Object { Write-Host "  Registry: $($_ -join ' | ')" }
 Assert ($reg.Count -eq 1 -and $reg[0][0] -eq '-1' -and $reg[0][1] -eq 'Software\Microsoft\Windows\CurrentVersion\Run' -and $reg[0][2] -eq 'RST' -and $reg[0][3] -eq '"[TrayDir]RST.Tray.exe" --startup') 'the only registry row is the HKMU (HKLM here) Run value RST'
@@ -442,6 +461,8 @@ foreach ($y in $MachineYears.Keys) {
 }
 
 Assert ((Get-Related $MachineUpgradeCode).Count -eq 0 -and (Get-Related $UserCode).Count -eq 0) 'runner starts with no RST product'
+Seed-TraySettings   # the one-time notices would open windows of their own
+Show-RunnerTokens
 
 # ================================================================ (p) the user's own copy blocks a first install
 Set-RevitStubs @('2025', '2026', '2027')
@@ -472,7 +493,8 @@ Set-RevitStubs @('2026', '2027')
 $acl = Get-AclSnapshot
 Write-Host "ACL snapshot ($($acl.Count) paths):"; $acl.Keys | ForEach-Object { Write-Host "  $_ = $($acl[$_])" }
 $inventory = Get-SystemInventory
-$traysBefore = (Get-Trays).Count
+Assert-NoTray '(a) before' 0
+$sinceA = Get-Date
 Invoke-Msiexec '/i' $Msi (Join-Path $LogDir 'machine-a-install.log') | Out-Null
 Assert-OneMachineProduct $productCode $version '(a)'
 Assert-MachineYears @('2026', '2027') '(a)'
@@ -480,24 +502,39 @@ Assert-MachineTray $true '(a)'
 Assert ($null -eq (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name RST -ErrorAction SilentlyContinue)) '(a) no HKCU Run value'
 foreach ($y in '2025', '2026', '2027') { Assert (-not (Test-Path (Join-Path $AppData "Autodesk\Revit\Addins\$y\RST.addin"))) "(a) nothing per user in Addins\$y" }
 Assert (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\RST'))) '(a) nothing under %LocalAppData%\Programs\RST'
-Start-Sleep -Seconds 10
-Assert ((Get-Trays).Count -eq $traysBefore) "(a) the installer started no tray (N8: never elevated); it starts at the next sign-in"
+# SC-044: this administrator's install, from an elevated session, started the tray for them through their own Explorer:
+# one, hidden, as this user, never elevated (N8), not msiexec's child.
+$trayA = Wait-SettledTray '(a) after install'
+Assert-StartedTray $trayA $MachineTrayExe '(a) after install'
+$linesA = Get-StartTrayLines $sinceA '(a)'
+Assert (@($linesA | Where-Object { $_ -match "started RST\.Tray pid $($trayA.Id) through the desktop shell" }).Count -eq 1) "(a) RstStartTray started it through this user's Explorer (its log names pid $($trayA.Id))"
 Assert-AclsUnchanged $acl '(a)'
 Assert-OnlyInherited (Get-CreatedRoots @('2026', '2027') $acl) '(a)'
 Assert-NothingAdded $inventory '(a)'
 
 # ================================================================ (d) Repair adds a year
 Set-RevitStubs @('2025', '2026', '2027')
+$sinceD = Get-Date
 Invoke-Msiexec '/fa' $Msi (Join-Path $LogDir 'machine-d-repair.log') | Out-Null
 Assert-OneMachineProduct $productCode $version '(d)'
 Assert-MachineYears @('2025', '2026', '2027') '(d) repair added 2025'
 Assert-AclsUnchanged $acl '(d)'
 Assert-OnlyInherited (Get-CreatedRoots @('2025', '2026', '2027') $acl) '(d)'
+# SC-044: the repair closed the running tray (its files were replaced) and started one again: exactly one, unelevated
+# (Restart Manager is off here, so nothing else restarts it).
+Assert ($trayA.WaitForExit(30000)) "(d) the repair closed the tray from (a) (pid $($trayA.Id))"
+$trayD = Wait-SettledTray '(d) after repair'
+Assert ($trayD.Id -ne $trayA.Id) "(d) a new tray runs after the repair (pid $($trayD.Id))"
+Assert-StartedTray $trayD $MachineTrayExe '(d) after repair'
+$null = Get-StartTrayLines $sinceD '(d)'
 
 # ================================================================ (e) uninstall
+$sinceE = Get-Date
 Invoke-Msiexec '/x' $Msi (Join-Path $LogDir 'machine-e-uninstall.log') | Out-Null
 Assert ((Get-Related $MachineUpgradeCode).Count -eq 0) '(e) no RST-Machine product after uninstall'
 Assert-MachineGone '(e)'
+Assert-NoTray '(e) after uninstall'
+Assert ((Get-StartTrayLog $sinceE '(e)').Count -eq 0) '(e) the uninstall ran no RstStartTray (REMOVE=ALL): nothing was started'
 Assert-AclsUnchanged $acl '(e)'
 Assert-NothingAdded $inventory '(e)'
 
@@ -507,18 +544,17 @@ if ($OlderMsi) {
   $vOld = Get-MsiProperty $OlderMsi 'ProductVersion'
   $pcOld = Get-MsiProperty $OlderMsi 'ProductCode'
   Assert ((Get-MsiProperty $OlderMsi 'UpgradeCode') -eq $MachineUpgradeCode -and [version]$vOld -lt [version]$version) "(g) the older build ($vOld) is RST-Machine.msi below $version"
+  Seed-TraySettings
   Invoke-Msiexec '/i' $OlderMsi (Join-Path $LogDir 'machine-g-older.log') | Out-Null
   Assert-OneMachineProduct $pcOld $vOld '(g) older'
-  Seed-TraySettings
-  $t = Start-Process $MachineTrayExe -ArgumentList '--startup' -PassThru
-  $null = $t.Handle
-  $deadline = (Get-Date).AddSeconds(45)
-  while (-not (Test-TrayMutex)) { if ($t.HasExited -or (Get-Date) -gt $deadline) { Show-TrayLog; throw "FAIL: (g) tray did not start" }; Start-Sleep -Milliseconds 250 }
+  # The older build (this commit at 1.0.0) started its tray itself (SC-044).
+  $t = Wait-SettledTray '(g) older installed'
   Wait-TrayReady $t '(g)'
   Write-Host "(g) tray pid $($t.Id) from $MachineTrayExe"
   $logG = Join-Path $LogDir 'machine-g-upgrade.log'
+  $sinceG = Get-Date
   Invoke-Msiexec '/i' $Msi $logG | Out-Null
-  Select-String -Path $logG -Pattern 'RESTART MANAGER', 'CloseApplication', 'RST.Tray.exe', $pcOld -SimpleMatch | Select-Object -First 30 | ForEach-Object { Write-Host "  $($_.Line)" }
+  Select-String -Path $logG -Pattern 'RESTART MANAGER', 'CloseApplication', 'RST.Tray.exe', 'RstStartTray', $pcOld -SimpleMatch | Select-Object -First 30 | ForEach-Object { Write-Host "  $($_.Line)" }
   Assert-OneMachineProduct $productCode $version '(g) upgraded'
   Assert (Select-String -Path $logG -Pattern $pcOld -SimpleMatch -Quiet) "(g) the log names the removed older product $pcOld"
   Assert-MachineYears @('2025', '2026', '2027') '(g) upgraded'
@@ -528,12 +564,15 @@ if ($OlderMsi) {
   $exitLine = @(Get-ChildItem (Join-Path $AppData 'RST\logs') -Filter 'tray_*.log' | ForEach-Object { Get-Content $_.FullName } | Where-Object { $_.Contains("[$($t.Id)]") -and $_.Contains('RST tray exited') })
   Write-Host "  tray log: $($exitLine -join ' / ')"
   Assert (@($exitLine | Where-Object { $_ -match 'WM_CLOSE' }).Count -eq 1) '(g) it was closed by util:CloseApplication''s WM_CLOSE (Restart Manager is off here)'
-  Start-Sleep -Seconds 10
-  $again = Get-Trays
-  $again | ForEach-Object { Write-Host "  unexpected tray pid $($_.Id): $((Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)").CommandLine)" }
-  Assert ($again.Count -eq 0) '(g) no tray was started again by the elevated installer (N8)'
+  # SC-044: the upgrade started exactly one new tray, through this user's Explorer: never msiexec's elevated child (N8).
+  $again = Wait-SettledTray '(g) after upgrade'
+  Assert ($again.Id -ne $t.Id) "(g) a new tray runs after the upgrade (pid $($again.Id))"
+  Assert-StartedTray $again $MachineTrayExe '(g) after upgrade'
+  $linesG = Get-StartTrayLines $sinceG '(g)'
+  Assert (@($linesG | Where-Object { $_ -match "started RST\.Tray pid $($again.Id) through the desktop shell" }).Count -eq 1) "(g) RstStartTray started it (its log names pid $($again.Id))"
   Invoke-Msiexec '/x' $Msi (Join-Path $LogDir 'machine-g-uninstall.log') | Out-Null
   Assert-MachineGone '(g) uninstalled'
+  Assert-NoTray '(g) after uninstall'
   Assert-AclsUnchanged $acl '(g)'
 }
 
@@ -542,8 +581,17 @@ if ($OlderMsi) {
 # WM_CLOSE cannot reach it. A renamed PING.EXE at %LocalAppData%\Programs\RST\Tray\RST.Tray.exe stands in for a
 # per-user tray (same process name) and must be left running.
 Set-RevitStubs @('2025', '2026', '2027')
-Invoke-Msiexec '/i' $Msi (Join-Path $LogDir 'machine-h-install.log') | Out-Null
+# SC-044: installed as SYSTEM in session 0 (a deployment tool), RstStartTray starts no tray: each user's starts at
+# sign-in. It runs (its log, as SYSTEM: C:\Windows\Temp or SystemTemp) and says why it started none.
+$logHi = Join-Path $LogDir 'machine-h-system-install.log'
+$sinceHi = Get-Date
+$codeHi = Invoke-MsiexecAsSystem "/i `"$Msi`"" $logHi 'machine-h-system-install'
+Assert ($codeHi -eq 0) "(h) the install as SYSTEM exits 0 (exit $codeHi)"
 Assert-OneMachineProduct $productCode $version '(h)'
+Select-String -Path $logHi -Pattern 'RstStartTray' -SimpleMatch | Select-Object -First 6 | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+Assert-NoTray '(h) after the install as SYSTEM'
+$linesHi = Get-StartTrayLines $sinceHi '(h) install as SYSTEM'
+Assert (@($linesHi | Where-Object { $_ -match 'runs as a service account \(S-1-5-18;' }).Count -eq 1) '(h) RstStartTray ran as SYSTEM and started none (a service account)'
 $userTrayDir = Join-Path $env:LOCALAPPDATA 'Programs\RST\Tray'
 $userTrayExe = Join-Path $userTrayDir 'RST.Tray.exe'
 New-Item -ItemType Directory -Force $userTrayDir | Out-Null
@@ -580,7 +628,8 @@ try {
 # CheckRebootRequired sees its marker here too.)
 $core = Join-Path (Get-MachineEngineDir '2026') 'RST.Core.dll'
 Invoke-Msiexec '/i' $Msi (Join-Path $LogDir 'machine-j-install.log') | Out-Null
-$t = Start-MachineTray '(j)'
+$t = Wait-SettledTray '(j) installed'   # started by the install (SC-044)
+Wait-TrayReady $t '(j)'
 $holder = Start-Holder $core
 try {
   $logJ = Join-Path $LogDir 'machine-j-uninstall.log'
@@ -611,6 +660,9 @@ try {
   Assert (@($blockR | Where-Object { $_ -like '* not a full uninstall (REMOVE=*): in-use check skipped*' }).Count -eq 1) '(i) the repair skipped the in-use check (not a full uninstall)'
   Assert ($codeR -eq 0) "(i) a repair as SYSTEM that replaces nothing returns 0 with RST.Core.dll held, not 3010 (exit $codeR)"
   Assert-OneMachineProduct $productCode $version '(i) repaired'
+  # SC-044: the repair as SYSTEM ended the tray the install above started (RstEndTrays), and started none itself.
+  Assert-NoTray '(i) after the repair as SYSTEM'
+  Assert (@((Get-StartTrayLines $sinceR '(i) repair as SYSTEM') | Where-Object { $_ -match 'runs as a service account \(S-1-5-18;' }).Count -eq 1) '(i) RstStartTray ran as SYSTEM and started none'
   $t = Start-MachineTray '(i)'
   $logI = Join-Path $LogDir 'machine-i-system-uninstall.log'
   $sinceI = Get-Date

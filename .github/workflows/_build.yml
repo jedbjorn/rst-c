@@ -346,9 +346,10 @@ jobs:
   # and Run-key ACLs compared before and after install, repair and
   # uninstall; everything created only inherits; no service or scheduled
   # task added), the per-user-copy refusal, detected years only, Repair adds
-  # a year, the installer never starts a tray, an upgrade from a 1.0.0 build
-  # of this commit with a tray running (closed by WM_CLOSE, never restarted
-  # elevated), and a clean uninstall.
+  # a year, the installer starts exactly one tray for the administrator and
+  # never an elevated one (SC-044), none when it runs as SYSTEM, an upgrade
+  # from a 1.0.0 build of this commit with a tray running (closed by WM_CLOSE,
+  # never restarted elevated), and a clean uninstall.
   msi-machine:
     name: MSI per machine (RST-Machine.msi)
     needs: msi-unified

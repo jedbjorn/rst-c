@@ -62,8 +62,9 @@
       C:\Program Files\RST\Tray\                   the tray, HKLM Run
     The same Revit detection, launch condition and MajorUpgrade rules
     apply. It grants nothing: no permission changes, no service, nothing
-    elevated left behind (its one custom action of its own, Tray.wxs
-    RstEndTrays, runs only while it installs or uninstalls); add-in
+    elevated left behind (its custom actions of its own, Tray.wxs
+    RstEndTrays and RstStartTray, run only while it installs or uninstalls,
+    and the tray RstStartTray starts runs unelevated, as the user); add-in
     switching stays per user. A first install is
     refused while the installing user still has RST installed just for
     them (that copy would shadow this one; RST-Setup.exe removes it
@@ -230,8 +231,11 @@
          Revit included, in their sessions. util:CloseApplication (Tray.wxs)
          asks a running tray on the installer's desktop to exit, Tray.wxs's
          RstEndTrays ends this package's trays in every other session
-         (SC-028), and nothing restarts them: each starts again at the user's
-         next sign-in, or when Revit starts it. Windows Installer itself
+         (SC-028), and Restart Manager restarts none of them. Tray.wxs's
+         RstStartTray starts the installing user's tray after a successful
+         install, repair or upgrade, unelevated through that user's Explorer
+         (SC-044); every other user's starts again at their next sign-in, or
+         when Revit starts it. Windows Installer itself
          renames files in use and still returns 0, so RstEndTrays asks for
          the restart (3010) when anything else, Revit with the engine loaded,
          still uses them. -->

@@ -58,6 +58,19 @@ foreach ($y in '2025', '2026', '2027') {
   $d = Join-Path $ProgramFiles64 "Autodesk\Revit $y"; New-Item -ItemType Directory -Force $d | Out-Null
   Set-Content -Path (Join-Path $d 'Revit.exe') -Value 'rst-c ci stub' -NoNewline
 }
+# Every install now starts the tray (SC-044). Its one-time notices would open windows of their own over setup's, so
+# they are marked shown; the tray itself starts hidden.
+$traySettings = Join-Path $env:APPDATA 'RST\tray_settings.json'
+New-Item -ItemType Directory -Force (Split-Path $traySettings) | Out-Null
+Set-Content -Path $traySettings -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00", "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+
+# msiexec, waited on by its own handle (never -Wait, which waits for every descendant: a tray the install started).
+function Invoke-MsiexecOwn([string]$Arguments) {
+  $m = Start-Process msiexec.exe -ArgumentList $Arguments -PassThru
+  $null = $m.Handle
+  if (-not $m.WaitForExit(600000)) { $m | Stop-Process -Force -ErrorAction SilentlyContinue; throw "FAIL: msiexec $Arguments timed out" }
+  return $m
+}
 
 $Root = [Windows.Automation.AutomationElement]::RootElement
 # The window belongs to the BA, which Burn v5+ runs as its own child
@@ -217,7 +230,7 @@ foreach ($c in $companions) {
   Assert ((Get-RelatedCount "{$($c.release.upgradeCode)}") -eq 1) "$($c.name) still installed"
   $list = $Installer.GetType().InvokeMember('RelatedProducts', 'GetProperty', $null, $Installer, @("{$($c.release.upgradeCode)}"))
   $pc = $list.GetType().InvokeMember('Item', 'GetProperty', $null, $list, @(0))
-  $x = Start-Process msiexec.exe -ArgumentList "/x $pc /qn" -Wait -PassThru
+  $x = Invoke-MsiexecOwn "/x $pc /qn"
   Assert ($x.ExitCode -eq 0) "$($c.name) removed (msiexec /x exit $($x.ExitCode))"
 }
 
@@ -226,7 +239,7 @@ foreach ($c in $companions) {
 if ($RstMachineMsi) {
   $machineCode = '{79C25959-C28A-4ED8-8984-85ED525476C3}'
   $RstMachineMsi = (Resolve-Path $RstMachineMsi).Path
-  $x = Start-Process msiexec.exe -ArgumentList "/i `"$RstMachineMsi`" /qn /norestart /l*v `"$LogDir\ui-machine-install.log`"" -Wait -PassThru
+  $x = Invoke-MsiexecOwn "/i `"$RstMachineMsi`" /qn /norestart /l*v `"$LogDir\ui-machine-install.log`""
   Assert ($x.ExitCode -eq 0) "RST-Machine.msi installed bare (exit $($x.ExitCode))"
   Assert ((Get-RelatedCount $machineCode) -eq 1) 'RST-Machine is installed'
   $p = Start-Process $Bundle -ArgumentList @('/log', "`"$LogDir\bundle-ui-locked.log`"") -PassThru
@@ -245,7 +258,7 @@ if ($RstMachineMsi) {
   } finally {
     $p | Stop-Process -Force -ErrorAction SilentlyContinue
   }
-  $x = Start-Process msiexec.exe -ArgumentList "/x `"$RstMachineMsi`" /qn /norestart" -Wait -PassThru
+  $x = Invoke-MsiexecOwn "/x `"$RstMachineMsi`" /qn /norestart"
   Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $machineCode) -eq 0) "RST-Machine.msi removed (exit $($x.ExitCode))"
 }
 
@@ -278,7 +291,7 @@ public static IntPtr FindDialog(int processId) {
 $userCode = '{AF0331FC-5280-492A-94BD-95EDF108BE74}'
 $machineCode = '{79C25959-C28A-4ED8-8984-85ED525476C3}'
 # RST.msi installed bare, as on the VM (a bundle install would reopen the setup on its Modify page).
-$x = Start-Process msiexec.exe -ArgumentList "/i `"$((Resolve-Path $RstMsi).Path)`" /qn /norestart /l*v `"$LogDir\ui-6-user.log`"" -Wait -PassThru
+$x = Invoke-MsiexecOwn "/i `"$((Resolve-Path $RstMsi).Path)`" /qn /norestart /l*v `"$LogDir\ui-6-user.log`""
 Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $userCode) -eq 1) "(6) RST.msi installed just for this user first (exit $($x.ExitCode))"
 $fakeDir = New-Item -ItemType Directory -Force (Join-Path $LogDir 'ui-fake-revit')
 $fakeRevit = Join-Path $fakeDir 'Revit.exe'
@@ -333,7 +346,7 @@ try {
 }
 $list = $Installer.GetType().InvokeMember('RelatedProducts', 'GetProperty', $null, $Installer, @($userCode))
 $pc = $list.GetType().InvokeMember('Item', 'GetProperty', $null, $list, @(0))
-$x = Start-Process msiexec.exe -ArgumentList "/x $pc /qn /norestart" -Wait -PassThru
+$x = Invoke-MsiexecOwn "/x $pc /qn /norestart"
 Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Assert ($x.ExitCode -eq 0 -and (Get-RelatedCount $userCode) -eq 0) "(6) RST.msi removed again (exit $($x.ExitCode))"
 exit 0

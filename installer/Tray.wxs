@@ -31,7 +31,9 @@
   sessions (RstEndTrays, below). The tray
   registers with Restart Manager (RegisterApplicationRestart, startup switch), so
   after an installer closes it Windows starts it again. ci-smoke.ps1 checks
-  both paths. util:RemoveFolderEx removes the tray's
+  both paths. After every successful install, repair or upgrade RstStartTray
+  (below, SC-044) starts the tray for the signed-in user too; the
+  single-instance mutex leaves one tray when Restart Manager also restarts it. util:RemoveFolderEx removes the tray's
   download cache %LocalAppData%\RST\Tray\cache\ on a real uninstall (not when
   an upgrade removes the old version). The tray's settings and log are user
   data under %AppData%\RST\ and stay, like the rest of RST's user data.
@@ -51,10 +53,11 @@
       (both inside Scope=user below): %LocalAppData%\RST\Tray\ is per user,
       and an administrator's uninstall must never delete their own (WU4
       review DN5), nor can it reach every user's.
-    - The tray is never started by the installer, and Restart Manager does not
-      restart it (Product.wxs, MSIRESTARTMANAGERCONTROL=Disable), so it
-      never runs elevated (WU1 review N8). It starts at each user's next
-      sign-in, or when Revit starts it.
+    - Restart Manager does not restart a closed tray (Product.wxs,
+      MSIRESTARTMANAGERCONTROL=Disable), because it would restart it from this
+      elevated installer (WU1 review N8). RstStartTray (below) starts it
+      instead, unelevated, through the installing user's Explorer (SC-044);
+      as SYSTEM it starts none, and each user's tray starts at sign-in.
     - Every signed-in user's tray is ended before the files go (SC-028).
       CloseApplication's WM_CLOSE reaches only trays on the installer's own
       desktop, so an uninstall, repair or upgrade run as SYSTEM in session 0
@@ -151,15 +154,42 @@
     <CustomAction Id="RstEndTrays" BinaryRef="RstEndTraysExe"
                   ExeCommand="&quot;[TrayDir]RST.Tray.exe&quot; &quot;[RstFolder].&quot; &quot;[TempFolder]RST-Machine-EndTrays.log&quot; &quot;[REMOVE]&quot;"
                   Execute="deferred" Impersonate="no" Return="ignore" />
+    <?endif?>
+
+    <!-- SC-044 (decision #45): once an install, repair or upgrade has
+         succeeded, start the tray for the signed-in user, hidden (startup
+         switch), as that user and never elevated (helper\StartTray.cs). An
+         immediate custom action after InstallFinalize: the install is already
+         committed when it runs, and Return="ignore", so it can never fail or
+         roll one back. It starts none as SYSTEM or in session 0 (a deployment
+         tool: each user's tray starts at sign-in), none while a tray or RST's
+         self-updater already holds the tray's mutex (a reinstall over a running
+         tray, a self-update: the updater starts the tray itself), and none
+         from an elevated process unless this user's Explorer can start it, so
+         the tray gets Explorer's own unelevated token. Not on an uninstall,
+         nor in the old version's removal during an upgrade (REMOVE is ALL in
+         both). RST-Machine.msi run by RST-Setup.exe (RSTFROMSETUP) skips it:
+         setup's RemoveUserRst helper starts the tray once it has removed the
+         user's own RST, whose removal closes every RST.Tray.exe by name. Each
+         run writes RST-StartTray-<time>-<pid>.log in the installer's TEMP. -->
+    <Binary Id="RstStartTrayExe" SourceFile="$(var.RstStartTrayExe)" />
+    <CustomAction Id="RstStartTray" BinaryRef="RstStartTrayExe"
+                  ExeCommand="&quot;[TrayDir]RST.Tray.exe&quot; &quot;[TempFolder]RST-StartTray.log&quot;"
+                  Execute="immediate" Return="ignore" />
+
     <InstallExecuteSequence>
+      <?if $(var.Scope) = "user" ?>
+      <Custom Action="RstStartTray" After="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+      <?else?>
       <Custom Action="RstEndTrays" Before="RemoveFiles"
               Condition="NOT Installed OR REINSTALL OR REMOVE OR UPGRADINGPRODUCTCODE" />
       <!-- WiX schedules its CheckRebootRequired for install and repair only
            (NOT REMOVE~="ALL"); an uninstall that leaves files in use must say
            so too. -->
       <Custom Action="override Wix4CheckRebootRequired_X64" After="InstallFinalize" Condition="VersionNT &gt; 400" />
+      <Custom Action="RstStartTray" After="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot; AND NOT RSTFROMSETUP" />
+      <?endif?>
     </InstallExecuteSequence>
-    <?endif?>
   </Fragment>
 
 </Wix>
