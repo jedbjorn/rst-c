@@ -9,7 +9,8 @@
 //     restart, the Run value) and no switch (the updater's start, a double-click). Exactly one survives each round,
 //     the other exits 0 having found it, and the survivor holds the mutex. When a launch with no switch (the
 //     updater's) loses to a --startup tray (Restart Manager's), that tray shows its window. Every fifth survivor is
-//     killed, so the next round meets an abandoned mutex.
+//     killed while this host keeps a handle to the mutex open (review B1: without one the mutex is simply gone), so
+//     the next round meets an abandoned mutex: exactly its survivor logs "taking over", and no other round's does.
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -117,63 +118,89 @@ public sealed class TraySingleInstanceRaceTests
         Assert.True(SpinWait.SpinUntil(() => Trays().Length == 0, TimeSpan.FromSeconds(30)), "a tray still runs before the race");
 
         var record = new List<object>();
-        for (var round = 0; round < rounds; round++)
+        // Review B1: a named mutex is gone once its last handle closes, so a killed tray alone leaves nothing abandoned
+        // for the next launches. This host keeps a handle open across each kill (as the updater's or another launch's
+        // handle would be), until the next round has decided: then the mutex outlives its owner, abandoned.
+        Mutex? keptOpen = null;
+        var abandonedBefore = false;
+        try
         {
-            var (argsA, argsB) = Pairings[round % Pairings.Length];
-            var kill = round % 5 == 4;
-            var (a, b) = StartTogether(exe, argsA, argsB);
-            try
+            for (var round = 0; round < rounds; round++)
             {
-                var clock = Stopwatch.StartNew();
-                while (!a.HasExited && !b.HasExited && clock.Elapsed < Decide) Thread.Sleep(20);
-                var decided = clock.Elapsed;
-                Thread.Sleep(Settle); // a second survivor (or a survivor that also ends) shows here
-                var alive = new[] { a, b }.Where(p => !p.HasExited).ToList();
-                var line = $"round {round}: [{Name(argsA)}] pid {a.Id} {State(a)}, [{Name(argsB)}] pid {b.Id} {State(b)}; decided in {decided.TotalMilliseconds:0} ms";
-                _output.WriteLine(line);
-                Assert.True(alive.Count == 1, $"exactly one tray must survive: {line}");
-                var survivor = alive[0];
-                var loser = survivor == a ? b : a;
-                Assert.True(loser.ExitCode == 0, $"the second launch exits 0 having found the first: {line}");
-                Assert.True(HeldByAnother(mutex), $"the surviving tray holds {mutex}: {line}");
-                var all = Trays();
-                Assert.True(all.Length == 1 && all[0].Id == survivor.Id, $"one RST.Tray.exe in all (got {all.Length}): {line}");
-                // The updater's start (no switch) losing to Restart Manager's --startup tray: it asks that tray to show its
-                // window (the update's result) before it exits, so the user still sees it.
-                var survivorArgs = survivor == a ? argsA : argsB;
-                var loserArgs = survivor == a ? argsB : argsA;
-                var shown = false;
-                if (loserArgs.Length == 0 && survivorArgs.Length > 0)
+                var (argsA, argsB) = Pairings[round % Pairings.Length];
+                var kill = round % 5 == 4;
+                var roundStart = DateTime.Now;
+                var (a, b) = StartTogether(exe, argsA, argsB);
+                try
                 {
-                    shown = SpinWait.SpinUntil(() =>
+                    var clock = Stopwatch.StartNew();
+                    while (!a.HasExited && !b.HasExited && clock.Elapsed < Decide) Thread.Sleep(20);
+                    var decided = clock.Elapsed;
+                    Thread.Sleep(Settle); // a second survivor (or a survivor that also ends) shows here
+                    var alive = new[] { a, b }.Where(p => !p.HasExited).ToList();
+                    var line = $"round {round}: [{Name(argsA)}] pid {a.Id} {State(a)}, [{Name(argsB)}] pid {b.Id} {State(b)}; decided in {decided.TotalMilliseconds:0} ms";
+                    _output.WriteLine(line);
+                    Assert.True(alive.Count == 1, $"exactly one tray must survive: {line}");
+                    var survivor = alive[0];
+                    var loser = survivor == a ? b : a;
+                    Assert.True(loser.ExitCode == 0, $"the second launch exits 0 having found the first: {line}");
+                    Assert.True(HeldByAnother(mutex), $"the surviving tray holds {mutex}: {line}");
+                    var all = Trays();
+                    Assert.True(all.Length == 1 && all[0].Id == survivor.Id, $"one RST.Tray.exe in all (got {all.Length}): {line}");
+                    // The updater's start (no switch) losing to Restart Manager's --startup tray: it asks that tray to show its
+                    // window (the update's result) before it exits, so the user still sees it.
+                    var survivorArgs = survivor == a ? argsA : argsB;
+                    var loserArgs = survivor == a ? argsB : argsA;
+                    var shown = false;
+                    if (loserArgs.Length == 0 && survivorArgs.Length > 0)
                     {
-                        survivor.Refresh();
-                        return survivor.HasExited || survivor.MainWindowHandle != IntPtr.Zero;
-                    }, TimeSpan.FromSeconds(30)) && !survivor.HasExited;
-                    Assert.True(shown, $"the --startup tray shows its window when a launch with no switch finds it: {line}");
+                        shown = SpinWait.SpinUntil(() =>
+                        {
+                            survivor.Refresh();
+                            return survivor.HasExited || survivor.MainWindowHandle != IntPtr.Zero;
+                        }, TimeSpan.FromSeconds(30)) && !survivor.HasExited;
+                        Assert.True(shown, $"the --startup tray shows its window when a launch with no switch finds it: {line}");
+                    }
+                    // Exactly the survivor took over an abandoned mutex, and only after a killed one: its log says so before
+                    // its "starting" line, which it writes once it is up.
+                    Assert.True(SpinWait.SpinUntil(() => survivor.HasExited || TrayLogHas(survivor.Id, $"starting (pid {survivor.Id},", roundStart), TimeSpan.FromSeconds(60))
+                                && !survivor.HasExited, $"the surviving tray logs its start: {line}");
+                    var tookOver = TrayLogHas(survivor.Id, "taking over", roundStart);
+                    Assert.True(tookOver == abandonedBefore,
+                                $"the survivor {(tookOver ? "took over" : "did not take over")} an abandoned mutex, after a round that {(abandonedBefore ? "killed" : "closed")} its tray: {line}");
+                    Assert.False(TrayLogHas(loser.Id, "taking over", roundStart), $"the second launch never takes over: {line}");
+                    keptOpen?.Dispose(); // this round has decided
+                    keptOpen = null;
+                    record.Add(new
+                    {
+                        round,
+                        a = Name(argsA),
+                        b = Name(argsB),
+                        survivor = survivor == a ? "a" : "b",
+                        survivorPid = survivor.Id,
+                        loserExit = loser.ExitCode,
+                        decidedMs = (int)decided.TotalMilliseconds,
+                        windowShownOnSignal = shown,
+                        tookOverAbandoned = tookOver,
+                        ended = kill ? "killed (next round meets an abandoned mutex)" : "closed",
+                    });
+                    if (kill) keptOpen = Mutex.OpenExisting(mutex);
+                    End(survivor, kill);
+                    abandonedBefore = kill;
                 }
-                record.Add(new
+                finally
                 {
-                    round,
-                    a = Name(argsA),
-                    b = Name(argsB),
-                    survivor = survivor == a ? "a" : "b",
-                    survivorPid = survivor.Id,
-                    loserExit = loser.ExitCode,
-                    decidedMs = (int)decided.TotalMilliseconds,
-                    windowShownOnSignal = shown,
-                    ended = kill ? "killed (next round meets an abandoned mutex)" : "closed",
-                });
-                End(survivor, kill);
-            }
-            finally
-            {
-                foreach (var p in new[] { a, b })
-                {
-                    if (!p.HasExited) End(p, kill: true);
-                    p.Dispose();
+                    foreach (var p in new[] { a, b })
+                    {
+                        if (!p.HasExited) End(p, kill: true);
+                        p.Dispose();
+                    }
                 }
             }
+        }
+        finally
+        {
+            keptOpen?.Dispose();
         }
 
         var result = Environment.GetEnvironmentVariable("RST_TRAY_RACE_RESULT");
@@ -182,6 +209,37 @@ public sealed class TraySingleInstanceRaceTests
     }
 
     private static string Name(string args) => args.Length == 0 ? "no switch" : args;
+
+    /// <summary>
+    /// A line of the tray log (%AppData%\RST\logs\tray_*.log, shared) written by <paramref name="pid"/> since
+    /// <paramref name="since"/> (a pid can recur in a day's log) that holds <paramref name="text"/>.
+    /// </summary>
+    private static bool TrayLogHas(int pid, string text, DateTime since)
+    {
+        var tag = $" [{pid}] "; // after the level: "… 00:25:37.832 INF [884] …"
+        var from = since.AddSeconds(-1);
+        foreach (var file in Directory.EnumerateFiles(TrayPaths.LogsDir, "tray_*.log"))
+        {
+            try
+            {
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                while (reader.ReadLine() is { } l)
+                {
+                    // "yyyy-MM-dd HH:mm:ss.fff LVL [pid] message" (TrayLog's template), local time.
+                    if (l.Length < 23 || !l.Contains(text, StringComparison.Ordinal)) continue;
+                    if (!DateTime.TryParseExact(l[..23], "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+                        || at < from) continue;
+                    if (l.IndexOf(tag, 23, StringComparison.Ordinal) is >= 23 and <= 30) return true;
+                }
+            }
+            catch (IOException)
+            {
+                // being rolled: the next look reads it
+            }
+        }
+        return false;
+    }
 
     private static string State(Process p) => p.HasExited ? $"exited {p.ExitCode}" : "running";
 

@@ -17,8 +17,9 @@
         updater cannot take the mutex in time; it must take it the moment msiexec's Restart Manager closes that tray
         and hand it over before it starts the new one.
     (3b) SC-022: RST.RuntimeTests TraySingleInstanceRaceTests starts two installed RST.Tray.exe at the same instant,
-        -RaceRounds times, in every pairing of --startup and no switch, killing every fifth survivor (an abandoned
-        mutex next): exactly one survives every round. Then a tray is started again for (4).
+        -RaceRounds times, in every pairing of --startup and no switch, killing every fifth survivor while the test
+        keeps a mutex handle open (an abandoned mutex next, taken over by exactly the next survivor): exactly one
+        survives every round. Then a tray is started again for (4).
     Trays are counted only once every launch has made its single-instance decision (Wait-OneTray), never at a fixed
     delay: on a slow runner a launch can still be starting when a fixed delay runs out (SC-022).
     (4) uninstall: no tray, no updater, and %LocalAppData%\RST\Tray\ (updater copy included) is removed.
@@ -249,7 +250,7 @@ Assert (@($lines | Where-Object { $_ -match 'updater: msiexec exited 0 ' }).Coun
 # the moment msiexec closes that tray, then hands it over before it starts the new tray (never "going on without it").
 Assert (@($lines | Where-Object { $_ -match 'updater: the tray.s single-instance mutex was not free within' }).Count -eq 1) '(3) the mutex was not free in time (the tray still ran) and the updater went on waiting for it'
 Assert (@($lines | Where-Object { $_ -match 'updater: took the tray.s single-instance mutex .* once the tray let it go' }).Count -eq 1) '(3) the updater took the mutex once msiexec closed the tray'
-Assert (@($lines | Where-Object { $_ -match 'going on without it' }).Count -eq 0) '(3) the updater never replaced RST without the mutex'
+Assert (@($lines | Where-Object { $_ -match 'not confirmed released' }).Count -eq 0) '(3) the updater confirmed the hand-over (review N3)'
 Assert ([array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'released the tray.s single-instance mutex' } | Select-Object -First 1)) -lt [array]::IndexOf($lines, ($lines | Where-Object { $_ -match 'updater: started the installed tray' } | Select-Object -First 1))) '(3) it handed the mutex over before starting the new tray'
 $null = Wait-OneTray $before '(3)' "Restart Manager's restart and the updater's start leave exactly one tray"
 # Two launches, one tray: whichever came second (Restart Manager's --startup or the updater's) found the first and exited.
@@ -276,6 +277,11 @@ Assert (Test-Path $raceResult) "(3b) the race test ran (not skipped) and wrote $
 $race = Get-Content $raceResult -Raw | ConvertFrom-Json
 $rounds = @($race.record)
 Assert ($rounds.Count -eq $RaceRounds) "(3b) all $RaceRounds rounds ran (got $($rounds.Count))"
+# Review B1: each killed survivor (the host keeps a mutex handle open) leaves an abandoned mutex: exactly the next round's
+# survivor took it over (the test asserts it per round; this checks the count, the last round has no next one).
+$killedBeforeNext = @($rounds | Select-Object -SkipLast 1 | Where-Object { $_.ended -like 'killed*' }).Count
+$tookOver = @($rounds | Where-Object { $_.tookOverAbandoned }).Count
+Assert ($killedBeforeNext -gt 0 -and $tookOver -eq $killedBeforeNext) "(3b) every killed tray's abandoned mutex was taken over by exactly the next survivor ($tookOver of $killedBeforeNext)"
 $decided = @($rounds | ForEach-Object { [int]$_.decidedMs } | Sort-Object)
 Write-Host "OBSERVE: (3b) $($rounds.Count) rounds; second launch gone after median $($decided[[int][math]::Floor($decided.Count / 2)]) ms, max $($decided[-1]) ms; survivors killed (abandoned mutex next): $(@($rounds | Where-Object { $_.ended -like 'killed*' }).Count)"
 Wait-Until { (Get-Trays).Count -eq 0 } 30 '(3b) no tray is left running after the race'
