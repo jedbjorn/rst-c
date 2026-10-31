@@ -51,24 +51,6 @@ public static class UpdateChecksPolicy
 }
 
 /// <summary>
-/// The one-time update-check notice, modelled on the former telemetry first-run notice (removed in v3.2, decision #49): shown on the
-/// first tray start where checks are on and the notice was never shown; recorded however it is dismissed.
-/// </summary>
-public static class TrayUpdateNotice
-{
-    /// <summary>Checks on (not preset off, not switched off) and the notice never shown.</summary>
-    public static bool ShouldShow(TraySettings settings, UpdateChecksState checks)
-    {
-        ArgumentNullException.ThrowIfNull(settings);
-        return checks.Enabled && settings.UpdateNoticeShownUtc is null;
-    }
-
-    /// <summary>Records the notice as shown, merging into the freshest settings. False if nothing was written.</summary>
-    public static bool MarkShown(DateTimeOffset shownUtc, string? path = null, Action<string>? log = null) =>
-        TraySettings.Update(s => s.UpdateNoticeShownUtc = shownUtc, path, log) is not null;
-}
-
-/// <summary>
 /// The one-time "your own copy is used" notice (spec #20 §7; F17 WU5): RST is installed both for this user (RST.msi)
 /// and for everyone (RST-Machine.msi), so Revit loads the user's own copy. Shown once, on the first tray start that
 /// finds a shadow (<see cref="RST.Core.Configuration.InstallLayout.FindShadows(System.Collections.Generic.IEnumerable{int}?)"/>);

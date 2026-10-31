@@ -215,7 +215,7 @@ foreach ($y in '2025', '2026', '2027') {
 }
 Assert (@(Get-Process -Name 'Revit' -ErrorAction SilentlyContinue).Count -eq 0) 'no Revit.exe runs (the stubs are files only)'
 New-Item -ItemType Directory -Force (Split-Path $TraySettings) | Out-Null
-Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": false, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": false }' -NoNewline
 $before = @(Get-TrayLog).Count
 Invoke-Msiexec '/i' $OldMsi "install-$OldVersion"
 Assert-OneRst $OldVersion '(1) installed'
