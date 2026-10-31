@@ -67,9 +67,12 @@ public sealed class RstApplication : IExternalApplication
         try
         {
             ConfigureLogging();
-            var rev = application.ControlledApplication.VersionNumber;
-            Log.Information("=== RST {Version} starting on Revit {RevitVersion} ===",
-                            ThisVersion, rev);
+            var app = application.ControlledApplication;
+            var rev = app.VersionNumber;
+            // SC-054: the release version (and its commit), Revit's update and build, and the runtime.
+            Log.Information("=== {Header} ===",
+                            BuildVersion.EngineHeader(typeof(RstApplication).Assembly, rev,
+                                                      RevitText(() => app.SubVersionNumber), RevitText(() => app.VersionBuild)));
             Log.Information("Paths: appData={AppData}, profilesDir={ProfilesDir}, " +
                             "activeProfileFile={ActiveProfile}, banList={BanList}, " +
                             "engineAssembly={EngineDll}",
@@ -491,4 +494,11 @@ public sealed class RstApplication : IExternalApplication
 
     private static string ThisVersion =>
         typeof(RstApplication).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+
+    /// <summary>A Revit version string for the log header; null when Revit cannot give it.</summary>
+    private static string? RevitText(Func<string?> read)
+    {
+        try { return read(); }
+        catch { return null; }
+    }
 }
