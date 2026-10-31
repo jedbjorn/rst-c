@@ -128,7 +128,7 @@ function Show-FilesInUse([string]$Label) {
     if (Test-Path $d) { $files += @(Get-ChildItem $d -Recurse -File | ForEach-Object { $_.FullName }) }
   }
   foreach ($y in '2025', '2026', '2027') { $files += @(Get-ChildItem (Join-Path $env:APPDATA "Autodesk\Revit\Addins\$y") -Filter 'RST*' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) }
-  $users = if ($files.Count) { [RstCiRm]::Users([string[]]$files) } else { @() }
+  $users = @(if ($files.Count) { [RstCiRm]::Users([string[]]$files) })   # @(...): one name or none stays an array
   Write-Host "OBSERVE: [$Label] Restart Manager: $($users.Count) process(es) use RST.msi's $($files.Count) files"
   foreach ($u in $users) { Write-Host "OBSERVE:   $u" }
 }
