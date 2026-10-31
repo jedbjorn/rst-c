@@ -66,6 +66,11 @@ public static class AppDataPaths
     /// <summary>%LOCALAPPDATA%\RST\telemetry\outbox\ — one .jsonl per session.</summary>
     public static string TelemetryOutboxDir => Path.Combine(TelemetryRoot, "outbox");
 
+    /// <summary>%LOCALAPPDATA%\RST\telemetry\rollups\ — per-model activity rollups, the
+    /// index and the fold ledger (spec #24). Written only by the tray; machine-local, like
+    /// the outbox.</summary>
+    public static string TelemetryRollupsDir => Path.Combine(TelemetryRoot, "rollups");
+
     /// <summary>
     /// Test hook — same pattern as <see cref="OverrideRootForTests"/>,
     /// separate override because TelemetryRoot resolves to LocalAppData,
