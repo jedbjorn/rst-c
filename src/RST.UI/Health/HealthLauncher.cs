@@ -22,7 +22,7 @@ public static class HealthLauncher
                             Action<bool>? telemetryToggled = null,
                             Func<DateTimeOffset?>? liveSessionStartUtc = null)
     {
-        var dialogs = new DialogService { EscapeCancels = true }; // decision #62
+        var dialogs = new DialogService { EscapeCancels = true, ReturnsFocus = true }; // decision #62; rc.3 VM finding F2
         var viewModel = new HealthViewModel(new HealthService(context, telemetryToggled, liveSessionStartUtc), dialogs);
         viewModel.Load();
         var window = new HealthWindow(viewModel);

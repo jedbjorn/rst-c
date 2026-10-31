@@ -1,6 +1,7 @@
 // Adapted from splash-it src/SplashIt.UI/Dialogs/DialogService.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/DialogService.cs, gantt-it commit a96d0a1), MIT, same owner.
 // Changes: namespaces (SplashIt.* to RST.*); comments say RST; SaveFile's default extension comes from the suggested file name (rst-c exports .zip, splash-it .json); Choose added (a three-way MessageDialog);
-// EscapeCancels (decision #62: the add-in's dialogs take Escape by EscapeGuard's rules; the tray app's keep WPF's own).
+// EscapeCancels (decision #62: the add-in's dialogs take Escape by EscapeGuard's rules; the tray app's keep WPF's own);
+// ReturnsFocus (v3.1.1, rc.3 VM finding F2: keyboard focus goes back inside the owner when a dialog closes, FocusReturn).
 
 using System.Windows;
 using System.Windows.Input;
@@ -25,6 +26,14 @@ public sealed class DialogService : IDialogService
     /// </summary>
     public bool EscapeCancels { get; init; }
 
+    /// <summary>
+    /// When a dialog this service opened closes, keyboard focus goes back inside its owner
+    /// (FocusReturn): on the element that had it, or the nearest one that can take it, so the owner's
+    /// Escape works on the next press. The add-in's windows turn it on (decision #62); the tray app
+    /// keeps WPF's own focus restore.
+    /// </summary>
+    public bool ReturnsFocus { get; init; }
+
     public void ShowMessage(string title, string message, string automationId = MessageDialog.MessageId) =>
         Show(new MessageDialogModel(title, title, message, []), automationId);
 
@@ -37,7 +46,7 @@ public sealed class DialogService : IDialogService
             new MessageDialogModel(title, title, message, [], primaryText, HasCancel: true) { SecondaryText = secondaryText },
             automationId) { Owner = Owner };
         if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
-        return dialog.ShowDialog() == true ? dialog.Choice : DialogChoice.Cancel;
+        return ShowModal(dialog) == true ? dialog.Choice : DialogChoice.Cancel;
     }
 
     public Rgb? PickColor(Rgb current, IReadOnlyList<Rgb> palette, string title)
@@ -45,13 +54,13 @@ public sealed class DialogService : IDialogService
         var workArea = Owner is null ? SystemParameters.WorkArea : MonitorWorkArea.Of(Owner);
         var dialog = new ColorPickerDialog(current, palette, title, PointerOnScreen(), workArea) { Owner = Owner };
         if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
-        return dialog.ShowDialog() == true ? dialog.Result : null;
+        return ShowModal(dialog) == true ? dialog.Result : null;
     }
 
     public string? OpenFile(string title, string filter)
     {
         var dialog = new OpenFileDialog { Title = title, Filter = filter, CheckFileExists = true, Multiselect = false };
-        return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
+        return ShowNative(() => dialog.ShowDialog(Owner)) == true ? dialog.FileName : null;
     }
 
     public string? SaveFile(string title, string filter, string fileName)
@@ -63,14 +72,18 @@ public sealed class DialogService : IDialogService
             Title = title, Filter = filter, FileName = fileName, OverwritePrompt = true, AddExtension = true,
             DefaultExt = string.IsNullOrEmpty(extension) ? ".zip" : extension,
         };
-        return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
+        return ShowNative(() => dialog.ShowDialog(Owner)) == true ? dialog.FileName : null;
     }
+
+    private bool? ShowModal(Window dialog) => ReturnsFocus ? FocusReturn.ShowDialog(dialog) : dialog.ShowDialog();
+
+    private bool? ShowNative(Func<bool?> show) => ReturnsFocus ? FocusReturn.Around(Owner, show) : show();
 
     private bool Show(MessageDialogModel model, string automationId)
     {
         var dialog = new MessageDialog(model, automationId) { Owner = Owner };
         if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
-        return dialog.ShowDialog() == true;
+        return ShowModal(dialog) == true;
     }
 
     /// <summary>The pointer position in screen DIPs, so the picker opens beside the chip that was clicked.</summary>

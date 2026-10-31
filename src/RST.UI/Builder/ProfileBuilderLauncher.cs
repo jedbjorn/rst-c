@@ -36,7 +36,7 @@ public static class ProfileBuilderLauncher
             revitVersion, catalog?.Count ?? 0, allTabs?.Count ?? 0, switchScheduler is not null);
 
         var backend = new ProfileBuilderBackend(revitVersion, catalog, switchScheduler, allTabs);
-        var dialogs = new DialogService { EscapeCancels = true }; // decision #62
+        var dialogs = new DialogService { EscapeCancels = true, ReturnsFocus = true }; // decision #62; rc.3 VM finding F2
         var builderDialogs = new BuilderDialogs(dialogs);
         var model = new ProfileBuilderViewModel(backend, dialogs, builderDialogs: builderDialogs);
         model.Initialize();

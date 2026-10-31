@@ -43,19 +43,28 @@ public sealed class LoaderDialogs : ILoaderDialogs
     /// </summary>
     public bool EscapeCancels { get; init; }
 
+    /// <summary>
+    /// When a dialog closes, keyboard focus goes back inside the Loader (FocusReturn), so its Escape works
+    /// on the next press (v3.1.1, rc.3 VM finding F2). The Loader turns it on; the tray app keeps WPF's own
+    /// focus restore.
+    /// </summary>
+    public bool ReturnsFocus { get; init; }
+
     public bool ConfirmAddinChanges(ConfirmAddinChangesModel model)
     {
         var dialog = new ConfirmAddinChangesWindow(model) { Owner = Owner };
         if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
-        return dialog.ShowDialog() == true;
+        return ShowModal(dialog) == true;
     }
 
     public void ShowAddinReport(AddinReportModel model)
     {
         var dialog = new AddinReportWindow(model) { Owner = Owner };
         if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
-        dialog.ShowDialog();
+        ShowModal(dialog);
     }
+
+    private bool? ShowModal(Window dialog) => ReturnsFocus ? FocusReturn.ShowDialog(dialog) : dialog.ShowDialog();
 }
 
 /// <summary>What "Confirm Add-in Changes" lists, from the plan the load will run.</summary>

@@ -44,11 +44,12 @@ public sealed class BuilderDialogs : IBuilderDialogs
 
     public Window? Owner { get; set; }
 
-    public bool EditName(ProfileNameDialogModel model) => new ProfileNameDialog(model) { Owner = Owner }.ShowDialog() == true;
+    // Each dialog returns keyboard focus into the Builder when it closes (FocusReturn; rc.3 VM finding F2).
+    public bool EditName(ProfileNameDialogModel model) => FocusReturn.ShowDialog(new ProfileNameDialog(model) { Owner = Owner }) == true;
 
-    public bool EditStack(StackDialogModel model) => new StackDialog(model) { Owner = Owner }.ShowDialog() == true;
+    public bool EditStack(StackDialogModel model) => FocusReturn.ShowDialog(new StackDialog(model) { Owner = Owner }) == true;
 
-    public bool EditCustomTool(CustomToolDialogModel model) => new CustomToolDialog(model) { Owner = Owner }.ShowDialog() == true;
+    public bool EditCustomTool(CustomToolDialogModel model) => FocusReturn.ShowDialog(new CustomToolDialog(model) { Owner = Owner }) == true;
 
     public void EditBranding(ProfileBuilderViewModel model)
     {
@@ -57,7 +58,7 @@ public sealed class BuilderDialogs : IBuilderDialogs
         if (_dialogs is not null) _dialogs.Owner = dialog;
         try
         {
-            dialog.ShowDialog();
+            FocusReturn.ShowDialog(dialog);
         }
         finally
         {
