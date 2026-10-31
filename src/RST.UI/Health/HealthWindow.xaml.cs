@@ -1,5 +1,6 @@
 // rst-c's own (not vendored): the Health window's code-behind (spec #16, WU2). The window binds to a
-// HealthViewModel; HealthLauncher builds both, owns the window to Revit and shows it modally.
+// HealthViewModel; HealthLauncher builds both, owns the window to Revit and shows it modally. Escape
+// closes the window as Close does (SC-010, feature #18 WU6).
 
 using System.ComponentModel;
 using System.Windows;
@@ -38,6 +39,22 @@ public partial class HealthWindow : Window
     }
 
     private void OnRequestClose(object? sender, EventArgs e) => Close();
+
+    /// <summary>
+    /// Escape closes Health the way Close does (SC-010): only while Close is enabled, so never during a
+    /// scan or a clean. Nothing else may want it: the Junk modal, a dialog Health opened (an owned
+    /// window), or a menu or popup open in it.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled || e.Key != Key.Escape || !EscapeCloses) return;
+        e.Handled = true;
+        ViewModel.CloseCommand.Execute(null);
+    }
+
+    private bool EscapeCloses =>
+        !ViewModel.IsJunkOpen && ViewModel.CloseCommand.CanExecute(null) && !EscapeGuard.HasSomethingOpen(this);
 
     /// <summary>The Junk modal takes the keyboard focus when it opens (the content behind it is disabled).</summary>
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
