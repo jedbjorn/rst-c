@@ -171,6 +171,15 @@ dotnet build installer-bundle\RST.Setup.wixproj -c Release
 
 None of this loads anything in Revit. That a real companion works in Revit after the setup is the one-time VM check (AC6, skill `rst_c_vm`), not CI.
 
+## Known harmless log lines (SC-014)
+
+WiX 6.0.2 can log these `e000` errors even when a per-user upgrade succeeds:
+
+- `0x80070003` (`CreateProcessW`, `Failed to create embedded process`, `Failed to run bundle as embedded`, then `Failed to configure per-user related bundle`): Burn detects the same HKCU bundle in both registry views and tries its uninstall twice. The first succeeds and removes its cached `RST-Setup.exe`; the second finds that path gone. This matches [WiX issue #7675](https://github.com/wixtoolset/issues/issues/7675) and the [6.0.2 registry enumeration](https://github.com/wixtoolset/wix/blob/v6.0.2/src/libs/dutil/WixToolset.DUtil/butil.cpp#L348-L413), which searches both views for per-user bundles too.
+- `0x80070006` (`Failed to write send message to pipe`, then `Failed to send BURN_ELEVATION_MESSAGE_TYPE_CLEAN_PACKAGE message to per-machine process`): cache cleanup attempts to contact an elevated engine through an invalid pipe handle. On the per-user path, which never launches that engine, this is consistent with cleanup of the skipped machine package. [ApplyClean](https://github.com/wixtoolset/wix/blob/v6.0.2/src/burn/engine/apply.cpp#L848-L880) ignores cleanup errors; they do not change the install result.
+
+These messages alone do not establish success: check the process exit code and `Apply complete, result: 0x0`, plus the installed version/ARP entries. A failed Apply or an unexpected error needs investigation. The tray self-update CI leg checks those outcomes and allows only these exact messages (missing cache paths must name a twice-detected bundle whose first uninstall succeeded). Bundle identity, scope and authoring are unchanged.
+
 ## Bumping a companion
 
 Edit `companions/companions.json` as described in [`companions/README.md`](../companions/README.md#bumping-a-pin). The bundle picks the change up on the next build. The `bundle` job fails if the new pin does not match the release asset.
