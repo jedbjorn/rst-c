@@ -28,6 +28,13 @@ public static class UiStrings
 
     public static string Common_Cancel => Get(nameof(Common_Cancel));
 
+    // SC-048 item 5: in-Revit messages share one title, independent of the last command.
+    public static string Common_RstTitle => Get(nameof(Common_RstTitle));
+
+    public static string Rstify_NoTabs => Get(nameof(Rstify_NoTabs));
+
+    public static string Rstify_ConfigureTabs => Get(nameof(Rstify_ConfigureTabs));
+
     /// <summary>The window's toast when a command failed unexpectedly (SC-046, UiGuard); the details are logged.</summary>
     public static string Common_ActionFailed => Get(nameof(Common_ActionFailed));
 

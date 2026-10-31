@@ -1414,4 +1414,14 @@ The other profiles were changed and stay changed.</value>
     <value>Update</value>
     <comment>The Edit dialog's button while the edit fails its check (no count).</comment>
   </data>
+  <!-- SC-048 item 5: shared title for in-Revit messages; Revit's automatic prefix is disabled. -->
+  <data name="Common_RstTitle" xml:space="preserve">
+    <value>RST</value>
+  </data>
+  <data name="Rstify_NoTabs" xml:space="preserve">
+    <value>No tabs configured to hide.</value>
+  </data>
+  <data name="Rstify_ConfigureTabs" xml:space="preserve">
+    <value>Set up tab visibility in the Loader (RSTify section).</value>
+  </data>
 </root>
