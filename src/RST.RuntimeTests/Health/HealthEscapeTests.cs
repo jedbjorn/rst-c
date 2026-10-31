@@ -157,6 +157,43 @@ public class HealthEscapeTests
         }
     });
 
+    /// <summary>
+    /// The busy rule: Escape on the Junk modal is its Cancel only while Cancel is enabled, so never while
+    /// a scan runs. (The window behind is disabled while the modal shows, so the scan is started on the
+    /// view-model; a clean closes the modal before it starts, so it cannot run behind an open one.)
+    /// </summary>
+    [Fact]
+    public void Escape_on_the_Junk_modal_during_a_scan_does_nothing() => Sta(() =>
+    {
+        var pending = new TaskCompletionSource();
+        var o = Open(new FakeHealthService { Snapshot = HealthSamples.Snapshot(), Targets = HealthSamples.Targets() }, _ => pending.Task);
+        try
+        {
+            o.Window.ViewModel.OpenJunk();
+            WindowCapture.DoEvents();
+            Assert.True(o.Window.ViewModel.IsJunkOpen);
+            var scan = o.Window.ViewModel.ScanAsync();
+            WindowCapture.DoEvents();
+            Assert.True(o.Window.ViewModel.IsScanning);
+            Assert.False(o.Window.ViewModel.JunkCancelCommand.CanExecute(null), "Cancel is disabled while the scan runs");
+
+            Assert.False(PressEscape(o.Window));
+            Assert.True(o.Window.ViewModel.IsJunkOpen, "a busy modal keeps Escape, as its Cancel does");
+            Assert.False(o.Closed);
+
+            pending.SetResult();
+            WindowCapture.DoEvents();
+            Assert.True(scan.IsCompleted);
+            Assert.True(PressEscape(o.Window));
+            Assert.False(o.Window.ViewModel.IsJunkOpen, "with the scan over, Escape cancels the modal");
+            Assert.False(o.Closed);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
     [Fact]
     public void Escape_on_the_Junk_modal_with_a_dialog_in_front_does_nothing() => Sta(() =>
     {
