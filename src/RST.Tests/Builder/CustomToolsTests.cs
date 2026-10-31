@@ -218,7 +218,8 @@ public sealed class CustomToolsTests : IDisposable
         var arch = OnDisk(ArchId);
         arch.Panels[0].Slots[0].Should().BeEquivalentTo(Url("Knowledge", "https://wiki2.example.com", baseName: "Knowledge", icon: "pack:bulb"));
         var stacked = arch.Stacks["Stack 1"].Tools[0];
-        (stacked.Name, stacked.BaseName, stacked.CommandId, stacked.IconFile).Should().Be(("Our wiki", "Knowledge", newId, "pack:bulb"));
+        (stacked.Name, stacked.BaseName, stacked.CommandId, stacked.IconFile).Should().Be(("Our wiki", "Knowledge", newId, (string?)null),
+            "it had no icon, not the tool's old one (pack:book), so it keeps none: icons picked on a panel are kept");
 
         var str = OnDisk(StructId).Panels[0].Slots;
         (str[0].Name, str[0].BaseName, str[0].CommandId).Should().Be(("Knowledge", "Knowledge", newId), "its name was its base name");
@@ -429,4 +430,286 @@ public sealed class CustomToolsTests : IDisposable
         Bytes(StructId).Should().Be(structBefore, "the failed file is as it was");
         _log.Lines.Should().Contain(l => l.StartsWith("W ") && l.Contains("Struct") && l.Contains("Write failed"));
     }
+
+    // ── the confirmation's plan (WU4) ──
+
+    [Fact]
+    public void The_plan_lists_every_profile_that_will_change_and_does_not_merge_profiles_that_share_a_name()
+    {
+        // A second profile called "Arch", with its own id, that also holds the wiki.
+        WriteAs("Arch (2).json", Make("e-arch2", "Arch", new(), Url("Wiki", Wiki)));
+        var working = ProfileEditing.ForEditing(OnDisk(StructId));
+
+        var plan = Editor().Plan(Wiki, working);
+
+        plan.Targets.Select(t => (t.ProfileName, t.ProfileId, t.State, t.IsOpen)).Should().BeEquivalentTo(new[]
+        {
+            ("Arch", (string?)ArchId, CustomToolTargetState.Write, false),
+            ("Arch", (string?)"e-arch2", CustomToolTargetState.Write, false),
+            ("Struct", (string?)StructId, CustomToolTargetState.Write, true),
+        });
+        plan.Count.Should().Be(3, "two profiles named Arch are two profiles");
+        Editor().Affected(Wiki, working).Should().Equal("Arch", "Arch", "Struct");
+
+        var result = Editor().Remove(Wiki, working, null);
+        result.Written.Should().HaveCount(plan.Count, "the count is what was written");
+    }
+
+    [Fact]
+    public void An_unsaved_working_copy_is_listed_under_its_current_name()
+    {
+        var draft = Make("", "", new(), Url("Wiki", Wiki));
+        draft.Id = null;
+        var plan = Editor().Plan(Wiki, draft);
+        plan.Changing.Select(t => (t.ProfileName, t.State, t.FileName, t.IsOpen)).Should().Equal(
+            ("Arch", CustomToolTargetState.Write, FileOf(ArchId), false),
+            ("Struct", CustomToolTargetState.Write, FileOf(StructId), false),
+            ("", CustomToolTargetState.WorkingCopy, "", true));
+
+        // The open profile's file does not hold the tool, but its working copy does (placed, not saved yet).
+        var mep = ProfileEditing.ForEditing(OnDisk(MepId));
+        mep.ProfileName = "MEP renamed";
+        mep.Panels[0].Slots.Add(Url("Wiki", Wiki));
+        Editor().Plan(Wiki, mep).Changing.Select(t => (t.ProfileName, t.State)).Should().Equal(
+            ("Arch", CustomToolTargetState.Write), ("Struct", CustomToolTargetState.Write), ("MEP renamed", CustomToolTargetState.WorkingCopy));
+
+        // Its file holds it and is written: one entry for the profile, not two.
+        var arch = ProfileEditing.ForEditing(OnDisk(ArchId));
+        Editor().Plan(Wiki, arch).Changing.Should().HaveCount(2).And.ContainSingle(t => t.IsOpen && t.State == CustomToolTargetState.Write);
+    }
+
+    [Fact]
+    public void The_plan_lists_the_files_that_will_be_refused_apart_and_does_not_count_them()
+    {
+        var legacy = Make("", "Legacy", new(), Url("Wiki", Wiki));
+        legacy.Id = null;
+        WriteAs("Legacy_2024-05-01.json", legacy);
+        var stale = Struct();
+        stale.Panels[0].Name = "Stale";
+        WriteAs("Struct_2024-05-01.json", stale);
+
+        var plan = Editor().Plan(Wiki, null);
+        plan.Changing.Select(t => t.ProfileName).Should().Equal("Arch");
+        plan.Count.Should().Be(1);
+        plan.Refused.Select(t => (t.ProfileName, t.State)).Should().BeEquivalentTo(new[]
+        {
+            ("Legacy", CustomToolTargetState.NoId),
+            ("Struct", CustomToolTargetState.SharedId),
+            ("Struct", CustomToolTargetState.SharedId),
+        });
+        plan.Refused.Should().OnlyContain(t => !string.IsNullOrEmpty(t.Reason));
+
+        var result = Editor().Edit(Editor().Derive(null).Single(t => t.Link == Wiki), new CustomToolEdit("Knowledge", Wiki, null), null, null);
+        result.Written.Should().HaveCount(plan.Count);
+        result.Failed.Select(f => (f.FileName, f.Error)).Should().BeEquivalentTo(plan.Refused.Select(t => (t.FileName, t.Reason!)),
+            "the refusals the confirmation listed are the failures reported");
+    }
+
+    [Fact]
+    public void A_working_copy_change_that_throws_is_reported_not_thrown()
+    {
+        var working = Make("w-broken", "Broken", new(), Url("Wiki", Wiki));
+        working.Stacks = null!; // the remove walks the stacks after taking the slot out
+
+        var result = Editor().Remove(Wiki, working, null);
+
+        result.Written.Select(w => w.ProfileName).Should().Equal(new[] { "Arch", "Struct" }, "the saved files are still written");
+        var failure = result.Failed.Should().ContainSingle().Subject;
+        (failure.ProfileName, failure.ProfileId, failure.FileName).Should().Be(("Broken", (string?)"w-broken", ""));
+        failure.Error.Should().StartWith("The open profile could not be changed: ");
+        result.WorkingCopyChanged.Should().BeTrue("the slot was taken out before it threw");
+        _log.Lines.Should().Contain(l => l.StartsWith("E ") && l.Contains("Broken"));
+    }
+
+    [Fact]
+    public void Short_links_and_list_slots()
+    {
+        CustomTools.ShortLink("https://wiki.example.com/").Should().Be("wiki.example.com");
+        CustomTools.ShortLink("mailto:bim@studio.example").Should().Be("bim@studio.example");
+        CustomTools.ShortLink("tel:+4412345").Should().Be("+4412345");
+        CustomTools.ShortLink(null).Should().Be("");
+        var tool = new CustomTool("mailto:bim@studio.example", "Help", "pack:question", CustomToolKind.Email, ["Arch"]);
+        var a = CustomTools.SlotFor(tool);
+        a.Should().BeEquivalentTo(new Slot { SlotType = "tool", Name = "Help", BaseName = "Help", CommandId = "URL:mailto:bim@studio.example", IconFile = "pack:question" });
+        CustomTools.LinkOf(a).Should().Be(tool.Link, "a placed copy is the same tool");
+        CustomTools.SlotFor(tool).Should().NotBeSameAs(a);
+    }
+
+    // ── an email tool holds an email address (WU4 review F4) ──
+
+    [Theory]
+    [InlineData("mailto:https://wiki.example.com")]
+    [InlineData("mailto:wiki.example.com")]
+    [InlineData("mailto:bob")]
+    [InlineData("mailto:bob@")]
+    [InlineData("mailto:@example.com")]
+    [InlineData("mailto:bob@@example.com")]
+    [InlineData("mailto:bob smith@example.com")]
+    [InlineData("MAILTO:http://x@y.com")]
+    [InlineData("mailto:bob@example.com/page")]
+    public void An_email_link_that_is_not_an_email_address_is_refused(string address)
+    {
+        CustomTools.Check(new CustomToolEdit("Help", address, null)).Should().Be(CustomTools.NotAnEmail);
+        // Edit everywhere refuses it before anything is written.
+        var editor = Editor();
+        var wiki = editor.Derive(null).Single(t => t.Link == Wiki);
+        var before = Files().ToDictionary(f => f, f => File.ReadAllText(Path.Combine(_dir, f)));
+        FluentActions.Invoking(() => editor.Edit(wiki, new CustomToolEdit("Wiki", address, null), null, null)).Should().Throw<ArgumentException>();
+        Files().Should().OnlyContain(f => File.ReadAllText(Path.Combine(_dir, f)) == before[f]);
+    }
+
+    [Theory]
+    [InlineData("mailto:bim@studio.example")]
+    [InlineData("bim@studio.example")]
+    [InlineData("MAILTO:Bob.Smith+rst@Example.co.uk")]
+    [InlineData("mailto:help@example.com?subject=RST%20help")]
+    public void A_plausible_email_address_passes(string address)
+    {
+        CustomTools.Check(new CustomToolEdit("Help", address, null)).Should().BeNull();
+        CustomTools.KindOf(CustomTools.Opens(address)).Should().Be(CustomToolKind.Email);
+    }
+
+    [Fact]
+    public void Links_that_are_not_email_are_not_held_to_the_email_rule()
+    {
+        CustomTools.Check(new CustomToolEdit("Wiki", "https://wiki.example.com/a@b", null)).Should().BeNull();
+        CustomTools.Check(new CustomToolEdit("Call", "tel:+4412345", null)).Should().BeNull();
+        CustomTools.Check(new CustomToolEdit("Share", "file://server/share", null)).Should().BeNull();
+    }
+
+    // ── icons picked on a panel are kept (FnB decision on WU4 review F2) ──
+
+    private const string Help = "mailto:bim@studio.example";
+
+    /// <summary>Architecture: Help with the blue icon; Structure: Help with a grey icon picked on its panel, and a blue Help in a stack.</summary>
+    private void HelpProfiles()
+    {
+        ProfileStore.Save(Make("h-arch", "Architecture", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_blue")), _dir);
+        ProfileStore.Save(Make("h-struct", "Structure",
+            new() { ["S"] = new Stack { Tools = [Url("Help", Help, baseName: "Help", icon: "pack:question_blue"), Command("ID_BEAM")] } },
+            Url("Help", Help, baseName: "Help", icon: "pack:question_light_grey"),
+            PanelStacks.StackSlot("S")), _dir);
+    }
+
+    [Fact]
+    public void An_edit_keeps_an_icon_picked_on_a_panel_and_changes_the_ones_that_had_the_old_icon()
+    {
+        HelpProfiles();
+        var editor = Editor();
+        var help = editor.Derive(null).Single(t => t.Link == Help);
+        help.IconFile.Should().Be("pack:question_blue", "the first occurrence by profile name: Architecture's");
+
+        var result = editor.Edit(help, new CustomToolEdit("BIM help", "bim@studio.example", "pack:question_green"), null, null);
+
+        result.Ok.Should().BeTrue();
+        result.Written.Select(w => w.ProfileName).Should().Equal("Architecture", "Structure");
+        OnDisk("h-arch").Panels[0].Slots[0].IconFile.Should().Be("pack:question_green", "it had the tool's old icon");
+        var structure = OnDisk("h-struct");
+        var grey = structure.Panels[0].Slots[0];
+        (grey.Name, grey.BaseName, grey.IconFile).Should().Be(("BIM help", "BIM help", "pack:question_light_grey"), "the grey icon was picked on the panel: kept");
+        structure.Stacks["S"].Tools[0].IconFile.Should().Be("pack:question_green", "the stacked copy had the old icon");
+    }
+
+    [Fact]
+    public void An_icon_only_edit_does_not_write_a_profile_whose_placements_all_have_their_own_icon()
+    {
+        ProfileStore.Save(Make("h-arch", "Architecture", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_blue")), _dir);
+        ProfileStore.Save(Make("h-struct", "Structure", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_light_grey")), _dir);
+        var file = Path.Combine(_dir, FileOf("h-struct"));
+        var bytes = File.ReadAllText(file);
+        var stamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, stamp);
+        var editor = Editor();
+        var help = editor.Derive(null).Single(t => t.Link == Help);
+
+        var result = editor.Edit(help, new CustomToolEdit("Help", Help, "pack:question_green"), null, null);
+
+        result.Written.Select(w => w.ProfileName).Should().Equal(new[] { "Architecture" }, "only the icon would have changed, and Structure's is its own");
+        File.ReadAllText(file).Should().Be(bytes);
+        File.GetLastWriteTimeUtc(file).Should().Be(stamp, "no spurious write");
+        OnDisk("h-arch").Panels[0].Slots[0].IconFile.Should().Be("pack:question_green");
+    }
+
+    // ── the edit's plan is exact (WU4 delta review F8) ──
+
+    [Fact]
+    public void An_icon_only_edit_s_plan_counts_only_the_profiles_it_writes()
+    {
+        ProfileStore.Save(Make("h-arch", "Architecture", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_blue")), _dir);
+        ProfileStore.Save(Make("h-struct", "Structure", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_light_grey")), _dir);
+        var editor = Editor();
+        var help = editor.Derive(null).Single(t => t.Link == Help);
+        var iconOnly = new CustomToolEdit("Help", Help, "pack:question_green");
+
+        editor.Plan(Help, null).Count.Should().Be(2, "Remove reaches every holder");
+        var plan = editor.PlanEdit(help, iconOnly, null);
+        plan.Changing.Select(t => t.ProfileName).Should().Equal("Architecture");
+        plan.Count.Should().Be(1);
+        var unchanged = plan.Refused.Should().ContainSingle().Subject;
+        (unchanged.ProfileName, unchanged.State, unchanged.Reason).Should().Be(("Structure", CustomToolTargetState.Unchanged, CustomToolPreview.UnchangedReason));
+
+        var result = editor.Edit(help, iconOnly, null, null);
+        result.Written.Should().HaveCount(plan.Count, "N is exactly what is written");
+        result.Failed.Should().BeEmpty("a profile left as it is is not a failure");
+
+        // A label edit changes both (Structure keeps its grey icon but takes the new label).
+        Editor().PlanEdit(Editor().Derive(null).Single(t => t.Link == Help), new CustomToolEdit("BIM help", Help, "pack:question_green"), null)
+            .Changing.Select(t => t.ProfileName).Should().Equal("Architecture", "Structure");
+    }
+
+    [Fact]
+    public void The_open_profile_counts_once_and_only_its_working_copy_when_only_that_changes()
+    {
+        ProfileStore.Save(Make("h-arch", "Architecture", new(), Url("Help", Help, baseName: "Help", icon: "pack:question_blue")), _dir);
+        var working = ProfileEditing.ForEditing(OnDisk("h-arch"));
+        working.Panels[0].Slots.Add(Url("Help", Help, baseName: "Help", icon: "pack:question_blue")); // a second placement, not saved yet
+        working.Panels[0].Slots[0].IconFile = "pack:question_red"; // and its own icon on the first, not saved yet
+        var editor = Editor();
+        var help = editor.Derive(working).Single(t => t.Link == Help);
+        help.IconFile.Should().Be("pack:question_red", "the working copy's first occurrence");
+
+        // The file's Help is blue, not the tool's (red) icon, so an icon-only edit leaves the file as it is;
+        // in the working copy only the red placement changes (its blue second placement is its own).
+        var iconOnly = editor.PlanEdit(help, new CustomToolEdit("Help", Help, "pack:question_green"), working);
+        var open = iconOnly.Targets.Should().ContainSingle().Subject;
+        (open.State, open.IsOpen).Should().Be((CustomToolTargetState.WorkingCopy, true), "only the working copy's red placement changes");
+        iconOnly.Count.Should().Be(1);
+
+        var label = editor.PlanEdit(help, new CustomToolEdit("Desk", Help, "pack:question_red"), working);
+        label.Targets.Should().ContainSingle().Which.State.Should().Be(CustomToolTargetState.Write);
+        editor.PlanEdit(help, new CustomToolEdit("Help", Help, "pack:question_red"), working).Targets.Should().ContainSingle()
+            .Which.State.Should().Be(CustomToolTargetState.Unchanged, "an edit that changes nothing writes nothing");
+    }
+
+    [Fact]
+    public void An_edit_that_fails_its_check_plans_every_holder()
+    {
+        HelpProfiles();
+        var editor = Editor();
+        var help = editor.Derive(null).Single(t => t.Link == Help);
+        editor.PlanEdit(help, new CustomToolEdit(" ", Help, null), null).Should().BeEquivalentTo(editor.Plan(Help, null));
+    }
+
+    // ── several recipients (WU4 delta review F9) ──
+
+    [Theory]
+    [InlineData("mailto:a@x.example,b@y.example")]
+    [InlineData("mailto:a@x.example, b@y.example")]
+    [InlineData("mailto:a@x.example,b@y.example?subject=RST")]
+    [InlineData("a@x.example,b@y.example")]
+    public void Several_comma_separated_addresses_pass(string address)
+    {
+        CustomTools.Check(new CustomToolEdit("Team", address, null)).Should().BeNull();
+        CustomTools.KindOf(CustomTools.Opens(address)).Should().Be(CustomToolKind.Email);
+    }
+
+    [Theory]
+    [InlineData("mailto:a@x.example,")]
+    [InlineData("mailto:,a@x.example")]
+    [InlineData("mailto:a@x.example,,b@y.example")]
+    [InlineData("mailto:a@x.example,https://wiki.example.com")]
+    [InlineData("mailto:a@x.example,bob")]
+    [InlineData("mailto:a@x.example,b c@y.example")]
+    public void A_blank_or_implausible_recipient_is_refused(string address) =>
+        CustomTools.Check(new CustomToolEdit("Team", address, null)).Should().Be(CustomTools.NotAnEmail);
 }

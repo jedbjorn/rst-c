@@ -4,6 +4,8 @@
 // export_profile, load_profile (the auto-reload), list_iconpack, and the machine-wide branding
 // (load_default_branding, save_default_branding_url, pick_logo_file, clear_default_logo).
 // The real backend composes the same RST.Core services the WPF Loader calls.
+// Feature #18 (spec #19, WU4): Custom Tools' edit and remove everywhere, through RST.Core's
+// CustomToolEditor over the same profiles folder and save service.
 
 using System.IO;
 using RST.Core.Builder;
@@ -63,6 +65,18 @@ public interface IProfileBuilderBackend
 
     /// <summary>The icon pack catalogue (one entry per design with a complete color set); empty when the pack is missing.</summary>
     IReadOnlyList<IconPackEntry> GetIconPack();
+
+    /// <summary>
+    /// The profiles folder read once for a confirmation of <paramref name="link"/> (feature #18, WU4):
+    /// Remove's plan, and an edit's exact plan as the dialog changes (a dry run, no I/O).
+    /// </summary>
+    CustomToolPreview PreviewCustomTool(string link, Profile? working);
+
+    /// <summary>Edit everywhere: every saved profile holding the tool, and <paramref name="working"/> in memory.</summary>
+    CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId);
+
+    /// <summary>Remove everywhere: every saved profile holding the link, and <paramref name="working"/> in memory.</summary>
+    CustomToolUpdate RemoveCustomTool(string link, Profile? working, string? activeProfileId);
 }
 
 /// <summary>The real backend: %AppData%\RST, the shipped lookup, and the running Revit's add-in folders.</summary>
@@ -72,6 +86,7 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     private readonly ProfileLoadService _load;
     private readonly ProfileSaveService _save;
     private readonly AddinLookupService _lookup;
+    private readonly CustomToolEditor _customTools;
 
     /// <param name="revitVersion">Revit's version number.</param>
     /// <param name="catalog">The scanned command catalogue.</param>
@@ -97,6 +112,7 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
         _load = new ProfileLoadService(p, switchScheduler, switching: null, log);
         _save = new ProfileSaveService(p.ProfilesDir, log);
         _lookup = new AddinLookupService(lookupPath ?? LoaderAssets.LookupPath, log);
+        _customTools = new CustomToolEditor(p.ProfilesDir, _save, log);
         Log.Information("Builder catalog: {Count} commands ({Promoted} host-tab promoted)", Catalog.Count, promoted);
     }
 
@@ -174,6 +190,14 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
     /// with no confirm and ignored its result (D8); add-ins change only through Load Profile.
     /// </summary>
     public Task<LoadResult> LoadAsync(LoadRequest request) => Task.FromResult(_load.Reload(request));
+
+    public CustomToolPreview PreviewCustomTool(string link, Profile? working) => _customTools.Preview(link, working);
+
+    public CustomToolUpdate EditCustomTool(CustomTool tool, CustomToolEdit edit, Profile? working, string? activeProfileId) =>
+        _customTools.Edit(tool, edit, working, activeProfileId);
+
+    public CustomToolUpdate RemoveCustomTool(string link, Profile? working, string? activeProfileId) =>
+        _customTools.Remove(link, working, activeProfileId);
 }
 
 /// <summary>The icon pack catalogue as the picker reads it (LoaderBridge.ListIconpackCore without the JSON).</summary>

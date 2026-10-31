@@ -13,6 +13,9 @@
     Junk cleanup tabs, where the Properties pane, the header's Name and Tab boxes, the Branding ▾ popover
     and the Presets and Cleanup modals were. WU3 makes the panel cards tiles and stacks ("Panels on tab",
     the inline colour and name, + New Stack, the stack rules of decisions #18 and #19 for drag and drop).
+    WU4 adds the Commands pane's + Create new and its Custom Tools group (decision #20): first in the
+    catalogue tree, so the two scroll as one region (decision #25), and filtered with it; the count is
+    the commands plus the custom tools.
 -->
 <Window x:Class="RST.UI.Builder.ProfileBuilderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -336,7 +339,7 @@
                         </StackPanel>
                     </Border>
                     <StackPanel x:Name="Corner" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0" Opacity="0" IsHitTestVisible="False">
-                        <!-- WU4's hook: ✎ on a placed custom tool (shown only when WU4 provides the command). -->
+                        <!-- ✎ on a placed custom tool: edit it everywhere (WU4). -->
                         <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCustomCommand}" CommandParameter="{Binding}"
                                 Visibility="{Binding ShowsEditCustom, Converter={StaticResource BoolToVisible}}"
                                 ToolTip="{x:Static res:UiStrings.Builder_EditCustomToolTip}"
@@ -502,6 +505,136 @@
                     </DataTrigger>
                 </HierarchicalDataTemplate.Triggers>
             </HierarchicalDataTemplate>
+
+            <!-- A catalogue node's row in the tree (the catalogue's own TreeViewItem settings). -->
+            <Style x:Key="CatalogItemStyle" TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+            </Style>
+
+            <!--
+                The Custom Tools group's place in the tree (feature #18, WU4): the group draws itself (no
+                tree chevron, hover or selection), is never a keyboard stop of the tree, and hides while a
+                filter matches none of its tools.
+            -->
+            <Style x:Key="CustomToolsItemStyle" TargetType="TreeViewItem">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolToVisible}}" />
+                <Setter Property="AutomationProperties.AutomationId" Value="Builder.CustomTools" />
+                <Setter Property="AutomationProperties.Name" Value="{x:Static res:UiStrings.Builder_CustomTools}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TreeViewItem">
+                            <ContentPresenter ContentSource="Header" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- A Custom Tools row's kind tag (URL, EMAIL). -->
+            <Style x:Key="KindTag" TargetType="Border">
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="3" />
+                <Setter Property="Padding" Value="4,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!--
+                A Custom Tools row (feature #18, WU4; decision #20): the 16 px icon, the label, the kind tag;
+                ✎ (edit everywhere) and × (remove everywhere) on hover or keyboard focus; the link and
+                "Used in: …" as the tooltip. Dragged onto a panel like a catalogue command; a double-click
+                adds it to the selected panel. Each placement is a new slot. The row is a keyboard stop
+                (review F7): ↑ ↓ move between rows, Delete removes the tool everywhere (with the confirm).
+            -->
+            <DataTemplate DataType="{x:Type builder:CustomToolItemViewModel}">
+                <Border x:Name="Row" Padding="20,2,4,2" CornerRadius="3" Background="Transparent" MinHeight="24" ToolTip="{Binding ToolTip}"
+                        Focusable="True" FocusVisualStyle="{StaticResource FocusRing}" KeyDown="OnCustomToolKeyDown"
+                        PreviewMouseLeftButtonDown="OnDragSourceDown" PreviewMouseMove="OnDragSourceMove"
+                        AutomationProperties.AutomationId="Builder.CustomTool" AutomationProperties.Name="{Binding Label}">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding AddCommand}" />
+                    </Border.InputBindings>
+                    <DockPanel>
+                        <StackPanel x:Name="Acts" DockPanel.Dock="Right" Orientation="Horizontal" Margin="4,0,0,0" Visibility="Collapsed">
+                            <Button Content="✎" Style="{StaticResource Ghost}" Command="{Binding EditCommand}"
+                                    ToolTip="{x:Static res:UiStrings.Builder_EditToolEverywhereTip}"
+                                    AutomationProperties.AutomationId="Builder.EditCustomToolEverywhere"
+                                    AutomationProperties.Name="{x:Static res:UiStrings.Builder_EditToolEverywhereTip}" />
+                            <Button Content="×" Style="{StaticResource GhostDanger}" Command="{Binding RemoveCommand}"
+                                    ToolTip="{x:Static res:UiStrings.Builder_RemoveToolEverywhereTip}"
+                                    AutomationProperties.AutomationId="Builder.RemoveCustomToolEverywhere"
+                                    AutomationProperties.Name="{x:Static res:UiStrings.Builder_RemoveToolEverywhereTip}" />
+                        </StackPanel>
+                        <Border DockPanel.Dock="Right" Style="{StaticResource KindTag}">
+                            <TextBlock Text="{Binding KindText}" FontSize="9" Foreground="{StaticResource MutedTextBrush}"
+                                       AutomationProperties.AutomationId="Builder.CustomToolKind" />
+                        </Border>
+                        <Image DockPanel.Dock="Left" Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,6,0"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   AutomationProperties.AutomationId="Builder.CustomToolLabel" />
+                    </DockPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Row" Property="Background" Value="{StaticResource HoverBrush}" />
+                        <Setter TargetName="Acts" Property="Visibility" Value="Visible" />
+                    </Trigger>
+                    <Trigger SourceName="Row" Property="IsKeyboardFocusWithin" Value="True">
+                        <Setter TargetName="Acts" Property="Visibility" Value="Visible" />
+                    </Trigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!--
+                The Custom Tools group (feature #18, WU4; decisions #20 and #25): first in the catalogue tree, so
+                the two scroll as one region; set apart (InfoSoft with an InfoBorder line), expanded at first,
+                with its count, the note, and its rows.
+            -->
+            <DataTemplate x:Key="CustomToolsGroupTemplate" DataType="{x:Type builder:CustomToolsGroupViewModel}">
+                <Border Margin="2,0,2,8" Background="{StaticResource InfoSoftBrush}" BorderBrush="{StaticResource InfoBorderBrush}"
+                        BorderThickness="1" CornerRadius="5" Padding="2,3,2,4" AutomationProperties.AutomationId="Builder.CustomToolsGroup">
+                    <StackPanel>
+                        <DockPanel x:Name="GroupHeader" Margin="0,0,4,2" MinHeight="22" Background="Transparent" Cursor="Hand"
+                                   ToolTip="{x:Static res:UiStrings.Builder_CustomToolsToggleTip}"
+                                   AutomationProperties.AutomationId="Builder.CustomToolsHeader">
+                            <DockPanel.InputBindings>
+                                <MouseBinding Gesture="LeftClick" Command="{Binding ToggleCommand}" />
+                            </DockPanel.InputBindings>
+                            <ContentControl DockPanel.Dock="Right" Style="{StaticResource Pill}" Content="{Binding Count}"
+                                            AutomationProperties.AutomationId="Builder.CustomToolsCount" />
+                            <Path x:Name="Chevron" DockPanel.Dock="Left" Data="M 0,0 L 4,4 L 0,8" Stroke="{StaticResource MutedTextBrush}" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Width="8" Height="8"
+                                  Margin="5,0,7,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="0" />
+                                </Path.RenderTransform>
+                            </Path>
+                            <TextBlock Text="{x:Static res:UiStrings.Builder_CustomTools}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding Note}" Foreground="{StaticResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap"
+                                   Margin="22,0,8,4" AutomationProperties.AutomationId="Builder.CustomToolsNote" />
+                        <ItemsControl ItemsSource="{Binding Items}" Focusable="False"
+                                      Visibility="{Binding ShowsRows, Converter={StaticResource BoolToVisible}}"
+                                      AutomationProperties.AutomationId="Builder.CustomToolsRows" />
+                    </StackPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding ShowsRows}" Value="True">
+                        <Setter TargetName="Chevron" Property="RenderTransform">
+                            <Setter.Value>
+                                <RotateTransform Angle="90" />
+                            </Setter.Value>
+                        </Setter>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <builder:CatalogItemTemplateSelector x:Key="CatalogItemTemplates" Catalog="{StaticResource CatalogNodeTemplate}"
+                                                 CustomTools="{StaticResource CustomToolsGroupTemplate}" />
+            <builder:CatalogItemStyleSelector x:Key="CatalogItemStyles" Catalog="{StaticResource CatalogItemStyle}"
+                                              CustomTools="{StaticResource CustomToolsItemStyle}" />
         </ResourceDictionary>
     </Window.Resources>
 
@@ -609,42 +742,46 @@
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
                             <DockPanel VerticalAlignment="Center">
-                                <ContentControl DockPanel.Dock="Right" Style="{StaticResource Pill}" Content="{Binding CatalogCount}"
+                                <ContentControl DockPanel.Dock="Right" Style="{StaticResource Pill}" Content="{Binding CommandsCount}"
                                                 AutomationProperties.AutomationId="Builder.CatalogCount" />
                                 <TextBlock Text="{x:Static res:UiStrings.Builder_Commands}" Style="{StaticResource SectionText}" Margin="0"
                                            VerticalAlignment="Center" />
                             </DockPanel>
                         </Border>
-                        <Grid DockPanel.Dock="Top" Margin="12,10,12,8">
-                            <TextBox x:Name="FilterBox" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.AutomationId="Builder.Filter"
-                                     AutomationProperties.Name="{x:Static res:UiStrings.Builder_FilterPlaceholder}" />
-                            <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_FilterPlaceholder}"
-                                       Tag="{Binding Text, ElementName=FilterBox}" />
-                        </Grid>
-                        <Grid>
-                            <!-- Height-bounded by the pane, so the tree virtualizes (spec #16, AC7). -->
-                            <TreeView x:Name="CatalogTreeView" ItemsSource="{Binding CatalogRoots}" ItemTemplate="{StaticResource CatalogNodeTemplate}"
-                                      Padding="6,0,6,8" ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                      AutomationProperties.AutomationId="Builder.Catalog"
-                                      AutomationProperties.Name="{x:Static res:UiStrings.Builder_Commands}">
-                                <TreeView.ItemContainerStyle>
-                                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
-                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                                        <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
-                                    </Style>
-                                </TreeView.ItemContainerStyle>
-                            </TreeView>
-                            <TextBlock Text="{x:Static res:UiStrings.Builder_CatalogEmpty}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                                       TextAlignment="Center" Margin="20,24" VerticalAlignment="Top"
-                                       Visibility="{Binding CatalogIsEmpty, Converter={StaticResource BoolToVisible}}"
-                                       AutomationProperties.AutomationId="Builder.CatalogEmpty" />
-                            <TextBlock Text="{Binding NoMatchesText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                                       TextAlignment="Center" Margin="20,24" VerticalAlignment="Top"
-                                       Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisible}}"
-                                       AutomationProperties.AutomationId="Builder.NoMatches" />
-                        </Grid>
+                        <DockPanel DockPanel.Dock="Top" Margin="12,10,12,8">
+                            <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Builder_CreateNew}" Margin="6,0,0,0"
+                                    Command="{Binding CreateCustomToolCommand}" ToolTip="{x:Static res:UiStrings.Builder_CreateNewTip}"
+                                    AutomationProperties.AutomationId="Builder.CreateNew"
+                                    AutomationProperties.Name="{x:Static res:UiStrings.Builder_CreateNewTip}" />
+                            <Grid>
+                                <TextBox x:Name="FilterBox" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                                         PreviewKeyDown="OnFilterKeyDown"
+                                         AutomationProperties.AutomationId="Builder.Filter"
+                                         AutomationProperties.Name="{x:Static res:UiStrings.Builder_FilterPlaceholder}" />
+                                <TextBlock Style="{StaticResource Hint}" Text="{x:Static res:UiStrings.Builder_FilterPlaceholder}"
+                                           Tag="{Binding Text, ElementName=FilterBox}" />
+                            </Grid>
+                        </DockPanel>
+                        <!-- The empty states sit above the tree, which may still show Custom Tools. -->
+                        <TextBlock DockPanel.Dock="Top" Text="{x:Static res:UiStrings.Builder_CatalogEmpty}" Style="{StaticResource MutedText}"
+                                   TextWrapping="Wrap" TextAlignment="Center" Margin="20,8,20,12"
+                                   Visibility="{Binding CatalogIsEmpty, Converter={StaticResource BoolToVisible}}"
+                                   AutomationProperties.AutomationId="Builder.CatalogEmpty" />
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding NoMatchesText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="20,8,20,12"
+                                   Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisible}}"
+                                   AutomationProperties.AutomationId="Builder.NoMatches" />
+                        <!--
+                            Height-bounded by the pane, so the tree virtualizes (spec #16, AC7). Its items are the
+                            Custom Tools group, then the catalogue (code-behind: one CompositeCollection), so both
+                            scroll as one region (decision #25).
+                        -->
+                        <TreeView x:Name="CatalogTreeView" ItemTemplateSelector="{StaticResource CatalogItemTemplates}"
+                                  ItemContainerStyleSelector="{StaticResource CatalogItemStyles}"
+                                  Padding="6,0,6,8" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  AutomationProperties.AutomationId="Builder.Catalog"
+                                  AutomationProperties.Name="{x:Static res:UiStrings.Builder_Commands}" />
                     </DockPanel>
                 </Border>
 

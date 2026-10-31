@@ -426,8 +426,8 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     the tooltip. The ▲ ▼ slot buttons and the command id on rows are retired.
   - **Stack** (`StackGroupViewModel`, 200 px): "STACK · n/3" with ✎ (the stack dialog) and × (un-stack),
     then a row per tool (`ToolTileViewModel` with `Row` ≥ 0): the 16 px icon, the name box, × on hover.
-  - **WU4's hook:** ✎ on a placed custom tool binds `ProfileBuilderViewModel.EditCustomToolCommand`
-    (null in WU3, so hidden) with the tile as its parameter.
+  - **✎ on a placed custom tool** binds `ProfileBuilderViewModel.EditCustomToolCommand` with the tile
+    as its parameter (WU4: edit everywhere; hidden on other tools).
   - **The stack dialog** (`StackDialog` over `StackDialogModel`, behind `IBuilderDialogs.EditStack`):
     New lists the panel's loose tools, ticked 2-3 in pick order ("#n"); Edit lists the stack's rows
     (ticked) then the loose tools, with ▲ ▼ to reorder; a fourth tick is refused; saving an edit
@@ -435,6 +435,45 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
   - **Opening a profile** runs `PanelStacks.Normalize` after the clean baseline is taken, so a
     repaired profile reads as changed and Save can write the repair (WU1 review F2, WU2 review F1);
     each repair is logged and a toast says so. Save refuses a stack of 4+ (`PanelStacks.SaveBlocker`).
+- **Feature #18 (spec #19), WU4, the Commands pane's Custom Tools** (`CustomToolItems.cs`, decision #20):
+  - **The list** (`CustomToolsGroupViewModel`): `RST.Core.Builder.CustomTools.Derive` over the saved
+    profiles (as last read) and the working copy, refreshed after every edit; rows are rebuilt only when
+    what they show changed. Each row (`CustomToolItemViewModel`): the 16 px icon, the label, the kind tag,
+    ✎ and × on hover, the link and "Used in: …" as the tooltip; dragged like a catalogue command
+    (`BuilderDrag.FromCustomTool`, `DragKind.CustomTool`: every drop places a fresh slot,
+    `CustomTools.SlotFor`) and double-clicked to add to the selected panel. The pane's count is the
+    commands plus the custom tools; Filter… filters the list too (label or link). **Keyboard:** each row is
+    a keyboard stop (↓ from Filter… enters the list, ↑ ↓ move between rows, ↓ past the last row goes on
+    to the first catalogue node); focus shows ✎ × as hover does, and Delete removes the tool everywhere
+    through the usual confirmation, then focus goes to the next row (the previous one after the last,
+    Filter… when the list is empty).
+  - **One scroll region** (decision #25): the tree's `ItemsSource` is a `CompositeCollection` (code-behind)
+    of the group, then `CatalogRoots`, so the catalogue keeps its virtualizing tree (AC7). The
+    `CatalogItemTemplateSelector` and `CatalogItemStyleSelector` give the group its own template and a
+    container that draws only the group (no tree chevron, hover or selection; not a keyboard stop).
+  - **The Custom Tool dialog** (`CustomToolDialog` over `CustomToolDialogModel`, behind
+    `IBuilderDialogs.EditCustomTool`): + Create new and ✎ (a row, or a placed tile or stack row through
+    `EditCustomToolCommand`). URL / Email (`RangePill`s; Email adds `mailto:`), label, address and the
+    live "Opens: …" line, and the icon (the family icon picker in its own window, `IconPickerWindow`,
+    since its 700 px card does not fit the dialog). Create's note names the panel; Edit's warning names
+    every profile that will change (two profiles that share a name show their files) and lists the ones
+    that will not. A `mailto:` link must hold a plausible email address (`CustomTools.IsEmailAddress`),
+    so Email mode cannot write a URL as an email to every profile.
+  - **Edit everywhere** changes every placement's link and BaseName; a placement's Name changes only
+    where it still equals the old base name, and its icon only where it is still the tool's old icon
+    (the one the list shows): names and icons picked on a panel are kept (FnB decision, WU4 review F2).
+  - **Edit and Remove everywhere** go through `IProfileBuilderBackend` to `CustomToolEditor`. The
+    confirmation comes from `CustomToolEditor.Plan`, the same classification the edit and remove run,
+    so "Update in N profiles" / "Remove from N profiles" is what will be written (for an edit, exactly:
+    `CustomToolPreview.PlanEdit` dry-runs the edit as the dialog stands, so a holder it would leave as
+    it is, its names and icons its own, is listed as not changed and not counted): profiles that share a
+    name are not merged, the open unsaved working copy shows under its current name, and id-less and
+    shared-id files are listed as not changed. After the change: when the open profile's file was
+    written, its clean baseline (`ProfileEditing.FromSnapshot`) gets the same change, so only other
+    unsaved edits stay unsaved; the cards are rebuilt; failures are listed in a message and logged; and
+    when the loaded profile's file changed the ribbon reloads through Save's reload (`ReloadActiveAsync`).
+    A working-copy change that throws is a reported failure, not a crash.
+  - **Retired:** `BuilderRules.UrlSlot` (the Properties pane's + URL Button).
 
 ## Revit API floor
 

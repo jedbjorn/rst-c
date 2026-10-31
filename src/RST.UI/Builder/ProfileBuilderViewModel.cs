@@ -21,6 +21,12 @@
 // profile the Builder opens is normalised first (PanelStacks.Normalize: a shared stack is split, a
 // broken one repaired), which counts as an unsaved change; Save refuses a stack of 4+ tools
 // (PanelStacks.SaveBlocker). The ▲ ▼ slot buttons and the slot rows' command ids are retired.
+// Feature #18, WU4: the Commands pane's Custom Tools (decision #20): the list derived from the saved
+// profiles and the working copy, filtered with the catalogue, dragged or double-clicked onto panels
+// as fresh slots; + Create new (the Custom Tool dialog); ✎ on a row or a placed custom tool edits it
+// everywhere and × on a row removes it everywhere, each after a confirmation that lists the profiles
+// that will change (RST.Core CustomToolEditor.Plan). The open profile's clean baseline takes the same
+// change when its file was written, and the ribbon reloads when the loaded profile's file changed.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -44,6 +50,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 {
     public const string UnsavedChangesDialogId = MessageDialog.DiscardChangesId;
     public const string DeletePanelDialogId = "DeletePanelDialog";
+    public const string RemoveCustomToolDialogId = "RemoveCustomToolDialog";
+    public const string CustomToolsPartialDialogId = "CustomToolsPartialDialog";
 
     /// <summary>
     /// The color picker's palette: the Builder's default blue and the other panel colors rst-c's
@@ -90,6 +98,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private IReadOnlyList<PresetTabViewModel> _presetTabs = [];
 
+    private readonly CustomToolsGroupViewModel _customTools;
+
     // The file a profile with no id was read from: its first save writes it under a new id and a
     // new file name, and then removes this one (WU1 review F6), so it is not listed twice.
     private string? _supersededFile;
@@ -119,6 +129,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _builderDialogs = builderDialogs ?? NoBuilderDialogs.Instance;
         _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
         Toast = new TransientMessage(schedule);
+        _customTools = new CustomToolsGroupViewModel(this);
 
         BrandingCommand = new RelayCommand(() => _builderDialogs.EditBranding(this), () => IsIdle);
         PickLogoCommand = new RelayCommand(PickLogo, () => IsIdle);
@@ -134,6 +145,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         RenameCommand = new RelayCommand(Rename, () => IsIdle);
         DuplicateCommand = new RelayCommand(Duplicate, () => IsIdle && _editMode);
         RestoreCleanupDefaultsCommand = new RelayCommand(RestoreCleanupDefaults, () => IsIdle);
+        CreateCustomToolCommand = new RelayCommand(CreateCustomTool, () => IsIdle);
+        EditCustomToolCommand = new RelayCommand<ToolTileViewModel>(EditPlacedCustomTool, t => IsIdle && t is { IsCustom: true });
     }
 
     /// <summary>Raised when the window should close (Exit, or after the unsaved-changes prompt allowed it).</summary>
@@ -175,6 +188,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         if (catalog.Count == 0) Log.Warning("Builder: get_catalog returned no commands");
         ApplyFilter();
         OnPropertyChanged(nameof(CatalogCount));
+        OnPropertyChanged(nameof(CommandsCount));
         OnPropertyChanged(nameof(CatalogIsEmpty));
 
         _library = Safe(_backend.GetProfiles, [], "get_profiles");
@@ -228,6 +242,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         var current = ProfileOptions.FirstOrDefault(o => o.Key == previous)
                       ?? (_selectedOption is { } held && held.Key == previous ? held : ProfileOptionViewModel.New());
         SetCurrent(current);
+        RefreshCustomTools();
     }
 
     /// <summary>
@@ -365,6 +380,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     internal void ProfileEdited()
     {
         OnPropertyChanged(nameof(IsDirty));
+        RefreshCustomTools();
         RelayCommand.Refresh();
     }
 
@@ -600,8 +616,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <summary>"No commands available…": the catalogue is empty (the Builder opened outside Revit).</summary>
     public bool CatalogIsEmpty => _tree.CommandCount == 0;
 
-    /// <summary>"No matches for "q".": a filter is active and matches nothing.</summary>
-    public bool HasNoMatches => !CatalogIsEmpty && _filter is { IsActive: true, AnyMatch: false };
+    /// <summary>"No matches for "q".": a filter is active and matches nothing (no command and no custom tool).</summary>
+    public bool HasNoMatches => !CatalogIsEmpty && _filter is { IsActive: true, AnyMatch: false } && !_customTools.HasMatches;
 
     public string NoMatchesText => UiStrings.Builder_NoMatches(_filter?.Query ?? "");
 
@@ -624,6 +640,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _expansion.FilterActive = _filter.IsActive;
         foreach (var root in _allRoots) root.Apply(_filter);
         CatalogRoots.Sync(_allRoots, r => _filter.IsVisible(r.Node));
+        _customTools.ApplyFilter(_filterText);
         OnPropertyChanged(nameof(HasNoMatches));
         OnPropertyChanged(nameof(NoMatchesText));
     }
@@ -826,10 +843,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     /// <summary>
-    /// WU4's hook for ✎ on a placed custom tool (its parameter is the <see cref="ToolTileViewModel"/>).
-    /// Null in WU3, so the tiles show no ✎; WU4 sets it when it adds the Custom Tool dialog.
+    /// ✎ on a placed custom tool (its parameter is the <see cref="ToolTileViewModel"/>): the Custom
+    /// Tool dialog, edit everywhere (feature #18, WU4).
     /// </summary>
-    public ICommand? EditCustomToolCommand { get; private set; }
+    public ICommand? EditCustomToolCommand { get; }
 
     /// <summary>The icon picker while it is open (the window shows it over everything), else null.</summary>
     public IconPickerViewModel? IconPicker
@@ -850,8 +867,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// </summary>
     internal void PickIcon(ToolTileViewModel tile)
     {
-        _iconPack ??= Safe(_backend.GetIconPack, [], "list_iconpack");
-        IconPicker = new IconPickerViewModel(_iconPack, tile.Model.IconFile, PackDirectory, outcome =>
+        IconPicker = new IconPickerViewModel(IconPackEntries, tile.Model.IconFile, PackDirectory, outcome =>
         {
             IconPicker = null;
             if (!outcome.Committed) return;
@@ -1066,7 +1082,12 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private void AfterTileDrop(BuilderDrag drag, TileDrop plan, StackResult result)
     {
         Log.Information("Builder: drop {Kind} {Source} → panel {Panel} slot {Slot}: {Result}",
-            plan.Kind, drag.Kind == DragKind.Catalog ? drag.Command?.Id : $"{drag.PanelIndex}/{drag.SlotIndex}/{drag.Row}", plan.Panel, plan.Slot, result);
+            plan.Kind, drag.Kind switch
+            {
+                DragKind.Catalog => drag.Command?.Id,
+                DragKind.CustomTool => drag.Tool?.Link,
+                _ => $"{drag.PanelIndex}/{drag.SlotIndex}/{drag.Row}",
+            }, plan.Panel, plan.Slot, result);
         if (result == StackResult.Full) ShowToast(UiStrings.Builder_StackFull, BannerKind.Warning);
         if (plan.Kind == TileDropKind.Stale)
         {
@@ -1114,6 +1135,229 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         panelIndex >= 0 && panelIndex < Panels.Count && slotIndex >= 0 && slotIndex < Panels[panelIndex].Items.Count
             ? Panels[panelIndex].Items[slotIndex]
             : null;
+
+    // ---- Custom Tools (feature #18, WU4) ---------------------------------------------------------
+
+    /// <summary>The Custom Tools group at the top of the Commands pane (decision #20).</summary>
+    public CustomToolsGroupViewModel CustomToolsGroup => _customTools;
+
+    /// <summary>The Commands pane's count: the catalogue's commands plus the custom tools.</summary>
+    public int CommandsCount => CatalogCount + _customTools.Count;
+
+    /// <summary>+ Create new: the Custom Tool dialog; the tool goes on the selected panel (or the first).</summary>
+    public ICommand CreateCustomToolCommand { get; }
+
+    private IReadOnlyList<IconPackEntry> IconPackEntries => _iconPack ??= Safe(_backend.GetIconPack, [], "list_iconpack");
+
+    /// <summary>
+    /// The list again from the saved profiles (as last read) and the working copy: after every edit,
+    /// and whenever the saved profiles are read. Rows are rebuilt only when what they show changed.
+    /// </summary>
+    private void RefreshCustomTools()
+    {
+        var tools = Safe(() => CustomTools.Derive(_library.Select(e => e.Profile), _profile), [], "derive_custom_tools");
+        if (!_customTools.Update(tools)) return;
+        _customTools.ApplyFilter(_filterText);
+        OnPropertyChanged(nameof(CommandsCount));
+        OnPropertyChanged(nameof(HasNoMatches));
+    }
+
+    /// <summary>
+    /// + Create new: a profile with no panels is refused; otherwise the dialog, then a new slot at the
+    /// end of the selected panel (the first when none is selected). A link the list already holds is
+    /// added anyway, as another placement.
+    /// </summary>
+    private void CreateCustomTool()
+    {
+        if (IsWorking) return;
+        if (_profile.Panels.Count == 0)
+        {
+            ShowToast(UiStrings.Builder_AddPanelFirst, BannerKind.Error);
+            return;
+        }
+        var target = _selectedPanelIndex >= 0 && _selectedPanelIndex < _profile.Panels.Count ? _selectedPanelIndex : 0;
+        var dialog = CustomToolDialogModel.ForCreate(_profile.Panels[target].Name ?? "", IconPackEntries, PackDirectory);
+        if (!_builderDialogs.EditCustomTool(dialog)) return;
+        var edit = dialog.Result;
+        if (CustomTools.Check(edit) is not null) return;
+        var existed = _customTools.Find(CustomTools.Normalize(edit.Address)) is not null;
+        if (CustomTools.AddToPanel(_profile, target, CustomTools.NewSlot(edit)) is not { } panel)
+        {
+            ShowToast(UiStrings.Builder_AddPanelFirst, BannerKind.Error);
+            return;
+        }
+        Log.Information("Builder: custom tool created {Label} → {Link} on {Panel} (existing link: {Existing})",
+            edit.Label, CustomTools.Normalize(edit.Address), _profile.Panels[panel].Name, existed);
+        _selectedPanelIndex = panel;
+        RenderCanvas();
+        ShowToast(existed ? UiStrings.Builder_ToolAddedExisting : UiStrings.Builder_ToolAdded(_profile.Panels[panel].Name ?? ""), BannerKind.Success);
+    }
+
+    /// <summary>A double-click on a Custom Tools row: a new placement on the selected panel (as a catalogue command).</summary>
+    internal void AddCustomToolToSelectedPanel(CustomTool tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        if (_selectedPanelIndex < 0 || _selectedPanelIndex >= _profile.Panels.Count) AddPanelCore();
+        _profile.Panels[_selectedPanelIndex].Slots.Add(CustomTools.SlotFor(tool));
+        Log.Information("Builder: custom tool {Link} added to {Panel}", tool.Link, _profile.Panels[_selectedPanelIndex].Name);
+        RenderCanvas();
+    }
+
+    /// <summary>✎ on a placed custom tool (a tile or a stack row): the same edit as ✎ on its Custom Tools row.</summary>
+    private void EditPlacedCustomTool(ToolTileViewModel? tile)
+    {
+        if (tile is null || !tile.IsCustom) return;
+        RefreshCustomTools();
+        if (_customTools.Find(CustomTools.LinkOf(tile.Model)) is { } tool) EditCustomTool(tool);
+    }
+
+    /// <summary>✎ on a Custom Tools row or a placed custom tool: edit everywhere.</summary>
+    internal void EditCustomTool(CustomTool tool) => _ = EditCustomToolAsync(tool);
+
+    /// <summary>× on a Custom Tools row: remove everywhere, after a confirmation that lists the profiles.</summary>
+    internal void RemoveCustomTool(CustomTool tool) => _ = RemoveCustomToolAsync(tool);
+
+    /// <summary>
+    /// Edit everywhere (decision #20): the dialog filled in, with a warning naming every profile that
+    /// will change ("Update in N profiles", N being what will be written) and the ones that will
+    /// not; then every saved profile holding the tool, and the working copy.
+    /// </summary>
+    internal async Task EditCustomToolAsync(CustomTool tool)
+    {
+        if (IsWorking) return;
+        RefreshProfiles(); // another Revit session may have saved since
+        tool = _customTools.Find(tool.Link) ?? tool;
+        if (Safe<CustomToolPreview?>(() => _backend.PreviewCustomTool(tool.Link, _profile), null, "plan_custom_tool") is not { } preview)
+        {
+            ShowToast(UiStrings.Builder_ToolChangeFailed, BannerKind.Error);
+            return;
+        }
+        // The confirmation's count follows the dialog: a dry run of the edit as it stands (delta review F8).
+        var target = tool;
+        var dialog = CustomToolDialogModel.ForEdit(tool, preview.Plan, IconPackEntries, PackDirectory, e => preview.PlanEdit(target, e));
+        if (!_builderDialogs.EditCustomTool(dialog) || !dialog.CanConfirm) return;
+        var edit = dialog.Result;
+        if (CustomTools.Check(edit) is not null) return;
+        Log.Information("Builder: edit custom tool {Link} everywhere ({Count} profiles)", tool.Link, dialog.Plan?.Count);
+        var update = Safe<CustomToolUpdate?>(() => _backend.EditCustomTool(tool, edit, _profile, _activeId), null, "edit_custom_tool");
+        await AfterCustomToolUpdateAsync(update, p => CustomTools.ApplyEdit(p, tool, edit), UiStrings.Builder_ToolUpdated);
+    }
+
+    /// <summary>
+    /// Remove everywhere (decision #20): asks first, listing the profiles ("Remove from N profiles");
+    /// then every slot with the link goes from every saved profile and the working copy.
+    /// </summary>
+    internal async Task RemoveCustomToolAsync(CustomTool tool)
+    {
+        if (IsWorking) return;
+        RefreshProfiles();
+        if (Safe(() => _backend.PreviewCustomTool(tool.Link, _profile).Plan, null, "plan_custom_tool") is not { } plan)
+        {
+            ShowToast(UiStrings.Builder_ToolChangeFailed, BannerKind.Error);
+            return;
+        }
+        var text = UiStrings.Builder_RemoveToolText(tool.Label, CustomTools.ShortLink(tool.Link));
+        if (plan.Refused.Count > 0)
+            text += Environment.NewLine + Environment.NewLine + UiStrings.Builder_ToolNotChanged + Environment.NewLine
+                    + string.Join(Environment.NewLine, plan.Refused.Select(CustomToolDialogModel.RefusalLine));
+        if (plan.Count == 0)
+        {
+            _dialogs.ShowMessage(UiStrings.Builder_RemoveToolTitle, UiStrings.Builder_ToolNothingToChange + Environment.NewLine + Environment.NewLine + text, RemoveCustomToolDialogId);
+            return;
+        }
+        var names = CustomToolDialogModel.TargetNames(plan.Changing);
+        if (!_dialogs.Confirm(UiStrings.Builder_RemoveToolTitle, text, names,
+                UiStrings.Builder_RemoveFrom(CustomToolDialogModel.ProfileCount(plan.Count)), danger: true, RemoveCustomToolDialogId))
+            return;
+        Log.Information("Builder: remove custom tool {Link} everywhere ({Count} profiles)", tool.Link, plan.Count);
+        var update = Safe<CustomToolUpdate?>(() => _backend.RemoveCustomTool(tool.Link, _profile, _activeId), null, "remove_custom_tool");
+        await AfterCustomToolUpdateAsync(update, p => CustomTools.ApplyRemove(p, tool.Link), UiStrings.Builder_ToolRemoved);
+    }
+
+    /// <summary>
+    /// After an edit or remove everywhere: when the open profile's file was written, its clean
+    /// baseline gets the same change (so a change already on disk does not read as unsaved, while
+    /// other unsaved edits stay unsaved); the saved profiles are read again, the cards rebuilt from
+    /// the working copy, failures listed (and logged), and the ribbon reloaded when the loaded
+    /// profile's file changed.
+    /// </summary>
+    private async Task AfterCustomToolUpdateAsync(CustomToolUpdate? update, Action<Profile> change, Func<object?, string> done)
+    {
+        if (update is null)
+        {
+            // The backend threw (logged): the files may be partly written; show what is there now.
+            RefreshProfiles();
+            RenderCanvas();
+            ShowToast(UiStrings.Builder_ToolChangeFailed, BannerKind.Error);
+            return;
+        }
+        var openId = string.IsNullOrEmpty(_profile.Id) ? null : _profile.Id;
+        var openWritten = _editMode && openId is not null && update.Written.Any(w => w.ProfileId == openId);
+        if (openWritten)
+        {
+            try
+            {
+                var baseline = ProfileEditing.FromSnapshot(_pristine);
+                change(baseline);
+                _pristine = ProfileEditing.Snapshot(baseline);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Builder: the clean baseline could not take the custom tool change; the editor reads as unsaved");
+            }
+        }
+
+        RefreshProfiles();
+        RenderCanvas(); // the working copy changed underneath the cards: rebuild them, never reuse their indexes
+        var changed = update.Written.Count + (update.WorkingCopyChanged && !openWritten ? 1 : 0);
+        Log.Information("Builder: custom tool change: written={Written} failed={Failed} working={Working} reload={Reload}",
+            update.Written.Count, update.Failed.Count, update.WorkingCopyChanged, update.ActiveProfileChanged);
+        if (update.Failed.Count > 0)
+        {
+            foreach (var f in update.Failed) Log.Warning("Builder: custom tool change not written for {Name} ({File}): {Error}", f.ProfileName, f.FileName, f.Error);
+            var lines = update.Failed.Select(f => UiStrings.Builder_ToolFailedLine(
+                string.IsNullOrWhiteSpace(f.ProfileName) ? UiStrings.Builder_UnnamedProfile : f.ProfileName, f.FileName, f.Error));
+            _dialogs.ShowMessage(UiStrings.Builder_ToolsPartialTitle, UiStrings.Builder_ToolsPartialText(string.Join(Environment.NewLine, lines)), CustomToolsPartialDialogId);
+        }
+
+        var message = done(CustomToolDialogModel.ProfileCount(changed));
+        if (!update.ActiveProfileChanged)
+        {
+            if (update.Failed.Count == 0) ShowToast(message, BannerKind.Success);
+            return;
+        }
+        var active = _library.FirstOrDefault(e => e.Profile.Id == _activeId)?.Profile;
+        Log.Information("Builder: the loaded profile changed — auto-reloading");
+        IsWorking = true;
+        try
+        {
+            var load = await ReloadActiveAsync(active?.ProfileName ?? "", _activeId);
+            if (load.Ok) ShowToast(message + " " + UiStrings.Builder_ToolRibbonReloaded, BannerKind.Success);
+            else ShowToast(UiStrings.Builder_ToolReloadFailed, BannerKind.Error);
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+    }
+
+    /// <summary>
+    /// The ribbon-only reload of the loaded profile (the existing reload-after-save path: Save and
+    /// the Custom Tools' edit and remove everywhere), with the loaded profile's hidden tabs and
+    /// disable flag. A throw is logged and returned as a failure.
+    /// </summary>
+    private async Task<LoadResult> ReloadActiveAsync(string name, string? id)
+    {
+        try
+        {
+            return await _backend.LoadAsync(new LoadRequest(name, id, _activeDisable, _activeHiddenTabs));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Builder: auto-reload threw");
+            return LoadResult.Fail(ex.Message);
+        }
+    }
 
     // ---- the live preview ---------------------------------------------------------------------
 
@@ -1239,16 +1483,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         IsWorking = true;
         try
         {
-            LoadResult load;
-            try
-            {
-                load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Builder: auto-reload threw");
-                load = LoadResult.Fail(ex.Message);
-            }
+            var load = await ReloadActiveAsync(_profile.ProfileName ?? "", _profile.Id);
             if (!load.Ok)
             {
                 if (wasActiveIdless && _supersededFile is { } old)
@@ -1391,6 +1626,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         public bool EditName(ProfileNameDialogModel model) => false;
 
         public bool EditStack(StackDialogModel model) => false;
+
+        public bool EditCustomTool(CustomToolDialogModel model) => false;
 
         public void EditBranding(ProfileBuilderViewModel model)
         {

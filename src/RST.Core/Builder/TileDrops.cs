@@ -17,8 +17,8 @@
 //     expected target are checked by reference) is Stale: nothing changes (WU3 review N1).
 // Tiles are laid out left to right, so the edges are the leading and trailing edges of a tile or a
 // stack group (a quarter of its width, at most 24 px); a stack's rows are stacked, so before and
-// after a row are its upper and lower halves. A catalogue command becomes a fresh slot on every
-// drop (the operations find slots by reference: WU1 review F3).
+// after a row are its upper and lower halves. A catalogue command (and, since WU4, a Custom Tools
+// row) becomes a fresh slot on every drop (the operations find slots by reference: WU1 review F3).
 
 using RST.Core.Profiles;
 
@@ -117,12 +117,13 @@ public static class TileDrops
     }
 
     /// <summary>
-    /// What the drag drops: a fresh tool slot for a catalogue command (new on every call), the tile
-    /// it came from for a slot drag, null for a panel drag.
+    /// What the drag drops: a fresh tool slot for a catalogue command or a Custom Tools row (new on
+    /// every call), the tile it came from for a slot drag, null for a panel drag.
     /// </summary>
     public static TileSource? SourceOf(BuilderDrag? drag) => drag?.Kind switch
     {
         DragKind.Catalog when drag.Command is not null => TileSource.New(BuilderRules.ToolSlot(drag.Command)),
+        DragKind.CustomTool when drag.Tool is not null => TileSource.New(CustomTools.SlotFor(drag.Tool)),
         DragKind.Slot => TileSource.Tile(drag.PanelIndex, drag.SlotIndex, drag.Row),
         _ => null,
     };
@@ -229,7 +230,7 @@ public static class TileDrops
 
     private static TileDrop Refuse(TileHit hit) => new(TileDropKind.Full, hit.Panel, hit.Slot, null, DropMarker.Refused);
 
-    /// <summary>The dragged slot (a new tool for a catalogue command), and whether it is a whole stack.</summary>
+    /// <summary>The dragged slot (a new tool for a catalogue command or a Custom Tools row), and whether it is a whole stack.</summary>
     private static bool Dragged(Profile profile, BuilderDrag drag, out Slot? moving, out bool wholeStack)
     {
         moving = null;
@@ -238,6 +239,8 @@ public static class TileDrops
         {
             case DragKind.Catalog:
                 return drag.Command is not null;
+            case DragKind.CustomTool:
+                return drag.Tool is not null;
             case DragKind.Slot when SlotAt(profile, drag.PanelIndex, drag.SlotIndex, out var slot):
                 if (drag.Row < 0)
                 {

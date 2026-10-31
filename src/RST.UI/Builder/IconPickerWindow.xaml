@@ -1,0 +1,28 @@
+<!--
+    rst-c's own (not vendored). The family icon picker (Controls/IconPicker, spec #16 WU5) in a window of
+    its own, for a dialog too small to hold its 700 px card as an overlay: the Custom Tool dialog's Icon
+    button (feature #18, spec #19, WU4). The window is the card's size; Cancel, Escape and a pick close it.
+-->
+<Window x:Class="RST.UI.Builder.IconPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:RST.UI.Resources"
+        xmlns:controls="clr-namespace:RST.UI.Controls"
+        Title="{x:Static res:UiStrings.Builder_IconPickerTitle}"
+        SizeToContent="WidthAndHeight" ResizeMode="NoResize" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}"
+        AutomationProperties.AutomationId="IconPickerWindow">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid x:Name="Root" Background="{StaticResource WindowBrush}">
+        <controls:IconPicker x:Name="Picker" />
+    </Grid>
+</Window>
