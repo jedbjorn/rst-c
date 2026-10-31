@@ -36,8 +36,8 @@ public static class ProfileLoaderLauncher
             revitVersion, catalog?.Count ?? 0, allTabs?.Count ?? 0, switchScheduler is not null);
 
         var backend = new ProfileLoaderBackend(revitVersion, switchScheduler, allTabs);
-        var dialogs = new DialogService { EscapeCancels = true }; // decision #62
-        var loaderDialogs = new LoaderDialogs { EscapeCancels = true };
+        var dialogs = new DialogService { EscapeCancels = true, ReturnsFocus = true }; // decision #62; rc.3 VM finding F2
+        var loaderDialogs = new LoaderDialogs { EscapeCancels = true, ReturnsFocus = true };
         var model = new ProfileLoaderViewModel(backend, dialogs, loaderDialogs);
         model.LoadData();
         var window = new ProfileLoaderWindow(model);
