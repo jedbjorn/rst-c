@@ -1,14 +1,19 @@
 // rst-c's own (not vendored): the Profile Builder's view-model (spec #16, WU4), a port of
-// profile_builder.html's script (1361-3453): boot, the profile dropdown (startFresh /
+// profile_builder.html's script (1361-3453): boot, the profile switch (startFresh /
 // loadIntoProfile), the machine-wide branding, the catalogue tree and filter, double-click to add,
 // the panels list (add, select, rename, ▲ ▼ ×), the slot rows (rename, ▲ ▼ ×), drag and drop (the
-// four kinds, WU5), the icon picker (WU5), the Properties pane (Min Revit, opacity, the selected
-// panel's name and color, the URL button editor, RST Presets and Junk Cleanup with their Configure
-// modals, WU5), the live preview, Save (a rename keeps the id since spec #19, required add-ins, the
-// auto-reload of the active profile), Export ZIP and Exit. Every toast keeps its text.
-// Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕ and the dropdown
-// (Planner default 3), the panel delete confirm is the family's destructive MessageDialog, and the
-// Cleanup modal's Cancel reverts (Planner default 4).
+// four kinds, WU5), the icon picker (WU5), the live preview, Save (required add-ins, the auto-reload
+// of the active profile), Export ZIP and Exit. Every toast keeps its text.
+// Changes are the spec's: the unsaved-changes prompt also guards the title-bar ✕, Escape and the
+// profile switch (Planner default 3; SC-010), and the panel delete confirm is the family's
+// destructive MessageDialog.
+// Feature #18 (spec #19, WU2) reshapes the window by scope: the header's profile menu (switch,
+// + New profile, Rename…, Duplicate…; rename-as-copy is retired) and ⚙ menu (Branding…, a dialog);
+// the Profile pane's General, Loader defaults and Junk cleanup tabs, which edit the profile in place
+// (unsaved changes, saved with Save) where the Properties pane and the Presets and Cleanup modals
+// were; an unsaved-changes indicator; and Save enabled only when there are changes. The selected
+// panel's colour and name editing and the URL button editor went with the Properties pane; the
+// panel cards (WU3) and the Commands pane (WU4) take them over.
 // Stacks (feature #15, spec #17): the Builder keeps a profile's stacks as they are and the preview
 // draws them; it does not author them (feature #18, decision #19). A stack no panel places (its
 // slot deleted) is dropped by the save (ProfileSaveService), and from the editor once that worked.
@@ -64,6 +69,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private IReadOnlyDictionary<string, AddinLookupEntry> _lookup = new Dictionary<string, AddinLookupEntry>();
     private IReadOnlyList<ProfileEntry> _library = [];
     private string? _activeId;
+    // The loaded profile's file when the pointer has no id (a legacy profile with no id is loaded):
+    // its first save in the Builder gives it an id, and the pointer and ribbon follow (F6).
+    private string? _activeIdlessFile;
     private IReadOnlyList<string> _activeHiddenTabs = [];
     private bool _activeDisable;
 
@@ -75,11 +83,12 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private ProfileOptionViewModel? _selectedOption;
 
     private BrandingState _branding = BrandingState.None;
-    private bool _isBrandingOpen;
 
-    private bool _isUrlEditorOpen;
-    private string _urlLabel = "";
-    private string _urlAddress = "";
+    private IReadOnlyList<PresetTabViewModel> _presetTabs = [];
+
+    // The file a profile with no id was read from: its first save writes it under a new id and a
+    // new file name, and then removes this one (WU1 review F6), so it is not listed twice.
+    private string? _supersededFile;
 
     private int _previewRevision;
     private bool _isWorking;
@@ -89,10 +98,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <param name="dialogs">The family dialogs: confirm, the three-way prompt, the color picker, the file dialogs.</param>
     /// <param name="schedule">Runs an action once after a delay (the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
     /// <param name="post">
-    /// Runs an action after the current input event: the dropdown's snap-back, the switch after the
-    /// unsaved prompt, and Save &amp; Exit from the title-bar ✕ (after the Closing event). Null uses the dispatcher.
+    /// Runs an action after the current input event: the switch after the unsaved prompt (the
+    /// profile menu's list is rebuilt), and Save &amp; Exit from the title-bar ✕ (after the Closing
+    /// event). Null uses the dispatcher.
     /// </param>
-    /// <param name="builderDialogs">The RST Presets and Junk Cleanup modals; null cancels both (tests that do not open them).</param>
+    /// <param name="builderDialogs">Rename… / Duplicate… and Branding…; null cancels them (tests that do not open them).</param>
     public ProfileBuilderViewModel(
         IProfileBuilderBackend backend,
         IDialogService dialogs,
@@ -106,20 +116,20 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
         Toast = new TransientMessage(schedule);
 
-        CloseBrandingCommand = new RelayCommand(() => IsBrandingOpen = false);
+        BrandingCommand = new RelayCommand(() => _builderDialogs.EditBranding(this), () => IsIdle);
         PickLogoCommand = new RelayCommand(PickLogo, () => IsIdle);
         ClearLogoCommand = new RelayCommand(ClearLogo, () => IsIdle);
         ExportCommand = new RelayCommand(Export, () => IsIdle);
-        SaveCommand = new RelayCommand(() => _ = SaveAsync(), () => IsIdle);
+        SaveCommand = new RelayCommand(() => _ = SaveAsync(), () => IsIdle && IsDirty);
         ExitCommand = new RelayCommand(() => _ = ExitAsync(), () => IsIdle);
         AddPanelCommand = new RelayCommand(AddPanel, () => IsIdle);
         AddCatalogCommand = new RelayCommand<CatalogNodeViewModel>(n => AddToSelectedPanel(n.Command!), n => IsIdle && n.IsCommand);
         PickColorCommand = new RelayCommand(PickColor, () => IsIdle && SelectedPanel is not null);
-        OpenUrlEditorCommand = new RelayCommand(OpenUrlEditor, () => IsIdle && SelectedPanel is not null);
-        CancelUrlEditorCommand = new RelayCommand(() => IsUrlEditorOpen = false);
-        AddUrlCommand = new RelayCommand(AddUrlButton, () => IsIdle && SelectedPanel is not null);
-        ConfigurePresetsCommand = new RelayCommand(ConfigurePresets, () => IsIdle);
-        ConfigureCleanupCommand = new RelayCommand(ConfigureCleanup, () => IsIdle);
+        NewProfileCommand = new RelayCommand(() => RequestSwitch(ProfileOptionViewModel.New()), () => IsIdle);
+        SwitchProfileCommand = new RelayCommand<ProfileOptionViewModel>(o => SelectedProfileOption = o, _ => IsIdle);
+        RenameCommand = new RelayCommand(Rename, () => IsIdle);
+        DuplicateCommand = new RelayCommand(Duplicate, () => IsIdle && _editMode);
+        RestoreCleanupDefaultsCommand = new RelayCommand(RestoreCleanupDefaults, () => IsIdle);
     }
 
     /// <summary>Raised when the window should close (Exit, or after the unsaved-changes prompt allowed it).</summary>
@@ -166,6 +176,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _library = Safe(_backend.GetProfiles, [], "get_profiles");
         var active = Safe<ActiveProfile?>(_backend.GetActiveProfile, null, "get_active_profile");
         _activeId = active is { IsBlank: false } && !string.IsNullOrEmpty(active.ProfileId) ? active.ProfileId : null;
+        _activeIdlessFile = active is { IsBlank: false } && _activeId is null ? active.ProfileFile : null;
         _activeHiddenTabs = active is { IsBlank: false } ? active.HiddenTabs ?? [] : [];
         _activeDisable = active is { IsBlank: false } && active.DisableNonRequired;
         _lookup = Safe(_backend.GetAddinLookup, new Dictionary<string, AddinLookupEntry>(), "get_addin_lookup");
@@ -176,11 +187,15 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         StartFresh();
     }
 
-    // ---- the profile dropdown -----------------------------------------------------------------
+    // ---- the profile menu -----------------------------------------------------------------------
 
+    /// <summary>The saved profiles, as the header's profile menu lists them (the current one ticked).</summary>
     public ObservableCollection<ProfileOptionViewModel> ProfileOptions { get; } = [];
 
-    /// <summary>The dropdown's selection. Choosing another entry switches the editor (asking first when dirty).</summary>
+    /// <summary>
+    /// The profile in the editor: a saved one, or "+ New profile" (<see cref="ProfileOptionViewModel.IsNew"/>).
+    /// Setting another switches the editor, asking first when there are unsaved changes.
+    /// </summary>
     public ProfileOptionViewModel? SelectedProfileOption
     {
         get => _selectedOption;
@@ -191,26 +206,46 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         }
     }
 
-    /// <summary>"edit" mode: the editor holds a profile from the dropdown, or one saved once.</summary>
+    /// <summary>A profile in the menu: switch to it (asking first when there are unsaved changes).</summary>
+    public ICommand SwitchProfileCommand { get; }
+
+    /// <summary>+ New profile: a blank profile with one panel (asking first when there are unsaved changes).</summary>
+    public ICommand NewProfileCommand { get; }
+
+    /// <summary>"edit" mode: the editor holds a saved profile (switched to, saved once, or duplicated).</summary>
     public bool IsEditMode => _editMode;
 
     private void PopulateOptions(string? selectKey = null)
     {
         var previous = selectKey ?? _selectedOption?.Key;
         ProfileOptions.Clear();
-        ProfileOptions.Add(ProfileOptionViewModel.New());
         foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId));
-        _selectedOption = ProfileOptions.FirstOrDefault(o => o.Key == previous) ?? ProfileOptions[0];
+        // The profile in the editor stays current even when its file is gone from the list (another session removed it).
+        var current = ProfileOptions.FirstOrDefault(o => o.Key == previous)
+                      ?? (_selectedOption is { } held && held.Key == previous ? held : ProfileOptionViewModel.New());
+        SetCurrent(current);
+    }
+
+    /// <summary>
+    /// Re-reads the saved profiles (another Revit session may have saved, renamed or removed one
+    /// since): before the name checks of Save, Rename… and Duplicate…, and when the profile menu opens.
+    /// </summary>
+    public void RefreshProfiles()
+    {
+        _library = Safe(_backend.GetProfiles, _library, "get_profiles");
+        PopulateOptions();
+    }
+
+    private void SetCurrent(ProfileOptionViewModel option)
+    {
+        _selectedOption = option;
+        foreach (var o in ProfileOptions) o.IsCurrent = ReferenceEquals(o, option);
         OnPropertyChanged(nameof(SelectedProfileOption));
     }
 
     private void RequestSwitch(ProfileOptionViewModel target)
     {
-        if (IsWorking)
-        {
-            SnapDropdownBack();
-            return;
-        }
+        if (IsWorking) return;
         if (!IsDirty)
         {
             ApplySwitch(target);
@@ -219,19 +254,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         switch (_dialogs.Choose(UiStrings.Builder_UnsavedTitle, UiStrings.Builder_UnsavedText,
                     UiStrings.Builder_SaveAndSwitch, UiStrings.Builder_DiscardAndSwitch, UnsavedChangesDialogId))
         {
-            // Both run after the ComboBox's selection write is over: the save rebuilds the
-            // dropdown's list, which must not happen inside its own selection change.
+            // Both run after the menu click is over: the switch rebuilds the menu's list.
             case DialogChoice.Secondary:
-                Log.Information("Builder: dropdown switch → discard unsaved changes");
+                Log.Information("Builder: profile switch → discard unsaved changes");
                 _post(() => ApplySwitch(target));
                 break;
             case DialogChoice.Primary:
-                Log.Information("Builder: dropdown switch → save first");
-                SnapDropdownBack();
+                Log.Information("Builder: profile switch → save first");
                 _post(() => _ = SaveThenSwitchAsync(target.Key));
-                break;
-            default:
-                SnapDropdownBack();
                 break;
         }
     }
@@ -239,32 +269,29 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     private async Task SaveThenSwitchAsync(string targetKey)
     {
         if (!await SaveAsync()) return;
-        var target = ProfileOptions.FirstOrDefault(o => o.Key == targetKey) ?? ProfileOptions[0];
+        var target = ProfileOptions.FirstOrDefault(o => o.Key == targetKey) ?? ProfileOptionViewModel.New();
         ApplySwitch(target);
     }
 
-    // The ComboBox has already shown the new entry; put it back once the input event is over.
-    private void SnapDropdownBack() => _post(() => OnPropertyChanged(nameof(SelectedProfileOption)));
-
-    /// <summary>onProfileSelectChange: "+ New Profile" starts fresh; a profile loads into the editor.</summary>
+    /// <summary>onProfileSelectChange: "+ New profile" starts fresh; a profile loads into the editor.</summary>
     private void ApplySwitch(ProfileOptionViewModel target)
     {
-        _selectedOption = target;
-        OnPropertyChanged(nameof(SelectedProfileOption));
+        SetCurrent(target);
         if (target.Entry is null)
         {
-            Log.Information("Builder: dropdown → new profile");
+            Log.Information("Builder: profile menu → new profile");
             StartFresh();
             return;
         }
-        Log.Information("Builder: dropdown → load existing {Name} ({Id})", target.Entry.Profile.ProfileName, target.Entry.Profile.Id);
-        LoadIntoEditor(target.Entry.Profile);
+        Log.Information("Builder: profile menu → load existing {Name} ({Id})", target.Entry.Profile.ProfileName, target.Entry.Profile.Id);
+        LoadIntoEditor(target.Entry.Profile, target.Entry.FileName);
     }
 
     /// <summary>startFresh: a blank profile with one panel ("Panel 1"), new mode, a clean baseline.</summary>
     private void StartFresh()
     {
         _profile = ProfileEditing.NewProfile();
+        _supersededFile = null;
         _selectedPanelIndex = -1;
         _editMode = false;
         _originalName = "";
@@ -274,8 +301,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     /// <summary>loadIntoProfile + the dropdown handler: edit mode, panel 0 selected, a clean baseline.</summary>
-    private void LoadIntoEditor(Profile source)
+    /// <param name="source">The saved profile.</param>
+    /// <param name="fileName">Its file; kept when the profile has no id, for the first save to replace (WU1 review F6).</param>
+    private void LoadIntoEditor(Profile source, string? fileName = null)
     {
+        _supersededFile = string.IsNullOrEmpty(source.Id) ? fileName : null;
         _profile = ProfileEditing.ForEditing(source);
         _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
         _editMode = true;
@@ -286,31 +316,54 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private void ProfileChanged()
     {
-        IsUrlEditorOpen = false;
         IconPicker = null;
         RenderCanvas();
-        OnPropertyChanged(nameof(ProfileName));
+        RebuildPresetTabs();
+        RebuildCleanupRows();
+        RaiseName();
         OnPropertyChanged(nameof(ProfileTab));
         OnPropertyChanged(nameof(MinVersion));
         OnPropertyChanged(nameof(PanelOpacity));
-        OnPropertyChanged(nameof(PresetsSummary));
-        OnPropertyChanged(nameof(CleanupSummary));
+        OnPropertyChanged(nameof(PanelOpacityText));
+        OnPropertyChanged(nameof(DisableUnused));
         OnPropertyChanged(nameof(PreviewProfile));
         OnPropertyChanged(nameof(IsEditMode));
+        OnPropertyChanged(nameof(IsLoadedProfile));
     }
 
     // ---- dirty tracking -----------------------------------------------------------------------
 
-    /// <summary>The profile differs from the clean baseline (boot, a dropdown switch, the last save).</summary>
-    public bool IsDirty => ProfileEditing.Snapshot(_profile) != _pristine;
+    /// <summary>
+    /// The profile differs from the clean baseline (boot, a profile switch, the last save): the
+    /// header's unsaved-changes dot and text show, and Save is enabled. A saved profile read without
+    /// an id (a legacy file) counts as changed until Save gives it one, so "open it in the Builder and
+    /// save it once" works with no edit (review N7); the id the save assigns clears it.
+    /// </summary>
+    public bool IsDirty => ProfileEditing.Snapshot(_profile) != _pristine || (_editMode && string.IsNullOrEmpty(_profile.Id));
 
-    private void SnapshotPristine() => _pristine = ProfileEditing.Snapshot(_profile);
+    private void SnapshotPristine()
+    {
+        _pristine = ProfileEditing.Snapshot(_profile);
+        ProfileEdited();
+    }
+
+    /// <summary>After any edit: the unsaved-changes indicator and Save's enabled state follow.</summary>
+    internal void ProfileEdited()
+    {
+        OnPropertyChanged(nameof(IsDirty));
+        RelayCommand.Refresh();
+    }
 
     /// <summary>The profile being edited (the preview draws it; tests read it).</summary>
     public Profile Profile => _profile;
 
-    // ---- header fields ------------------------------------------------------------------------
+    // ---- the name: header, Rename…, Duplicate… -------------------------------------------------
 
+    /// <summary>
+    /// The working copy's name. Rename… sets it once its checks pass (required, unique among the
+    /// other saved profiles); General shows it read-only. An unsaved change: Save writes it under the
+    /// same id, so a user who has the profile loaded keeps it (spec #19).
+    /// </summary>
     public string ProfileName
     {
         get => _profile.ProfileName ?? "";
@@ -318,11 +371,86 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         {
             if (_profile.ProfileName == (value ?? "")) return;
             _profile.ProfileName = value ?? "";
-            OnPropertyChanged();
+            RaiseName();
+            ProfileEdited();
         }
     }
 
-    /// <summary>The ribbon tab; the preview's tab pill follows it as you type.</summary>
+    public bool HasProfileName => !string.IsNullOrWhiteSpace(_profile.ProfileName);
+
+    /// <summary>The header button's and the Profile pane's name: the profile's, or "New profile" before it has one.</summary>
+    public string DisplayName => HasProfileName ? _profile.ProfileName! : UiStrings.Builder_UnnamedProfile;
+
+    /// <summary>The Profile pane's header: "· editing &lt;name&gt;".</summary>
+    public string EditingText => UiStrings.Builder_EditingName(DisplayName);
+
+    /// <summary>The header button's "(loaded)": the editor holds the profile the Loader has loaded.</summary>
+    public bool IsLoadedProfile => _editMode && !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
+
+    private void RaiseName()
+    {
+        OnPropertyChanged(nameof(ProfileName));
+        OnPropertyChanged(nameof(HasProfileName));
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(EditingText));
+    }
+
+    /// <summary>Rename… (the profile menu, or General's button).</summary>
+    public ICommand RenameCommand { get; }
+
+    /// <summary>Duplicate… (the profile menu): only for a saved profile.</summary>
+    public ICommand DuplicateCommand { get; }
+
+    private List<Profile> SavedProfiles() => _library.Select(e => e.Profile).ToList();
+
+    /// <summary>
+    /// Rename…: a required name, unique among the saved profiles other than this one
+    /// (case-insensitive). It changes only the working copy's name, so it is an unsaved change.
+    /// </summary>
+    private void Rename()
+    {
+        RefreshProfiles();
+        var saved = SavedProfiles();
+        NameCheck Check(string? n) => ProfileNaming.Check(n, _profile.Id, saved);
+        var dialog = ProfileNameDialogModel.ForRename(ProfileName, Check);
+        if (!_builderDialogs.EditName(dialog) || Check(dialog.Result) != NameCheck.Ok) return;
+        if (dialog.Result == ProfileName) return;
+        Log.Information("Builder: rename {Old} → {New} (id {Id}, unsaved)", ProfileName, dialog.Result, _profile.Id ?? "(new)");
+        ProfileName = dialog.Result;
+    }
+
+    /// <summary>
+    /// Duplicate…: "&lt;name&gt; copy" by default, unique among every saved profile. Writes a new
+    /// profile with a new id from the working copy, unsaved edits included, and switches the editor
+    /// to it; the original's file stays as last saved.
+    /// </summary>
+    private void Duplicate()
+    {
+        if (!_editMode || IsWorking) return;
+        RefreshProfiles();
+        var saved = SavedProfiles();
+        NameCheck Check(string? n) => ProfileNaming.Check(n, null, saved);
+        var dialog = ProfileNameDialogModel.ForDuplicate(ProfileNaming.DefaultDuplicateName(ProfileName, saved), Check);
+        if (!_builderDialogs.EditName(dialog) || Check(dialog.Result) != NameCheck.Ok) return;
+
+        var copy = ProfileNaming.DuplicateOf(_profile, dialog.Result);
+        copy.RequiredAddins = RequiredAddinDetector.Compute(copy, _catalog, _lookup);
+        Log.Information("Builder: duplicate {Name} ({Id}) as {Copy}", ProfileName, _profile.Id, copy.ProfileName);
+        var result = Safe(() => _backend.Save(copy), SaveOutcome.Fail("unknown"), "save_profile (duplicate)");
+        if (!result.Ok || result.Saved is not { } written)
+        {
+            ShowToast(UiStrings.Builder_SaveFailed(result.Error ?? "unknown"), BannerKind.Error);
+            return;
+        }
+        _library = Safe(_backend.GetProfiles, _library, "get_profiles");
+        PopulateOptions(written.Id);
+        LoadIntoEditor(_library.FirstOrDefault(e => e.Profile.Id == written.Id)?.Profile ?? written);
+        ShowToast(UiStrings.Builder_Duplicated(copy.ProfileName), BannerKind.Success);
+    }
+
+    // ---- the Profile pane: General --------------------------------------------------------------
+
+    /// <summary>The ribbon tab (General is the only place to edit it); the preview's tab pill follows it as you type.</summary>
     public string ProfileTab
     {
         get => _profile.Tab ?? "";
@@ -331,24 +459,45 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             if (_profile.Tab == (value ?? "")) return;
             _profile.Tab = value ?? "";
             OnPropertyChanged();
+            RebuildPresetTabs(); // the profile's own tab is never offered for hiding
             PreviewChanged();
         }
     }
 
-    // ---- branding (machine-wide, not part of the profile) ------------------------------------
-
-    public bool IsBrandingOpen
+    public string MinVersion
     {
-        get => _isBrandingOpen;
+        get => _profile.MinVersion ?? "";
         set
         {
-            if (!SetField(ref _isBrandingOpen, value)) return;
-            if (value) RaiseBranding();
+            if (_profile.MinVersion == (value ?? "")) return;
+            _profile.MinVersion = value ?? "";
+            OnPropertyChanged();
+            ProfileEdited();
         }
     }
 
-    /// <summary>The Branding button's dot: filled when a logo or a URL is set.</summary>
-    public bool HasBranding => _branding.IsSet;
+    /// <summary>Panel colour strength (the profile's panel opacity), 10-100 in steps of 5; the preview follows it.</summary>
+    public int PanelOpacity
+    {
+        get => _profile.PanelOpacity;
+        set
+        {
+            var v = Math.Clamp(value, 10, 100);
+            if (_profile.PanelOpacity == v) return;
+            _profile.PanelOpacity = v;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PanelOpacityText));
+            PreviewChanged();
+        }
+    }
+
+    /// <summary>The slider's value as shown: "60%".</summary>
+    public string PanelOpacityText => UiStrings.Builder_OpacityPercent(_profile.PanelOpacity);
+
+    // ---- branding (⚙ → Branding…: machine-wide, not part of the profile) -----------------------
+
+    /// <summary>⚙ → Branding…: the dialog with the logo and link controls.</summary>
+    public ICommand BrandingCommand { get; }
 
     public bool HasLogo => _branding.HasLogo;
 
@@ -367,8 +516,6 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             SetBrandingUrl(value ?? "");
         }
     }
-
-    public ICommand CloseBrandingCommand { get; }
 
     public ICommand PickLogoCommand { get; }
 
@@ -389,21 +536,6 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     private void PickLogo()
-    {
-        // The file dialog takes the focus and the popover closes behind it; the page's popover stayed
-        // open, so it reopens once the dialog is done (VM finding, WU5).
-        var wasOpen = IsBrandingOpen;
-        try
-        {
-            PickLogoCore();
-        }
-        finally
-        {
-            if (wasOpen) _post(() => IsBrandingOpen = true);
-        }
-    }
-
-    private void PickLogoCore()
     {
         var path = _dialogs.OpenFile(FileDialogTexts.LogoTitle, FileDialogTexts.ImageFilter);
         if (string.IsNullOrEmpty(path)) return; // cancelled: no toast
@@ -431,7 +563,6 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     private void RaiseBranding()
     {
-        OnPropertyChanged(nameof(HasBranding));
         OnPropertyChanged(nameof(HasLogo));
         OnPropertyChanged(nameof(LogoName));
         OnPropertyChanged(nameof(BrandingUrl));
@@ -497,11 +628,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     public bool HasPanels => Panels.Count > 0;
 
-    /// <summary>The selected panel (the Properties pane edits it), or null.</summary>
+    /// <summary>The selected panel (double-click adds to it), or null.</summary>
     public PanelCardViewModel? SelectedPanel =>
         _selectedPanelIndex >= 0 && _selectedPanelIndex < Panels.Count ? Panels[_selectedPanelIndex] : null;
-
-    public bool HasSelectedPanel => SelectedPanel is not null;
 
     public int SelectedPanelIndex => _selectedPanelIndex;
 
@@ -597,10 +726,9 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         });
     }
 
-    /// <summary>renderCanvas: the cards and rows again from the profile; the URL editor closes, the preview redraws.</summary>
+    /// <summary>renderCanvas: the cards and rows again from the profile; the preview redraws.</summary>
     private void RenderCanvas()
     {
-        IsUrlEditorOpen = false;
         Panels.Clear();
         for (var i = 0; i < _profile.Panels.Count; i++)
         {
@@ -608,41 +736,16 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(HasPanels));
         OnPropertyChanged(nameof(SelectedPanel));
-        OnPropertyChanged(nameof(HasSelectedPanel));
         OnPropertyChanged(nameof(SelectedPanelIndex));
         PreviewChanged();
     }
 
-    // ---- the Properties pane ------------------------------------------------------------------
-
-    public string MinVersion
-    {
-        get => _profile.MinVersion ?? "";
-        set
-        {
-            if (_profile.MinVersion == (value ?? "")) return;
-            _profile.MinVersion = value ?? "";
-            OnPropertyChanged();
-        }
-    }
-
-    /// <summary>Panel Opacity, 10-100 in steps of 5; the preview follows it.</summary>
-    public int PanelOpacity
-    {
-        get => _profile.PanelOpacity;
-        set
-        {
-            var v = Math.Clamp(value, 10, 100);
-            if (_profile.PanelOpacity == v) return;
-            _profile.PanelOpacity = v;
-            OnPropertyChanged();
-            PreviewChanged();
-        }
-    }
-
+    /// <summary>
+    /// The panel colour picker, starting from the selected panel's colour. Its Properties pane swatch
+    /// is retired (spec #19); the panel cards' swatch (WU3) opens it.
+    /// </summary>
     public ICommand PickColorCommand { get; }
 
-    /// <summary>The swatch: the family color picker, starting from the panel's color.</summary>
     private void PickColor()
     {
         if (SelectedPanel is not { } panel) return;
@@ -651,96 +754,88 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         panel.SetColor(picked.ToHex().ToLowerInvariant());
     }
 
-    public bool IsUrlEditorOpen
+    // ---- the Profile pane: Loader defaults --------------------------------------------------------
+
+    /// <summary>
+    /// "Hide these tabs (RSTify)": a switch per tab the profile may hide (the ribbon minus the core
+    /// tabs and the profile's own tab, then preset tabs that are not on this ribbon). A switch
+    /// writes the profile's presets at once, as the RST Presets modal's Apply did.
+    /// </summary>
+    public IReadOnlyList<PresetTabViewModel> PresetTabs
     {
-        get => _isUrlEditorOpen;
+        get => _presetTabs;
         private set
         {
-            if (!SetField(ref _isUrlEditorOpen, value)) return;
-            if (!value)
-            {
-                UrlLabel = "";
-                UrlAddress = "";
-            }
+            _presetTabs = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasPresetTabs));
         }
     }
 
-    public string UrlLabel
+    public bool HasPresetTabs => _presetTabs.Count > 0;
+
+    /// <summary>"Disable unused add-ins": the Loader switch's starting position for this profile.</summary>
+    public bool DisableUnused
     {
-        get => _urlLabel;
-        set => SetField(ref _urlLabel, value ?? "");
-    }
-
-    public string UrlAddress
-    {
-        get => _urlAddress;
-        set => SetField(ref _urlAddress, value ?? "");
-    }
-
-    public ICommand OpenUrlEditorCommand { get; }
-
-    public ICommand CancelUrlEditorCommand { get; }
-
-    public ICommand AddUrlCommand { get; }
-
-    private void OpenUrlEditor()
-    {
-        if (IsUrlEditorOpen) return;
-        IsUrlEditorOpen = true;
-    }
-
-    /// <summary>The editor's Add: a label and a URL are required; the URL is normalized and the slot gets "URL:&lt;url&gt;".</summary>
-    private void AddUrlButton()
-    {
-        if (SelectedPanel is not { } panel) return;
-        var name = UrlLabel.Trim();
-        var url = BuilderRules.NormalizeUrl(UrlAddress.Trim());
-        if (name.Length == 0)
+        get => _profile.Presets?.DisableUnusedAddins ?? false;
+        set
         {
-            ShowToast(UiStrings.Builder_LabelRequired, BannerKind.Error);
-            return;
+            if (DisableUnused == value) return;
+            _profile.Presets ??= new ProfilePresets();
+            _profile.Presets.DisableUnusedAddins = value;
+            Log.Information("Builder: loader default disableUnused → {Disable}", value);
+            OnPropertyChanged();
+            ProfileEdited();
         }
-        if (url.Length == 0)
-        {
-            ShowToast(UiStrings.Builder_UrlRequired, BannerKind.Error);
-            return;
-        }
-        panel.Model.Slots.Add(BuilderRules.UrlSlot(name, url));
-        Log.Information("Builder: url button added to panel {Panel}: {Name} → {Url}", panel.Index, name, url);
-        IsUrlEditorOpen = false;
-        RenderCanvas();
     }
 
-    public string PresetsSummary => BuilderRules.PresetsSummary(_profile.Presets);
-
-    public string CleanupSummary => BuilderRules.CleanupSummary(_profile.CleanupTargets);
-
-    /// <summary>RST Presets → Configure.</summary>
-    public ICommand ConfigurePresetsCommand { get; }
-
-    /// <summary>Junk Cleanup → Configure.</summary>
-    public ICommand ConfigureCleanupCommand { get; }
-
-    /// <summary>The RST Presets modal: Apply replaces the profile's presets; Cancel changes nothing.</summary>
-    private void ConfigurePresets()
+    private void RebuildPresetTabs()
     {
-        var model = new PresetsViewModel(_backend.AllTabs, _profile.Presets, _profile.Tab);
-        if (!_builderDialogs.EditPresets(model)) return;
-        _profile.Presets = model.Result();
-        Log.Information("Builder: presets updated (hiddenTabs={Hidden}, disableUnused={Disable})",
-            _profile.Presets.HiddenTabs.Count, _profile.Presets.DisableUnusedAddins);
-        OnPropertyChanged(nameof(PresetsSummary));
+        var hidden = new HashSet<string>(_profile.Presets?.HiddenTabs ?? [], StringComparer.Ordinal);
+        PresetTabs = BuilderModals.PresetTabs(_backend.AllTabs, _profile.Presets, _profile.Tab)
+            .Select(t => new PresetTabViewModel(t, hidden.Contains(t), PresetTabChanged)).ToList();
     }
 
-    /// <summary>The Junk Cleanup modal over a copy: Apply keeps the non-blank rows; Cancel reverts (Planner default 4).</summary>
-    private void ConfigureCleanup()
+    private void PresetTabChanged()
     {
-        var model = new CleanupViewModel(_profile.CleanupTargets);
-        if (!_builderDialogs.EditCleanup(model)) return;
-        _profile.CleanupTargets = model.Result();
-        Log.Information("Builder: cleanup targets saved (count={Count}, enabled={Enabled})",
-            _profile.CleanupTargets.Count, _profile.CleanupTargets.Count(t => t.Enabled));
-        OnPropertyChanged(nameof(CleanupSummary));
+        _profile.Presets = BuilderModals.ApplyPresets(_presetTabs.Select(t => (t.Tab, t.IsHidden)), DisableUnused);
+        Log.Information("Builder: loader default hiddenTabs → {Hidden}", string.Join(", ", _profile.Presets.HiddenTabs));
+        ProfileEdited();
+    }
+
+    // ---- the Profile pane: Junk cleanup -----------------------------------------------------------
+
+    /// <summary>The profile's cleanup targets, edited in place: on/off, name, ×.</summary>
+    public ObservableCollection<CleanupRowViewModel> CleanupRows { get; } = [];
+
+    public bool HasCleanupTargets => CleanupRows.Count > 0;
+
+    /// <summary>Restore defaults: the list becomes RST's default targets.</summary>
+    public ICommand RestoreCleanupDefaultsCommand { get; }
+
+    private void RebuildCleanupRows()
+    {
+        CleanupRows.Clear();
+        foreach (var t in _profile.CleanupTargets ?? []) CleanupRows.Add(new CleanupRowViewModel(t, this));
+        OnPropertyChanged(nameof(HasCleanupTargets));
+    }
+
+    /// <summary>× on a cleanup row: removed from this profile (Restore defaults brings it back).</summary>
+    internal void RemoveCleanupTarget(CleanupRowViewModel row)
+    {
+        _profile.CleanupTargets?.Remove(row.Target);
+        CleanupRows.Remove(row);
+        Log.Information("Builder: cleanup target removed {Name}", row.Name);
+        OnPropertyChanged(nameof(HasCleanupTargets));
+        ProfileEdited();
+    }
+
+    private void RestoreCleanupDefaults()
+    {
+        _profile.CleanupTargets = CleanupDefaults.Build();
+        Log.Information("Builder: cleanup targets restored to the defaults");
+        RebuildCleanupRows();
+        ProfileEdited();
     }
 
     // ---- drag and drop ------------------------------------------------------------------------
@@ -844,7 +939,12 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         private set => SetField(ref _previewRevision, value);
     }
 
-    internal void PreviewChanged() => PreviewRevision++;
+    /// <summary>After an edit the preview shows: it redraws, and the unsaved-changes state follows.</summary>
+    internal void PreviewChanged()
+    {
+        PreviewRevision++;
+        ProfileEdited();
+    }
 
     // ---- save, export, exit -------------------------------------------------------------------
 
@@ -855,16 +955,25 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     public ICommand ExitCommand { get; }
 
     /// <summary>
-    /// saveAndMaybeReload: name and tab required; a changed name in edit mode is a rename under the
-    /// same id (a name collision aborts; rename-as-copy is retired, spec #19); the required add-ins
-    /// recomputed; the save; the dropdown refreshed; a clean baseline; then, when the saved profile
-    /// is the active one, the ribbon reloaded with the active hidden tabs and disable flag. True
-    /// when the profile was saved.
+    /// saveAndMaybeReload: name and tab required; always under the open profile's id, so a name
+    /// changed by Rename… is a rename (rename-as-copy is retired, spec #19); the required add-ins
+    /// recomputed; the save; the profile menu refreshed; a clean baseline; then, when the saved
+    /// profile is the active one, the ribbon reloaded with the active hidden tabs and disable flag.
+    /// True when the profile was saved.
     /// </summary>
+    /// <remarks>
+    /// Rename… already refuses a taken name. Save re-reads the saved profiles and checks again, as a
+    /// safety net for a name another profile took since (a second Revit session saving): a rename in
+    /// edit mode (<see cref="ProfileEditing.PlanSave"/>), and a new profile's first save (WU1 review F5).
+    /// </remarks>
     public async Task<bool> SaveAsync()
     {
         if (IsWorking) return false;
-        var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, _library.Select(e => e.Profile));
+        RefreshProfiles();
+        var library = SavedProfiles();
+        var plan = ProfileEditing.PlanSave(_profile, _editMode, _originalName, library);
+        if (plan == SavePlanKind.InPlace && !_editMode && ProfileNaming.IsTaken(_profile.ProfileName, _profile.Id, library))
+            plan = SavePlanKind.NameCollision;
         switch (plan)
         {
             case SavePlanKind.MissingName:
@@ -874,8 +983,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 ShowToast(UiStrings.Builder_TabRequired, BannerKind.Error);
                 return false;
             case SavePlanKind.NameCollision:
-                Log.Warning("Builder: rename aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
-                ShowToast(UiStrings.Builder_NameCollision(_profile.ProfileName), BannerKind.Error);
+                Log.Warning("Builder: save aborted (name collision) {New} ← {Original}", _profile.ProfileName, _originalName);
+                ShowToast(UiStrings.Builder_NameCollision((_profile.ProfileName ?? "").Trim()), BannerKind.Error);
                 return false;
         }
 
@@ -899,13 +1008,34 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         _editMode = true;
         _originalName = _profile.ProfileName ?? "";
         OnPropertyChanged(nameof(IsEditMode));
+        OnPropertyChanged(nameof(IsLoadedProfile));
+        // A loaded legacy profile with no id (the pointer names its file) is the active one too: the
+        // auto-reload below re-points active_profile.json at the new id and file and rebuilds the tab,
+        // so the pointer is never left on the file this save replaces (F6).
+        var wasActiveIdless = _supersededFile is { } from && _activeIdlessFile is { } activeFile
+                              && string.Equals(from, activeFile, StringComparison.OrdinalIgnoreCase);
+        if (wasActiveIdless)
+        {
+            Log.Information("Builder: the loaded profile had no id; it is now {Id}", _profile.Id);
+            _activeId = _profile.Id;
+            _activeIdlessFile = null;
+        }
         var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
+        // The loaded legacy profile's old file goes only once the reload has re-pointed
+        // active_profile.json at the new one (review N8a); any other goes now.
+        var oldFileKept = wasActiveIdless ? null : RemoveSupersededFile(result.FileName);
 
         _library = Safe(_backend.GetProfiles, _library, "get_profiles");
         PopulateOptions(_profile.Id);
         SnapshotPristine();
 
-        if (!savedIsActive)
+        if (oldFileKept is { } kept)
+        {
+            // The save stands; the user is told the old file is still there (listed twice until removed).
+            ShowToast(UiStrings.Builder_SavedOldFileKept(result.FileName, kept.File, kept.Error), BannerKind.Warning);
+            if (!savedIsActive) return true;
+        }
+        else if (!savedIsActive)
         {
             ShowToast(UiStrings.Builder_SavedAs(result.FileName), BannerKind.Success);
             return true;
@@ -915,14 +1045,43 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         IsWorking = true;
         try
         {
-            var load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
-            if (load.Ok) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success);
-            else ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Builder: auto-reload threw");
-            ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+            LoadResult load;
+            try
+            {
+                load = await _backend.LoadAsync(new LoadRequest(_profile.ProfileName ?? "", _profile.Id, _activeDisable, _activeHiddenTabs));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Builder: auto-reload threw");
+                load = LoadResult.Fail(ex.Message);
+            }
+            if (!load.Ok)
+            {
+                if (wasActiveIdless && _supersededFile is { } old)
+                {
+                    // The pointer may still name the old file: keep it, so the loaded profile still resolves.
+                    _supersededFile = null;
+                    Log.Warning("Builder: auto-reload failed; kept {Old}, which active_profile.json may still name", old);
+                    ShowToast(UiStrings.Builder_SavedReloadFailedOldKept(result.FileName, old), BannerKind.Warning);
+                }
+                else
+                {
+                    ShowToast(UiStrings.Builder_SavedReloadFailed, BannerKind.Error);
+                }
+                return true;
+            }
+            if (wasActiveIdless)
+            {
+                oldFileKept = RemoveSupersededFile(result.FileName);
+                _library = Safe(_backend.GetProfiles, _library, "get_profiles");
+                PopulateOptions(_profile.Id);
+                if (oldFileKept is { } late)
+                {
+                    ShowToast(UiStrings.Builder_SavedOldFileKept(result.FileName, late.File, late.Error), BannerKind.Warning);
+                    return true;
+                }
+            }
+            if (oldFileKept is null) ShowToast(UiStrings.Builder_SavedReloaded, BannerKind.Success); // else the warning stays
         }
         finally
         {
@@ -994,6 +1153,26 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// After a save: the id-less file the profile was read from is removed (WU1 review F6). A
+    /// failure is logged and returned for a warning; it never fails the save. Null when there was
+    /// nothing to remove or it was removed.
+    /// </summary>
+    private (string File, string Error)? RemoveSupersededFile(string? savedFileName)
+    {
+        if (_supersededFile is not { } old) return null;
+        _supersededFile = null;
+        if (string.Equals(old, savedFileName, StringComparison.OrdinalIgnoreCase)) return null;
+        var removed = Safe(() => _backend.RemoveSupersededFile(old), OpResult.Fail("unknown"), "remove_superseded_file");
+        if (removed.Ok)
+        {
+            Log.Information("Builder: {Old} replaced by {New} (the profile had no id)", old, savedFileName);
+            return null;
+        }
+        Log.Warning("Builder: saved as {New}, but {Old} could not be removed: {Error}", savedFileName, old, removed.Error);
+        return (old, removed.Error ?? "unknown");
+    }
+
     private async Task SaveThenCloseAsync()
     {
         if (await SaveAsync()) Close();
@@ -1010,14 +1189,16 @@ public sealed class ProfileBuilderViewModel : ObservableObject
 
     // ---- helpers ------------------------------------------------------------------------------
 
-    /// <summary>No modal host: both modals answer Cancel.</summary>
+    /// <summary>No dialog host: the name dialogs answer Cancel and Branding opens nothing.</summary>
     private sealed class NoBuilderDialogs : IBuilderDialogs
     {
         public static readonly NoBuilderDialogs Instance = new();
 
-        public bool EditPresets(PresetsViewModel model) => false;
+        public bool EditName(ProfileNameDialogModel model) => false;
 
-        public bool EditCleanup(CleanupViewModel model) => false;
+        public void EditBranding(ProfileBuilderViewModel model)
+        {
+        }
     }
 
     private void ShowToast(string text, BannerKind kind) => Toast.Show(text, kind, TransientMessage.ToastDuration);

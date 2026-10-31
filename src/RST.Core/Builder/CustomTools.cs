@@ -347,7 +347,7 @@ public sealed class CustomToolEditor
             var name = profile.ProfileName ?? "";
             if (string.IsNullOrEmpty(profile.Id))
             {
-                Fail(name, null, entry.FileName, $"\"{name}\" is a legacy profile with no id, so it was not changed. Recreate it in the Builder.");
+                Fail(name, null, entry.FileName, $"\"{name}\" is a legacy profile with no id, so it was not changed. Open it in the Builder and save it once to give it an id.");
                 continue;
             }
             if (shared.TryGetValue(profile.Id, out var files))

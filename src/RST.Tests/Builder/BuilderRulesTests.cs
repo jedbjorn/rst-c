@@ -103,22 +103,4 @@ public class BuilderRulesTests
     [InlineData("pack:../x", "Icon")]
     public void The_pick_icon_label_is_the_design_or_Icon(string? icon, string expected) =>
         BuilderRules.IconButtonLabel(new Slot { IconFile = icon }).Should().Be(expected);
-
-    [Fact]
-    public void The_presets_summary_matches_the_page()
-    {
-        BuilderRules.PresetsSummary(null).Should().Be("No tabs hidden  •  Disable Unused: off");
-        BuilderRules.PresetsSummary(new ProfilePresets { HiddenTabs = ["A"], DisableUnusedAddins = true }).Should().Be("1 tab hidden  •  Disable Unused: on");
-        BuilderRules.PresetsSummary(new ProfilePresets { HiddenTabs = ["A", "B"] }).Should().Be("2 tabs hidden  •  Disable Unused: off");
-    }
-
-    [Fact]
-    public void The_cleanup_summary_matches_the_page()
-    {
-        BuilderRules.CleanupSummary(null).Should().Be("Defaults will be used.");
-        BuilderRules.CleanupSummary(CleanupDefaults.Build()).Should().Be("6 of 6 targets enabled.");
-        var one = new List<CleanupTarget> { new() { Enabled = false } };
-        BuilderRules.CleanupSummary(one).Should().Be("0 of 1 target enabled.");
-        BuilderRules.CleanupSummary([]).Should().Be("0 of 0 targets enabled.");
-    }
 }

@@ -168,13 +168,20 @@ The Builder's drag and drop (`ProfileBuilderWindow.xaml.cs`, rules in `RST.Core.
   inside a `TextBoxBase` or `ButtonBase` (`IsInteractive`), so typing, selecting text and clicking
   ▲ ▼ × never start one.
 
-### Popups
+### Popups and menus
 
-The Branding popover is a `StaysOpen="False"` `Popup` opened by a `ToggleButton` bound to
-`IsOpen`, and the toggle is not hit-testable while the popup is open. Otherwise the click that
-dismisses the popup reaches the button and reopens it (VM defect D2). On `Opened`, keyboard focus
-moves into the popup (its first control), because a mouse click leaves focus in the window and
-Escape would never reach the popup's key handler.
+A button that opens a popup or a menu that closes on an outside click is a `ToggleButton`,
+checked while it is open and not hit-testable then. Otherwise the click that dismisses the popup
+reaches the button and reopens it (VM defect D2, found on v3.0's Branding popover). The Builder's
+⚙ and profile buttons (feature #18) use the window's `MenuToggle` style: checking one opens its
+`ContextMenu` under it (code-behind sets the menu's `DataContext` and `PlacementTarget`, since a
+`ContextMenu` is not in the window's tree), and the menu's `Closed` unchecks it.
+
+### Escape
+
+Escape closes the Builder through the same path as Exit, so unsaved changes get the Save /
+Discard / Cancel prompt (SC-010). The window acts only when nothing else has it: an open menu,
+the icon picker overlay and the dialogs handle their own Escape (`ProfileBuilderWindow.OnKeyDown`).
 
 ## Theme keys
 
@@ -221,6 +228,9 @@ rst-c adds the following. Every pairing they draw is a `ContrastRequirement` in
 | `BusySpinner` | ProgressBar | A 16 px turning accent arc. Inside a `PrimaryButton`, set `Foreground="{StaticResource OnAccentBrush}"` |
 | `BusyOverlay` | ContentControl | The `RSTmsgWait` overlay. Content: a `BusyState`. A scrim, then a centred panel with the spinner, `Title` and `Message`. Put it last in the root grid, spanning everything. The view-model also disables its commands while busy |
 | `TransientBanner` | ContentControl | The `RSTmsgInform` / `showToast` toast. Content: a `TransientMessage`. Info/Success/Warning/Error colors by `Kind`, an optional bold `Title`, top-centre, click-through. Put it last in the root grid |
+| `HeaderStrip` | Border | A window's header (feature #18, decision #24): the Tint, `AccentSoftBrush` with an `InfoBorderBrush` bottom line, 54 px tall, 16 px side padding. The Builder's header; the Loader adopts it (F18 WU6). Its pairings are `UiPalette.HeaderRequirements` |
+| `HeaderTitle` | TextBlock | The window title in a `HeaderStrip` ("Profile Builder"): `SectionText` at 14 px, vertically centred |
+| `HeaderDivider` | Rectangle | The 1 × 20 px divider between header groups, 16 px each side |
 
 ### Models (RST.UI.Controls)
 
@@ -358,9 +368,19 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
   - **Icon picker:** `RST.Core.Builder.IconPickerModel` (the port of `icon-picker.test.mjs`'s
     behavior, as a row model), `Controls/IconPickerViewModel` and the `Controls/IconPicker` overlay
     (a scrim inside the Builder window, so a click outside the card cancels).
-  - **Modals:** `PresetsWindow` and `CleanupWindow` (family dialogs, `ShowInTaskbar="False"`) over
-    `PresetsViewModel` / `CleanupViewModel`, behind `IBuilderDialogs`. The Cleanup modal edits a copy.
-  - **Branding popover:** see [Popups](#popups).
+- **Feature #18 (spec #19), WU2, the window shell:**
+  - **Header:** `HeaderStrip` with ⚙ (its menu: Branding…), the profile button and its menu (the
+    saved profiles, + New profile, Rename…, Duplicate…), Export ZIP, the title, the unsaved-changes
+    indicator (`IsDirty`), Save (enabled only with changes) and Exit. See [Popups and menus](#popups-and-menus)
+    and [Escape](#escape).
+  - **Dialogs** behind `IBuilderDialogs` (family dialogs, `ShowInTaskbar="False"`): `ProfileNameDialog`
+    over `ProfileNameDialogModel` for Rename… and Duplicate… (a required name, unique among the saved
+    profiles: `RST.Core.Builder.ProfileNaming`; Confirm closes only on a passing name), and
+    `BrandingDialog` for the machine-wide logo and link. While Branding is open, `BuilderDialogs` makes
+    it the owner of the family dialogs, so the Pick… file dialog does not re-enable the Builder.
+  - **The Profile pane** (330 px): General, Loader defaults and Junk cleanup tabs, which edit the
+    working copy in place (`PresetTabViewModel`, `CleanupRowViewModel`); the RST Presets and Junk
+    Cleanup modals and the Properties pane are retired.
 
 ## Revit API floor
 

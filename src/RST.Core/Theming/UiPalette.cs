@@ -1,5 +1,5 @@
 // Adapted from splash-it src/SplashIt.Core/Theming/UiPalette.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Core/Theming/UiPalette.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); doc comments name RST; rst-c additions: Success/SuccessSoft/SuccessBorder and Scrim keys and their contrast requirements (card "active" border, Loaded badge, success banner, busy overlay), and the requirements for the new ToggleSwitch, TabItem, TreeViewItem, card ListBoxItem, GridSplitter, busy indicator and transient banner styles; the Health window's CautionText key and HealthRequirements (severity colors, range pills).
+// Changes: namespaces (SplashIt.* to RST.*); doc comments name RST; rst-c additions: Success/SuccessSoft/SuccessBorder and Scrim keys and their contrast requirements (card "active" border, Loaded badge, success banner, busy overlay), and the requirements for the new ToggleSwitch, TabItem, TreeViewItem, card ListBoxItem, GridSplitter, busy indicator and transient banner styles; the Health window's CautionText key and HealthRequirements (severity colors, range pills); HeaderRequirements, the window header's Tint (feature #18).
 
 using System.Globalization;
 
@@ -280,6 +280,21 @@ public static class UiPalette
     ];
 
     /// <summary>
+    /// The window header's Tint (feature #18, decision #24; declared before <see cref="Requirements"/>,
+    /// which includes them): the Theme.xaml <c>HeaderStrip</c> is AccentSoft with an InfoBorder bottom
+    /// line, in both themes. What it draws straight on AccentSoft: the title and body text, muted text,
+    /// the unsaved-changes dot and text, and the focus ring of its buttons. The buttons themselves keep
+    /// their own fills (Surface, Hover, Pressed, Accent), whose pairings <see cref="Requirements"/> checks.
+    /// </summary>
+    public static IReadOnlyList<ContrastRequirement> HeaderRequirements { get; } =
+    [
+        .. Text4(Text, [AccentSoft], "window header: the title"),
+        .. Text4(MutedText, [AccentSoft], "window header: secondary text"),
+        .. Text4(WarningText, [AccentSoft], "window header: the unsaved-changes dot and text"),
+        .. NonText3(AccentForeground, [AccentSoft], "window header: the focus ring of its buttons"),
+    ];
+
+    /// <summary>
     /// Every text (4.5:1, WCAG AA body text) and non-text (3:1, WCAG 1.4.11 focus
     /// indicators, glyphs and control boundaries) pairing the XAML draws, checked
     /// for both palettes by the Core tests.
@@ -307,6 +322,7 @@ public static class UiPalette
         new(ScrollGlyph, ScrollTrack, 3, "scroll bar arrows"),
         .. RstRequirements,
         .. HealthRequirements,
+        .. HeaderRequirements,
         // Loader (spec #16, WU3): the Profile Loader's link text on its panes and dialogs.
         .. Text4(AccentForeground, [Window, Surface], "Loader links (info ↗, download ↗)"),
     ];

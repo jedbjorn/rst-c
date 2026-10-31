@@ -120,7 +120,7 @@ To add one, close the Builder, open a profile's file from `%AppData%\RST\profile
 
 ### Properties
 
-- **Profile:** **Min Revit Version** (default `0.1.0`; informational, see [Notes & limits](#notes--limits)) and **Panel Opacity**, from 10 to 100 in steps of 5. Opacity sets how strongly every panel's colour is drawn; users can override it in the Loader.
+- **Profile:** **Min RST Version**, the minimum RST version (default `0.1.0`; informational, see [Notes & limits](#notes--limits)) and **Panel Opacity**, from 10 to 100 in steps of 5. Opacity sets how strongly every panel's colour is drawn; users can override it in the Loader.
 - **Selected Panel:** the panel's **Name**; its **Color**, as a swatch and a hex box (`#RRGGBB`, applied when you press Enter or leave the box). The swatch opens the colour picker, with a palette, recent colours, a hex box and a tool to pick a colour from anywhere on screen. **+ URL Button** opens a small editor with **Button label** and **URL** boxes: **Add** appends a link button to the panel (see [Custom URL Slots](custom-url-slots.md)) and **Cancel** discards it. Both boxes are required.
 - **RST Presets:** a summary (for example "2 tabs hidden • Disable Unused: on") and **Configure**.
 - **Junk Cleanup:** a summary ("5 of 6 targets enabled.") and **Configure**.
@@ -225,7 +225,7 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 - The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means the catalogue could not be read.
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
-- **Min Revit Version** is informational: the Loader shows it on the profile's card and details ("Min Revit"), but rst-c does not check or enforce it when a profile is loaded.
+- **Min RST Version** (the minimum RST version, `min_version`) is informational: the Loader shows it on the profile's card and details ("Min RST"), but rst-c does not check or enforce it when a profile is loaded.
 - Stacks hold push buttons only: Revit and add-in commands and URL buttons, two or three per stack. Pulldowns, split buttons, combo boxes, text boxes and stacks inside stacks are not supported, and the permanent RST panel on the Add-Ins tab has no stacks.
 - A profile file whose stacks break the rules (for example a hand-edited stack of one or four tools, or a stack tool without a command id) fails validation, so neither the Loader nor the Builder lists it; the log says why. The ribbon would skip such a stack in any case, with a log line, and never draws a stack of one or four buttons.
 - Profiles with stacks open in older versions of rst-c (v3.0.0 and earlier) without errors, but those versions do not draw the stacks on the ribbon.
