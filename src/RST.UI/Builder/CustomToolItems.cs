@@ -225,10 +225,14 @@ public sealed class CustomToolDialogModel : ObservableObject
 
     public string Title => IsEdit ? UiStrings.Builder_EditToolTitle : UiStrings.Builder_CreateToolTitle;
 
-    /// <summary>"Create", or "Update in N profiles" (N: the profiles that will actually change).</summary>
+    /// <summary>
+    /// "Create", or "Update in N profiles" (N: the profiles that will actually change, at least one).
+    /// Plain "Update" while the edit fails its check (second delta review F8a) or would change no
+    /// profile yet (the button is disabled then; never "Update in 0 profiles": #158 review F1).
+    /// </summary>
     public string ConfirmText => !IsEdit ? UiStrings.Builder_Create
-        : IsValid ? UiStrings.Builder_UpdateIn(ProfileCount(Plan!.Count))
-        : UiStrings.Builder_Update; // no count while the edit fails its check (second delta review F8a)
+        : IsValid && Plan!.Count > 0 ? UiStrings.Builder_UpdateIn(ProfileCount(Plan.Count))
+        : UiStrings.Builder_Update;
 
     /// <summary>
     /// Edit: an edit that fails its check (a cleared label, no address, not an email address), or would

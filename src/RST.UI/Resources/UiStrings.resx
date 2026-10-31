@@ -289,7 +289,7 @@
     <value>No cleanup targets configured</value>
   </data>
   <data name="Health_JunkEmptyHint" xml:space="preserve">
-    <value>Add some in the Builder → Junk Cleanup section.</value>
+    <value>Turn some on in the Profile Builder: the Profile pane's Junk cleanup tab (Restore defaults brings back the full list).</value>
   </data>
   <data name="Health_JunkCancel" xml:space="preserve">
     <value>Cancel</value>
@@ -436,7 +436,7 @@
     <value>No profiles found</value>
   </data>
   <data name="Loader_NoProfilesHint" xml:space="preserve">
-    <value>Create a profile in the Profiler, or import an existing one.</value>
+    <value>Create a profile in the Profile Builder, or import an existing one.</value>
   </data>
   <data name="Loader_ImportProfileFromFile" xml:space="preserve">
     <value>+ Import Profile from File</value>
@@ -779,7 +779,7 @@
   </data>
   <data name="Builder_CatalogEmpty" xml:space="preserve">
     <value>No commands available.
-Open the Loader from inside Revit to populate the catalog.</value>
+Revit's commands could not be read. Restart Revit and open the Builder again; the RST log has the details.</value>
   </data>
   <data name="Builder_NoMatches" xml:space="preserve">
     <value>No matches for "{0}".</value>
