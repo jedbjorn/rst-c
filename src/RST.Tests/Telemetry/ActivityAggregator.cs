@@ -1,17 +1,53 @@
-// ActivityAggregator.cs — parses outbox files and computes the Activity
-// tab's series for the current file (Telemetry v1 spec, Build Plan
-// step 3). Pure, unit-testable, no Revit references.
-//
-// The matching ladder and the replay's join rules (SC-032, SC-038 to
-// SC-043) live in SessionReplay, shared with the rollup fold (spec #24).
-// Overlapping intervals across concurrent sessions are unioned before
-// bucketing, so a file open in two instances never exceeds wall-clock.
+// ActivityAggregator.cs (test harness) — the pre-spec-#24 Activity
+// aggregation, kept in RST.Tests only: the Health window now reads the
+// per-model rollups (ModelActivityReader), but these replays of whole
+// outboxes are the regression net for SessionReplay's matching ladder and
+// join rules (SC-032, SC-038 to SC-043), which the rollup fold shares.
+// Moved out of RST.Core unchanged (F19 #24 WU4).
 
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using RST.Core.Telemetry;
 
-namespace RST.Core.Telemetry;
+namespace RST.Tests.Telemetry;
 
-public static class ActivityAggregator
+/// <summary>Hours the current file was open on one calendar day. The
+/// per-day series carries one point for every day in range, zeros
+/// included.</summary>
+public sealed record DayOpenHoursPoint(DateOnly Date, double Hours);
+
+public sealed class ActivitySeries
+{
+    public static readonly ActivitySeries Empty = new();
+
+    /// <summary>See <see cref="ActivityMatchKinds"/>; null when no key
+    /// was usable and the series are necessarily empty.</summary>
+    public string? MatchedKeyKind { get; init; }
+
+    /// <summary>When the live session (the caller's
+    /// <c>liveSessionGuid</c>) currently has the file open: the ts its
+    /// earliest still-open interval started — the "open since" the
+    /// current-session block shows. Null when no live session was named,
+    /// the file isn't open in it, or collection was toggled off.</summary>
+    public DateTimeOffset? LiveOpenSinceUtc { get; init; }
+
+    /// <summary>One point per calendar day in range, oldest first,
+    /// zero-hour days included.</summary>
+    public IReadOnlyList<DayOpenHoursPoint> PerDayOpenHours { get; init; } =
+        Array.Empty<DayOpenHoursPoint>();
+
+    /// <summary>Load durations, one per open event in range, oldest first.</summary>
+    public IReadOnlyList<DurationPoint> OpenEvents { get; init; } =
+        Array.Empty<DurationPoint>();
+
+    /// <summary>Sync durations, one per sync in range, oldest first.</summary>
+    public IReadOnlyList<DurationPoint> SyncEvents { get; init; } =
+        Array.Empty<DurationPoint>();
+}
+
+internal static class ActivityAggregator
 {
     /// <summary>
     /// Compute the Activity tab's series for <paramref name="currentFile"/>
@@ -65,7 +101,7 @@ public static class ActivityAggregator
             }
         }
 
-        var days = SessionReplay.BucketByDay(SessionReplay.MergeIntervals(sink.Intervals), zone, firstDay, lastDay);
+        var days = BucketByDay(SessionReplay.MergeIntervals(sink.Intervals), zone, firstDay, lastDay);
         var perDay = new List<DayOpenHoursPoint>(rangeDays);
         for (var d = firstDay; d <= lastDay; d = d.AddDays(1))
             perDay.Add(new DayOpenHoursPoint(d, days.GetValueOrDefault(d)));
@@ -80,50 +116,29 @@ public static class ActivityAggregator
         };
     }
 
-    /// <summary>
-    /// The Activity footer's status line: file count, total bytes on
-    /// disk, and the oldest parseable event's ts across the outbox.
-    /// Never throws; unreadable files still count toward size when their
-    /// length is readable, and are skipped for the oldest-event scan.
-    /// </summary>
-    public static OutboxStatus ReadStatus(string outboxDir, Action<string>? log = null)
+    /// <summary>Split merged intervals at local-midnight boundaries and
+    /// sum hours per calendar day in [firstDay, lastDay].</summary>
+    private static Dictionary<DateOnly, double> BucketByDay(
+        List<(DateTimeOffset Start, DateTimeOffset End)> merged,
+        TimeZoneInfo zone, DateOnly firstDay, DateOnly lastDay)
     {
-        var files = ListOutboxFiles(outboxDir, log);
-        if (files.Length == 0) return OutboxStatus.Empty;
-
-        var count = 0;
-        long totalBytes = 0;
-        DateTimeOffset? oldest = null;
-        foreach (var path in files)
+        var days = new Dictionary<DateOnly, double>();
+        foreach (var (start, end) in merged)
         {
-            count++;
-            try { totalBytes += new FileInfo(path).Length; }
-            catch (Exception ex) { SafeLog(log, "telemetry status size failed for " + Path.GetFileName(path) + ": " + ex.Message); }
-            try
+            var cur = start;
+            while (cur < end)
             {
-                if (ReadFirstEventTs(path) is { } ts && (oldest is null || ts < oldest))
-                    oldest = ts;
-            }
-            catch (Exception ex)
-            {
-                SafeLog(log, "telemetry status read failed for " + Path.GetFileName(path) + ": " + ex.Message);
+                var local = TimeZoneInfo.ConvertTime(cur, zone);
+                var day = DateOnly.FromDateTime(local.Date);
+                var dayEndUtc = SessionReplay.NextLocalMidnightUtc(local, zone);
+                var segEnd = end < dayEndUtc ? end : dayEndUtc;
+                if (segEnd <= cur) break; // safety: never loop in place
+                if (day >= firstDay && day <= lastDay)
+                    days[day] = days.GetValueOrDefault(day) + (segEnd - cur).TotalHours;
+                cur = segEnd;
             }
         }
-        return new OutboxStatus(count, totalBytes, oldest);
-    }
-
-    /// <summary>Ts of the first parseable line — the whole file is
-    /// scanned only when every earlier line is damaged.</summary>
-    private static DateTimeOffset? ReadFirstEventTs(string path)
-    {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        using var reader = new StreamReader(fs);
-        string? line;
-        while ((line = reader.ReadLine()) is not null)
-        {
-            if (TelemetryJson.TryParseLine(line) is { } e) return e.Ts;
-        }
-        return null;
+        return days;
     }
 
     private static string[] ListOutboxFiles(string outboxDir, Action<string>? log)

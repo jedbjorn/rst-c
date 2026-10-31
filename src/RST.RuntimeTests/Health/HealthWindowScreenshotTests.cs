@@ -1,7 +1,9 @@
 // rst-c's own (not vendored): the Health window rendered off-screen in its main states, light and
 // dark (spec #16, WU2, AC3/AC4), with a scripted service and realistic data. Each test also checks
 // what it shows (the visible tab, the overlay, the severity dot colors, the chart dots), so a
-// broken template fails here as well as in review. The PNGs land in TestResults/screenshots; CI
+// broken template fails here as well as in review. The Activity captures (spec #24, Revit Health)
+// cover the Activity (Session) / (Total) cards, the four charts with the Health trend's coloured
+// dots, the 6M weekly view, the single-dot and empty states and "No model open". The PNGs land in TestResults/screenshots; CI
 // uploads them as RST-screenshots.
 
 using System.Globalization;
@@ -70,7 +72,6 @@ public class HealthWindowScreenshotTests
                 work();
                 return Task.CompletedTask;
             }),
-            StartTimer = (_, _) => new NoTimer(),
             Now = () => Now,
             Culture = CultureInfo.GetCultureInfo("en-US"),
             Zone = TimeZoneInfo.Utc,
@@ -301,15 +302,49 @@ public class HealthWindowScreenshotTests
         }
     });
 
+    /// <summary>The window's charts by card: Active time, Opening time, Sync history, Health.</summary>
+    private static Dictionary<string, ActivityChart> ChartsByCard(HealthWindow window) =>
+        WindowCapture.Descendants<Border>(window)
+            .Where(b => b.DataContext is ChartCard && System.Windows.Automation.AutomationProperties.GetAutomationId(b).StartsWith("Health.Chart.", StringComparison.Ordinal))
+            .ToDictionary(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b), b => WindowCapture.Descendants<ActivityChart>(b).Single());
+
+    /// <summary>Each Health trend dot is drawn in its band's colour: Health's four severity colours, grey for "not enough data".</summary>
+    private static void AssertTrendColours(BitmapSource bitmap, HealthWindow window, ActivityChart trend, UiTheme theme)
+    {
+        var keys = new Dictionary<HealthSeverity, string>
+        {
+            [HealthSeverity.Ok] = UiPalette.Success,
+            [HealthSeverity.WarnSoft] = UiPalette.CautionText,
+            [HealthSeverity.Warn] = UiPalette.WarningText,
+            [HealthSeverity.Danger] = UiPalette.Error,
+            [HealthSeverity.None] = UiPalette.MutedText,
+        };
+        var root = (Visual)window.Content;
+        var ellipses = trend.Surface.Children.OfType<Ellipse>().ToList();
+        Assert.Equal(trend.Layout!.Dots.Count, ellipses.Count);
+        for (var i = 0; i < ellipses.Count; i++)
+        {
+            var tone = trend.Layout.Dots[i].Tone!.Value;
+            Assert.Equal(ActivityChart.TonedDotRadius * 2, ellipses[i].Width);
+            AssertColor(Palette(theme, keys[tone]), At(bitmap, ellipses[i], root, new Point(ActivityChart.TonedDotRadius, ActivityChart.TonedDotRadius)),
+                $"trend dot {i} ({tone})");
+            Assert.DoesNotMatch(@"\d+(\.\d+)?\s*(%|points?|score)", (string)ellipses[i].ToolTip);
+        }
+        // No numeric axis: the band edges are lines without labels; the only text is the date ticks.
+        Assert.Equal(3, trend.Surface.Children.OfType<Line>().Count());
+        Assert.Equal(trend.Layout.Ticks.Select(t => t.Label), trend.Surface.Children.OfType<TextBlock>().Select(t => t.Text));
+        Assert.Empty(trend.Surface.Children.OfType<Path>());
+    }
+
     [Theory]
     [MemberData(nameof(Themes))]
-    public void ActivityTab_CurveCharts(UiTheme theme) => Sta(() =>
+    public void ActivityTab_SevenDays_CardsAndFourCharts(UiTheme theme) => Sta(() =>
     {
         RstTheme.Apply(theme);
         var vm = ViewModel(new FakeHealthService
         {
             Snapshot = HealthSamples.Snapshot(),
-            Activity = days => HealthSamples.Activity(Now, days),
+            Activity = () => HealthSamples.Activity(Now),
         });
         vm.Load();
         vm.SelectedTab = HealthViewModel.ActivityTab;
@@ -322,23 +357,72 @@ public class HealthWindowScreenshotTests
             Assert.Equal(Visibility.Visible, window.ActivityPane.Visibility);
             Assert.True(window.CollectionToggle.IsChecked);
 
-            var charts = WindowCapture.Descendants<ActivityChart>(window).ToList();
-            Assert.Equal(3, charts.Count);
+            var charts = ChartsByCard(window);
+            Assert.Equal(["Health.Chart.Active", "Health.Chart.Open", "Health.Chart.Sync", "Health.Chart.Health"], charts.Keys);
             var root = (Visual)window.Content;
-            foreach (var chart in charts)
+            foreach (var key in new[] { "Health.Chart.Active", "Health.Chart.Open", "Health.Chart.Sync" })
             {
+                var chart = charts[key];
                 Assert.Equal(ActivityChartLayout.Width, chart.Surface.Width);
                 Assert.Equal(ActivityChartLayout.Height, chart.Surface.Height);
                 Assert.Single(chart.Surface.Children.OfType<Path>());
                 Assert.Equal(4, chart.Surface.Children.OfType<Line>().Count());
                 var dot = chart.Surface.Children.OfType<Ellipse>().First();
                 Assert.False(string.IsNullOrEmpty(dot.ToolTip as string));
-                AssertColor(Palette(theme, UiPalette.AccentForeground), At(bitmap, dot, root, new Point(3, 3)), "chart dot");
+                AssertColor(Palette(theme, UiPalette.AccentForeground), At(bitmap, dot, root, new Point(3, 3)), $"{key} dot");
             }
-            // Six stat cards, the 7D pill selected.
-            Assert.Equal(["Session Timer", "Session Total", "Longest Sync", "Longest Open Time", "Warning Count", "File Size"],
+            AssertTrendColours(bitmap, window, charts["Health.Chart.Health"], theme);
+            Assert.Equal(6, charts["Health.Chart.Health"].Layout!.Dots.Count);
+
+            // Six stat cards with their automation ids, the 7D pill selected.
+            Assert.Equal(["Activity (Session)", "Activity (Total)", "Longest Sync", "Longest Open Time", "Warning Count", "File Size"],
                 vm.StatCards.Select(c => c.Label));
-            Assert.True(WindowCapture.Descendants<RadioButton>(window).First().IsChecked);
+            var cardIds = WindowCapture.Descendants<Border>(window).Where(b => b.DataContext is StatCard)
+                .Select(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b)).Where(id => id.Length > 0).ToList();
+            Assert.Equal(["Health.Stat.ActivitySession", "Health.Stat.ActivityTotal", "Health.Stat.LongestSync", "Health.Stat.LongestOpen",
+                "Health.Stat.Warnings", "Health.Stat.FileSize"], cardIds);
+            var pills = WindowCapture.Descendants<RadioButton>(window).ToList();
+            Assert.True(pills[0].IsChecked);
+            Assert.Equal("Health.Range.7D", System.Windows.Automation.AutomationProperties.GetAutomationId(pills[0]));
+            var texts = WindowCapture.Descendants<TextBlock>(window).Where(t => t.IsVisible).Select(t => t.Text).ToList();
+            Assert.Contains("47m", texts);
+            Assert.Contains("opened 12:56 PM", texts);
+            Assert.Contains("Health — this file", texts);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void ActivityTab_SixMonths_WeeklyPoints(UiTheme theme) => Sta(() =>
+    {
+        RstTheme.Apply(theme);
+        var vm = ViewModel(new FakeHealthService
+        {
+            Snapshot = HealthSamples.Snapshot(),
+            Activity = () => HealthSamples.Activity(Now),
+        });
+        vm.Load();
+        vm.SelectedTab = HealthViewModel.ActivityTab;
+        vm.SelectRange(180);
+        var window = new HealthWindow(vm);
+        try
+        {
+            var bitmap = Capture(window, theme, "activity-weekly");
+            AssertWindowCorners(bitmap, theme);
+            Assert.True(WindowCapture.Descendants<RadioButton>(window).Last().IsChecked);
+            var charts = ChartsByCard(window);
+            Assert.Equal(26, charts["Health.Chart.Active"].Layout!.Dots.Count);
+            Assert.All(charts["Health.Chart.Active"].Layout!.Dots, d => Assert.StartsWith("Week of ", d.Label, StringComparison.Ordinal));
+            Assert.All(charts["Health.Chart.Open"].Layout!.Dots, d => Assert.Contains(" average of ", d.Label, StringComparison.Ordinal));
+            AssertTrendColours(bitmap, window, charts["Health.Chart.Health"], theme);
+            var tones = charts["Health.Chart.Health"].Layout!.Dots.Select(d => d.Tone).ToList();
+            Assert.Equal(HealthSeverity.Danger, tones[0]);
+            Assert.Equal(HealthSeverity.Ok, tones[^1]);
+            Assert.Contains(WindowCapture.Descendants<TextBlock>(window), t => t.Text == "133h 36m");
         }
         finally
         {
@@ -354,7 +438,7 @@ public class HealthWindowScreenshotTests
         var vm = ViewModel(new FakeHealthService
         {
             Snapshot = HealthSamples.Snapshot(),
-            Activity = _ => HealthSamples.SparseActivity(Now),
+            Activity = () => HealthSamples.SparseActivity(Now),
         });
         vm.Load();
         vm.SelectedTab = HealthViewModel.ActivityTab;
@@ -363,15 +447,47 @@ public class HealthWindowScreenshotTests
         {
             Capture(window, theme, "activity-sparse", WindowSize);
             Assert.False(window.CollectionToggle.IsChecked);
-            var charts = WindowCapture.Descendants<ActivityChart>(window).Where(c => c.IsVisible).ToList();
-            var single = Assert.Single(charts);
-            Assert.Single(single.Surface.Children.OfType<Ellipse>());
-            Assert.Empty(single.Surface.Children.OfType<Path>());
+            var visible = WindowCapture.Descendants<ActivityChart>(window).Where(c => c.IsVisible).ToList();
+            Assert.Equal(2, visible.Count); // Opening time and Health: one dot each
+            Assert.All(visible, c =>
+            {
+                Assert.Single(c.Surface.Children.OfType<Ellipse>());
+                Assert.Empty(c.Surface.Children.OfType<Path>());
+            });
             var texts = WindowCapture.Descendants<TextBlock>(window).Where(t => t.IsVisible).Select(t => t.Text).ToList();
             Assert.Contains("No time recorded in this range", texts);
-            Assert.Contains("not enough history yet", texts);
+            Assert.Equal(2, texts.Count(t => t == "not enough history yet"));
             Assert.Contains("Not a workshared model", texts);
-            Assert.Contains("collection off · 0 files · 0 B", texts);
+            Assert.Contains("collection off · 0 files · 0 B · since 10/30/2026", texts);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void ActivityTab_NoModelOpen(UiTheme theme) => Sta(() =>
+    {
+        RstTheme.Apply(theme);
+        var vm = ViewModel(new FakeHealthService
+        {
+            Snapshot = HealthSamples.Snapshot(),
+            Activity = HealthSamples.NoModel,
+        });
+        vm.Load();
+        vm.SelectedTab = HealthViewModel.ActivityTab;
+        var window = new HealthWindow(vm);
+        try
+        {
+            Capture(window, theme, "activity-no-model", WindowSize);
+            Assert.DoesNotContain(WindowCapture.Descendants<ActivityChart>(window), c => c.IsVisible);
+            var texts = WindowCapture.Descendants<TextBlock>(window).Where(t => t.IsVisible).Select(t => t.Text).ToList();
+            Assert.Equal(4, texts.Count(t => t == "No model open"));
+            Assert.Equal(6, WindowCapture.Descendants<TextBlock>(window)
+                .Count(t => System.Windows.Automation.AutomationProperties.GetAutomationId(t) == "Health.StatValue" && t.Text == "—"));
+            Assert.Contains("collection on · 23 files · 1.4 MB", texts);
         }
         finally
         {
@@ -388,7 +504,7 @@ public class HealthWindowScreenshotTests
         var vm = ViewModel(new FakeHealthService
         {
             Snapshot = HealthSamples.Snapshot(),
-            Activity = _ => HealthSamples.SmallActivity(Now),
+            Activity = () => HealthSamples.SmallActivity(Now),
         });
         vm.Load();
         vm.SelectedTab = HealthViewModel.ActivityTab;
@@ -396,15 +512,14 @@ public class HealthWindowScreenshotTests
         try
         {
             Capture(window, theme, "activity-small");
-            var charts = WindowCapture.Descendants<ActivityChart>(window).ToList();
-            Assert.Equal(3, charts.Count);
-            foreach (var chart in charts)
+            var charts = ChartsByCard(window);
+            foreach (var key in new[] { "Health.Chart.Active", "Health.Chart.Open", "Health.Chart.Sync" })
             {
-                var labels = chart.Layout!.GridLines.Select(g => g.Label).ToList();
+                var labels = charts[key].Layout!.GridLines.Select(g => g.Label).ToList();
                 Assert.Equal(4, labels.Distinct().Count());
-                Assert.Single(chart.Surface.Children.OfType<Path>());
+                Assert.Single(charts[key].Surface.Children.OfType<Path>());
             }
-            Assert.Equal(["7m", "4m", "2m", "0m"], charts[0].Layout!.GridLines.Select(g => g.Label));
+            Assert.Equal(["7m", "4m", "2m", "0m"], charts["Health.Chart.Active"].Layout!.GridLines.Select(g => g.Label));
         }
         finally
         {
