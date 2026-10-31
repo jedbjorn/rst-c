@@ -210,7 +210,7 @@ public class ProfileLoaderViewModelTests
         var vm = Model(backend, catalog: catalog);
         vm.SelectedCard = Card(vm, "Walls");
         vm.SelectedHiddenTabs.Should().Equal("Architecture");
-        if (adoptPresets) backend.PrefsWrites.Should().ContainSingle().Which.Hidden.Should().Equal("Architecture");
+        if (adoptPresets) backend.PrefsWrites.Should().ContainSingle().Which.Hidden.Should().Equal("Structure", "Architecture");
         var architecture = vm.TabToggles.Single(t => t.Tab == "Architecture");
         var structure = vm.TabToggles.Single(t => t.Tab == "Structure");
         structure.IsEnabled.Should().BeFalse();
