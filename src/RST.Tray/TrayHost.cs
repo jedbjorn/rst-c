@@ -318,7 +318,11 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _window.Activate();
     }
 
-    /// <summary>Ends the tray from the dispatcher (never inside the hidden window's own message handler).</summary>
+    /// <summary>
+    /// Ends the tray from the dispatcher, never inside the hidden window's own message handler: an open tray menu
+    /// (whose loop runs inside that handler and keeps draining the dispatcher) is closed first, and the quit runs
+    /// once its loop has returned (SC-043 review N1).
+    /// </summary>
     public void Quit(string reason) => _dispatcher.BeginInvoke(() => QuitNow(reason));
 
     public bool SetTheme(TrayThemeChoice choice)
@@ -463,6 +467,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void QuitNow(string reason, bool insideWindowMessage = false)
     {
         if (_quitting) return;
+        // SC-043 review N1: a quit that arrives while the menu is open closes it and runs again after its loop has
+        // returned. Inside WM_ENDSESSION there is no later: the menu is ended and the quit goes on now.
+        if (insideWindowMessage) TrayMenu.Close();
+        else if (TrayMenu.Close(() => QuitNow(reason))) return;
         _quitting = true;
         _iconRetry?.Stop();
         ExitReason = reason;
@@ -503,6 +511,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void OnSessionEnding(string reason)
     {
         if (_quitting) return;
+        TrayMenu.Close(); // review N1: the session is ending now; no menu loop is left running under the shutdown
         _quitting = true;
         ExitReason = "session ending (" + reason + "): Restart Manager or sign-out";
         Log.Information("Windows asked the tray to close: {Reason}", ExitReason);

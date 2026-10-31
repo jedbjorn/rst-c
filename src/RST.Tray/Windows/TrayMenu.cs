@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using RST.Core.Logging;
 using RST.Core.Tray;
 using RST.Tray.Resources;
@@ -44,6 +45,8 @@ internal static class TrayMenu
     private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     private static bool _open;
+    private static bool _closedByTray;
+    private static readonly List<Action> AfterClose = new();
 
     /// <summary>The menu's entries, in the tray's strings.</summary>
     public static IReadOnlyList<TrayMenuEntry> Entries(TrayMenuActions actions)
@@ -52,6 +55,26 @@ internal static class TrayMenu
         return TrayMenuModel.Entries(
             new TrayMenuTexts(TrayStrings.Menu_Open, TrayStrings.Menu_CheckForUpdates, TrayStrings.Menu_Settings, TrayStrings.Menu_Quit),
             actions.CanCheckForUpdates);
+    }
+
+    /// <summary>Whether the menu's loop is running now (UI thread).</summary>
+    public static bool IsOpen => _open;
+
+    /// <summary>
+    /// SC-043 review N1: ends an open menu (EndMenu) so a quit that arrives while it is open (WM_CLOSE from Windows
+    /// Installer, a self-update, sign-out) does not run inside the menu's loop, which runs inside the icon window's
+    /// WM_CONTEXTMENU. False when no menu is open: the caller goes ahead now. True when one was: the menu closes as
+    /// soon as the current message returns, and <paramref name="then"/>, if given, is queued on the dispatcher after
+    /// TrackPopupMenuEx has returned. UI thread only.
+    /// </summary>
+    public static bool Close(Action? then = null)
+    {
+        if (!_open) return false;
+        if (!_closedByTray) Log.Information("tray menu: closed by the tray");
+        _closedByTray = true;
+        if (then is not null) AfterClose.Add(then);
+        EndMenu();
+        return true;
     }
 
     /// <summary>
@@ -94,12 +117,15 @@ internal static class TrayMenu
 
         int command;
         long openMs;
-        _open = true;
-        owner.AddHook(hook);
+        var previousForeground = IntPtr.Zero;
         try
         {
+            _open = true;
+            _closedByTray = false;
+            owner.AddHook(hook);
             // The notification-menu rule: the owner takes the foreground first, so a click anywhere else dismisses
             // the menu. Explorer lets the icon's process do this while it handles the icon's message.
+            previousForeground = GetForegroundWindow();
             ownerForeground = SetForegroundWindow(owner.Handle);
             shown.Start();
             command = TrackPopupMenuEx(menu, Alignment(x, y) | TPM_RIGHTBUTTON | TPM_RETURNCMD, x, y, owner.Handle, IntPtr.Zero);
@@ -119,7 +145,19 @@ internal static class TrayMenu
 
         var chosen = TrayMenuModel.Chosen(entries, command);
         Log.Information("tray menu closed after {Ms} ms: {Choice}", openMs,
-                        chosen == TrayMenuCommand.None ? "dismissed" : chosen.ToString());
+                        chosen != TrayMenuCommand.None ? chosen.ToString() : _closedByTray ? "closed by the tray" : "dismissed");
+        // Review N4: dismissed with Escape, the foreground is still on the hidden window, where keys go nowhere; give
+        // it back to the window that had it (the taskbar, for a keyboard user on the icon). A click elsewhere has
+        // already moved it, and an item opens a window or quits.
+        if (chosen == TrayMenuCommand.None && previousForeground != IntPtr.Zero && previousForeground != owner.Handle
+            && GetForegroundWindow() == owner.Handle)
+            SetForegroundWindow(previousForeground);
+        if (AfterClose.Count > 0)
+        {
+            var queued = AfterClose.ToArray();
+            AfterClose.Clear();
+            foreach (var action in queued) Dispatcher.CurrentDispatcher.BeginInvoke(action);
+        }
         Run(actions, chosen);
         return chosen;
     }
@@ -219,6 +257,13 @@ internal static class TrayMenu
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EndMenu();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

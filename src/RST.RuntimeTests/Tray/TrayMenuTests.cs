@@ -143,6 +143,73 @@ public class TrayMenuTests
         Assert.EndsWith(": Quit", Assert.Single(Lines(events, "tray menu closed after")));
     }));
 
+    /// <summary>
+    /// SC-043 review N1: Windows Installer's util:CloseApplication sends WM_CLOSE to the icon's window; arriving while
+    /// the menu is open, it closes the menu first, and the quit runs once, after TrackPopupMenuEx has returned (not
+    /// inside the menu's loop, which runs inside the icon window's WM_CONTEXTMENU), and the dispatcher stops. The quit
+    /// is wired as TrayHost wires it: CloseRequested -> Quit (BeginInvoke) -> QuitNow, which defers to TrayMenu.Close.
+    /// </summary>
+    [Fact]
+    public void WM_CLOSE_while_the_menu_is_open_closes_it_then_quits_once() => WithLog(events => Screenshots.RunSta(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(null);
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var failures = new List<string>();
+        var calls = new List<string>();
+        var order = new List<string>();
+        var quits = 0;
+        var icon = new TrayIcon(TrayAssets.IconFile(), "RST", failures.Add);
+        try
+        {
+            void QuitNow()
+            {
+                if (TrayMenu.Close(QuitNow))
+                {
+                    order.Add("deferred: menu open");
+                    return;
+                }
+                quits++;
+                order.Add(TrayMenu.IsOpen ? "quit inside the menu" : "quit");
+                icon.Dispose();
+                dispatcher.BeginInvokeShutdown(DispatcherPriority.Normal);
+            }
+
+            icon.CloseRequested += (_, _) => dispatcher.BeginInvoke(QuitNow);
+            icon.MenuRequested += (_, p) => order.Add("menu returned " + TrayMenu.Open(Recording(calls), p, icon.Source));
+
+            // Last resorts, so a broken path fails the asserts instead of hanging the run.
+            var rescue = new DispatcherTimer(TimeSpan.FromSeconds(20), DispatcherPriority.Normal, (s, _) =>
+            {
+                ((DispatcherTimer)s!).Stop();
+                EndMenu();
+                dispatcher.BeginInvokeShutdown(DispatcherPriority.Normal);
+            }, dispatcher);
+
+            var (uiThread, owner) = (GetCurrentThreadId(), icon.Handle);
+            var watcher = Task.Run(() => Watch(uiThread, owner, _ => PostMessageW(owner, WmClose, IntPtr.Zero, IntPtr.Zero), capture: false));
+            dispatcher.BeginInvoke(() => Send(icon, WmContextMenu, 200, 200));
+            Dispatcher.Run(); // returns when the quit has shut the dispatcher down
+            rescue.Stop();
+            var watch = watcher.GetAwaiter().GetResult();
+
+            Assert.True(watch.Appeared, "the menu never appeared on screen");
+            Assert.True(watch.OpenAfterWait, $"the menu closed before {StaysOpenFor.TotalSeconds:0} s (SC-043)");
+            Assert.True(watch.ClosedByKeys, "WM_CLOSE did not close the menu");
+            Assert.Equal(1, quits);
+            Assert.Equal(new[] { "deferred: menu open", "menu returned None", "quit" }, order);
+            Assert.True(dispatcher.HasShutdownFinished, "the dispatcher did not stop");
+            Assert.Empty(calls);
+            Assert.Single(Lines(events, "tray menu: closed by the tray"));
+            Assert.EndsWith(": closed by the tray", Assert.Single(Lines(events, "tray menu closed after")));
+            Assert.Empty(failures);
+        }
+        finally
+        {
+            icon.Dispose();
+            if (!dispatcher.HasShutdownStarted) dispatcher.InvokeShutdown();
+        }
+    }));
+
     private static TrayMenuActions Recording(List<string> calls) =>
         new(() => calls.Add("open"), () => calls.Add("check"), () => calls.Add("settings"), () => calls.Add("quit"));
 
@@ -168,7 +235,7 @@ public class TrayMenuTests
         }, Dispatcher.CurrentDispatcher);
 
         var (uiThread, owner) = (GetCurrentThreadId(), icon.Handle);
-        var watcher = Task.Run(() => Watch(uiThread, owner, keys, screenshot is not null));
+        var watcher = Task.Run(() => Watch(uiThread, owner, menu => PressKeys(menu, keys), screenshot is not null));
         Send(icon, WmContextMenu, 200, 200); // returns when the menu has closed
         rescue.Stop();
         watch = watcher.GetAwaiter().GetResult();
@@ -191,7 +258,21 @@ public class TrayMenuTests
 
     private sealed record MenuWatch(bool Appeared, bool OpenAfterWait, bool ClosedByKeys, IntPtr Capture);
 
-    private static MenuWatch Watch(uint uiThread, IntPtr owner, int[] keys, bool capture)
+    private static void PressKeys(IntPtr menu, int[] keys)
+    {
+        foreach (var key in keys)
+        {
+            PostMessageW(menu, WmKeyDown, new IntPtr(key), new IntPtr(1));
+            PostMessageW(menu, WmKeyUp, new IntPtr(key), new IntPtr(unchecked((int)0xC0000001)));
+            Thread.Sleep(100);
+        }
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="uiThread"/>'s menu window, checks it is still open after <see cref="StaysOpenFor"/>,
+    /// optionally captures it, then runs <paramref name="act"/> on it and waits up to 5 s for it to close.
+    /// </summary>
+    private static MenuWatch Watch(uint uiThread, IntPtr owner, Action<IntPtr> act, bool capture)
     {
         var clock = Stopwatch.StartNew();
         var menu = IntPtr.Zero;
@@ -206,12 +287,7 @@ public class TrayMenuTests
         var openAfterWait = IsWindow(menu) && IsWindowVisible(menu);
         var bitmap = capture && openAfterWait ? CaptureScreen(menu) : IntPtr.Zero;
 
-        foreach (var key in keys)
-        {
-            PostMessageW(menu, WmKeyDown, new IntPtr(key), new IntPtr(1));
-            PostMessageW(menu, WmKeyUp, new IntPtr(key), new IntPtr(unchecked((int)0xC0000001)));
-            Thread.Sleep(100);
-        }
+        act(menu);
         clock.Restart();
         while (clock.Elapsed < TimeSpan.FromSeconds(5) && IsWindow(menu) && IsWindowVisible(menu)) Thread.Sleep(20);
         var closedByKeys = !(IsWindow(menu) && IsWindowVisible(menu));
@@ -318,6 +394,7 @@ public class TrayMenuTests
         }
     }
 
+    private const int WmClose = 0x0010;
     private const int WmCancelMode = 0x001F;
     private const int WmKeyDown = 0x0100;
     private const int WmKeyUp = 0x0101;
