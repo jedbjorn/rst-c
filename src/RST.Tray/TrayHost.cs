@@ -397,7 +397,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         {
             try
             {
-                await revit.WaitUntilNoneAsync(cts.Token).ConfigureAwait(false);
+                await revit.WaitUntilNoneAsync(RevitWaitPurpose.Window, cts.Token).ConfigureAwait(false);
                 _ = _dispatcher.BeginInvoke(() =>
                 {
                     if (ReferenceEquals(_revitPageWatch, cts)) _revitPageWatch = null;

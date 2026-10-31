@@ -69,6 +69,17 @@ internal sealed class BundleReader : IBundleReader
     }
 }
 
+/// <summary>
+/// Why <see cref="RevitWatch"/> waits for Revit, for its log lines: an install waiting to run, or the open window
+/// watching to refresh its "… when Revit closes" buttons, which is not an install (SC-043 follow-up).
+/// </summary>
+internal sealed record RevitWaitPurpose(string Area, Func<int, string> Waiting)
+{
+    public static readonly RevitWaitPurpose Install = new("install", n => $"waiting for {n} Revit process(es) to exit");
+
+    public static readonly RevitWaitPurpose Window = new("window", n => $"watching {n} Revit process(es) to refresh the Install buttons");
+}
+
 internal sealed class RevitWatch : IRevitWatch
 {
     private static readonly TimeSpan UnopenableRecheck = TimeSpan.FromSeconds(15);
@@ -89,7 +100,11 @@ internal sealed class RevitWatch : IRevitWatch
         return found.Count > 0;
     }
 
-    public async Task WaitUntilNoneAsync(CancellationToken cancel)
+    /// <summary>The install's wait (IRevitWatch): its log lines start "install: waiting for …".</summary>
+    public Task WaitUntilNoneAsync(CancellationToken cancel) => WaitUntilNoneAsync(RevitWaitPurpose.Install, cancel);
+
+    /// <summary>The same wait, logged for <paramref name="purpose"/> (the window's watch is not an install).</summary>
+    public async Task WaitUntilNoneAsync(RevitWaitPurpose purpose, CancellationToken cancel)
     {
         while (true)
         {
@@ -97,8 +112,8 @@ internal sealed class RevitWatch : IRevitWatch
             if (running.Count == 0) return;
             try
             {
-                _log($"install: waiting for {running.Count} Revit process(es) to exit: {string.Join(", ", running.Select(p => p.Id))}");
-                await Task.WhenAll(running.Select(p => WaitAsync(p, cancel))).ConfigureAwait(false);
+                _log($"{purpose.Area}: {purpose.Waiting(running.Count)}: {string.Join(", ", running.Select(p => p.Id))}");
+                await Task.WhenAll(running.Select(p => WaitAsync(p, purpose, cancel))).ConfigureAwait(false);
             }
             finally
             {
@@ -107,7 +122,7 @@ internal sealed class RevitWatch : IRevitWatch
         }
     }
 
-    private async Task WaitAsync(Process process, CancellationToken cancel)
+    private async Task WaitAsync(Process process, RevitWaitPurpose purpose, CancellationToken cancel)
     {
         try
         {
@@ -116,7 +131,7 @@ internal sealed class RevitWatch : IRevitWatch
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
             // Not ours to open (an elevated Revit): look again until it is gone.
-            _log($"install: cannot watch Revit pid {process.Id} ({ex.Message}); checking every {UnopenableRecheck.TotalSeconds:0} s");
+            _log($"{purpose.Area}: cannot watch Revit pid {process.Id} ({ex.Message}); checking every {UnopenableRecheck.TotalSeconds:0} s");
             var id = process.Id;
             while (Exists(id))
                 await Task.Delay(UnopenableRecheck, cancel).ConfigureAwait(false);
