@@ -201,8 +201,9 @@ internal sealed class TrayInstanceClaim : ITrayInstanceClaim
             taken = Take(mutex, Timeout.InfiniteTimeSpan); // until the tray lets go, or Release
             if (taken)
             {
-                _held = true;
+                // Logged before Held turns true, so whoever sees Held also finds the line.
                 _log($"updater: took the tray's single-instance mutex {Stopwatch.GetElapsedTime(asked).TotalSeconds:0.0} s after asking, once the tray let it go");
+                _held = true;
             }
         }
         if (taken)

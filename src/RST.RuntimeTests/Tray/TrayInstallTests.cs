@@ -425,7 +425,7 @@ public class TrayInstanceClaimTests
     public void A_claim_not_held_in_time_takes_the_mutex_the_moment_the_tray_lets_it_go()
     {
         var sid = "S-1-5-21-0-0-1-" + Random.Shared.Next(100000, 999999);
-        var log = new List<string>();
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>(); // written on the claim's own thread
         using var trayExits = new ManualResetEventSlim();
         using var trayRuns = new ManualResetEventSlim();
         var trayOwned = false;
@@ -440,7 +440,7 @@ public class TrayInstanceClaimTests
         Assert.True(trayRuns.Wait(TimeSpan.FromSeconds(10)));
         Assert.True(trayOwned);
 
-        using var claim = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(300), log.Add);
+        using var claim = TrayInstanceClaim.TryClaim(sid, TimeSpan.FromMilliseconds(300), log.Enqueue);
         Assert.False(claim.Held);
         trayExits.Set(); // the old tray quits (Restart Manager)
         tray.Join();
