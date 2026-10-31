@@ -1,7 +1,7 @@
 ---
 title: Health Tool
 tags: [rst-c, health, diagnostics, cleanup, activity, telemetry]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: Guide to the Health system snapshot and junk file cleanup
 ---
@@ -16,7 +16,7 @@ Health is a one-click workstation and Revit-session snapshot. It collects hardwa
 
 The intent is to give a user something concrete to share with a BIM lead when Revit is misbehaving, without asking them to open Task Manager, dig through Windows settings, or know what a journal file is.
 
-Click **Health** on the **RST** panel of the **Add-Ins** tab. The window, titled **RST — Health**, opens centred over Revit. It belongs to Revit (no taskbar button of its own; Revit waits until you close it) and uses Revit's light or dark theme as it was when the window opened.
+Click **Health** on the **RST** panel of the **Add-Ins** tab. The window, titled **RST — Health**, opens centred over Revit. It belongs to Revit (no taskbar button of its own; Revit waits until you close it) and uses Revit's light or dark theme as it was when the window opened. **Escape** closes it, as **Close** does, except while a scan or a clean is running or a dialog is open over it.
 
 The header reads "RST · Health" and holds two tabs, plus the **Device** name and the time the snapshot was **Captured**:
 

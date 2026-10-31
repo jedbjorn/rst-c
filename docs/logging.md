@@ -1,7 +1,7 @@
 ---
 title: Logging
 tags: [rst-c, logging, diagnostics]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: Where rst-c logs live and what they contain
 ---

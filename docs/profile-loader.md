@@ -24,12 +24,13 @@ Click **Loader** on the **RST** panel of the **Add-Ins** tab. The window, titled
 
 - It belongs to Revit. It has no taskbar button of its own, and Revit waits until you close it.
 - It uses Revit's light or dark theme, as set in Revit under Options → Colors → UI active theme (including "Use system setting"). The theme is read when the window opens; if you change Revit's theme, close and reopen the Loader to pick it up.
+- **Escape** closes it, as **Close** does, except while a load or unload is running or a dialog is open over it.
 
 ![The Profile Loader opened with Revit's dark theme: the same window with a dark palette and a dark title bar](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/loader-dark.png)
 
 ### The window
 
-- **Header:** "Profile Selector", the running Revit version, and **+ Import from File**.
+- **Header:** "Profile Selector", the running Revit version, and **+ Import from File**. It has the same tinted header strip and pane headers as the [Profile Builder](profile-builder.md), so the two windows read as one family.
 - **Profiles (left):** one card per profile, with its name, Tab, Min RST (the minimum RST version) and panel count, and a count of profiles at the top. The loaded profile has a green ring and a **● Loaded** badge. With no profiles installed, the list reads "No profiles found" and offers **+ Import Profile from File**.
 - **Details (right):** the selected profile's name (with **● Loaded** when it is the loaded one), its Tab, Min RST and Updated date, and three sections:
   - **Tab Preview:** a read-only picture of the ribbon tab the profile builds: its panels, their colours and the tools' icons and names.
