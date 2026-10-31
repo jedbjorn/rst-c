@@ -15,10 +15,12 @@ using RST.Core.Builder;
 using RST.Core.Colors;
 using RST.Core.Theming;
 using RST.RuntimeTests.Builder;
+using RST.RuntimeTests.Health;
 using RST.RuntimeTests.Loader;
 using RST.RuntimeTests.Support;
 using RST.UI.Builder;
 using RST.UI.Dialogs;
+using RST.UI.Health;
 using RST.UI.Loader;
 using RST.UI.Swatches;
 using RST.UI.Theming;
@@ -466,4 +468,46 @@ public class DialogEscapeTests
             owner.Close();
         }
     });
+    // ── every window is covered ──────────────────────────────────────────
+
+    /// <summary>
+    /// Every window class in RST.UI, and the test that proves its Escape. The windows close as Close or
+    /// Exit does (their own OnKeyDown, SC-010); each dialog opts in to EscapeGuard.CancelOnEscape, in its
+    /// constructor (the Builder's) or through DialogService / LoaderDialogs.EscapeCancels (the shared
+    /// family dialogs, which the tray app also opens and leaves off). The names are nameof, so a renamed
+    /// or removed test breaks the build.
+    /// </summary>
+    private static readonly Dictionary<Type, string> EscapeCoverage = new()
+    {
+        [typeof(ProfileBuilderWindow)] = nameof(ProfileBuilderWindowFlowTests.Escape_closes_a_clean_window_without_asking),
+        [typeof(ProfileLoaderWindow)] = nameof(ProfileLoaderEscapeTests.Escape_closes_the_Loader_as_Close_does),
+        [typeof(HealthWindow)] = nameof(HealthEscapeTests.Escape_closes_Health_as_Close_does),
+        [typeof(ProfileNameDialog)] = nameof(Escape_in_the_name_box_cancels_Rename),
+        [typeof(StackDialog)] = nameof(Escape_cancels_New_Stack),
+        [typeof(CustomToolDialog)] = nameof(Escape_in_the_label_box_cancels_the_custom_tool_dialog),
+        [typeof(BrandingDialog)] = nameof(Escape_closes_Branding_as_Done_does),
+        [typeof(IconPickerWindow)] = nameof(Escape_cancels_the_icon_picker_window),
+        [typeof(MessageDialog)] = nameof(Escape_closes_a_message_as_its_OK_does),
+        [typeof(ColorPickerDialog)] = nameof(Escape_cancels_the_colour_picker),
+        [typeof(ConfirmAddinChangesWindow)] = nameof(Escape_cancels_Confirm_Add_in_Changes),
+        [typeof(AddinReportWindow)] = nameof(Escape_closes_the_add_in_report_as_Continue_does),
+    };
+
+    /// <summary>
+    /// A new window in RST.UI fails this until it opts in to the Escape rules and its Escape test is
+    /// listed in <see cref="EscapeCoverage"/>. The eyedropper's ScreenPickOverlay is left out: it is not
+    /// a modal the user closes but the pick itself, and ScreenColorPicker takes its Escape (a fresh
+    /// press cancels the pick, and the picker waits for the key's release before it shows again).
+    /// </summary>
+    [Fact]
+    public void Every_RST_UI_window_has_its_Escape_covered()
+    {
+        var windows = typeof(EscapeGuard).Assembly.GetTypes()
+            .Where(t => typeof(Window).IsAssignableFrom(t) && !t.IsAbstract)
+            .Where(t => t != typeof(ScreenPickOverlay))
+            .Select(t => t.FullName!)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(EscapeCoverage.Keys.Select(t => t.FullName!).Order(StringComparer.Ordinal).ToList(), windows);
+    }
 }
