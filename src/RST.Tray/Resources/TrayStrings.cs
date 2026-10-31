@@ -103,11 +103,8 @@ public static class TrayStrings
 
     public static string Footer_Close => Get(nameof(Footer_Close));
 
+    /// <summary>The title of the tray's one-time notices (now only the "installed twice" one).</summary>
     public static string Notice_Title => Get(nameof(Notice_Title));
-
-    public static string Notice_Heading => Get(nameof(Notice_Heading));
-
-    public static string Notice_Message => Get(nameof(Notice_Message));
 
     // The one-time "your own copy is used" notice (F17 WU5, spec #20 §7).
 

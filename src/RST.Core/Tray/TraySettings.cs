@@ -2,7 +2,7 @@
 //
 //   { "theme": "system" | "light" | "dark",
 //     "checkForUpdates": true,
-//     "updateNoticeShownUtc": null,
+//     "updateNoticeShownUtc": null,      (unread since v3.2, decision #65: the update-check notice is gone)
 //     "shadowNoticeShownUtc": null }      (F17 WU5: "your own copy shadows the shared one", told once)
 //
 // Read semantics follow TelemetryPrefs: a truly missing file (or folder) is a first run and gives the
@@ -38,7 +38,10 @@ public sealed class TraySettings
     /// <summary>"Check for updates automatically" (default on). An IT preset can force it off: <see cref="UpdateChecksPolicy"/>.</summary>
     public bool CheckForUpdates { get; set; } = true;
 
-    /// <summary>Set (UTC) once the first-run update-check notice has been shown, however it was dismissed. Null: not yet.</summary>
+    /// <summary>
+    /// Unread since v3.2 (decision #65: the tray no longer shows its one-time update-check notice). It recorded when that
+    /// notice was shown. Kept so older files still parse and a write keeps the value.
+    /// </summary>
     public DateTimeOffset? UpdateNoticeShownUtc { get; set; }
 
     /// <summary>

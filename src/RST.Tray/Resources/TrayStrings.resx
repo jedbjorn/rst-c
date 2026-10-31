@@ -145,15 +145,6 @@
   <data name="Notice_Title" xml:space="preserve">
     <value>RST</value>
   </data>
-  <data name="Notice_Heading" xml:space="preserve">
-    <value>RST checks for updates</value>
-  </data>
-  <data name="Notice_Message" xml:space="preserve">
-    <value>Once a day, the RST tray asks GitHub whether a newer RST, Gantt-It or Splash-It is available, and tells you when one is. It sends nothing about you or your models, and it installs nothing until you click Install.
-
-To turn this off, open RST from the notification area and go to Settings.</value>
-    <comment>The one-time first-run notice (modelled on the former telemetry first-run notice).</comment>
-  </data>
   <data name="Shadow_Heading" xml:space="preserve">
     <value>RST is installed twice</value>
   </data>

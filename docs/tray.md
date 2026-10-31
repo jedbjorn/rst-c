@@ -1,7 +1,7 @@
 ---
 title: RST tray
 tags: [rst-c, tray, startup, updates, installer]
-date: 2026-10-30
+date: 2026-10-31
 project: rst-c
 purpose: What the RST tray app is, where it lives, how its update checks work and what they send, how to quit it, stop it starting, or preset update checks off, and what changes when RST is installed for everyone on the PC
 ---
@@ -21,7 +21,7 @@ The tray shows which versions of RST, Gantt-It and Splash-It are installed, tell
 - **Add-ins:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [Add-ins page](#add-ins-page).
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
-  - **Check for updates automatically:** on by default. The first time the tray starts, a notice explains what this does.
+  - **Check for updates automatically:** on by default. The tray then asks GitHub once a day whether a newer RST, Gantt-It or Splash-It is out. Turn it off to stop those checks. See [Updates](#updates).
   - **About:** the version and a link to the log folder.
 
 Click the icon to open the window. Right-click it for the menu: **Open RST**, **Check for updates** (checks now and opens the Updates page), **Settings** and **Quit**. Closing the window leaves the tray running.
@@ -43,6 +43,8 @@ Each Windows user has their own tray, settings and log, whichever MSI installed 
 The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own ten files, and neither one's automatic clean-up deletes the other's. Health's **RST Logs** clean-up, which you start yourself, clears both, except the log the tray has open.
 
 ## Updates
+
+In short: once a day, the tray asks GitHub's releases feed whether a newer RST, Gantt-It or Splash-It is out, and shows a Windows notification when one is. Each check sends only those requests, three small web requests with nothing about you, your PC or your models ([Privacy](#privacy-what-is-sent-and-to-whom)). It installs nothing until you click **Update** or **Install**. To stop the checks, turn off **Check for updates automatically** in the tray's Settings ([Switching checks off](#switching-checks-off)). The tray shows no message about this when it is installed or first starts: this page is where it is explained.
 
 ### When it checks
 
@@ -77,7 +79,7 @@ The hosts, for an allowlist: `github.com`, `api.github.com`, `release-assets.git
 
 ### Switching checks off
 
-- **For yourself:** Settings, then turn off **Check for updates automatically**. The Updates page then says "Automatic checks are off".
+- **For yourself:** Settings, then turn off **Check for updates automatically**. The Updates page then says "Automatic checks are off". The tray then makes no network calls of its own; **Check now**, **Install** and **Update** still work when you click them. Turn the switch back on to resume the daily checks.
 - **For everyone (IT):** set the `UpdateChecks` preset, below.
 
 ### Release checksums

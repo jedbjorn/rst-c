@@ -310,10 +310,12 @@ function Test-TrayMutex {
   if ($m) { $m.Dispose() }
   return $open
 }
-# Seeds the tray's settings so the one-time update-check notice does not open a window of its own.
+# Seeds the tray's settings as a first run has them: checks on and no notice recorded. Up to v3.1.1 that opened the
+# one-time update-check notice; since decision #65 the tray opens no notice, and Assert-StartedTray's "it shows no
+# window" checks that no notice opened after the install.
 function Seed-TraySettings {
   New-Item -ItemType Directory -Force (Split-Path $TraySettings) | Out-Null
-  Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+  Set-Content -Path $TraySettings -Value '{ "theme": "system", "checkForUpdates": true }' -NoNewline
 }
 # Starts the installed tray and waits until it holds its single-instance mutex.
 function Start-Tray([string[]]$TrayArgs, [string]$Label) {
@@ -549,7 +551,7 @@ Assert ((Get-Related $UnifiedCode).Count -eq 0 -and (Get-Related $PreviewCode).C
 
 if ($Mode -eq 'Install') {
   $probe = Seed-Probe
-  Seed-TraySettings   # the one-time update-check notice would open a window of its own
+  Seed-TraySettings   # a first run's settings: no update-check notice may open (decision #65)
   Show-RunnerTokens
   Assert-NoTray '(start)' 0
 

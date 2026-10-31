@@ -252,7 +252,7 @@ function Test-TrayMutex {
 function Seed-TraySettings {
   $f = Join-Path $AppData 'RST\tray_settings.json'
   New-Item -ItemType Directory -Force (Split-Path $f) | Out-Null
-  Set-Content -Path $f -Value '{ "theme": "system", "checkForUpdates": true, "updateNoticeShownUtc": "2026-10-30T00:00:00+00:00", "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
+  Set-Content -Path $f -Value '{ "theme": "system", "checkForUpdates": true, "shadowNoticeShownUtc": "2026-10-30T00:00:00+00:00" }' -NoNewline
 }
 function Get-Trays { return , @(Get-Process -Name 'RST.Tray' -ErrorAction SilentlyContinue) }
 function Start-MachineTray([string]$Label) {
@@ -461,7 +461,7 @@ foreach ($y in $MachineYears.Keys) {
 }
 
 Assert ((Get-Related $MachineUpgradeCode).Count -eq 0 -and (Get-Related $UserCode).Count -eq 0) 'runner starts with no RST product'
-Seed-TraySettings   # the one-time notices would open windows of their own
+Seed-TraySettings   # the one-time installed-twice notice would open a window of its own; no update-check notice may (decision #65)
 Show-RunnerTokens
 
 # ================================================================ (p) the user's own copy blocks a first install

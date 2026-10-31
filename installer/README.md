@@ -175,7 +175,7 @@ Each run writes `RST-StartTray-<yyyyMMdd-HHmmss>-<pid>.log` in the installer's `
 | Self-update (the tray's **Update** button) | The updater, as before. `RST.msi`'s `RstStartTray` finds the updater holding the mutex and starts none. |
 | Any uninstall | Nothing. |
 
-The tray's one-time update-check notice opens on the tray's first start. With `RstStartTray` that is now right after the first install, not at the next sign-in (kept on purpose: the Planner's call, review N5). The tray itself opens no window.
+The tray opens no window when an install starts it. Since v3.2 it has no first-run update-check notice (decision #65; [docs/tray.md](../docs/tray.md#updates) explains the checks and how to turn them off). The one notice it can still show is the one-time "installed twice" notice, for a user who has both `RST.msi` and `RST-Machine.msi`.
 
 ## Per-machine install (RST-Machine.msi)
 

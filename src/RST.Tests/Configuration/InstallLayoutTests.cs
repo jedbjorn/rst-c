@@ -106,7 +106,7 @@ public sealed class InstallLayoutTests : IDisposable
 
         var read = TraySettings.Read(path);
         read.ShadowNoticeShownUtc.Should().Be(at);
-        read.UpdateNoticeShownUtc.Should().BeNull("the two notices are recorded separately");
+        read.UpdateNoticeShownUtc.Should().BeNull("the shadow notice records only its own field");
         TrayShadowNotice.ShouldShow(read, shadowCount: 2).Should().BeFalse();
         File.ReadAllText(path).Should().Contain("\"shadowNoticeShownUtc\"");
     }
