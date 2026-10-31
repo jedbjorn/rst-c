@@ -47,7 +47,7 @@ namespace RST.UI.Dialogs;
 /// tried again and, failing that, the window's content is detached so nothing in it lays out or renders
 /// again. Exceptions that repeat while it closes are handled without a line each: one line after the window
 /// has closed gives their count. An exception thrown synchronously by ShowDialog itself is handled the same
-/// way. Dialogs the window opens run nested inside its modal loop, so the same scope covers them; closing
+/// way, unless it is someone else's, which is rethrown. Dialogs the window opens run nested inside its modal loop, so the same scope covers them; closing
 /// the window closes them too. The handler itself never throws.</para>
 /// </remarks>
 public static class WindowGuard
@@ -97,6 +97,8 @@ public static class WindowGuard
         var open = true;
         var faulted = false;
         var repeats = 0;
+        // Someone else's exceptions the handler left alone: one that unwinds out of ShowDialog is rethrown.
+        var leftAlone = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
 
         void Fault(Exception exception, string owner)
         {
@@ -111,7 +113,11 @@ public static class WindowGuard
             try
             {
                 var owner = Classify(e.Exception);
-                if (owner == FaultOwner.Foreign) return;
+                if (owner == FaultOwner.Foreign)
+                {
+                    leftAlone.Add(e.Exception);
+                    return;
+                }
                 e.Handled = true;
                 if (faulted)
                 {
@@ -148,8 +154,9 @@ public static class WindowGuard
         {
             window.ShowDialog();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!leftAlone.Contains(ex))
         {
+            // Someone else's exception the handler left alone is rethrown, as it would be without the net.
             // Thrown before or outside the modal loop (OnSourceInitialized, a first layout pass): the window
             // may be up and still faulting, so it is closed here like any other fault.
             if (!faulted) Fault(ex, FromShowDialog);

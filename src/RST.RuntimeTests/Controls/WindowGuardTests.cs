@@ -8,6 +8,7 @@ using System.Reflection.Emit;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using RST.Core.Loader;
 using RST.Core.Logging;
 using RST.RuntimeTests.Builder;
 using RST.RuntimeTests.Support;
@@ -444,6 +445,87 @@ public class WindowGuardTests
         Assert.Contains(events, e => e.Level == LogLevel.Warning && e.MessageTemplate.Contains("unsaved changes were discarded"));
         Assert.Single(Faults(events));
     });
+
+    [Fact]
+    public void AQueuedSaveAndSwitch_DoesNothing_AfterTheBuilderFaults() => Sta(() =>
+    {
+        var h = BuilderHarness.Create(deferPosts: true);
+        h.Model.ProfileName = "Draft";
+        h.Model.ProfileTab = "Tab";
+        h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Primary); // "Save & Switch"
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        Assert.NotEmpty(h.Posted!); // the save and the switch wait for a later dispatcher turn
+        var backstopFired = false;
+        var result = true;
+        CaptureLog(() =>
+        {
+            var window = OffScreen(new ProfileBuilderWindow(h.Model), () => backstopFired = true);
+            window.Loaded += (_, _) => throw new InvalidOperationException("SC-045 test: Builder fault");
+            result = WindowGuard.ShowDialog(window, "Builder");
+        });
+        h.RunPosted(); // the queued "Save & Switch" gets its turn after the window has gone
+
+        Assert.False(result);
+        Assert.False(backstopFired);
+        Assert.True(h.Model.IsAbandoned);
+        Assert.Empty(h.Backend.Saved);  // no save
+        Assert.Empty(h.Backend.Loads);  // no reload
+        Assert.Equal("Draft", h.Model.ProfileName); // no switch
+    });
+
+    [Fact]
+    public void ASaveMidReload_StopsAfterItsAwait_WhenTheBuilderFaults() => Sta(() =>
+    {
+        var h = BuilderHarness.Create(deferPosts: true);
+        h.Model.SelectedProfileOption = h.Option("Architecture"); // the active profile: its save reloads the ribbon
+        h.RunPosted();
+        h.Model.PanelOpacity = 90; // unsaved
+        var reload = new TaskCompletionSource<LoadResult>();
+        h.Backend.OnLoad = _ => reload.Task; // the seam: the reload after the save waits until the test says
+        h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Primary); // "Save & Switch" to Structure
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.RunPosted();
+        Assert.Single(h.Backend.Saved); // written before the fault: that stays
+        Assert.Single(h.Backend.Loads); // the reload is in flight
+        Assert.True(h.Model.IsWorking);
+
+        var backstopFired = false;
+        var result = true;
+        CaptureLog(() =>
+        {
+            var window = OffScreen(new ProfileBuilderWindow(h.Model), () => backstopFired = true);
+            window.Loaded += (_, _) => throw new InvalidOperationException("SC-045 test: Builder fault");
+            result = WindowGuard.ShowDialog(window, "Builder");
+        });
+        reload.SetResult(new LoadResult(true, [], false, [], QaCheck.Clear)); // the save resumes after the window has gone
+        h.RunPosted();
+        PumpFor(TimeSpan.FromMilliseconds(200));
+        h.RunPosted();
+
+        Assert.False(result);
+        Assert.False(backstopFired);
+        Assert.Single(h.Backend.Saved);  // no second save
+        Assert.Single(h.Backend.Loads);  // no further reload
+        Assert.Equal("Architecture", h.Model.ProfileName); // no switch to Structure
+        Assert.False(h.Model.Toast.IsOpen && h.Model.Toast.Text == "Saved & ribbon reloaded.", "the save went on after the fault");
+    });
+
+    [Fact]
+    public void AnOnDiskLibraryOutsideTheSharedFramework_IsForeign_AndTheFrameworkItselfIsNot()
+    {
+        // Thrown inside xunit.assert.dll (loaded from the test's bin folder) and caught by reflection in
+        // System.Private.CoreLib: the inner exception's frames are that library's and the runtime's only.
+        var library = Assert.IsType<TargetInvocationException>(Thrown(() =>
+            typeof(Assert).GetMethod(nameof(Assert.True), [typeof(bool)])!.Invoke(null, [false]))).InnerException!;
+        Assert.Equal("xunit.assert", new System.Diagnostics.StackTrace(library, false).GetFrame(0)!.GetMethod()!.DeclaringType!.Assembly.GetName().Name);
+        Assert.Equal(WindowGuard.FaultOwner.Foreign, WindowGuard.Classify(library));
+
+        // Thrown inside System.Private.CoreLib (the runtime's directory) and caught there too: framework-only.
+        var framework = Assert.IsType<TargetInvocationException>(Thrown(() =>
+            typeof(int).GetMethod(nameof(int.Parse), [typeof(string)])!.Invoke(null, ["not a number"]))).InnerException!;
+        Assert.IsType<FormatException>(framework);
+        Assert.Equal(WindowGuard.FaultOwner.FrameworkOnly, WindowGuard.Classify(framework));
+    }
 
     private static Exception Thrown(Action action)
     {

@@ -83,6 +83,7 @@ public partial class ProfileBuilderWindow : Window
         if (WindowGuard.IsClosingAfterFault(this))
         {
             if (HasUnsavedEdits()) Log.Warning("Builder: closed after an unexpected error; its unsaved changes were discarded, not saved");
+            Model.Abandon(); // a queued or in-flight save, switch or reload does nothing more
             base.OnClosing(e);
             return;
         }
