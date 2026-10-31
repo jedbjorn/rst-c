@@ -40,17 +40,55 @@ public interface ISelfUpdateHost
 
     /// <summary>
     /// Takes the tray's single-instance mutex (<c>Local\RST.Tray.&lt;UserSid&gt;</c>, TrayPaths.MutexName), waiting up to
-    /// <paramref name="timeout"/> for the old tray to let it go, and holds it until disposed. While the updater holds
+    /// <paramref name="timeout"/> for the old tray to let it go, and holds it until released. While the updater holds
     /// it, a tray that Revit (WU2), the Run value or Restart Manager starts finds "a tray runs" and exits, so nothing
-    /// runs from the folder being replaced. Null when it could not be taken in time (logged; the update goes on).
+    /// runs from the folder being replaced. When the mutex is not free in time the claim is returned NOT held and keeps
+    /// waiting in the background: it takes the mutex the moment the tray lets it go (Restart Manager or CloseApplication
+    /// closing it for msiexec; SC-022). A failure to make the claim at all (no user SID) throws: the update stops.
     /// </summary>
-    IDisposable? ClaimTrayInstance(TimeSpan timeout);
+    ITrayInstanceClaim ClaimTrayInstance(TimeSpan timeout);
+}
+
+/// <summary>What <see cref="ITrayInstanceClaim.Release"/> found.</summary>
+public enum ClaimRelease
+{
+    /// <summary>The claim held the mutex and has released it: the tray started next can take it.</summary>
+    Released,
+
+    /// <summary>The claim never got the mutex (a tray holds it) and has stopped waiting for it.</summary>
+    NotHeld,
+
+    /// <summary>The claim's thread has not finished within the wait: the mutex may still be held. Call again to wait more.</summary>
+    Unconfirmed,
+}
+
+/// <summary>The updater's claim on the tray's single-instance mutex (<see cref="ISelfUpdateHost.ClaimTrayInstance"/>).</summary>
+public interface ITrayInstanceClaim : IDisposable
+{
+    /// <summary>The updater holds the mutex now: taken at once, or later, in the background, once the tray let it go.</summary>
+    bool Held { get; }
+
+    /// <summary>
+    /// Releases the mutex, or stops waiting for it when it was never taken, and waits a bounded time until that is
+    /// done (so a tray started next can take it). Calling again waits again; once confirmed it returns the same.
+    /// </summary>
+    ClaimRelease Release();
 }
 
 public static class SelfUpdateApply
 {
     /// <summary>How long the updater waits for the old tray to exit before it goes on anyway.</summary>
     public static readonly TimeSpan TrayExitTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// How long the updater waits for the tray's mutex before msiexec starts (review N2). Short: by now the waited tray
+    /// has exited (its mutex is free at once) or timed out; any tray still holding it is one msiexec closes, and the
+    /// claim goes on waiting in the background and takes the mutex at that moment.
+    /// </summary>
+    public static readonly TimeSpan ClaimTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>How many times Finish waits for an unconfirmed release before it gives up starting a tray (review N3).</summary>
+    public const int ReleaseAttempts = 4;
 
     /// <summary>Exit codes of the updater process.</summary>
     public const int Installed = 0, InstallFailed = 1, Refused = 2, DeferredForRevit = 3;
@@ -68,7 +106,7 @@ public static class SelfUpdateApply
         ArgumentNullException.ThrowIfNull(time);
         log ??= _ => { };
         var folderVersion = VersionFromFolder(packagePath);
-        IDisposable? instance = null;
+        ITrayInstanceClaim? instance = null;
         try
         {
             var (path, verified, refusal) = Accept(packagePath, paths, msi, bundles, log);
@@ -92,10 +130,13 @@ public static class SelfUpdateApply
             // While files are replaced, this process holds the tray's single-instance mutex: a tray started meanwhile
             // (by Revit, the Run value, Restart Manager) exits at once instead of running from the folder being
             // replaced. It is handed over (released) right before the new tray is started, in Finish.
-            instance = host.ClaimTrayInstance(TrayExitTimeout);
-            log(instance is null
-                ? "updater: the tray's single-instance mutex could not be taken in time; going on without it"
-                : "updater: holding the tray's single-instance mutex while RST is replaced");
+            // SC-022: a tray that does not let go in time (it was never asked to quit, or is slow to) is closed by
+            // msiexec's Restart Manager; the claim keeps waiting and takes the mutex at that moment, so the gap between
+            // the old tray's exit and the hand-over is never unguarded.
+            instance = host.ClaimTrayInstance(ClaimTimeout);
+            log(instance.Held
+                ? "updater: holding the tray's single-instance mutex while RST is replaced"
+                : $"updater: the tray's single-instance mutex was not free within {ClaimTimeout.TotalSeconds:0} s; going on, and taking it the moment the tray lets it go");
 
             var kind = InstallChecks.KindOf(path);
             for (var run = 1; ; run++)
@@ -201,7 +242,7 @@ public static class SelfUpdateApply
     }
 
     /// <summary>Records the result (null: nothing to record) and starts the installed tray, whatever happened.</summary>
-    private static void Finish(InstallPaths paths, SelfUpdateResult? result, ISelfUpdateHost host, Action<string> log, IDisposable? instance)
+    private static void Finish(InstallPaths paths, SelfUpdateResult? result, ISelfUpdateHost host, Action<string> log, ITrayInstanceClaim? instance)
     {
         if (result is not null)
         {
@@ -216,13 +257,35 @@ public static class SelfUpdateApply
             }
         }
         // Hand the single-instance mutex over: released only now, with every file in place, right before the tray that
-        // runs from the new files is started (a tray starting in between runs those new files too).
+        // runs from the new files is started (a tray starting in between runs those new files too). A claim that never
+        // got the mutex stops waiting: a tray holds it, and the launch below then only brings that tray's window
+        // forward (it shows this result) and exits, so the updater never adds a second tray (SC-022). A release that is
+        // never confirmed starts no tray (review N3): that launch would find the mutex still held, signal a tray that is
+        // not there and exit, leaving none; a tray Restart Manager started keeps running, or one starts at sign-in.
+        // instance is null only on the paths that end before the claim is made (a refused package, an early failure).
         if (instance is not null)
         {
             try
             {
-                instance.Dispose();
-                log("updater: released the tray's single-instance mutex");
+                var release = instance.Release();
+                for (var attempt = 1; release == ClaimRelease.Unconfirmed && attempt < ReleaseAttempts; attempt++)
+                {
+                    log("updater: the tray's single-instance mutex is not released yet; waiting");
+                    release = instance.Release();
+                }
+                switch (release)
+                {
+                    case ClaimRelease.Released:
+                        log("updater: released the tray's single-instance mutex");
+                        break;
+                    case ClaimRelease.NotHeld:
+                        log("updater: stopped waiting for the tray's single-instance mutex (a tray holds it: the launch below defers to it)");
+                        break;
+                    default:
+                        log("updater: the tray's single-instance mutex was not confirmed released; no tray is started now " +
+                            "(one Restart Manager started keeps running, or it starts at the next sign-in)");
+                        return;
+                }
             }
             catch (Exception ex)
             {

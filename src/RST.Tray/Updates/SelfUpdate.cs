@@ -138,64 +138,133 @@ internal static class BundleRegistration
 /// <summary>
 /// The updater holding the tray's single-instance mutex (<c>Local\RST.Tray.&lt;UserSid&gt;</c>, the same
 /// TrayPaths.MutexName the tray claims) while it replaces RST's files. A Mutex belongs to the thread that took it,
-/// and the updater's work is async, so one dedicated thread takes it, holds it, and releases it when disposed.
+/// and the updater's work is async, so one dedicated thread takes it, holds it, and releases it on
+/// <see cref="Release"/>. SC-022: when the mutex is not free within the timeout the claim is returned not held and
+/// that thread goes on waiting, so it takes the mutex the moment the old tray lets it go (Restart Manager closing it
+/// for msiexec), and no tray can start from the folder being replaced after that.
 /// </summary>
-internal sealed class TrayInstanceClaim : IDisposable
+internal sealed class TrayInstanceClaim : ITrayInstanceClaim
 {
-    private readonly ManualResetEventSlim _release = new();
+    private readonly ManualResetEvent _stop = new(false);
+    private readonly ManualResetEventSlim _decided = new();
+    private readonly Action<string> _log;
     private Thread? _owner;
-    private int _disposed;
+    private volatile bool _held;
+    private volatile bool _wasHeld;
+    private bool _stopped, _finished;
 
-    private TrayInstanceClaim()
+    private TrayInstanceClaim(Action<string>? log) => _log = log ?? (_ => { });
+
+    public bool Held => _held;
+
+    /// <summary>
+    /// The claim: held when the mutex was free within <paramref name="timeout"/>; otherwise not (yet) held, and still
+    /// waiting for it until <see cref="Release"/>.
+    /// </summary>
+    public static TrayInstanceClaim TryClaim(string userSid, TimeSpan timeout, Action<string>? log = null)
     {
+        var name = TrayPaths.MutexName(userSid);
+        var claim = new TrayInstanceClaim(log);
+        claim._owner = new Thread(() => claim.Hold(name, timeout)) { IsBackground = true, Name = "RST tray instance claim" };
+        claim._owner.Start();
+        claim._decided.Wait();
+        return claim;
     }
 
-    /// <summary>The claim, or null when the mutex was not free within <paramref name="timeout"/>.</summary>
-    public static TrayInstanceClaim? TryClaim(string userSid, TimeSpan timeout)
+    private void Hold(string name, TimeSpan timeout)
     {
-        var claim = new TrayInstanceClaim();
-        var decided = new ManualResetEventSlim();
-        var taken = false;
-        var name = TrayPaths.MutexName(userSid);
-        claim._owner = new Thread(() =>
+        try
         {
-            using var mutex = new Mutex(false, name);
-            try
+            HoldCore(name, timeout);
+        }
+        catch (Exception ex)
+        {
+            // Never an unhandled exception on this thread (it would end the updater mid-install): the claim is not held.
+            _held = false;
+            _log("updater: the tray's single-instance mutex could not be claimed: " + ex.Message);
+        }
+        finally
+        {
+            _decided.Set();
+        }
+    }
+
+    private void HoldCore(string name, TimeSpan timeout)
+    {
+        using var mutex = new Mutex(false, name);
+        var asked = Stopwatch.GetTimestamp();
+        var taken = Take(mutex, timeout);
+        _held = taken;
+        _decided.Set();
+        if (!taken)
+        {
+            taken = Take(mutex, Timeout.InfiniteTimeSpan); // until the tray lets go, or Release
+            if (taken)
             {
-                taken = mutex.WaitOne(timeout);
+                // Logged before Held turns true, so whoever sees Held also finds the line.
+                _log($"updater: took the tray's single-instance mutex {Stopwatch.GetElapsedTime(asked).TotalSeconds:0.0} s after asking, once the tray let it go");
+                _held = true;
             }
-            catch (AbandonedMutexException)
-            {
-                taken = true; // the old tray ended without releasing it: ours now
-            }
-            decided.Set();
-            if (!taken) return;
-            claim._release.Wait();
+        }
+        if (taken)
+        {
+            _stop.WaitOne();
             mutex.ReleaseMutex();
-        })
-        { IsBackground = true, Name = "RST tray instance claim" };
-        claim._owner.Start();
-        decided.Wait();
-        if (taken) return claim;
-        claim._owner.Join();
-        return null;
+            _held = false;
+        }
+        _wasHeld = taken;
+    }
+
+    /// <summary>True when this thread now owns the mutex; false on the timeout or a <see cref="Release"/>.</summary>
+    private bool Take(Mutex mutex, TimeSpan timeout)
+    {
+        try
+        {
+            // The mutex first: when it comes free as Release is called, it is taken (and released at once after).
+            return WaitHandle.WaitAny(new WaitHandle[] { mutex, _stop }, timeout) == 0;
+        }
+        catch (AbandonedMutexException ex) when (ex.MutexIndex == 0)
+        {
+            return true; // the old tray ended without releasing it: Windows gives it to this one waiter, ours now
+        }
+    }
+
+    /// <summary>How long one <see cref="Release"/> waits for the claim's thread to finish.</summary>
+    private static readonly TimeSpan ReleaseWait = TimeSpan.FromSeconds(10);
+
+    public ClaimRelease Release()
+    {
+        lock (_stop)
+        {
+            if (_finished) return _wasHeld ? ClaimRelease.Released : ClaimRelease.NotHeld;
+            if (!_stopped)
+            {
+                _stopped = true;
+                _stop.Set();
+            }
+            // Review N3: only a finished thread has certainly released the mutex (or stopped waiting for it).
+            if (_owner is { } owner && !owner.Join(ReleaseWait)) return ClaimRelease.Unconfirmed;
+            _finished = true;
+            _decided.Dispose();
+            return _wasHeld ? ClaimRelease.Released : ClaimRelease.NotHeld;
+        }
     }
 
     /// <summary>Releases the mutex (and waits until it is released, so a tray started next can take it).</summary>
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _release.Set();
-        _owner?.Join(TimeSpan.FromSeconds(10));
-    }
+    public void Dispose() => Release();
 }
 
 /// <summary>The updater's Windows: wait for the old tray, start the new one.</summary>
 internal sealed class UpdaterHost : ISelfUpdateHost
 {
     private readonly string _trayExe;
+    private readonly Action<string>? _log;
 
-    public UpdaterHost(string? trayExe = null) => _trayExe = trayExe ?? Path.Combine(TrayPaths.PerUserInstallDir, TrayPaths.ExeName);
+    public UpdaterHost(string? trayExe = null, Action<string>? log = null)
+    {
+        _trayExe = trayExe ?? Path.Combine(TrayPaths.PerUserInstallDir, TrayPaths.ExeName);
+        _log = log;
+    }
 
     public bool WaitForTrayExit(int pid, TimeSpan timeout)
     {
@@ -212,8 +281,14 @@ internal sealed class UpdaterHost : ISelfUpdateHost
         }
     }
 
-    public IDisposable? ClaimTrayInstance(TimeSpan timeout) => TrayInstanceClaim.TryClaim(SingleInstance.CurrentUserSid(), timeout);
+    public ITrayInstanceClaim ClaimTrayInstance(TimeSpan timeout) => TrayInstanceClaim.TryClaim(SingleInstance.CurrentUserSid(), timeout, _log);
 
+    /// <summary>
+    /// Starts the installed tray (no switch: its window opens on the result). It is started even when another tray
+    /// holds the mutex (the updater could not take it): that launch's first act is the single-instance check, so it
+    /// only asks the running tray to show its window (and this result) and exits (SC-022). Deciding here instead
+    /// ("a tray runs, start none") could leave no tray if that one exits next.
+    /// </summary>
     public bool StartTray()
     {
         if (!File.Exists(_trayExe)) return false;
@@ -240,7 +315,7 @@ internal static class Updater
         Log.Information("RST updater (pid {Pid}) applying {Msi}", Environment.ProcessId, args.ApplyMsi);
         var paths = new InstallPaths(TrayPaths.CacheDir, TrayPaths.InstallLogsDir, TrayPaths.SelfUpdateResultFile);
         var code = SelfUpdateApply.RunAsync(args.ApplyMsi!, args.WaitPid, paths, new MsiDatabase(), new BundleReader(), new Msiexec(),
-                                            new RevitWatch(log: m => Log.Information("{Message}", m)), new UpdaterHost(),
+                                            new RevitWatch(log: m => Log.Information("{Message}", m)), new UpdaterHost(log: m => Log.Information("{Message}", m)),
                                             TimeProvider.System, m => Log.Information("{Message}", m)).GetAwaiter().GetResult();
         Log.Information("RST updater exits {Code}", code);
         return code;
