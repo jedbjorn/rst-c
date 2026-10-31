@@ -608,4 +608,44 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Close(window, h);
         }
     });
+
+    // ── the cards after a change underneath them (WU3 delta review) ──
+
+    [Fact]
+    public void After_an_edit_everywhere_the_cards_are_rebuilt_and_panel_up_moves_the_panel_you_pressed() => Sta(() =>
+    {
+        var (window, h) = Open();
+        try
+        {
+            var before = h.Model.Panels.ToList();
+            h.Modals.CustomTools.Enqueue(d =>
+            {
+                d.Label = "Studio wiki";
+                return true;
+            });
+            Click(RowButton(Row(window, "Wiki"), "Builder.EditCustomToolEverywhere"));
+            // Rebuilt from the changed working copy before anything else can run: no old card survives.
+            Assert.All(h.Model.Panels, card => Assert.DoesNotContain(card, before));
+            Assert.True(h.Model.IsIdle);
+
+            // ▲ on Links, the card on screen now: Links moves, nothing else does.
+            var up = WindowCapture.Descendants<Button>(Card(window, 2)).Single(b => Id(b) == "Builder.MovePanelUp");
+            Assert.Equal("Links", ((PanelCardViewModel)up.DataContext).Name);
+            Click(up);
+            Assert.Equal(["Frame", "Links", "Review"], h.Model.Profile.Panels.Select(p => p.Name));
+            Assert.Equal("Studio wiki", h.Model.Panels[1].Tile(0).Name);
+
+            // And after a remove everywhere: ▼ on Frame.
+            h.Dialogs.ConfirmResult = true;
+            Click(RowButton(Row(window, "Help"), "Builder.RemoveCustomToolEverywhere"));
+            var down = WindowCapture.Descendants<Button>(Card(window, 0)).Single(b => Id(b) == "Builder.MovePanelDown");
+            Click(down);
+            Assert.Equal(["Links", "Frame", "Review"], h.Model.Profile.Panels.Select(p => p.Name));
+            Assert.Equal("Studio wiki", PanelCardTestExtensions.Shape(h.Model.Profile, 0));
+        }
+        finally
+        {
+            Close(window, h);
+        }
+    });
 }
