@@ -10,19 +10,24 @@
 //
 // So this runs as a deferred, not impersonated custom action (Tray.wxs: RstEndTrays, as SYSTEM, before RemoveFiles):
 //   1. every RST.Tray process, in any session, whose image is exactly this package's tray (the first argument,
-//      [TrayDir]RST.Tray.exe) is ended with TerminateProcess (exit code 1) and waited for (10 s each). The tray holds
-//      no unsaved user data; it starts again at the user's next sign-in, or when Revit starts it. Any other
-//      RST.Tray process (a per-user tray) is logged and left alone.
-//   2. Restart Manager is asked which processes still use any file under the package folder (the second argument,
+//      [TrayDir]RST.Tray.exe) is ended with TerminateProcess (exit code 1) and waited for (10 s each). The image is
+//      checked and the process ended through one handle, so a process id reused in between is never ended unchecked
+//      (review N1). The tray holds no unsaved user data; it starts again at the user's next sign-in, or when Revit
+//      starts it. Any other RST.Tray process (a per-user tray) is logged and left alone.
+//   2. On a full uninstall only (the fourth argument, [REMOVE], is ALL; review N2), Restart Manager is asked which
+//      processes still use any file under the package folder (the second argument,
 //      [RstFolder]: C:\Program Files\RST). Typically Revit, with RST's engine loaded. If any does, a restart is needed:
 //      it sets the global atom "WcaDeferredActionRequiresReboot", WiX's own marker that its CheckRebootRequired action
 //      (scheduled after InstallFinalize, on uninstall too in this package) turns into "restart required", so msiexec
-//      returns 3010 instead of 0. That is how util:CloseApplication's RebootPrompt asks for a restart too.
+//      returns 3010 instead of 0. That is how util:CloseApplication's RebootPrompt asks for a restart too. An
+//      install, repair or upgrade skips this step: Windows Installer itself returns 3010 when it has to replace a
+//      file in use, and a repair that replaces nothing must not ask deployment tools for a reboot.
 //
-// Arguments: the tray's path, the package folder, the log path (Tray.wxs passes [TempFolder]RST-Machine-EndTrays.log:
-// as SYSTEM that is C:\Windows\Temp or C:\Windows\SystemTemp). The log is appended to; each run starts with a
-// "RST-Machine:" line. Exit codes, for the log only (the custom action is Return="ignore": it never stops an
-// uninstall): 0 done; 3010 a restart is needed; 1603 it failed.
+// Arguments: the tray's path, the package folder, the log's base path (Tray.wxs passes
+// [TempFolder]RST-Machine-EndTrays.log: as SYSTEM that is C:\Windows\Temp or C:\Windows\SystemTemp), and [REMOVE].
+// Each run writes its own new log beside the base path, RST-Machine-EndTrays-<yyyyMMdd-HHmmss>-<pid>.log (review N7).
+// Exit codes, for the log only (the custom action is Return="ignore": it never stops an uninstall): 0 done; 3010 a
+// restart is needed; 1603 it failed.
 //
 // Built by RST.Installer.wixproj (machine scope) with the .NET Framework 4 compiler that ships in Windows
 // (%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe, C# 5), like the bundle's RemoveUserRst helper. It sits in
@@ -102,18 +107,19 @@ internal static class EndTrays
 
     private static int Main(string[] args)
     {
-        string log = args.Length > 2 && args[2].Trim().Length > 0
-            ? args[2].Trim()
-            : Path.Combine(Path.GetTempPath(), "RST-Machine-EndTrays.log");
+        string log = RunLog(args.Length > 2 ? args[2].Trim() : "");
         try
         {
-            if (args.Length < 2) throw new ArgumentException("usage: RST.EndTrays.exe <tray exe> <package folder> [<log>]");
+            if (args.Length < 2) throw new ArgumentException("usage: RST.EndTrays.exe <tray exe> <package folder> [<log> [<REMOVE>]]");
             string trayExe = Path.GetFullPath(args[0].Trim());
             string root = Path.GetFullPath(args[1].Trim());
+            string remove = args.Length > 3 ? args[3].Trim() : "";
+            bool fullUninstall = string.Equals(remove, "ALL", StringComparison.OrdinalIgnoreCase);
             uint mySession;
             ProcessIdToSessionId(Process.GetCurrentProcess().Id, out mySession);
-            Write(log, "RST-Machine: ending every tray that runs from " + trayExe + " (any user, any session), then checking " + root + " for files still in use");
-            Write(log, "running as " + Environment.UserDomainName + "\\" + Environment.UserName + " in session " + mySession);
+            Write(log, "RST-Machine: ending every tray that runs from " + trayExe + " (any user, any session)"
+                + (fullUninstall ? ", then checking " + root + " for files still in use" : ""));
+            Write(log, "running as " + Environment.UserDomainName + "\\" + Environment.UserName + " in session " + mySession + "; REMOVE=" + remove);
 
             // 1. This package's trays, in every session. Nothing else.
             int ended = 0, failed = 0, left = 0;
@@ -124,29 +130,50 @@ internal static class EndTrays
                     int pid = p.Id;
                     uint session;
                     string where = ProcessIdToSessionId(pid, out session) ? "session " + session : "session unknown";
-                    string image = ImagePath(pid);
-                    if (image == null || !string.Equals(image, trayExe, StringComparison.OrdinalIgnoreCase))
+                    // One handle for the check and the end (review N1).
+                    IntPtr h = OpenProcess(ProcessQueryLimitedInformation | ProcessTerminate | Synchronize, false, pid);
+                    if (h == IntPtr.Zero)
                     {
-                        Write(log, "left alone: RST.Tray pid " + pid + " (" + where + ") runs from " + (image ?? "(path unknown)") + ", not from this package");
+                        int e = Marshal.GetLastWin32Error();
+                        Write(log, "left alone: RST.Tray pid " + pid + " (" + where + ") runs from " + (ImagePath(pid) ?? "(path unknown)") + "; it cannot be opened to end it (error " + e + ")");
                         left++;
                         continue;
                     }
-                    string error;
-                    if (End(pid, out error))
+                    try
                     {
-                        Write(log, "ended: RST.Tray pid " + pid + " (" + where + ") from " + image);
-                        ended++;
+                        string image = ImagePath(h);
+                        if (image == null || !string.Equals(image, trayExe, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Write(log, "left alone: RST.Tray pid " + pid + " (" + where + ") runs from " + (image ?? "(path unknown)") + ", not from this package");
+                            left++;
+                            continue;
+                        }
+                        string error;
+                        if (End(h, out error))
+                        {
+                            Write(log, "ended: RST.Tray pid " + pid + " (" + where + ") from " + image);
+                            ended++;
+                        }
+                        else
+                        {
+                            Write(log, "could not end RST.Tray pid " + pid + " (" + where + "): " + error);
+                            failed++;
+                        }
                     }
-                    else
+                    finally
                     {
-                        Write(log, "could not end RST.Tray pid " + pid + " (" + where + "): " + error);
-                        failed++;
+                        CloseHandle(h);
                     }
                 }
             }
             Write(log, "trays: " + ended + " ended, " + failed + " could not be ended, " + left + " left alone");
 
-            // 2. Anything still using the package's files means a restart is needed.
+            // 2. On a full uninstall, anything still using the package's files means a restart is needed.
+            if (!fullUninstall)
+            {
+                Write(log, "not a full uninstall (REMOVE=" + remove + "): in-use check skipped; Windows Installer reports a restart itself if it must replace a file in use (exit " + ExitSuccess + ")");
+                return ExitSuccess;
+            }
             List<string> users = FilesInUse(root, log);
             if (users.Count > 0)
             {
@@ -166,6 +193,22 @@ internal static class EndTrays
         }
     }
 
+    /// <summary>This run's own log: RST-Machine-EndTrays-yyyyMMdd-HHmmss-pid.log beside the base path (review N7).</summary>
+    private static string RunLog(string basePath)
+    {
+        string dir = Path.GetTempPath();
+        try
+        {
+            if (basePath.Length > 0) dir = Path.GetDirectoryName(Path.GetFullPath(basePath)) ?? dir;
+        }
+        catch
+        {
+            // An unusable base path: %TEMP%.
+        }
+        return Path.Combine(dir, "RST-Machine-EndTrays-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)
+            + "-" + Process.GetCurrentProcess().Id + ".log");
+    }
+
     /// <summary>The process's image path (Win32 form), or null.</summary>
     private static string ImagePath(int pid)
     {
@@ -173,9 +216,7 @@ internal static class EndTrays
         if (h == IntPtr.Zero) return null;
         try
         {
-            uint size = 1024;
-            StringBuilder name = new StringBuilder((int)size);
-            return QueryFullProcessImageName(h, 0, name, ref size) ? name.ToString() : null;
+            return ImagePath(h);
         }
         finally
         {
@@ -183,31 +224,26 @@ internal static class EndTrays
         }
     }
 
-    private static bool End(int pid, out string error)
+    private static string ImagePath(IntPtr process)
+    {
+        uint size = 1024;
+        StringBuilder name = new StringBuilder((int)size);
+        return QueryFullProcessImageName(process, 0, name, ref size) ? name.ToString() : null;
+    }
+
+    /// <summary>Ends the process behind the handle (opened with PROCESS_TERMINATE and SYNCHRONIZE) and waits.</summary>
+    private static bool End(IntPtr h, out string error)
     {
         error = null;
-        IntPtr h = OpenProcess(ProcessTerminate | Synchronize, false, pid);
-        if (h == IntPtr.Zero)
+        if (!TerminateProcess(h, TerminatedExitCode))
         {
-            error = "OpenProcess failed with " + Marshal.GetLastWin32Error();
-            return false;
+            int e = Marshal.GetLastWin32Error();
+            // ERROR_ACCESS_DENIED also comes back for a process that is already exiting; the wait below decides.
+            error = "TerminateProcess failed with " + e;
         }
-        try
-        {
-            if (!TerminateProcess(h, TerminatedExitCode))
-            {
-                int e = Marshal.GetLastWin32Error();
-                // ERROR_ACCESS_DENIED also comes back for a process that is already exiting; the wait below decides.
-                error = "TerminateProcess failed with " + e;
-            }
-            if (WaitForSingleObject(h, WaitMilliseconds) == WaitObject0) return true;
-            error = (error == null ? "" : error + "; ") + "still running after " + (WaitMilliseconds / 1000) + " s";
-            return false;
-        }
-        finally
-        {
-            CloseHandle(h);
-        }
+        if (WaitForSingleObject(h, WaitMilliseconds) == WaitObject0) return true;
+        error = (error == null ? "" : error + "; ") + "still running after " + (WaitMilliseconds / 1000) + " s";
+        return false;
     }
 
     /// <summary>"name (pid N, session S): path" for each process Restart Manager says uses a file under root.</summary>

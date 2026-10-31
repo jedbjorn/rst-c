@@ -51,8 +51,10 @@
         RstEndTrays (as SYSTEM, in this session) finds it in use -> exit
         3010; the next install in this session also returns 3010 (WiX's
         restart marker stays set until the restart, by design)
-    (i) as (h), with that process holding the file -> exit 3010 (restart
-        needed), not 0; the holder is left running
+    (i) with that process holding the file, as SYSTEM: a repair that
+        replaces nothing (REINSTALLMODE=omus) -> exit 0, the in-use check
+        is for a full uninstall only (review N2); then as (h) -> exit 3010
+        (restart needed), not 0; the holder is left running
 #>
 param(
   [Parameter(Mandatory)][string]$Msi,
@@ -287,23 +289,23 @@ function Invoke-MsiexecAsSystem([string]$Arguments, [string]$Log, [string]$Name)
   Write-Host "  exit $code"
   return $code
 }
-# RstEndTrays' own log for the run in $MsiLog: its path is in the scheduled custom action's target in the MSI log;
-# each run starts with a "RST-Machine:" line. Copied beside the MSI logs; returns this run's lines.
-function Get-EndTraysLog([string]$MsiLog, [string]$Name) {
+# RstEndTrays' own log for the run in $MsiLog. Each run writes a new RST-Machine-EndTrays-<time>-<pid>.log in the
+# folder of the base path the scheduled custom action's target shows in the MSI log (review N7). The newest one written
+# since $Since is this run's. Copied beside the MSI logs; returns its lines.
+function Get-EndTraysLog([string]$MsiLog, [string]$Name, [datetime]$Since) {
   Select-String -Path $MsiLog -Pattern 'RstEndTrays' -SimpleMatch | Select-Object -First 12 | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
   $m = Select-String -Path $MsiLog -Pattern '"([^"]*RST-Machine-EndTrays\.log)"' | Select-Object -Last 1
-  $candidates = @()
-  if ($m) { $candidates += $m.Matches[0].Groups[1].Value } else { Write-Host "  [$Name] the MSI log does not show RstEndTrays' target; looking in the usual TEMP folders" }
-  $candidates += @((Join-Path $env:SystemRoot 'Temp'), (Join-Path $env:SystemRoot 'SystemTemp'), $env:TEMP | ForEach-Object { Join-Path $_ 'RST-Machine-EndTrays.log' })
-  $path = @($candidates | Where-Object { Test-Path $_ } | Sort-Object { (Get-Item $_).LastWriteTimeUtc } -Descending | Select-Object -First 1)
-  Assert ($path.Count -eq 1) "[$Name] RstEndTrays wrote its log ($($candidates -join ' or '))"
-  $path = $path[0]
-  $lines = @(Get-Content $path)
-  $start = 0
-  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -like '* RST-Machine: ending every tray*') { $start = $i } }
-  $block = @($lines[$start..($lines.Count - 1)])
+  $dirs = @()
+  if ($m) { $dirs += Split-Path $m.Matches[0].Groups[1].Value } else { Write-Host "  [$Name] the MSI log does not show RstEndTrays' target; looking in the usual TEMP folders" }
+  $dirs += @((Join-Path $env:SystemRoot 'Temp'), (Join-Path $env:SystemRoot 'SystemTemp'), $env:TEMP)
+  $logs = @($dirs | Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ -Filter 'RST-Machine-EndTrays-*-*.log' -ErrorAction SilentlyContinue } |
+    Where-Object { $_.LastWriteTimeUtc -ge $Since.ToUniversalTime() } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1)
+  Assert ($logs.Count -eq 1) "[$Name] RstEndTrays wrote a log of its own for this run (in $($dirs -join ' or '))"
+  $path = $logs[0].FullName
+  Assert ($logs[0].Name -match '^RST-Machine-EndTrays-\d{8}-\d{6}-\d+\.log$') "[$Name] its name carries the time and its pid ($($logs[0].Name))"
+  $block = @(Get-Content $path)
   Copy-Item $path (Join-Path $LogDir "$Name-EndTrays.log") -Force
-  Write-Host "---- $path (this run)"; $block | ForEach-Object { Write-Host "  $_" }
+  Write-Host "---- $path"; $block | ForEach-Object { Write-Host "  $_" }
   return , $block
 }
 # A stand-in for Revit with RST's engine loaded: Windows PowerShell holding the file open, sharing read, write and
@@ -407,7 +409,7 @@ Assert ($unexpected.Count -eq 0) "every custom action is one of WiX's XmlFile, C
 # it never stops an uninstall) + 1024 (deferred) + 2048 (not impersonated: SYSTEM, which reaches every session).
 $endCa = @($cas | Where-Object { $_[0] -eq 'RstEndTrays' })
 Assert ($endCa.Count -eq 1 -and $endCa[0][1] -eq '3138' -and $endCa[0][2] -eq 'RstEndTraysExe') "RstEndTrays is a deferred, not impersonated, Return=ignore exe from the Binary table (type 3138, source RstEndTraysExe; got $(if ($endCa.Count) { $endCa[0][1] + ' ' + $endCa[0][2] }))"
-Assert ($endCa[0][3] -eq '"[TrayDir]RST.Tray.exe" "[RstFolder]." "[TempFolder]RST-Machine-EndTrays.log"') "RstEndTrays ends only [TrayDir]RST.Tray.exe and checks [RstFolder] (target: $($endCa[0][3]))"
+Assert ($endCa[0][3] -eq '"[TrayDir]RST.Tray.exe" "[RstFolder]." "[TempFolder]RST-Machine-EndTrays.log" "[REMOVE]"') "RstEndTrays ends only [TrayDir]RST.Tray.exe and checks [RstFolder] on a full uninstall ([REMOVE]; target: $($endCa[0][3]))"
 Assert ((Get-MsiQuery $Msi "SELECT ``Name`` FROM ``Binary`` WHERE ``Name`` = 'RstEndTraysExe'").Count -eq 1) 'its exe is in the Binary table (nothing of it is installed)'
 $seqRows = Get-MsiQuery $Msi 'SELECT `Action`, `Condition`, `Sequence` FROM `InstallExecuteSequence`' 3
 $endRow = @($seqRows | Where-Object { $_[0] -eq 'RstEndTrays' })
@@ -540,8 +542,9 @@ Write-Host "(h) per-user tray stand-in pid $($standIn.Id) from $userTrayExe"
 try {
   Assert ($t.SessionId -ne 0) "(h) the tray runs in the runner's session ($($t.SessionId)), not session 0 where msiexec runs as SYSTEM"
   $logH = Join-Path $LogDir 'machine-h-system-uninstall.log'
+  $sinceH = Get-Date
   $codeH = Invoke-MsiexecAsSystem "/x $productCode" $logH 'machine-h-system-uninstall'
-  $blockH = Get-EndTraysLog $logH 'machine-h'
+  $blockH = Get-EndTraysLog $logH 'machine-h' $sinceH
   Assert ($codeH -eq 0) "(h) the uninstall as SYSTEM exits 0: nothing else holds RST's files (exit $codeH)"
   Assert ($t.WaitForExit(5000)) "(h) the tray in session $($t.SessionId) was ended"
   Assert ($t.ExitCode -eq 1) "(h) by RstEndTrays (TerminateProcess exit code 1; got $($t.ExitCode))"
@@ -568,8 +571,9 @@ $t = Start-MachineTray '(j)'
 $holder = Start-Holder $core
 try {
   $logJ = Join-Path $LogDir 'machine-j-uninstall.log'
+  $sinceJ = Get-Date
   $codeJ = Invoke-Msiexec '/x' $Msi $logJ -ExpectFail
-  $blockJ = Get-EndTraysLog $logJ 'machine-j'
+  $blockJ = Get-EndTraysLog $logJ 'machine-j' $sinceJ
   Assert ($codeJ -eq 3010) "(j) the uninstall from this elevated session returns 3010 (restart needed), not 0 (exit $codeJ)"
   Assert ($t.WaitForExit(15000)) '(j) the tray on this desktop was closed'
   Assert (@($blockJ | Where-Object { $_ -like "* still in use: * (pid $($holder.Id), *" }).Count -ge 1) "(j) RstEndTrays found RST.Core.dll in use by the holder (pid $($holder.Id))"
@@ -583,12 +587,22 @@ try {
 $codeIi = Invoke-Msiexec '/i' $Msi (Join-Path $LogDir 'machine-i-install.log') -ExpectFail
 Assert ($codeIi -eq 0 -or $codeIi -eq 3010) "(i) installed again (exit $codeIi; 3010 if (j)'s restart marker is still set in this session)"
 Assert-OneMachineProduct $productCode $version '(i)'
-$t = Start-MachineTray '(i)'
 $holder = Start-Holder $core
 try {
+  # Review N2 first: a repair as SYSTEM that replaces no file (REINSTALLMODE=omus: same-version files stay), with the
+  # file held, must not ask for a restart. RstEndTrays skips its in-use check when REMOVE is not ALL.
+  $logR = Join-Path $LogDir 'machine-i-system-repair.log'
+  $sinceR = Get-Date
+  $codeR = Invoke-MsiexecAsSystem "/i $productCode REINSTALL=ALL REINSTALLMODE=omus" $logR 'machine-i-system-repair'
+  $blockR = Get-EndTraysLog $logR 'machine-i-repair' $sinceR
+  Assert (@($blockR | Where-Object { $_ -like '* not a full uninstall (REMOVE=*): in-use check skipped*' }).Count -eq 1) '(i) the repair skipped the in-use check (not a full uninstall)'
+  Assert ($codeR -eq 0) "(i) a repair as SYSTEM that replaces nothing returns 0 with RST.Core.dll held, not 3010 (exit $codeR)"
+  Assert-OneMachineProduct $productCode $version '(i) repaired'
+  $t = Start-MachineTray '(i)'
   $logI = Join-Path $LogDir 'machine-i-system-uninstall.log'
+  $sinceI = Get-Date
   $codeI = Invoke-MsiexecAsSystem "/x $productCode" $logI 'machine-i-system-uninstall'
-  $blockI = Get-EndTraysLog $logI 'machine-i'
+  $blockI = Get-EndTraysLog $logI 'machine-i' $sinceI
   Assert ($t.WaitForExit(5000) -and $t.ExitCode -eq 1) "(i) the tray in session $($t.SessionId) was ended by RstEndTrays"
   Assert (@($blockI | Where-Object { $_ -like "* still in use: * (pid $($holder.Id), *" }).Count -ge 1) "(i) RstEndTrays found RST.Core.dll in use by the holder (pid $($holder.Id))"
   Assert ($codeI -eq 3010) "(i) msiexec as SYSTEM returns 3010 (restart needed), not 0 (exit $codeI)"

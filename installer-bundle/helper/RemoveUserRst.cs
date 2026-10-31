@@ -97,7 +97,7 @@ internal static class RemoveUserRst
     [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiConfigureProductExW")]
     private static extern uint MsiConfigureProductEx(string productCode, int installLevel, int installState, string commandLine);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW", SetLastError = true)]
     private static extern int MessageBox(IntPtr owner, string text, string caption, uint type);
 
     // SC-029: the prompt's owner and foreground.
@@ -190,6 +190,7 @@ internal static class RemoveUserRst
     private static TimerProc promptTimer;   // kept alive while the timer can fire
     private static EnumWindowsProc promptFinder;
     private static IntPtr promptBox;
+    private static int promptError;          // GetLastError when MessageBox returned 0
 
     private sealed class Found
     {
@@ -225,6 +226,12 @@ internal static class RemoveUserRst
                 int answer = Prompt(log,
                     "Revit is running. Close Revit, then click Retry.\n\nYour own RST has not been changed. Click Cancel to stop setup: everything is put back as it was.",
                     MbRetryCancel | MbIconWarning);
+                if (answer == 0)
+                {
+                    // Review N5: MessageBox failed (the setup window may have closed under it); not the user's Cancel.
+                    Write(log, "the prompt could not be shown (MessageBox failed with error " + promptError + "; the setup window may have closed); stopping, nothing removed (exit " + ExitCancelled + ")");
+                    return ExitCancelled;
+                }
                 if (answer != IdRetry)
                 {
                     Write(log, "cancelled by the user while Revit was running; nothing removed (exit " + ExitCancelled + ")");
@@ -325,12 +332,14 @@ internal static class RemoveUserRst
         UIntPtr timer = SetTimer(IntPtr.Zero, UIntPtr.Zero, 100, promptTimer);
         try
         {
-            return MessageBox(owner, text, SetupCaption, type | MbSetForeground | MbTopmost);
+            int answer = MessageBox(owner, text, SetupCaption, type | MbSetForeground | MbTopmost);
+            promptError = answer == 0 ? Marshal.GetLastWin32Error() : 0;
+            Write(log, answer == 0 ? "the prompt failed (MessageBox returned 0, error " + promptError + ")" : "the prompt was answered (" + answer + ")");
+            return answer;
         }
         finally
         {
             if (timer != UIntPtr.Zero) KillTimer(IntPtr.Zero, timer);
-            Write(log, "the prompt was answered");
         }
     }
 

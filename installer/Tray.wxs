@@ -64,8 +64,9 @@
       per-user trays (%LocalAppData%\Programs\RST\Tray\) too. RstEndTrays
       (helper\EndTrays.cs, deferred, as SYSTEM, before RemoveFiles) ends
       exactly the RST.Tray processes whose image is [TrayDir]RST.Tray.exe, in
-      every session, then asks Restart Manager whether anything else (Revit
-      with the engine loaded) still uses a file under [RstFolder]. If so it
+      every session. On a full uninstall it then asks Restart Manager
+      whether anything else (Revit with the engine loaded) still uses a file
+      under [RstFolder]. If so it
       sets WiX's restart marker, and Wix4CheckRebootRequired, which this
       package also runs on uninstall, makes msiexec return 3010. The upgrade
       path is the same: RemoveExistingProducts runs the old package's own
@@ -142,11 +143,13 @@
          process in any session. Return="ignore": it never stops an uninstall.
          The same condition as CloseRstTray, so a no-op reinstall leaves the
          trays alone. "[RstFolder]." keeps the quoted argument from ending in
-         a backslash. Its log is [TempFolder]RST-Machine-EndTrays.log (as
+         a backslash. [REMOVE] is ALL only on a full uninstall, the one
+         case it checks for files still in use (review N2). Each run writes
+         its own log, [TempFolder]RST-Machine-EndTrays-<time>-<pid>.log (as
          SYSTEM: C:\Windows\Temp, or C:\Windows\SystemTemp). -->
     <Binary Id="RstEndTraysExe" SourceFile="$(var.RstEndTraysExe)" />
     <CustomAction Id="RstEndTrays" BinaryRef="RstEndTraysExe"
-                  ExeCommand="&quot;[TrayDir]RST.Tray.exe&quot; &quot;[RstFolder].&quot; &quot;[TempFolder]RST-Machine-EndTrays.log&quot;"
+                  ExeCommand="&quot;[TrayDir]RST.Tray.exe&quot; &quot;[RstFolder].&quot; &quot;[TempFolder]RST-Machine-EndTrays.log&quot; &quot;[REMOVE]&quot;"
                   Execute="deferred" Impersonate="no" Return="ignore" />
     <InstallExecuteSequence>
       <Custom Action="RstEndTrays" Before="RemoveFiles"
