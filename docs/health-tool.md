@@ -78,7 +78,7 @@ Health has no export button. To share a snapshot with a BIM lead or support cont
 
 ### What can be cleaned
 
-The cleanup targets are fixed presets. A profile can turn them on or off or remove them (on the Builder's **Junk cleanup** tab), but no profile can point the cleanup at any other folder. A profile that names a path outside this list is ignored for safety.
+The cleanup targets are fixed presets. A profile can turn them on or off or remove them (in the Profile Builder, on the Profile pane's [Junk cleanup](profile-builder.md#junk-cleanup) tab), but no profile can point the cleanup at any other folder. A profile that names a path outside this list is ignored for safety.
 
 | Target | Path | What is removed |
 |---|---|---|
