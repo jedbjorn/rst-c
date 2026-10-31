@@ -41,14 +41,15 @@ public partial class HealthWindow : Window
     private void OnRequestClose(object? sender, EventArgs e) => Close();
 
     /// <summary>
-    /// Escape closes Health the way Close does (SC-010): only while Close is enabled, so never during a
+    /// Escape closes Health the way Close does (SC-010): a fresh press only (a held Escape that closed a
+    /// dialog in front must not repeat into Health), and only while Close is enabled, so never during a
     /// scan or a clean. Nothing else may want it: the Junk modal, a dialog Health opened (an owned
     /// window), or a menu or popup open in it.
     /// </summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Handled || e.Key != Key.Escape || !EscapeCloses) return;
+        if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled) || !EscapeCloses) return;
         e.Handled = true;
         ViewModel.CloseCommand.Execute(null);
     }

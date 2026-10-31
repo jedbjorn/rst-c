@@ -54,7 +54,8 @@ public partial class ProfileLoaderWindow : Window
     }
 
     /// <summary>
-    /// Escape closes the Loader the way Close does (SC-010): only while Close is enabled, so never during
+    /// Escape closes the Loader the way Close does (SC-010): a fresh press only (a held Escape that closed a
+    /// dialog in front must not repeat into the Loader), and only while Close is enabled, so never during
     /// a load or unload (the busy overlay) or the load's add-in pass, which the title-bar ✕ waits for
     /// too. Nothing else may want it: a dialog the Loader opened (an owned window), a popup or menu
     /// open in it, or a drag of the opacity slider (the mouse is captured).
@@ -62,7 +63,7 @@ public partial class ProfileLoaderWindow : Window
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Handled || e.Key != Key.Escape || !EscapeCloses) return;
+        if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled) || !EscapeCloses) return;
         e.Handled = true;
         Model.CloseCommand.Execute(null);
     }
