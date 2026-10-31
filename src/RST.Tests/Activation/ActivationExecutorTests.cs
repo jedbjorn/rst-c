@@ -18,7 +18,8 @@ namespace RST.Tests.Activation;
 
 public sealed class ActivationExecutorTests : IDisposable
 {
-    // The add-ins of the spike's own orig-2026.json, so the real capture is what gets edited.
+    // The add-ins of the spike's own orig-2026.json, so the real capture is what gets edited. The capture predates
+    // SC-050 and still lists RST with Vendor "RSTC" beside the DSOS manifest below, as an upgraded user's file does.
     private const string DiRoots = "b4ad7489-2899-46b3-aca6-c0def7135528";
     private const string Kinship = "a47e7259-a459-4fdd-8435-fb0bc0f86268";
     private const string AlignTag = "5a9e8c41-09d6-4cdf-8556-38f8119137a4";
@@ -39,7 +40,7 @@ public sealed class ActivationExecutorTests : IDisposable
     {
         _tree.Manifest(_tree.UserAddins(2026), "Kinship.addin", "Kinship", Kinship, "ANDK");
         _tree.Manifest(_tree.MachineAddins(2026), "DiRoots.One.addin", "DiRoots.One", DiRoots, "www.diroots.com");
-        _tree.Manifest(_tree.UserAddins(2026), "RST.addin", "RST", InventoryItem.RstClientId, "RSTC");
+        _tree.Manifest(_tree.UserAddins(2026), "RST.addin", "RST", InventoryItem.RstClientId, "DSOS");
         _tree.Manifest(_tree.MachineAddins(2026), "Autodesk.BatchPrint.addin", "Batch Print", "9d508589-48b6-4ff6-a50d-d16d77c585a1", "ADSK");
         _tree.Settings(2026, FakeAddinTree.Fixture("orig-2026.json"));
     }
