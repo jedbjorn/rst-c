@@ -38,6 +38,9 @@
                 <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- The Commands pane's width, shared by the header's left group so the two line up (F18 follow-up). -->
+            <GridLength x:Key="CommandsPaneWidth">320</GridLength>
+
             <!-- A text box's placeholder: shown while the box (its Tag binding) is empty. -->
             <Style x:Key="Hint" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
                 <Setter Property="IsHitTestVisible" Value="False" />
@@ -643,11 +646,27 @@
             <!--
                 Header (feature #18, decisions #22-#24): the shared HeaderStrip (Tint). Left to right: ⚙ (machine
                 settings), the profile button and its menu, Export ZIP, a divider, "Profile Builder"; on the right,
-                the unsaved-changes dot and text, Save (the Primary; only with changes) and Exit.
+                the unsaved-changes dot and text, Save (the Primary; only with changes) and Exit. The left group fills
+                a column as wide as the Commands pane (CommandsPaneWidth), so the divider ends on the pane's right
+                border and the title starts where the Panels label does (its margin is the Panels header's padding,
+                PaneHeader's inset, bound so the two cannot drift); the profile
+                button takes whatever width ⚙ and Export ZIP leave. The strip's left padding moves onto ⚙ for this.
             -->
-            <Border x:Name="Header" Style="{StaticResource HeaderStrip}" AutomationProperties.AutomationId="Builder.Header">
-                <DockPanel VerticalAlignment="Center" LastChildFill="False">
-                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+            <Border x:Name="Header" Style="{StaticResource HeaderStrip}" Padding="0,0,16,0" AutomationProperties.AutomationId="Builder.Header">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="{StaticResource CommandsPaneWidth}" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Margin="16,0,0,0" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <ToggleButton x:Name="SettingsButton" Style="{StaticResource MenuToggle}" Width="30" MinWidth="30" Padding="0"
                                       Checked="OnMenuToggleChecked"
                                       ToolTip="{x:Static res:UiStrings.Builder_SettingsTip}" AutomationProperties.AutomationId="Builder.Settings"
@@ -664,21 +683,30 @@
                             </ToggleButton.ContextMenu>
                         </ToggleButton>
 
-                        <ToggleButton x:Name="ProfileButton" Style="{StaticResource MenuToggle}" Width="250" Margin="10,0,0,0"
+                        <ToggleButton x:Name="ProfileButton" Grid.Column="1" Style="{StaticResource MenuToggle}" Margin="10,0,0,0"
                                       HorizontalContentAlignment="Stretch" Checked="OnMenuToggleChecked"
                                       ToolTip="{x:Static res:UiStrings.Builder_ProfileSelectorTip}"
                                       AutomationProperties.AutomationId="Builder.ProfileButton"
                                       AutomationProperties.Name="{x:Static res:UiStrings.Builder_ProfileSelectorTip}">
-                            <!-- The name, "(loaded)" right after it (as the spike), the chevron at the right edge. -->
-                            <DockPanel LastChildFill="False">
-                                <TextBlock DockPanel.Dock="Right" Text="▾" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="8,0,0,0" />
-                                <TextBlock x:Name="ProfileButtonName" DockPanel.Dock="Left" Text="{Binding DisplayName}" FontWeight="SemiBold"
-                                           VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis"
-                                           AutomationProperties.AutomationId="Builder.ProfileButtonName" />
-                                <TextBlock DockPanel.Dock="Left" Text="{x:Static res:UiStrings.Builder_LoadedMark}" Style="{StaticResource MutedText}"
-                                           Margin="6,0,0,0" VerticalAlignment="Center"
-                                           Visibility="{Binding IsLoadedProfile, Converter={StaticResource BoolToVisible}}"
-                                           AutomationProperties.AutomationId="Builder.LoadedMark" />
+                            <!--
+                                The name, the loaded profile's green dot right after it (the Loader's "● Loaded" mark:
+                                its brush and size; "Loaded" is its tooltip and name), the chevron at the right edge. The
+                                inner panel hugs its content, so a long name trims to the space left and the dot (docked
+                                first) keeps its width; the full name is the name's tooltip.
+                            -->
+                            <DockPanel>
+                                <TextBlock x:Name="ProfileChevron" DockPanel.Dock="Right" Text="▾" Style="{StaticResource MutedText}"
+                                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                                <DockPanel HorizontalAlignment="Left">
+                                    <TextBlock x:Name="LoadedMark" DockPanel.Dock="Right" Text="●" Style="{StaticResource SuccessText}" FontSize="11"
+                                               Margin="6,0,0,0" ToolTip="{x:Static res:UiStrings.Builder_LoadedMark}"
+                                               Visibility="{Binding IsLoadedProfile, Converter={StaticResource BoolToVisible}}"
+                                               AutomationProperties.AutomationId="Builder.LoadedMark"
+                                               AutomationProperties.Name="{x:Static res:UiStrings.Builder_LoadedMark}" />
+                                    <TextBlock x:Name="ProfileButtonName" Text="{Binding DisplayName}" ToolTip="{Binding DisplayName}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               AutomationProperties.AutomationId="Builder.ProfileButtonName" />
+                                </DockPanel>
                             </DockPanel>
                             <ToggleButton.ContextMenu>
                                 <ContextMenu x:Name="ProfileMenu" Closed="OnMenuClosed" MinWidth="300"
@@ -697,15 +725,16 @@
                             </ToggleButton.ContextMenu>
                         </ToggleButton>
 
-                        <Button Content="{x:Static res:UiStrings.Builder_ExportZip}" Command="{Binding ExportCommand}" Margin="10,0,0,0"
-                                AutomationProperties.AutomationId="Builder.Export" />
-                        <Rectangle Style="{StaticResource HeaderDivider}" />
-                        <TextBlock Text="{x:Static res:UiStrings.Builder_Title}" Style="{StaticResource HeaderTitle}"
-                                   AutomationProperties.AutomationId="Builder.Title" />
-                    </StackPanel>
+                        <Button x:Name="ExportButton" Grid.Column="2" Content="{x:Static res:UiStrings.Builder_ExportZip}"
+                                Command="{Binding ExportCommand}" Margin="10,0,0,0" AutomationProperties.AutomationId="Builder.Export" />
+                        <!-- Flush with the column's right edge: over the Commands pane's 1 px border. -->
+                        <Rectangle x:Name="TitleDivider" Grid.Column="3" Style="{StaticResource HeaderDivider}" Margin="16,0,0,0" />
+                    </Grid>
+                    <TextBlock x:Name="BuilderTitle" Grid.Column="1" Text="{x:Static res:UiStrings.Builder_Title}" Style="{StaticResource HeaderTitle}"
+                               Margin="{Binding Padding, ElementName=PanelsHeader}" AutomationProperties.AutomationId="Builder.Title" />
 
                     <!-- The unsaved-changes indicator, then the family button bar: Save (the Primary), Exit rightmost. -->
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                         <StackPanel x:Name="UnsavedIndicator" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0"
                                     Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisible}}"
                                     AutomationProperties.AutomationId="Builder.Unsaved">
@@ -718,19 +747,19 @@
                         <Button Content="{x:Static res:UiStrings.Builder_Exit}" Command="{Binding ExitCommand}" Margin="8,0,0,0" MinWidth="72"
                                 ToolTip="{x:Static res:UiStrings.Builder_ExitTip}" AutomationProperties.AutomationId="Builder.Exit" />
                     </StackPanel>
-                </DockPanel>
+                </Grid>
             </Border>
 
             <!-- Body: Commands | Panels | Profile -->
             <Grid x:Name="Panes" Grid.Row="1">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="320" />
+                    <ColumnDefinition Width="{StaticResource CommandsPaneWidth}" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="330" />
                 </Grid.ColumnDefinitions>
 
                 <!-- Commands -->
-                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Background="{StaticResource SurfaceAltBrush}">
+                <Border x:Name="CommandsPane" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Background="{StaticResource SurfaceAltBrush}">
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
                             <DockPanel VerticalAlignment="Center">
@@ -785,13 +814,13 @@
                     included (a TextBox swallows drags: the TextBox lesson in docs/DEVELOPING.md).
                 -->
                 <DockPanel Grid.Column="1">
-                    <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
+                    <Border x:Name="PanelsHeader" DockPanel.Dock="Top" Style="{StaticResource PaneHeader}">
                         <DockPanel VerticalAlignment="Center">
                             <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Builder_AddPanel}" Command="{Binding AddPanelCommand}"
                                     AutomationProperties.AutomationId="Builder.AddPanel" />
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="{x:Static res:UiStrings.Builder_Panels}" Style="{StaticResource SectionText}" Margin="0"
-                                           VerticalAlignment="Center" />
+                                <TextBlock x:Name="PanelsLabel" Text="{x:Static res:UiStrings.Builder_Panels}" Style="{StaticResource SectionText}"
+                                           Margin="0" VerticalAlignment="Center" />
                                 <TextBlock Text="{x:Static res:UiStrings.Builder_PanelsOnTab}" Style="{StaticResource MutedText}" FontSize="11"
                                            Margin="8,0,8,0" VerticalAlignment="Center" />
                                 <Button x:Name="TabNameButton" Style="{StaticResource TabPill}" Click="OnTabNameClick" VerticalAlignment="Center"

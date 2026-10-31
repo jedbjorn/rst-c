@@ -111,6 +111,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     // SC-045: set when the window safety net closed the Builder after an error (Abandon).
     private bool _abandoned;
 
+    // While Initialize runs (before the window shows), a toast is held back for ShowBootToast.
+    private bool _booting;
+    private (string Text, BannerKind Kind)? _bootToast;
+
     /// <param name="backend">The Builder's data and writes (a fake in tests).</param>
     /// <param name="dialogs">The family dialogs: confirm, the three-way prompt, the color picker, the file dialogs.</param>
     /// <param name="schedule">Runs an action once after a delay (the toasts); null uses the dispatcher. Tests pass a fake clock.</param>
@@ -194,9 +198,23 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
 
     /// <summary>
     /// bootAfterBridge: the machine-wide branding first, then the catalogue, the profiles, the active
-    /// profile, the lookup and the tabs, then a fresh profile with one panel.
+    /// profile, the lookup and the tabs, then the loaded profile in the editor (<see cref="OpenOnLoaded"/>),
+    /// or a fresh profile with one panel when there is none to open.
     /// </summary>
     public void Initialize()
+    {
+        _booting = true;
+        try
+        {
+            Boot();
+        }
+        finally
+        {
+            _booting = false;
+        }
+    }
+
+    private void Boot()
     {
         _branding = Safe(_backend.LoadBranding, BrandingState.None, "load_default_branding");
         RaiseBranding();
@@ -210,7 +228,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         OnPropertyChanged(nameof(CommandsCount));
         OnPropertyChanged(nameof(CatalogIsEmpty));
 
-        _library = Safe(_backend.GetProfiles, [], "get_profiles");
+        var library = Safe<IReadOnlyList<ProfileEntry>?>(_backend.GetProfiles, null, "get_profiles");
+        _library = library ?? [];
         var active = Safe<ActiveProfile?>(_backend.GetActiveProfile, null, "get_active_profile");
         _activeId = active is { IsBlank: false } && !string.IsNullOrEmpty(active.ProfileId) ? active.ProfileId : null;
         _activeIdlessFile = active is { IsBlank: false } && _activeId is null ? active.ProfileFile : null;
@@ -221,7 +240,49 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
             catalog.Count, _library.Count, _activeId, _lookup.Count, _backend.AllTabs.Count);
 
         PopulateOptions();
-        StartFresh();
+        OpenOnLoaded(libraryRead: library is not null);
+    }
+
+    /// <summary>
+    /// The Builder opens on the loaded profile (VM finding F5, FnB decision): the one active_profile.json
+    /// names, matched by id, or by its file for a legacy profile with no id (the menu's loaded option). It
+    /// opens as picking it from the menu does, a stack repair included (the repair is an unsaved change;
+    /// its toast waits for the window: <see cref="ShowBootToast"/>). No loaded profile, one that is not in
+    /// the library (or a library that could not be read), or one that fails to open: a new profile, as before.
+    /// </summary>
+    private void OpenOnLoaded(bool libraryRead)
+    {
+        var loaded = ProfileOptions.FirstOrDefault(o => o.IsLoaded);
+        if (loaded?.Entry is not { } entry)
+        {
+            var named = _activeId ?? _activeIdlessFile;
+            if (named is null)
+                Log.Information("Builder: no profile is loaded; opening on a new profile");
+            else if (!libraryRead)
+                Log.Information("Builder: the profile library could not be read, so the loaded profile ({Active}) cannot open; "
+                                + "opening on a new profile", named);
+            else if (_library.Count == 0)
+                Log.Information("Builder: the profile library is empty, so the loaded profile ({Active}) cannot open; "
+                                + "opening on a new profile", named);
+            else
+                Log.Information("Builder: the loaded profile ({Active}) is not in the library; opening on a new profile", named);
+            StartFresh();
+            return;
+        }
+        try
+        {
+            SetCurrent(loaded);
+            LoadIntoEditor(entry.Profile, entry.FileName);
+            Log.Information("Builder: opened on the loaded profile {Name} ({Id}, {File})", entry.Profile.ProfileName,
+                entry.Profile.Id ?? "no id", entry.FileName);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Builder: the loaded profile {Name} ({File}) could not be opened; opening on a new profile",
+                entry.Profile.ProfileName, entry.FileName);
+            SetCurrent(ProfileOptionViewModel.New());
+            StartFresh();
+        }
     }
 
     // ---- the profile menu -----------------------------------------------------------------------
@@ -256,7 +317,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     {
         var previous = selectKey ?? _selectedOption?.Key;
         ProfileOptions.Clear();
-        foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId));
+        foreach (var entry in _library) ProfileOptions.Add(ProfileOptionViewModel.For(entry, _activeId, _activeIdlessFile));
         // The profile in the editor stays current even when its file is gone from the list (another session removed it).
         var current = ProfileOptions.FirstOrDefault(o => o.Key == previous)
                       ?? (_selectedOption is { } held && held.Key == previous ? held : ProfileOptionViewModel.New());
@@ -316,6 +377,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     private void ApplySwitch(ProfileOptionViewModel target)
     {
         if (_abandoned) return;
+        _bootToast = null; // a toast held back at boot was about the profile that opened
         SetCurrent(target);
         if (target.Entry is null)
         {
@@ -366,6 +428,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         ProfileChanged();
         ProfileEdited();
         _supersededFile = superseded;
+        OnPropertyChanged(nameof(IsLoadedProfile)); // a loaded legacy profile is known by that file
         if (repaired.Changed) ShowToast(UiStrings.Builder_StacksRepaired(repaired.Notes.Count), BannerKind.Info);
     }
 
@@ -441,8 +504,14 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// <summary>The Profile pane's header: "· editing &lt;name&gt;".</summary>
     public string EditingText => UiStrings.Builder_EditingName(DisplayName);
 
-    /// <summary>The header button's "(loaded)": the editor holds the profile the Loader has loaded.</summary>
-    public bool IsLoadedProfile => _editMode && !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
+    /// <summary>
+    /// The header button's green "Loaded" dot: the editor holds the profile the Loader has loaded: by id, or,
+    /// for a legacy profile with no id, the one read from the file the active pointer names (until its first
+    /// save gives it an id, which the pointer then follows).
+    /// </summary>
+    public bool IsLoadedProfile => _editMode && (string.IsNullOrEmpty(_profile.Id)
+        ? _supersededFile is { } file && _activeIdlessFile is { } active && string.Equals(file, active, StringComparison.OrdinalIgnoreCase)
+        : _profile.Id == _activeId);
 
     private void RaiseName()
     {
@@ -1306,8 +1375,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// After an edit or remove everywhere: when the open profile's file was written, its clean
     /// baseline gets the same change (so a change already on disk does not read as unsaved, while
     /// other unsaved edits stay unsaved); the saved profiles are read again, the cards rebuilt from
-    /// the working copy, failures listed (and logged), and the ribbon reloaded when the loaded
-    /// profile's file changed.
+    /// the working copy, failures listed (and logged), and a ribbon reload queued when the loaded
+    /// profile's file changed (Revit runs it once the modal Builder closes: VM finding F1).
     /// </summary>
     private async Task AfterCustomToolUpdateAsync(CustomToolUpdate? update, Action<Profile> change, Func<object?, string> done)
     {
@@ -1420,7 +1489,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     /// saveAndMaybeReload: name and tab required; always under the open profile's id, so a name
     /// changed by Rename… is a rename (rename-as-copy is retired, spec #19); the required add-ins
     /// recomputed; the save; the profile menu refreshed; a clean baseline; then, when the saved
-    /// profile is the active one, the ribbon reloaded with the active hidden tabs and disable flag.
+    /// profile is the active one, a ribbon reload queued with the active hidden tabs and disable flag
+    /// (Revit runs it once the modal Builder closes: VM finding F1).
     /// True when the profile was saved.
     /// </summary>
     /// <remarks>
@@ -1488,6 +1558,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
             Log.Information("Builder: the loaded profile had no id; it is now {Id}", _profile.Id);
             _activeId = _profile.Id;
             _activeIdlessFile = null;
+            OnPropertyChanged(nameof(IsLoadedProfile)); // now known by its id
         }
         var savedIsActive = !string.IsNullOrEmpty(_profile.Id) && _profile.Id == _activeId;
         // The loaded legacy profile's old file goes only once the reload has re-pointed
@@ -1671,7 +1742,26 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         }
     }
 
-    private void ShowToast(string text, BannerKind kind) => Toast.Show(text, kind, TransientMessage.ToastDuration);
+    private void ShowToast(string text, BannerKind kind)
+    {
+        if (_booting)
+        {
+            _bootToast = (text, kind);
+            return;
+        }
+        Toast.Show(text, kind, TransientMessage.ToastDuration);
+    }
+
+    /// <summary>
+    /// Shows the toast Initialize held back (the loaded profile's stack repair), once: the window calls it
+    /// when it has rendered, so the toast's time starts when it can be seen. Nothing held back: nothing.
+    /// </summary>
+    public void ShowBootToast()
+    {
+        if (_bootToast is not { } held) return;
+        _bootToast = null;
+        ShowToast(held.Text, held.Kind);
+    }
 
     private static T Safe<T>(Func<T> read, T fallback, string what)
     {

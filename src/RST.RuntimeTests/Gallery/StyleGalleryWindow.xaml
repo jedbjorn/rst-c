@@ -81,7 +81,7 @@
                         <TextBox Text="Architecture" Margin="0,0,0,6" />
                         <TextBox Text="Name required" mvvm:Behaviors.HasError="True" Margin="0,0,0,6" />
                         <ComboBox SelectedIndex="0" Margin="0,0,0,6">
-                            <ComboBoxItem Content="Architecture (loaded)" />
+                            <ComboBoxItem Content="Architecture · loaded" />
                             <ComboBoxItem Content="Structure" />
                             <ComboBoxItem Content="+ New Profile" />
                         </ComboBox>
@@ -247,7 +247,7 @@
                             <TextBlock Text="InfoBanner: a note about this window." TextWrapping="Wrap" />
                         </Border>
                         <Border Style="{StaticResource SuccessBanner}" Margin="0,0,0,4">
-                            <TextBlock Text="SuccessBanner: saved and reloaded." TextWrapping="Wrap" />
+                            <TextBlock Text="SuccessBanner: saved. The ribbon updates when you close the Builder." TextWrapping="Wrap" />
                         </Border>
                         <Border Style="{StaticResource WarningBanner}" Margin="0,0,0,4">
                             <TextBlock Text="WarningBanner: restart Revit to apply." TextWrapping="Wrap" />

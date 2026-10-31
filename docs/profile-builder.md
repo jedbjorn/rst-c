@@ -24,7 +24,7 @@ Live profile switching (no Revit restart) is part of the same system: the profil
 
 Click **Builder** on the **RST** panel of the **Add-Ins** tab. The window, titled **RST — Profile Builder**, opens centred over Revit, belongs to Revit (no taskbar button of its own; Revit waits until you close it) and uses Revit's light or dark theme as it was when the window opened.
 
-The Builder starts on **+ New Profile**: a blank profile with one empty panel, "Panel 1".
+The Builder opens on the profile that is loaded in the Loader, ready to edit. With no profile loaded, or when the loaded one is no longer among the saved profiles, it starts on **+ New Profile**: a blank profile with one empty panel, "Panel 1".
 
 ### The window
 
@@ -181,11 +181,11 @@ New profile :::class1 -> Name + assemble panels :::class2 -> Presets + cleanup t
 - A new profile is saved under a new file ("Saved as <file>").
 - An existing profile saved with the same name is overwritten.
 - An existing profile saved with a **new name** is renamed: it keeps its id, the file under the old name is replaced, and users who have it loaded keep it. If another profile already has that name, the save stops and asks you to choose a different one. (Saving under a new name no longer makes a copy; a Duplicate action arrives with the Builder redesign, feature #18.)
-- If the profile you saved is the loaded one, rst-c reloads it on the ribbon straight away ("Saved & ribbon reloaded.").
+- If the profile you saved is the loaded one, rst-c reloads it on the ribbon when you close the Builder ("Saved. The ribbon updates when you close the Builder."): Revit cannot rebuild the ribbon while the Builder is open.
 
 ### Editing an existing profile
 
-Choose a profile from the dropdown at the top left (the loaded one is marked "(loaded)"). Its panels, tools and settings load into the Builder. Your edits are made to a working copy, so the dropdown keeps showing the saved profiles until you save.
+Choose a profile from the dropdown at the top left (the loaded one is marked "loaded" in the list; while it is open, a green dot follows its name on the button). Its panels, tools and settings load into the Builder. Your edits are made to a working copy, so the dropdown keeps showing the saved profiles until you save.
 
 ### Unsaved changes
 

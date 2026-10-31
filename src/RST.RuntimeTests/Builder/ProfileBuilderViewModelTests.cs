@@ -33,13 +33,21 @@ public class ProfileBuilderViewModelTests
 
     // ── boot ─────────────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Boot_reads_branding_first_then_the_data_and_starts_a_fresh_profile_with_one_panel()
+    /// <summary>The fixture set with nothing loaded (active_profile.json is the blank stub).</summary>
+    private static FakeBuilderBackend NothingLoaded()
     {
-        var h = BuilderHarness.Create();
+        var backend = BuilderFixtures.Backend();
+        backend.Active = new ActiveProfile { ProfileName = "BlankRST", Blank = true };
+        return backend;
+    }
+
+    [Fact]
+    public void Boot_reads_branding_first_then_the_data_and_with_nothing_loaded_starts_a_fresh_profile_with_one_panel()
+    {
+        var h = BuilderHarness.Create(NothingLoaded(), startOnNew: false);
         h.Backend.Calls.Take(4).Should().Equal("LoadBranding", "GetProfiles", "GetActiveProfile", "GetAddinLookup");
         h.Model.ProfileOptions.Select(o => o.Display).Should().Equal("Architecture", "Structure");
-        h.Model.ProfileOptions.Select(o => o.IsLoaded).Should().Equal(true, false);
+        h.Model.ProfileOptions.Select(o => o.IsLoaded).Should().Equal(false, false);
         h.Model.ProfileOptions.Should().OnlyContain(o => !o.IsCurrent, "a new profile is in the editor");
         h.Model.SelectedProfileOption!.IsNew.Should().BeTrue();
         h.Model.DisplayName.Should().Be("New profile");
@@ -58,6 +66,102 @@ public class ProfileBuilderViewModelTests
         h.Model.IsDirty.Should().BeFalse("the auto-added panel is part of the clean baseline");
         h.Model.SaveCommand.CanExecute(null).Should().BeFalse("Save is enabled only when there are changes");
         h.Model.CatalogCount.Should().Be(15);
+    }
+
+    [Fact]
+    public void Boot_opens_on_the_loaded_profile_as_picking_it_from_the_menu_does()
+    {
+        // VM finding F5 (FnB decision): the Builder opens on the profile active_profile.json names, by id.
+        var h = BuilderHarness.Create(startOnNew: false);
+        h.Model.SelectedProfileOption.Should().BeSameAs(h.Option("Architecture"));
+        h.Option("Architecture").IsCurrent.Should().BeTrue();
+        h.Option("Structure").IsCurrent.Should().BeFalse();
+        h.Model.IsEditMode.Should().BeTrue();
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        h.Model.ProfileName.Should().Be("Architecture");
+        h.Model.DisplayName.Should().Be("Architecture");
+        h.Model.Profile.Id.Should().Be(BuilderFixtures.ArchId);
+        h.Model.ProfileTab.Should().Be("Studio Arch");
+        h.Model.SelectedPanel.Should().BeSameAs(h.Model.Panels[0]);
+        h.Model.IsDirty.Should().BeFalse("a consistent profile opens clean");
+        h.Model.Toast.IsOpen.Should().BeFalse();
+
+        // The same editor as picking it after + New profile.
+        var picked = BuilderHarness.Create();
+        picked.Model.SelectedProfileOption = picked.Option("Architecture");
+        ProfileEditing.Snapshot(h.Model.Profile).Should().Be(ProfileEditing.Snapshot(picked.Model.Profile));
+    }
+
+    [Fact]
+    public void Boot_opens_a_new_profile_when_the_loaded_id_is_not_in_the_library()
+    {
+        var backend = BuilderFixtures.Backend();
+        backend.Active = new ActiveProfile { ProfileName = "Gone", ProfileId = "0d6c1e7a-gone", ProfileFile = "Gone_2026-10-30.json" };
+        var h = BuilderHarness.Create(backend, startOnNew: false);
+        h.Model.SelectedProfileOption!.IsNew.Should().BeTrue();
+        h.Model.IsEditMode.Should().BeFalse();
+        h.Model.Panels.Should().ContainSingle().Which.Name.Should().Be("Panel 1");
+        h.Model.ProfileOptions.Should().OnlyContain(o => !o.IsCurrent && !o.IsLoaded);
+        h.Model.IsDirty.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Boot_opens_on_a_loaded_legacy_profile_with_no_id_by_its_file()
+    {
+        var backend = BuilderFixtures.Backend();
+        var legacy = LoaderFixtures.Structure();
+        legacy.Id = null;
+        legacy.ProfileName = "Legacy";
+        backend.Library.Add(new ProfileEntry("Legacy.json", legacy));
+        backend.Active = ActiveProfile.FromProfile(legacy, "legacy.JSON", ["Analyze"], true); // the file, matched case-insensitively
+        var h = BuilderHarness.Create(backend, startOnNew: false);
+        h.Model.SelectedProfileOption.Should().BeSameAs(h.Option("Legacy"));
+        h.Model.IsEditMode.Should().BeTrue();
+        h.Model.ProfileName.Should().Be("Legacy");
+        h.Model.IsDirty.Should().BeTrue("a profile with no id counts as changed until Save gives it one (review N7)");
+        // The green dot and the menu's mark: it is the loaded one, known by its file until it has an id.
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        h.Option("Legacy").IsLoaded.Should().BeTrue();
+        h.Option("Legacy").Note.Should().Be("loaded · tab \"Studio Struct\"");
+        h.Option("Architecture").IsLoaded.Should().BeFalse();
+
+        h.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
+        h.Model.SelectedProfileOption = h.Option("Structure");
+        h.Model.IsLoadedProfile.Should().BeFalse("Structure is not the loaded one");
+        var raised = new List<string?>();
+        h.Model.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        h.Model.SelectedProfileOption = h.Option("Legacy");
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        raised.Should().Contain(nameof(ProfileBuilderViewModel.IsLoadedProfile));
+    }
+
+    [Fact]
+    public void Boot_on_a_loaded_profile_that_needs_a_stack_repair_shows_the_repair_and_is_dirty()
+    {
+        var backend = BuilderFixtures.Backend().With(StackFixtures.Shared());
+        backend.Active = ActiveProfile.FromProfile(StackFixtures.Shared(), ProfileStore.CanonicalFileName(StackFixtures.Shared()));
+        var h = BuilderHarness.Create(backend, startOnNew: false);
+        h.Model.SelectedProfileOption.Should().BeSameAs(h.Option("Shared Stack"));
+        h.Model.IsLoadedProfile.Should().BeTrue();
+        h.Model.Profile.Stacks.Should().HaveCount(2, "the shared stack is split, as when it is picked");
+        h.Model.IsDirty.Should().BeTrue("the repair is an unsaved change");
+        // The toast waits for the window (its first render calls ShowBootToast), so its time runs while it shows.
+        h.Model.Toast.IsOpen.Should().BeFalse();
+        h.Model.ShowBootToast();
+        AssertToast(h, "This profile's stacks were repaired when it opened (1). Save to keep the repair.", BannerKind.Info);
+        h.Model.Toast.Dismiss();
+        h.Model.ShowBootToast();
+        h.Model.Toast.IsOpen.Should().BeFalse("it shows once");
+    }
+
+    [Fact]
+    public void A_held_back_boot_toast_is_dropped_when_another_profile_opens_first()
+    {
+        var backend = BuilderFixtures.Backend().With(StackFixtures.Shared());
+        backend.Active = ActiveProfile.FromProfile(StackFixtures.Shared(), ProfileStore.CanonicalFileName(StackFixtures.Shared()));
+        var h = BuilderHarness.Create(backend); // + New profile picked after boot (the repair discarded)
+        h.Model.ShowBootToast();
+        h.Model.Toast.IsOpen.Should().BeFalse("the repair toast was about the profile that is no longer open");
     }
 
     [Fact]
@@ -651,7 +755,7 @@ public class ProfileBuilderViewModelTests
         option.IsLoaded.Should().BeTrue();
         option.IsCurrent.Should().BeTrue();
         option.Note.Should().Be("loaded · tab \"Studio Arch\"");
-        AssertToast(h, "Saved & ribbon reloaded.", BannerKind.Success);
+        AssertToast(h, "Saved. The ribbon updates when you close the Builder.", BannerKind.Success);
     }
 
     [Fact]
@@ -746,7 +850,7 @@ public class ProfileBuilderViewModelTests
         (await save).Should().BeTrue();
 
         h.Backend.Loads.Single().Should().BeEquivalentTo(new LoadRequest("Architecture", BuilderFixtures.ArchId, true, ["Analyze"]));
-        AssertToast(h, "Saved & ribbon reloaded.", BannerKind.Success);
+        AssertToast(h, "Saved. The ribbon updates when you close the Builder.", BannerKind.Success);
         h.Model.IsWorking.Should().BeFalse();
     }
 

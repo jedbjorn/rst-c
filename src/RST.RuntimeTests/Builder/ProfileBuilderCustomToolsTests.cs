@@ -406,10 +406,10 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Assert.Equal(1, CustomToolFixtures.Holding(h.Model.Profile, newLink));
             Assert.Equal("BIM help", h.Model.Panels[2].Tile(1).Name);
 
-            // The loaded profile (Structure) changed: the ribbon reloaded through the save path's reload.
+            // The loaded profile (Structure) changed: a ribbon reload is queued through the save path's reload.
             var load = Assert.Single(h.Backend.Loads);
             Assert.Equal((LoaderFixtures.StructId, "Structure"), (load.Id, load.Name));
-            Assert.Equal("Updated in 2 profiles. Ribbon reloaded.", h.Model.Toast.Text);
+            Assert.Equal("Updated in 2 profiles. The ribbon updates when you close the Builder.", h.Model.Toast.Text);
             Assert.False(h.Model.IsDirty, "the change is on disk: the clean baseline took it too");
             Assert.Contains("BIM help", Labels(window));
             Assert.DoesNotContain("Help", Labels(window));
@@ -580,7 +580,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             Assert.Equal("Wiki", Shape(h, 2));
             Assert.DoesNotContain("Help", Labels(window));
             Assert.Single(h.Backend.Loads);
-            Assert.Equal("Removed from 2 profiles. Ribbon reloaded.", h.Model.Toast.Text);
+            Assert.Equal("Removed from 2 profiles. The ribbon updates when you close the Builder.", h.Model.Toast.Text);
             Assert.False(h.Model.IsDirty);
         }
         finally
@@ -763,7 +763,7 @@ public sealed class ProfileBuilderCustomToolsTests : IDisposable
             WindowCapture.DoEvents();
             Assert.False(h.Model.IsWorking);
             Assert.True(current.EditCommand.CanExecute(null));
-            Assert.Equal("Updated in 1 profile. Ribbon reloaded.", h.Model.Toast.Text);
+            Assert.Equal("Updated in 1 profile. The ribbon updates when you close the Builder.", h.Model.Toast.Text);
         }
         finally
         {

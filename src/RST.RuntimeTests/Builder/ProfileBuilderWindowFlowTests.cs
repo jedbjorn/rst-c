@@ -53,13 +53,17 @@ public class ProfileBuilderWindowFlowTests
         }
     });
 
-    /// <summary>A real window over the fixture backend, with the dispatcher-posting view-model (post: null).</summary>
+    /// <summary>
+    /// A real window over the fixture backend, with the dispatcher-posting view-model (post: null). It
+    /// opens on the loaded Architecture (F5); these flows start from + New profile, picked first.
+    /// </summary>
     private static Opened Open()
     {
         var backend = BuilderFixtures.Backend();
         var dialogs = new FakeDialogs();
         var model = new ProfileBuilderViewModel(backend, dialogs, new ManualClock().Schedule);
         model.Initialize();
+        model.NewProfileCommand.Execute(null);
         var window = new ProfileBuilderWindow(model);
         var opened = new Opened { Window = window, Backend = backend, Dialogs = dialogs };
         window.Closed += (_, _) => opened.Closed = true;
