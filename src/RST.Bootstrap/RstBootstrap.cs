@@ -40,7 +40,9 @@ public sealed class RstBootstrap : IExternalApplication
                 major,
                 File.Exists);
 
-            BootLog.Info("RST.Bootstrap loading");
+            // SC-054: the release version (and its commit) and the runtime, before anything can fail.
+            var bootBuild = BuildText(typeof(RstBootstrap).Assembly);
+            BootLog.Info($"RST.Bootstrap {ProductText(bootBuild)} ({bootBuild}) loading, {RuntimeInformation.FrameworkDescription}");
             BootLog.Info($"  bootstrapDll={bootstrapDll}");
             BootLog.Info($"  revitVersion={revitVersion} major={major}");
             BootLog.Info($"  appDir={appDir} (exists={Directory.Exists(appDir)}, layout: {layout})");
@@ -91,7 +93,7 @@ public sealed class RstBootstrap : IExternalApplication
             BootLog.Info("AssemblyDependencyResolver registered");
 
             var engineAsm = AssemblyLoadContext.Default.LoadFromAssemblyPath(enginePath);
-            BootLog.Info($"Engine loaded: {engineAsm.FullName}");
+            BootLog.Info($"Engine loaded: {engineAsm.FullName}, build {BuildText(engineAsm)}");
 
             const string typeName = "RST.Engine.RstApplication";
             var engineType = engineAsm.GetType(typeName, throwOnError: false);
@@ -129,6 +131,31 @@ public sealed class RstBootstrap : IExternalApplication
             BootLog.Error("OnStartup threw", ex);
             return Result.Failed;
         }
+    }
+
+    /// <summary>
+    /// An assembly's informational version (<c>3.2.0+abc1234</c>; RST.Core's <c>BuildVersion.Informational</c>, which
+    /// the bootstrap cannot reference: it stays dependency-free). Never throws.
+    /// </summary>
+    internal static string BuildText(Assembly assembly)
+    {
+        try
+        {
+            var info = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(info)) return info.Trim();
+            return assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        }
+        catch
+        {
+            return "0.0.0";
+        }
+    }
+
+    /// <summary>The product version: the informational version without its <c>+commit</c>.</summary>
+    internal static string ProductText(string build)
+    {
+        var plus = build.IndexOf('+');
+        return plus >= 0 ? build.Substring(0, plus) : build;
     }
 
     private static void LogShippedDlls(string appDir)

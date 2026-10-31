@@ -99,6 +99,14 @@ public sealed class VerifiedDownload
         return result;
     }
 
+    /// <summary>
+    /// The line logged as a download starts: <c>download: RST 3.2.0 (release v3.2.0): https://github.com/…/RST.msi,
+    /// checksums https://github.com/…/SHA256SUMS.txt</c>. Each URL is cut to its path: never a query or fragment.
+    /// </summary>
+    internal static string DownloadLine(ProductInfo product, ReleaseVersion version, Uri assetUri, Uri sumsUri) =>
+        $"download: {product.Name} {version} (release {version.Tag}): {assetUri.GetLeftPart(UriPartial.Path)}, "
+        + $"checksums {sumsUri.GetLeftPart(UriPartial.Path)}";
+
     private async Task<VerifyResult> RunCoreAsync(ProductInfo product, ReleaseVersion version, ReleaseVersion? installed, PackageKind kind,
                                                   CancellationToken cancel)
     {
@@ -118,6 +126,9 @@ public sealed class VerifiedDownload
         {
             return VerifyResult.Refused(new CheckResult(InstallProblem.NotInstallable, ex.Message));
         }
+        // SC-015: what this install or self-update fetches, and from which release. The URLs are the ones built
+        // above (no query string, no token); a redirect's signed URL is never logged.
+        _log(DownloadLine(product, version, assetUri, sumsUri));
 
         // 1. SHA256SUMS.txt, from the same release.
         var sums = await FetchTextAsync(sumsUri, UpdateHostUse.Download, Sha256Sums.MaxLength, api: false, cancel).ConfigureAwait(false);

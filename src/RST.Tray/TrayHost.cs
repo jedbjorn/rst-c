@@ -69,6 +69,9 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     public UpdateChecksState UpdateChecks => _checks;
 
+    /// <summary>The tray's informational version: the release version and its commit (<c>3.2.0+abc1234</c>).</summary>
+    private static readonly string BuildText = BuildVersion.Informational(typeof(TrayHost).Assembly);
+
     public string Version { get; } = CurrentVersion();
 
     public string LogFolder => TrayPaths.LogsDir;
@@ -171,8 +174,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     /// </summary>
     public void Start()
     {
-        Log.Information("RST tray {Version} starting (pid {Pid}, {Mode})",
-            Version, Environment.ProcessId, _args.StartHidden ? "--startup, hidden" : "window");
+        // SC-054: the build (release version and commit) and the runtime ride on the start line. Its head,
+        // "RST tray <version> starting (pid N,", is what installer/ci-tray-*.ps1 wait for.
+        Log.Information("RST tray {Version} starting (pid {Pid}, {Mode}), build {Build}, {Runtime}",
+            Version, Environment.ProcessId, _args.StartHidden ? "--startup, hidden" : "window", BuildText, BuildVersion.Runtime());
         if (TrayStartup.Run(StartSteps()) is not { } failed) return;
         ExitReason = "could not start: " + failed;
         _quitting = true;
@@ -707,11 +712,5 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     }
 
     /// <summary>The tray's version: its informational version without the source-revision suffix.</summary>
-    private static string CurrentVersion()
-    {
-        var info = typeof(TrayHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (string.IsNullOrWhiteSpace(info)) return typeof(TrayHost).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        var plus = info.IndexOf('+');
-        return plus >= 0 ? info[..plus] : info;
-    }
+    private static string CurrentVersion() => BuildVersion.Product(BuildText);
 }
