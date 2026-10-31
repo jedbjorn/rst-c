@@ -103,6 +103,15 @@ internal sealed class SessionBuilder
         return this;
     }
 
+    /// <summary>doc_saved_as re-identifying the open doc that was at <paramref name="previousLocalPath"/>.</summary>
+    public SessionBuilder SaveAs(DateTimeOffset ts, DocumentIdentity newId, string previousLocalPath)
+    {
+        var e = Add(TelemetryEventTypes.DocSavedAs, ts);
+        newId.WriteTo(e);
+        e.SetField(TelemetryFields.PreviousLocalPath, previousLocalPath);
+        return this;
+    }
+
     /// <summary>A doc_closing with no doc_closed (Revit stopped while closing).</summary>
     public SessionBuilder ClosingOnly(DateTimeOffset ts, DocumentIdentity id)
     {

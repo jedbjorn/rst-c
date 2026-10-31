@@ -235,6 +235,8 @@ internal static class SessionReplay
             return end ?? endTs;
         }
 
+        static DateTimeOffset EarlierOf(DateTimeOffset? a, DateTimeOffset b) => a is { } x && x < b ? x : b;
+
         // The live doc an identity names: the resolver's unique candidate, else
         // a lone doc under its exact key; nothing when ambiguous (SC-038/SC-042).
         (string? Key, int Index) Locate(DocumentIdentity id)
@@ -337,9 +339,13 @@ internal static class SessionReplay
                     if (oldKey is null && LineageFallback(allOpenDocs, id.CreationGuid, prevPath) is { } lineage)
                         (oldKey, oldIndex) = lineage;
 
+                    // A close already under way (doc_closing seen) survives the
+                    // re-identification: the doc still stops being active there.
+                    DateTimeOffset? carriedClosing = null;
                     if (oldKey is not null)
                     {
                         var oldDocs = allOpenDocs[oldKey];
+                        carriedClosing = oldDocs[oldIndex].ClosingTs;
                         if (newKey is not null && KeyEquals(oldKey, newKey))
                         {
                             // Same key = same bookkeeping doc — only the
@@ -350,11 +356,11 @@ internal static class SessionReplay
                             // interval starts at the save; one that
                             // matched and re-identified out of the view
                             // stops occupying it here (SC-043).
-                            oldDocs[oldIndex] = new OpenDoc(id, savedMatched);
+                            oldDocs[oldIndex] = new OpenDoc(id, savedMatched, carriedClosing);
                             if (savedMatched && !openDocs.ContainsKey(oldKey))
                                 openDocs[oldKey] = e.Ts;
                             else if (!savedMatched)
-                                RetireMatchedIfLast(oldKey, oldDocs, e.Ts);
+                                RetireMatchedIfLast(oldKey, oldDocs, e.Ts, EarlierOf(carriedClosing, e.Ts));
                             break;
                         }
                         // Only the doc that moved retires from the old
@@ -366,12 +372,12 @@ internal static class SessionReplay
                         // The mover's pre-save time sits inside the union
                         // either way (SC-040).
                         oldDocs.RemoveAt(oldIndex);
-                        RetireMatchedIfLast(oldKey, oldDocs, e.Ts);
+                        RetireMatchedIfLast(oldKey, oldDocs, e.Ts, EarlierOf(carriedClosing, e.Ts));
                         if (oldDocs.Count == 0) allOpenDocs.Remove(oldKey);
                     }
 
                     var key = newKey ?? e.EventId;
-                    var savedDoc = new OpenDoc(id, savedMatched);
+                    var savedDoc = new OpenDoc(id, savedMatched, carriedClosing);
                     if (allOpenDocs.TryGetValue(key, out var newDocs)) newDocs.Add(savedDoc);
                     else allOpenDocs[key] = new List<OpenDoc> { savedDoc };
                     if (!savedMatched) break;

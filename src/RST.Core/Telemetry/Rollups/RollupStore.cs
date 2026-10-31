@@ -147,8 +147,9 @@ internal sealed class RollupStore
                 // Membership the ledger cannot vouch for (missing, or an entry that is not a
                 // model) is unknown, never "touched nothing": the file re-folds, and nothing is
                 // sealed or deleted on its word. An empty list stays a genuinely empty session.
-                var unknown = f.Models is null || f.Models.Any(m => m is null || !ModelKey.IsValidId(m.ModelId));
-                f.Models = (f.Models ?? new List<LedgerModel>()).Where(m => m is not null && ModelKey.IsValidId(m.ModelId)).ToList();
+                var onDisk = f.ModelsOnDisk; // null: "models" was absent or null
+                var unknown = onDisk is null || onDisk.Any(m => m is null || !ModelKey.IsValidId(m.ModelId));
+                f.Models = (onDisk ?? new List<LedgerModel>()).Where(m => m is not null && ModelKey.IsValidId(m.ModelId)).ToList();
                 foreach (var m in f.Models)
                     if (m.Sealed is not (SealStates.No or SealStates.Current or SealStates.Both)) m.Sealed = SealStates.No;
                 if (unknown && f.Unclosed != true)

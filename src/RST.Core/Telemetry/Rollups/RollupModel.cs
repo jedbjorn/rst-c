@@ -442,7 +442,26 @@ internal sealed class LedgerRow
     public long Size { get; set; }
     public DateTimeOffset LastWriteUtc { get; set; }
     public long FoldedPass { get; set; }
-    public List<LedgerModel> Models { get; set; } = new();
+
+    private List<LedgerModel>? _models;
+
+    /// <summary>The models the file touched. On disk this is "models"; a row read without it
+    /// (absent or null) has <see cref="ModelsOnDisk"/> null — unknown membership, never "touched
+    /// nothing".</summary>
+    [JsonIgnore]
+    public List<LedgerModel> Models
+    {
+        get => _models ??= new List<LedgerModel>();
+        set => _models = value;
+    }
+
+    /// <summary>"models" exactly as read or written: null when the property was absent or null.</summary>
+    [JsonPropertyName("models")]
+    public List<LedgerModel>? ModelsOnDisk
+    {
+        get => _models;
+        set => _models = value;
+    }
 
     /// <summary>True for a file seen live or without session_end (recovery has not closed it):
     /// nothing is folded from it, and it is looked at again only once it changes.</summary>

@@ -672,6 +672,7 @@ public sealed class FoldPass : IDisposable
         row.SessionGuid = f.SessionGuid ?? "";
         row.Size = f.Size;
         row.LastWriteUtc = f.LastWriteUtc;
+        row.Models = new List<LedgerModel>();
         row.Unclosed = true;
         _ledgerDirty = true;
     }
