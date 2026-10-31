@@ -188,6 +188,29 @@ public sealed class VerifiedDownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task The_download_logs_the_release_tag_and_the_asset_url_but_never_a_signed_redirect()
+    {
+        // SC-015: support can tell from the tray log what an install or self-update fetched.
+        Release();
+        (await Run(V120, installed: V110)).Ok.Should().BeTrue();
+        _log.Should().Contain(
+            "download: Gantt-It 1.2.0 (release v1.2.0): https://github.com/jedbjorn/gantt-it/releases/download/v1.2.0/GanttIt-1.2.0.msi, "
+            + "checksums https://github.com/jedbjorn/gantt-it/releases/download/v1.2.0/SHA256SUMS.txt");
+        _log.Should().NotContain(l => l.Contains("sig=") || l.Contains("githubusercontent"),
+            "the redirect's signed URL is the CDN's, and stays out of the log");
+    }
+
+    [Fact]
+    public void The_download_line_cuts_each_url_to_its_path()
+    {
+        var line = VerifiedDownload.DownloadLine(_gantt, V120,
+            new Uri("https://github.com/jedbjorn/gantt-it/releases/download/v1.2.0/GanttIt-1.2.0.msi?token=secret#x"),
+            new Uri("https://github.com/jedbjorn/gantt-it/releases/download/v1.2.0/SHA256SUMS.txt?token=secret"));
+        line.Should().NotContain("secret").And.NotContain("?").And.NotContain("#");
+        line.Should().StartWith("download: Gantt-It 1.2.0 (release v1.2.0): https://github.com/");
+    }
+
+    [Fact]
     public async Task A_wrong_hash_is_refused()
     {
         var r = Release();

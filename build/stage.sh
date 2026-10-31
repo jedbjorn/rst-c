@@ -20,8 +20,14 @@
 #               RST.Tray.deps.json, RST.UI.dll, RST.Core.dll, *.pdb}
 # framework-dependent net8.0-windows (RollForward=Major), win-x64 apphost.
 # It is built with the R25 configuration, where RST.UI is net8.0-windows
-# too. RST_VERSION (a.b.c, optional) stamps the tray's version, which its
-# About page shows; unset, the tray says 0.0.0-dev.
+# too.
+#
+# RST_VERSION (a.b.c, optional; SC-054) is the release version, passed as
+# -p:Version to every target: each RST assembly gets FileVersion a.b.c.0 and
+# InformationalVersion a.b.c+<commit> (Directory.Build.props), which the
+# session, boot and tray logs and the tray's About page print. Unset or empty
+# (a dev or PR build), it is 0.1.0-dev. build/check-version-stamp.py then
+# checks the staged binaries carry it.
 
 set -euo pipefail
 
@@ -33,11 +39,11 @@ fi
 MAJOR="$1"
 KIND="${2:-Release}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="${RST_VERSION:-0.1.0-dev}"
 
 # ---- tray target: one build for every Revit year.
 if [ "$MAJOR" = "tray" ]; then
   OUT="$ROOT/build/Tray"
-  VERSION="${RST_VERSION:-0.0.0-dev}"
   echo "==> dotnet publish RST.Tray -c \"$KIND R25\" (version $VERSION)"
   rm -rf "$OUT"
   dotnet publish "$ROOT/src/RST.Tray/RST.Tray.csproj" -c "$KIND R25" \
@@ -51,6 +57,9 @@ if [ "$MAJOR" = "tray" ]; then
   done
   grep -q '"rollForward": "Major"' "$OUT/RST.Tray.runtimeconfig.json" \
     || { echo "RST.Tray.runtimeconfig.json lacks rollForward Major" >&2; exit 2; }
+  echo "==> version stamp ($VERSION)"
+  python3 "$ROOT/build/check-version-stamp.py" "$VERSION" \
+    "$OUT/RST.Tray.exe" "$OUT/RST.Tray.dll" "$OUT/RST.UI.dll" "$OUT/RST.Core.dll"
   echo "==> staged:"
   ( cd "$ROOT/build" && find Tray -type f | sort | sed 's/^/    /' )
   echo "==> done"
@@ -69,8 +78,8 @@ BOOT_BIN="$ROOT/src/RST.Bootstrap/bin/$CONFIG/$TFM"
 ADDIN_SRC="$ROOT/src/RST.Bootstrap/RST.addin"
 OUT="$ROOT/build/$MAJOR"
 
-echo "==> dotnet build -c \"$CONFIG\""
-dotnet build "$ROOT/RST-C.sln" -c "$CONFIG" --nologo -v minimal
+echo "==> dotnet build -c \"$CONFIG\" (version $VERSION)"
+dotnet build "$ROOT/RST-C.sln" -c "$CONFIG" -p:Version="$VERSION" --nologo -v minimal
 
 if [ ! -d "$ENGINE_BIN" ] || [ ! -d "$BOOT_BIN" ]; then
   echo "expected bin dirs missing after build:" >&2
@@ -95,6 +104,12 @@ cp -r "$ENGINE_BIN/." "$OUT/app/"
 rm -f "$OUT/app/RST.Bootstrap.dll" \
       "$OUT/app/RST.Bootstrap.pdb" \
       "$OUT/app/RST.Bootstrap.deps.json"
+
+# SC-054: the binaries say which release they are (FileVersion and the
+# informational version), so a log or Explorer's Properties can tell.
+echo "==> version stamp ($VERSION)"
+python3 "$ROOT/build/check-version-stamp.py" "$VERSION" \
+  "$OUT/addins/RST.Bootstrap.dll" "$OUT/app/RST.Engine.dll" "$OUT/app/RST.UI.dll" "$OUT/app/RST.Core.dll"
 
 echo "==> staged:"
 ( cd "$OUT" && find addins app -type f | sort | sed 's/^/    /' )

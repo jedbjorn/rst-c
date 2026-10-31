@@ -24,6 +24,8 @@ name: _build (reusable)
 #                    major is a hard gate: an R27 failure fails the
 #                    workflow and blocks a release (feature #11, D7: no
 #                    skip-R27 switch).
+#                    Each staged RST binary must carry the version passed in
+#                    (SC-054, build/check-version-stamp.py).
 #   • stage-tray   — build/stage.sh tray: RST.Tray.exe once, not per major
 #                    (feature #17), uploaded as stage-Tray.
 #   • msi-unified  — Windows runner. Downloads R25 + R26 + R27 artifacts,
@@ -213,7 +215,12 @@ jobs:
         if: matrix.major == 'R27'
         with:
           dotnet-version: '10.0.x'
+      # SC-054: the release's a.b.c stamps every RST assembly (FileVersion,
+      # InformationalVersion); 0.1.0-dev on push/PR builds. stage.sh checks
+      # the staged binaries carry it (build/check-version-stamp.py).
       - run: build/stage.sh ${{ matrix.major }} Release
+        env:
+          RST_VERSION: ${{ inputs.product_version }}
       # Decision #33: Revit's shared load context gets no third-party DLL
       # from RST. Fails on any DLL that is not RST.* and not named in
       # build/third-party-allowlist.txt (empty).
@@ -228,7 +235,7 @@ jobs:
   # RST tray (feature #17, spec #20 §1): RST.Tray.exe is built once, not per
   # Revit year (net8.0-windows, RollForward=Major), by build/stage.sh tray
   # into build/Tray/. RST.msi's Main feature installs it; the version stamp
-  # is the release's a.b.c (0.0.0-dev on push/PR builds).
+  # is the release's a.b.c (0.1.0-dev on push/PR builds).
   stage-tray:
     name: Stage Tray
     runs-on: ubuntu-latest
