@@ -51,6 +51,24 @@ public static class LocalPathGuard
             is DriveType.Fixed or DriveType.Removable or DriveType.Ram or DriveType.CDRom;
     }
 
+    /// <summary>
+    /// model_stats' file_size_bytes (spec #24 Capture Additions): the
+    /// file's length when <paramref name="path"/> verifies as local,
+    /// otherwise null — network, cloud and unsaved (empty path) models
+    /// all read as null, and so does any failure of the length read
+    /// itself (a missing file, a sharing violation). Never throws.
+    /// </summary>
+    public static long? LocalFileLength(string? path) =>
+        LocalFileLength(path, ProbeDriveType, p => new FileInfo(p).Length);
+
+    internal static long? LocalFileLength(
+        string? path, Func<char, DriveType?> driveTypeProbe, Func<string, long> readLength)
+    {
+        if (!IsLocalFile(path, driveTypeProbe)) return null;
+        try { return readLength(path); }
+        catch { return null; }
+    }
+
     private static bool IsSeparator(char c) => c is '\\' or '/';
 
     private static DriveType? ProbeDriveType(char driveLetter)

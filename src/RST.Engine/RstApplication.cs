@@ -81,7 +81,7 @@ public sealed class RstApplication : IExternalApplication
             // Activity telemetry (doc #5). Handlers are cheap capture +
             // enqueue; all file IO lives on the collector's writer thread.
             // Its own guard: telemetry failing must never fail OnStartup.
-            try { _telemetry = TelemetryCollector.Start(application, ThisVersion, m => Log.Warning("Telemetry: {Message}", m)); }
+            try { _telemetry = TelemetryCollector.Start(application, ThisVersion, m => Log.Warning("Telemetry: {Message}", m), m => Log.Information("Telemetry: {Message}", m)); }
             catch (Exception ex) { Log.Warning(ex, "Telemetry startup failed — telemetry off for this session"); }
 
             RibbonBuilder.Build(application);
