@@ -1,7 +1,8 @@
 // rst-c's own (not vendored): the Builder's Custom Tool dialog (feature #18, spec #19, WU4). All
 // behavior is in CustomToolDialogModel; Confirm closes with true only when the label and address
 // pass; the icon button opens the family icon picker in its own window (IconPickerWindow), since the
-// picker's 700 px card does not fit this dialog.
+// picker's 700 px card does not fit this dialog. Escape is Cancel, on a fresh press only, and closes
+// the icon picker first while it is open (EscapeGuard.CancelOnEscape, decision #62).
 
 using System.Windows;
 using RST.UI.Dialogs;
@@ -18,6 +19,8 @@ public partial class CustomToolDialog : Window
         DarkTitleBar.Attach(this);
         Model = model ?? throw new ArgumentNullException(nameof(model));
         DataContext = model;
+        // Cancel (decision #62); never past the icon picker window it opened, which takes the press.
+        EscapeGuard.CancelOnEscape(this);
         Loaded += (_, _) => UiGuard.Run("Custom tool dialog: loaded", () =>
         {
             LabelBox.Focus();
