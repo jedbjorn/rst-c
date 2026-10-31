@@ -69,7 +69,12 @@ public sealed record FoldPassResult(
     int Folded,
     int Failed,
     int Sealed,
-    int Deleted);
+    int Deleted)
+{
+    /// <summary>Session files this pass looked at and left alone: live (a Revit instance holds
+    /// them) or not yet closed by recovery. They are tried again on a later pass.</summary>
+    public int SkippedFiles { get; init; }
+}
 
 public sealed class ActivityFoldEngine
 {
@@ -124,12 +129,15 @@ public sealed class ActivityFoldEngine
                 sealedCount = pass.Seal();
                 deleted = pass.Cleanup();
             }
-            return new FoldPassResult(false, false, pass.Folded, pass.Failed, sealedCount, deleted);
+            return new FoldPassResult(false, false, pass.Folded, pass.Failed, sealedCount, deleted) { SkippedFiles = pass.SkippedFiles };
         }
         catch (Exception ex)
         {
             SafeLog(_options.Log, "activity fold: pass failed (retried next pass): " + ex.Message);
-            return new FoldPassResult(false, false, pass?.Folded ?? 0, (pass?.Failed ?? 0) + 1, sealedCount, deleted);
+            return new FoldPassResult(false, false, pass?.Folded ?? 0, (pass?.Failed ?? 0) + 1, sealedCount, deleted)
+            {
+                SkippedFiles = pass?.SkippedFiles ?? 0,
+            };
         }
         finally
         {
@@ -225,6 +233,9 @@ public sealed class FoldPass : IDisposable
     public int Folded { get; private set; }
     public int Failed { get; private set; }
 
+    /// <summary>Session files this pass left alone because they are live or not yet closed.</summary>
+    public int SkippedFiles { get; private set; }
+
     /// <summary>Session files not yet folded (or changed since) that this pass will try.</summary>
     public int RemainingToFold => _toFold.Count - _cursor;
 
@@ -247,6 +258,7 @@ public sealed class FoldPass : IDisposable
             {
                 if (_o.IsLive(f.Path))
                 {
+                    SkippedFiles++;
                     RememberUnclosed(f);
                     continue;
                 }
@@ -256,6 +268,7 @@ public sealed class FoldPass : IDisposable
                 var info = SessionInfo.Read(events, f.Name);
                 if (!info.Closed || info.SessionGuid is null)
                 {
+                    SkippedFiles++;
                     RememberUnclosed(f with { Size = size, LastWriteUtc = lastWrite }); // recovery's job first
                     continue;
                 }
