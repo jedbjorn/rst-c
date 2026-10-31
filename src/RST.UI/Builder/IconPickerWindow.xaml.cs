@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the family icon picker in its own window (feature #18, spec #19, WU4),
 // for the Custom Tool dialog. The picker's model reports its outcome once (a committed value, or
-// cancelled); the window closes on it.
+// cancelled); the window closes on it. Escape is the picker's own (EscapeGuard.CancelOnEscape).
 
 using System.Windows;
 using RST.Core.Builder;
@@ -19,11 +19,15 @@ public partial class IconPickerWindow : Window
     {
         InitializeComponent();
         DarkTitleBar.Attach(this);
-        Picker.DataContext = create(outcome =>
+        var picker = create(outcome =>
         {
             _outcome = outcome;
             if (IsVisible) Close();
         });
+        Picker.DataContext = picker;
+        // The picker takes Escape while it holds the focus (the variant row first, then the picker);
+        // a press on the window itself does the same, and a held Escape does nothing (decision #62).
+        EscapeGuard.CancelOnEscape(this, picker.Escape);
     }
 
     /// <summary>

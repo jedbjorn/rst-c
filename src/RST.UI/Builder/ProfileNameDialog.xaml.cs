@@ -1,6 +1,7 @@
 // rst-c's own (not vendored): the Builder's Rename… and Duplicate… dialog (feature #18, spec #19,
 // WU2). The name box takes focus with its text selected; Confirm closes only when the name passes
 // its check (ProfileNameDialogModel.TryConfirm), otherwise the refusal shows and the box keeps focus.
+// Escape is Cancel, on a fresh press only (EscapeGuard.CancelOnEscape, decision #62).
 
 using System.Windows;
 using System.Windows.Threading;
@@ -18,6 +19,7 @@ public partial class ProfileNameDialog : Window
         DarkTitleBar.Attach(this);
         Model = model ?? throw new ArgumentNullException(nameof(model));
         DataContext = model;
+        EscapeGuard.CancelOnEscape(this); // Cancel (decision #62)
         Loaded += (_, _) => UiGuard.Run("Profile name dialog: loaded", () =>
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UiGuard.Run("Profile name dialog: focus", FocusName)));
     }

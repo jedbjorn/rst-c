@@ -1,5 +1,6 @@
 // Adapted from splash-it src/SplashIt.UI/Dialogs/DialogService.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/DialogService.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); comments say RST; SaveFile's default extension comes from the suggested file name (rst-c exports .zip, splash-it .json); Choose added (a three-way MessageDialog).
+// Changes: namespaces (SplashIt.* to RST.*); comments say RST; SaveFile's default extension comes from the suggested file name (rst-c exports .zip, splash-it .json); Choose added (a three-way MessageDialog);
+// EscapeCancels (decision #62: the add-in's dialogs take Escape by EscapeGuard's rules; the tray app's keep WPF's own).
 
 using System.Windows;
 using System.Windows.Input;
@@ -17,6 +18,13 @@ public sealed class DialogService : IDialogService
     /// <summary>The window that owns the dialogs (the Loader, Builder or Health window).</summary>
     public Window? Owner { get; set; }
 
+    /// <summary>
+    /// Escape cancels the dialogs this service opens on a fresh press only, a message as its OK does
+    /// (EscapeGuard.CancelOnEscape). The add-in's windows turn it on (decision #62); the tray app,
+    /// which the decision leaves out, keeps WPF's own Escape (the Cancel button's).
+    /// </summary>
+    public bool EscapeCancels { get; init; }
+
     public void ShowMessage(string title, string message, string automationId = MessageDialog.MessageId) =>
         Show(new MessageDialogModel(title, title, message, []), automationId);
 
@@ -28,6 +36,7 @@ public sealed class DialogService : IDialogService
         var dialog = new MessageDialog(
             new MessageDialogModel(title, title, message, [], primaryText, HasCancel: true) { SecondaryText = secondaryText },
             automationId) { Owner = Owner };
+        if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
         return dialog.ShowDialog() == true ? dialog.Choice : DialogChoice.Cancel;
     }
 
@@ -35,6 +44,7 @@ public sealed class DialogService : IDialogService
     {
         var workArea = Owner is null ? SystemParameters.WorkArea : MonitorWorkArea.Of(Owner);
         var dialog = new ColorPickerDialog(current, palette, title, PointerOnScreen(), workArea) { Owner = Owner };
+        if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
         return dialog.ShowDialog() == true ? dialog.Result : null;
     }
 
@@ -59,6 +69,7 @@ public sealed class DialogService : IDialogService
     private bool Show(MessageDialogModel model, string automationId)
     {
         var dialog = new MessageDialog(model, automationId) { Owner = Owner };
+        if (EscapeCancels) EscapeGuard.CancelOnEscape(dialog);
         return dialog.ShowDialog() == true;
     }
 
