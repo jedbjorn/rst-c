@@ -41,7 +41,22 @@
     <Company>Designs/OS</Company>
     <Authors>jedbjorn</Authors>
     <Copyright>© 2026 Designs/OS</Copyright>
-    <Version>0.1.0-alpha</Version>
+    <!-- The release version (SC-054, SC-015): one source for every RST assembly. CI passes the
+         release's a.b.c as -p:Version (build/stage.sh, from RST_VERSION); a dev or PR build is
+         0.0.0-dev. The SDK derives FileVersion (a.b.c.0) and InformationalVersion
+         (a.b.c+<short commit>, see RstShortSourceRevision below) from it, and the session log
+         header, the boot log and the tray log print them (docs/logging.md). -->
+    <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
+    <!-- AssemblyVersion stays fixed at the value every release has shipped (0.1.0.0), whatever
+         the release: the bootstrap's assembly resolver (docs/DEVELOPING.md, "The bootstrap's
+         assembly resolver", decision #32) compares RST's own assemblies by version and declines a
+         different major, so a per-release AssemblyVersion would let one RST copy in a Revit
+         process refuse another. Change it only with the resolver in mind. -->
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <!-- The SDK would copy AssemblyVersion into FileVersion: derive it from Version instead
+         (3.2.0 and 3.2.0-rc.1 give 3.2.0.0; 0.0.0-dev gives 0.0.0.0). -->
+    <RstNumericVersion>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</RstNumericVersion>
+    <FileVersion Condition="'$(FileVersion)' == '' and '$(RstNumericVersion)' != ''">$(RstNumericVersion).0</FileVersion>
     <RepositoryUrl>https://github.com/jedbjorn/RST-C</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
@@ -65,6 +80,15 @@
     <SignAssemblies Condition="'$(SignAssemblies)' == ''">false</SignAssemblies>
     <SignTimestampUrl Condition="'$(SignTimestampUrl)' == ''">http://timestamp.digicert.com</SignTimestampUrl>
   </PropertyGroup>
+
+  <!-- InformationalVersion carries the commit as a short (7-character) hash, 3.2.0+abc1234, not
+       the SDK's full 40-character one. Runs once the SDK has read the commit from the repository
+       and before it appends it to InformationalVersion. -->
+  <Target Name="RstShortSourceRevision" BeforeTargets="AddSourceRevisionToInformationalVersion">
+    <PropertyGroup Condition="$(SourceRevisionId.Length) &gt; 7">
+      <SourceRevisionId>$(SourceRevisionId.Substring(0, 7))</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
 
   <!-- Disable common Revit-side analyzers/warnings that conflict with the
        Revit API surface (e.g. CA1416 platform-compat, IDE0290 primary ctors). -->
