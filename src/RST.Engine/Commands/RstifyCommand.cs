@@ -39,9 +39,9 @@ public sealed class RstifyCommand : IExternalCommand
                 return Result.Succeeded;
             }
 
-            // Toggle: if any of the configured tabs is currently hidden,
-            // we're in "hidden" state — show them. Otherwise hide them.
-            bool currentlyHidden = RstifyToggle.IsCurrentlyHidden(hiddenTabs);
+            // Toggle: lift an active hide rule even if its correction budget is spent
+            // and all tabs are visible; otherwise toggle from physical visibility.
+            bool currentlyHidden = RstifyToggle.HasActiveHideRule || RstifyToggle.IsCurrentlyHidden(hiddenTabs);
             int affected = currentlyHidden
                 ? RstifyToggle.Show(hiddenTabs)
                 : RstifyToggle.Hide(hiddenTabs);

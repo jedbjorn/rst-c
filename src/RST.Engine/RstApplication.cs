@@ -372,6 +372,8 @@ public sealed class RstApplication : IExternalApplication
             }
             _uiControlledApp = null;
         }
+        try { RstifyToggle.Shutdown(); }
+        catch (Exception ex) { Log.Debug(ex, "RSTify watcher shutdown failed (non-fatal)"); }
         try { _switchScheduler?.Dispose(); }
         catch (Exception ex) { Log.Debug(ex, "Switch scheduler dispose failed (non-fatal)"); }
         _switchScheduler = null;

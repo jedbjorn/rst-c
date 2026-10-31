@@ -15,6 +15,14 @@
 // the same property pyRevit's RSTify uses. AdWindows is unsupported but
 // de-facto stable, same caveat as ProfileTabBuilder.
 //
+// SC-048 F4: Idling is too late to prevent a flash after a document opens.
+// AdWindows 2025/2026/2027 exposes tab PropertyChanged and an observable Tabs
+// collection. Queue a coalesced UI-dispatcher re-hide above Render priority:
+// it runs before the next paint, without mutating tabs inside Revit's notification.
+// Watch ribbon/collection replacement too. Limit corrections until Background
+// runs so a binding that keeps re-showing tabs cannot starve Input or Render;
+// Idling remains the backstop when that budget is spent.
+//
 // Thread model: every method here mutates ComponentManager.Ribbon and
 // must run on the Revit UI thread. RstifyCommand runs on UI thread by
 // virtue of being an IExternalCommand; OnStartup-time application uses
@@ -22,10 +30,17 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows.Media;
+using System.Windows.Threading;
 using AwComponentManager = Autodesk.Windows.ComponentManager;
+using AwRibbonControl = Autodesk.Windows.RibbonControl;
 using AwRibbonItem = Autodesk.Windows.RibbonItem;
+using AwRibbonTab = Autodesk.Windows.RibbonTab;
+using AwRibbonTabCollection = Autodesk.Windows.RibbonTabCollection;
 using RST.Core.Logging;
+using RST.Core.Profiles;
 
 namespace RST.Engine.Ribbon;
 
@@ -48,6 +63,14 @@ internal static class RstifyToggle
     /// leave Architecture and Annotate stranded-hidden.
     /// </summary>
     private static IReadOnlyCollection<string> _lastAppliedHidden = Array.Empty<string>();
+    private static readonly HashSet<AwRibbonTab> _watchedTabs = new();
+    private static AwRibbonControl? _watchedRibbon;
+    private static AwRibbonTabCollection? _watchedCollection;
+    private static DispatcherOperation? _pendingReassert;
+    private static DispatcherOperation? _pendingRefill;
+    private static readonly RstifyReassertBudget _reassertBudget = new();
+    private static bool _yieldLogged;
+    private static bool _settingVisibility;
 
     /// <summary>
     /// Apply the hide rule (set IsVisible=false on every tab in
@@ -59,23 +82,24 @@ internal static class RstifyToggle
     public static int Hide(IReadOnlyCollection<string> hiddenTabTitles)
     {
         if (hiddenTabTitles is null || hiddenTabTitles.Count == 0) return 0;
-        var count = SetVisibility(hiddenTabTitles, visible: false);
+        StopWatching();
         _lastAppliedHidden = SnapshotCopy(hiddenTabTitles);
+        var count = SetVisibility(hiddenTabTitles, visible: false);
+        RefreshWatchers();
         return count;
     }
 
     /// <summary>
     /// Lift the hide rule (set IsVisible=true on every tab in
-    /// <paramref name="hiddenTabTitles"/>). No-op when the list is empty.
+    /// <paramref name="hiddenTabTitles"/>). Clears tracking even when the list is empty.
     /// Returns the count of tabs actually shown. Clears the
     /// last-applied tracking — nothing is hidden after this returns.
     /// </summary>
     public static int Show(IReadOnlyCollection<string> hiddenTabTitles)
     {
-        if (hiddenTabTitles is null || hiddenTabTitles.Count == 0) return 0;
-        var count = SetVisibility(hiddenTabTitles, visible: true);
-        _lastAppliedHidden = Array.Empty<string>();
-        return count;
+        Shutdown();
+        return hiddenTabTitles is null || hiddenTabTitles.Count == 0
+            ? 0 : SetVisibility(hiddenTabTitles, visible: true);
     }
 
     /// <summary>
@@ -94,18 +118,13 @@ internal static class RstifyToggle
         // Lift the previous set first, so a profile switch from
         // {Architecture, Annotate} → {View} doesn't leave the first
         // two stranded-hidden.
-        if (_lastAppliedHidden.Count > 0)
-        {
-            SetVisibility(_lastAppliedHidden, visible: true);
-            _lastAppliedHidden = Array.Empty<string>();
-        }
+        var previous = _lastAppliedHidden;
+        Shutdown();
+        if (previous.Count > 0) SetVisibility(previous, visible: true);
 
         var hasNew = newHiddenTabs is { Count: > 0 };
         if (hasNew)
-        {
-            SetVisibility(newHiddenTabs!, visible: false);
-            _lastAppliedHidden = SnapshotCopy(newHiddenTabs!);
-        }
+            Hide(newHiddenTabs!);
 
         RefreshIcon(active: hasNew);
     }
@@ -131,21 +150,166 @@ internal static class RstifyToggle
     public static int ReassertIfDrifted()
     {
         if (_lastAppliedHidden.Count == 0) return 0;
+        RefreshWatchers();
         var ribbon = AwComponentManager.Ribbon;
         if (ribbon is null) return 0;
 
-        var titles = new HashSet<string>(_lastAppliedHidden, StringComparer.Ordinal);
+        var host = HostTabTitle();
         bool drifted = false;
         foreach (var tab in ribbon.Tabs)
         {
             if (tab is null) continue;
-            if (titles.Contains(tab.Title ?? "") && tab.IsVisible) { drifted = true; break; }
+            if (ShouldRehide(tab, host)) { drifted = true; break; }
         }
         if (!drifted) return 0;
 
         var count = SetVisibility(_lastAppliedHidden, visible: false);
         Log.Information("RstifyToggle: re-asserted hide rule after ribbon rebuild ({Count} tabs)", count);
         return count;
+    }
+
+    private static bool ShouldRehide(AwRibbonTab tab, string? host) =>
+        RstifyVisibilityRules.ShouldRehide(_lastAppliedHidden, tab.Title, tab.IsVisible,
+            _settingVisibility, (host is not null && string.Equals(tab.Title, host, StringComparison.Ordinal))
+                                || RstManagedTabs.Contains(tab.Title));
+
+    private static void RefreshWatchers()
+    {
+        try
+        {
+            if (!HasActiveHideRule) return;
+            AwComponentManager.PropertyChanged -= OnRibbonPropertyChanged;
+            AwComponentManager.PropertyChanged += OnRibbonPropertyChanged;
+            var ribbon = AwComponentManager.Ribbon;
+            if (!ReferenceEquals(ribbon, _watchedRibbon))
+            {
+                var tabsProperty = DependencyPropertyDescriptor.FromProperty(AwRibbonControl.TabsProperty, typeof(AwRibbonControl));
+                if (_watchedRibbon is not null) tabsProperty.RemoveValueChanged(_watchedRibbon, OnTabsReplaced);
+                _watchedRibbon = ribbon;
+                if (ribbon is not null) tabsProperty.AddValueChanged(ribbon, OnTabsReplaced);
+            }
+            var tabs = ribbon?.Tabs;
+            if (!ReferenceEquals(tabs, _watchedCollection))
+            {
+                if (_watchedCollection is not null) _watchedCollection.CollectionChanged -= OnTabsChanged;
+                foreach (var tab in _watchedTabs) tab.PropertyChanged -= OnTabPropertyChanged;
+                _watchedTabs.Clear();
+                _watchedCollection = tabs;
+                if (tabs is not null) tabs.CollectionChanged += OnTabsChanged;
+            }
+            if (tabs is null) return;
+
+            var live = new HashSet<AwRibbonTab>(tabs);
+            foreach (var tab in new List<AwRibbonTab>(_watchedTabs))
+                if (!live.Contains(tab))
+                {
+                    tab.PropertyChanged -= OnTabPropertyChanged;
+                    _watchedTabs.Remove(tab);
+                }
+            // Also observe Title: Revit can insert a tab before assigning its title.
+            foreach (var tab in live)
+                if (tab is not null && _watchedTabs.Add(tab))
+                    tab.PropertyChanged += OnTabPropertyChanged;
+        }
+        catch (Exception ex) { Log.Warning(ex, "RstifyToggle: refreshing visibility watchers failed"); }
+    }
+
+    private static void OnRibbonPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(e.PropertyName) && e.PropertyName != nameof(AwComponentManager.Ribbon)) return;
+        OnTabsReplaced(sender, e);
+    }
+
+    private static void OnTabsReplaced(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (!HasActiveHideRule) return;
+            RefreshWatchers();
+            QueueReassert();
+        }
+        catch (Exception ex) { Log.Warning(ex, "RstifyToggle: ribbon replacement notification failed"); }
+    }
+
+    private static void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        try
+        {
+            if (_settingVisibility || !HasActiveHideRule) return;
+            if (!string.IsNullOrEmpty(e.PropertyName) && e.PropertyName != nameof(AwRibbonTab.IsVisible)
+                && e.PropertyName != nameof(AwRibbonTab.Title)) return;
+            if (sender is AwRibbonTab tab && ShouldRehide(tab, HostTabTitle())) QueueReassert();
+        }
+        catch (Exception ex) { Log.Warning(ex, "RstifyToggle: tab visibility notification failed"); }
+    }
+
+    private static void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        try
+        {
+            if (_settingVisibility || !HasActiveHideRule) return;
+            // Refresh now to observe new objects; defer the mutations until Revit's
+            // collection-change handlers have completed (including Replace/Reset).
+            RefreshWatchers();
+            QueueReassert();
+        }
+        catch (Exception ex) { Log.Warning(ex, "RstifyToggle: tab collection notification failed"); }
+    }
+
+    private static void QueueReassert()
+    {
+        if (!HasActiveHideRule || _pendingReassert is not null) return;
+        var dispatcher = AwComponentManager.Ribbon?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted) return;
+        // Never refill at Normal priority or on watcher refresh: either can be
+        // part of the same rebuild loop. Refilling does not queue another hide.
+        _pendingRefill ??= dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _pendingRefill = null;
+            _reassertBudget.Refill();
+        }));
+        if (!_reassertBudget.TryTake())
+        {
+            if (!_yieldLogged)
+            {
+                _yieldLogged = true;
+                Log.Information("RstifyToggle: pre-render correction budget spent; yielding to the Idling backstop");
+            }
+            return;
+        }
+        _pendingReassert = dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+        {
+            _pendingReassert = null;
+            try { ReassertIfDrifted(); }
+            catch (Exception ex) { Log.Warning(ex, "RstifyToggle: pre-render re-assert failed"); }
+        }));
+    }
+
+    private static void StopWatching()
+    {
+        _pendingReassert?.Abort();
+        _pendingReassert = null;
+        _pendingRefill?.Abort();
+        _pendingRefill = null;
+        // Rule changes start fresh; this path never runs inside the correction loop.
+        _reassertBudget.Refill();
+        _yieldLogged = false;
+        AwComponentManager.PropertyChanged -= OnRibbonPropertyChanged;
+        if (_watchedRibbon is not null)
+            DependencyPropertyDescriptor.FromProperty(AwRibbonControl.TabsProperty, typeof(AwRibbonControl))
+                .RemoveValueChanged(_watchedRibbon, OnTabsReplaced);
+        _watchedRibbon = null;
+        if (_watchedCollection is not null) _watchedCollection.CollectionChanged -= OnTabsChanged;
+        _watchedCollection = null;
+        foreach (var tab in _watchedTabs) tab.PropertyChanged -= OnTabPropertyChanged;
+        _watchedTabs.Clear();
+    }
+
+    /// <summary>Release UI subscriptions and queued work without changing ribbon visibility.</summary>
+    public static void Shutdown()
+    {
+        _lastAppliedHidden = Array.Empty<string>();
+        StopWatching();
     }
 
     private static IReadOnlyCollection<string> SnapshotCopy(IReadOnlyCollection<string> source)
@@ -281,6 +445,8 @@ internal static class RstifyToggle
             if (!titleSet.Contains(title)) continue;
             try
             {
+                if (tab.IsVisible == visible) continue;
+                _settingVisibility = true;
                 tab.IsVisible = visible;
                 count++;
             }
@@ -288,6 +454,7 @@ internal static class RstifyToggle
             {
                 Log.Warning(ex, "RstifyToggle.SetVisibility: failed to set IsVisible={Visible} on tab '{Title}'", visible, title);
             }
+            finally { _settingVisibility = false; }
         }
         Log.Information("RstifyToggle: visible={Visible}, affected {Count}/{Asked} tabs", visible, count, titles.Count);
         return count;
