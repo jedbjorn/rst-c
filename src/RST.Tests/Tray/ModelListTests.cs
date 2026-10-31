@@ -213,11 +213,44 @@ public sealed class ModelListTests
     [Fact]
     public void With_a_version_filter_a_model_groups_under_the_newest_selected_version()
     {
+        // 2026.4 on 2026-10-29, 2027.1 on 2026-10-30 (the PR #179 review's case).
         var both = new Model("Both").Day(Ago(1), 5, version: "2027", sub: "2027.1").Day(Ago(2), 5, version: "2026", sub: "2026.4");
-        var r = Q(Index(both), versions: new[] { "2026" });
+        var index = Index(both);
 
-        r.Groups.Single().Key.Should().Be("2026");
-        r.Cards.Single().LatestVersion.Should().Be("2026.4");
+        var major = Q(index, versions: new[] { "2026" });
+        major.Groups.Single().Key.Should().Be("2026", "no group outside the filter appears");
+        var minor = Q(index, groupBy: ModelGroupBy.MinorVersion, versions: new[] { "2026" });
+        minor.Groups.Single().Key.Should().Be("2026.4");
+
+        // Unfiltered, or with the newer version selected too, it groups under 2027.
+        Q(index).Groups.Single().Key.Should().Be("2027");
+        Q(index, versions: new[] { "2026", "2027" }).Groups.Single().Key.Should().Be("2027");
+    }
+
+    [Fact]
+    public void With_a_version_filter_the_card_still_shows_the_true_latest_version_in_the_window()
+    {
+        var both = new Model("Both").Day(Ago(1), 5, version: "2027", sub: "2027.1").Day(Ago(2), 5, version: "2026", sub: "2026.4");
+        var index = Index(both);
+
+        foreach (var by in new[] { ModelGroupBy.MajorVersion, ModelGroupBy.MinorVersion, ModelGroupBy.None })
+        {
+            var card = Q(index, groupBy: by, versions: new[] { "2026" }).Cards.Single();
+            card.Should().BeEquivalentTo(new
+            {
+                LatestMajor = "2027",
+                LatestMinor = "2027.1",
+                LatestVersion = "2027.1",
+                GroupMajor = "2026",
+                GroupMinor = "2026.4",
+            });
+        }
+        Q(index).Cards.Single().Should().BeEquivalentTo(new { LatestVersion = "2027.1", GroupMajor = "2027", GroupMinor = "2027.1" });
+
+        // The latest version is the window's: at Recent a 2027 day 30 days ago does not count.
+        var old27 = new Model("Old 2027").Day(Ago(1), 5, version: "2026", sub: "2026.4").Day(Ago(30), 5, version: "2027", sub: "2027.1");
+        Q(Index(old27), versions: new[] { "2026" }).Cards.Single().LatestVersion.Should().Be("2026.4");
+        Q(Index(old27), ModelTimeChip.ThreeMonths, versions: new[] { "2026" }).Cards.Single().LatestVersion.Should().Be("2027.1");
     }
 
     [Fact]

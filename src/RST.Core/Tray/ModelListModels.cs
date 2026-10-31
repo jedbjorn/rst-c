@@ -144,7 +144,7 @@ public sealed class ModelCard
     public HealthSeverity HealthSeverity { get; init; }
 
     /// <summary>The newest major version the model was opened in within the window (all time when
-    /// searching); null when none is recorded.</summary>
+    /// searching), whatever the version filter; null when none is recorded.</summary>
     public string? LatestMajor { get; init; }
 
     /// <summary>That major's newest minor version in the window; null when unknown.</summary>
@@ -152,6 +152,13 @@ public sealed class ModelCard
 
     /// <summary>What the card shows: the minor where known, else the major; null when none.</summary>
     public string? LatestVersion => LatestMinor ?? LatestMajor;
+
+    /// <summary>The major the card is grouped under: <see cref="LatestMajor"/>, or under a version
+    /// filter the newest selected major in the window (so it can be older than the card's version).</summary>
+    public string? GroupMajor { get; init; }
+
+    /// <summary>That group major's newest minor in the window; null when unknown.</summary>
+    public string? GroupMinor { get; init; }
 
     public DateOnly? LastActiveDay { get; init; }
     public DateOnly? FirstActiveDay { get; init; }

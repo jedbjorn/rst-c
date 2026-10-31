@@ -5,7 +5,7 @@
 //   var index  = ModelListIndex.Load(readOptions);              // index.json, once per refresh
 //   var result = index.Query(query, ModelList.LocalToday(now, zone));   // every chip / filter change
 //
-// Load parses spec #24's index rows once into compact, clamped buckets and a search text per
+// Load parses spec #24's index rows once into compact, clamped buckets and search fields per
 // model; Query only filters, sums and sorts them, so a chip change stays cheap (AC 9).
 //
 //   Recent     the last 14 calendar days, from each row's recent_days_totals
@@ -17,10 +17,13 @@
 //              version filter are ignored while searching
 //   group      the newest major the model was opened in within the window (all time when
 //              searching; among the selected majors when filtering), then its newest minor or
-//              "unknown minor"; groups newest version first, cards newest last-active first
+//              "unknown minor"; groups newest version first, cards newest last-active first.
+//              The card itself always shows the newest version in the window (filter or not)
 //
 // Implausible index values are clamped for display: nothing negative, no day over 24 h, no
 // week over 7 × 24 h, no all-time total over 24 h per day between the first and last active day.
+// A row carrying activity whose first or last active day is missing, or reversed, cannot be
+// bounded: it is skipped and logged.
 
 using RST.Core.Health;
 using RST.Core.Telemetry;
@@ -104,18 +107,27 @@ public sealed class RevitVersionOrder : IComparer<string?>
         if (ReferenceEquals(x, y)) return 0;
         if (x is null) return -1;
         if (y is null) return 1;
-        var a = x.Split('.');
-        var b = y.Split('.');
-        for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+        ReadOnlySpan<char> a = x, b = y;
+        while (true)
         {
-            var pa = a[i].Trim();
-            var pb = b[i].Trim();
-            int c;
-            if (long.TryParse(pa, out var na) && long.TryParse(pb, out var nb)) c = na.CompareTo(nb);
-            else c = string.Compare(pa, pb, StringComparison.OrdinalIgnoreCase);
+            var pa = Next(ref a, out var moreA);
+            var pb = Next(ref b, out var moreB);
+            var c = long.TryParse(pa, out var na) && long.TryParse(pb, out var nb)
+                ? na.CompareTo(nb)
+                : pa.CompareTo(pb, StringComparison.OrdinalIgnoreCase);
             if (c != 0) return c;
+            if (!moreA || !moreB) return moreA.CompareTo(moreB);
         }
-        return a.Length.CompareTo(b.Length);
+    }
+
+    /// <summary>The next dot-separated part, trimmed; <paramref name="more"/> says whether another follows.</summary>
+    private static ReadOnlySpan<char> Next(ref ReadOnlySpan<char> rest, out bool more)
+    {
+        var dot = rest.IndexOf('.');
+        more = dot >= 0;
+        var part = more ? rest[..dot] : rest;
+        rest = more ? rest[(dot + 1)..] : ReadOnlySpan<char>.Empty;
+        return part.Trim();
     }
 }
 
@@ -126,7 +138,6 @@ public sealed class RevitVersionOrder : IComparer<string?>
 public sealed class ModelListIndex
 {
     private const long DayMs = 24L * 60 * 60 * 1000;
-    private const char Sep = '\u0001';
 
     public static readonly ModelListIndex Empty = new(Array.Empty<Entry>());
 
@@ -153,28 +164,34 @@ public sealed class ModelListIndex
     {
         try
         {
-            return From(ModelActivityReader.ReadIndex(options.RollupsDir, options.NowUtc, options.Zone, options.Log));
+            return From(ModelActivityReader.ReadIndex(options.RollupsDir, options.NowUtc, options.Zone, options.Log), options.Log);
         }
         catch (Exception ex)
         {
-            try { options.Log?.Invoke("models list: index load failed: " + ex.Message); }
-            catch { /* logging never takes the list down */ }
+            SafeLog(options.Log, "models list: index load failed: " + ex.Message);
             return Empty;
         }
     }
 
     /// <summary>Prepares index rows. Null rows and rows without a model id are skipped; a repeated
     /// model id keeps its first row.</summary>
-    public static ModelListIndex From(IEnumerable<ModelIndexRow?> rows)
+    public static ModelListIndex From(IEnumerable<ModelIndexRow?> rows, Action<string>? log = null)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var entries = new List<Entry>();
         foreach (var row in rows)
         {
             if (row is null || string.IsNullOrWhiteSpace(row.ModelId) || !seen.Add(row.ModelId)) continue;
-            entries.Add(Entry.From(row));
+            if (Entry.From(row, out var skipped) is { } entry) entries.Add(entry);
+            else SafeLog(log, "models list: skipped index row " + row.ModelId + ": " + skipped);
         }
         return new ModelListIndex(entries.ToArray());
+    }
+
+    private static void SafeLog(Action<string>? log, string message)
+    {
+        try { log?.Invoke(message); }
+        catch { /* logging never takes the list down */ }
     }
 
     /// <summary>The list for <paramref name="query"/> with today taken from the clock and zone.</summary>
@@ -194,35 +211,43 @@ public sealed class ModelListIndex
             : new HashSet<string>(query.Versions.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()),
                 StringComparer.OrdinalIgnoreCase);
         if (filter is { Count: 0 }) filter = null;
-        var needle = search?.ToUpperInvariant();
 
         var cards = new List<ModelCard>();
         foreach (var e in _entries)
         {
             Bucket totals;
-            string? major = null, minor = null;
+            // latest: the card's version (the newest in the window, all time when searching).
+            // group: where the card sits — the newest *selected* version under a filter, so no
+            // group outside the filter appears (planner ruling, spec #25 Grouping).
+            string? latest = null, group = null;
+            DateOnly? from = null, to = null;
             if (searching)
             {
-                if (e.SearchText.IndexOf(needle!, StringComparison.Ordinal) < 0) continue;
+                if (!e.Matches(search!)) continue;
                 totals = e.AllTime;
-                major = e.Majors.Length > 0 ? e.Majors[0].Version : null;
-                if (major is not null) minor = NewestMinor(e, major, null, null);
+                latest = group = e.Majors.Length > 0 ? e.Majors[0].Version : null;
             }
             else
             {
                 totals = weeks == 0 ? Sum(e.Days, first, last) : Sum(e.Weeks, ActivityWeeks.WeekStart(first), last);
                 if (!totals.HasTime) continue;
+                from = first;
+                to = last;
                 foreach (var (v, day) in e.Majors) // newest first
                 {
                     if (day < first || day > last) continue;
+                    latest ??= v;
                     if (filter is not null && !filter.Contains(v)) continue;
-                    major = v;
+                    group = v;
                     break;
                 }
-                if (filter is not null && major is null) continue;
-                if (major is not null) minor = NewestMinor(e, major, first, last);
+                if (filter is not null && group is null) continue;
             }
-            cards.Add(e.Card(totals, major, minor));
+            var latestMinor = latest is null ? null : NewestMinor(e, latest, from, to);
+            var groupMinor = group is null ? null
+                : string.Equals(group, latest, StringComparison.OrdinalIgnoreCase) ? latestMinor
+                : NewestMinor(e, group, from, to);
+            cards.Add(e.Card(totals, latest, latestMinor, group, groupMinor));
         }
 
         var groups = Group(cards, query.GroupBy);
@@ -291,7 +316,7 @@ public sealed class ModelListIndex
             return new List<ModelGroup> { NewGroup("all", by, null, null, cards) };
 
         var groups = cards
-            .GroupBy(c => (Major: c.LatestMajor, Minor: by == ModelGroupBy.MinorVersion ? c.LatestMinor : null))
+            .GroupBy(c => (Major: c.GroupMajor, Minor: by == ModelGroupBy.MinorVersion ? c.GroupMinor : null))
             .Select(g => NewGroup(
                 g.Key.Major is null ? "unknown"
                     : by == ModelGroupBy.MajorVersion ? g.Key.Major
@@ -384,11 +409,32 @@ public sealed class ModelListIndex
         /// <summary>Minor → its major and last day open in it, newest version first.</summary>
         public (string Version, string Major, DateOnly Last)[] Minors = Array.Empty<(string, string, DateOnly)>();
 
-        /// <summary>Upper-cased search fields joined by a separator no one types.</summary>
-        public string SearchText = "";
+        /// <summary>The search fields: title, file name, local and central path, and the titles
+        /// and paths the model had before; matched case-insensitively, in place.</summary>
+        public string[] SearchFields = Array.Empty<string>();
 
-        public static Entry From(ModelIndexRow row)
+        public bool Matches(string search)
         {
+            foreach (var f in SearchFields)
+                if (f.Contains(search, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>The prepared model, or null (with <paramref name="skipped"/> saying why) for a row
+        /// whose activity dates are missing or reversed while it carries activity: its totals could
+        /// not be bounded, so it is not shown (spec #25, Beyond Intention).</summary>
+        public static Entry? From(ModelIndexRow row, out string? skipped)
+        {
+            skipped = null;
+            var datesOk = row.FirstActiveDay is { } fd && row.LastActiveDay is { } ld && ld >= fd;
+            if (!datesOk && HasActivity(row))
+            {
+                skipped = row.FirstActiveDay is null || row.LastActiveDay is null
+                    ? "activity without a first or last active day"
+                    : "last active day before first active day";
+                return null;
+            }
+
             var e = new Entry
             {
                 ModelId = row.ModelId,
@@ -407,15 +453,15 @@ public sealed class ModelListIndex
                 !string.Equals(e.Title, name, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(e.Title, ModelList.WithoutExtension(name), StringComparison.OrdinalIgnoreCase);
 
-            e.Days = Buckets(row.RecentDaysTotals, d => d, DayMs);
-            e.Weeks = Buckets(row.RecentWeeksTotals, ActivityWeeks.WeekStart, 7 * DayMs);
-            var spanDays = row.FirstActiveDay is { } fd && row.LastActiveDay is { } ld && ld >= fd
-                ? ld.DayNumber - fd.DayNumber + 1L
-                : long.MaxValue / DayMs;
+            e.Days = Buckets(row.RecentDaysTotals, weekly: false, DayMs);
+            e.Weeks = Buckets(row.RecentWeeksTotals, weekly: true, 7 * DayMs);
+            // At most 24 h per day between the first and last active day (0 when the row has
+            // neither: it then carries no activity, or it was skipped above).
+            var spanDays = datesOk ? row.LastActiveDay!.Value.DayNumber - row.FirstActiveDay!.Value.DayNumber + 1L : 0;
             e.AllTime = Bucket.From(row.Totals ?? new ActivityTotals(), default, spanDays * DayMs);
 
-            var majors = new Dictionary<string, DateOnly>(StringComparer.OrdinalIgnoreCase);
-            var minors = new Dictionary<string, DateOnly>(StringComparer.OrdinalIgnoreCase);
+            var majors = new List<(string Version, DateOnly Last)>(4);
+            var minors = new List<(string Version, DateOnly Last)>(4);
             if (row.RevitVersions is not null)
                 foreach (var (v, day) in row.RevitVersions)
                     if (Blank(v) is { } major) Latest(majors, major, day);
@@ -426,22 +472,47 @@ public sealed class ModelListIndex
                     Latest(minors, minor, day);
                     Latest(majors, major, day); // a subversion implies its major
                 }
-            e.Majors = majors.OrderByDescending(p => p.Key, RevitVersionOrder.Instance).Select(p => (p.Key, p.Value)).ToArray();
-            e.Minors = minors.OrderByDescending(p => p.Key, RevitVersionOrder.Instance)
-                .Select(p => (p.Key, ModelList.MajorOf(p.Key), p.Value)).ToArray();
+            majors.Sort((a, b) => RevitVersionOrder.Instance.Compare(b.Version, a.Version));
+            minors.Sort((a, b) => RevitVersionOrder.Instance.Compare(b.Version, a.Version));
+            e.Majors = majors.ToArray();
+            e.Minors = new (string, string, DateOnly)[minors.Count];
+            for (var i = 0; i < minors.Count; i++)
+                e.Minors[i] = (minors[i].Version, ModelList.MajorOf(minors[i].Version), minors[i].Last);
 
-            var fields = new List<string?> { e.Title, title, e.FileName, e.LocalPath, e.CentralPath };
-            if (row.KeysSeen is { } seen)
+            var seen = row.KeysSeen;
+            var fields = new List<string>(4 + (seen is null ? 0 : seen.Titles.Count + seen.LocalPaths.Count + seen.CentralPaths.Count));
+            AddField(fields, e.Title);
+            AddField(fields, e.FileName);
+            AddField(fields, e.LocalPath);
+            AddField(fields, e.CentralPath);
+            if (seen is not null)
             {
-                fields.AddRange(seen.Titles);
-                fields.AddRange(seen.LocalPaths);
-                fields.AddRange(seen.CentralPaths);
+                foreach (var v in seen.Titles) AddField(fields, v);
+                foreach (var v in seen.LocalPaths) AddField(fields, v);
+                foreach (var v in seen.CentralPaths) AddField(fields, v);
             }
-            e.SearchText = string.Join(Sep, fields.Where(s => !string.IsNullOrWhiteSpace(s))).ToUpperInvariant();
+            e.SearchFields = fields.ToArray();
             return e;
         }
 
-        public ModelCard Card(Bucket totals, string? major, string? minor) => new()
+        private static bool HasActivity(ModelIndexRow row)
+        {
+            static bool Any(ActivityTotals? t) => t is not null &&
+                (t.ActiveMs != 0 || t.OpenMs != 0 || t.Opens != 0 || t.OpenSumMs != 0 || t.Syncs != 0 || t.SyncSumMs != 0);
+            if (Any(row.Totals)) return true;
+            if (row.RecentDaysTotals is { } days)
+                foreach (var t in days) if (Any(t)) return true;
+            if (row.RecentWeeksTotals is { } weeks)
+                foreach (var t in weeks) if (Any(t)) return true;
+            return false;
+        }
+
+        private static void AddField(List<string> fields, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) fields.Add(value);
+        }
+
+        public ModelCard Card(Bucket totals, string? major, string? minor, string? groupMajor, string? groupMinor) => new()
         {
             ModelId = ModelId,
             Title = Title,
@@ -456,29 +527,43 @@ public sealed class ModelListIndex
             HealthSeverity = ModelHealth.ToSeverity(Health),
             LatestMajor = major,
             LatestMinor = minor,
+            GroupMajor = groupMajor,
+            GroupMinor = groupMinor,
             LastActiveDay = LastActiveDay,
             FirstActiveDay = FirstActiveDay,
             Totals = totals.ToTotals(),
         };
 
-        /// <summary>Rows merged by bucket date (a repeated date sums), each clamped to its cap.</summary>
-        private static Bucket[] Buckets(List<ActivityTotals>? rows, Func<DateOnly, DateOnly> key, long capMs)
+        /// <summary>Rows by bucket date, oldest first (a repeated date sums), each clamped to its cap.</summary>
+        private static Bucket[] Buckets(List<ActivityTotals>? rows, bool weekly, long capMs)
         {
             if (rows is null || rows.Count == 0) return Array.Empty<Bucket>();
-            var map = new Dictionary<DateOnly, Bucket>();
+            var list = new List<Bucket>(rows.Count);
             foreach (var t in rows)
             {
                 if (t is null || t.Date == default) continue;
-                var date = key(t.Date);
-                var b = Bucket.From(t, date, capMs);
-                map[date] = map.TryGetValue(date, out var had) ? had.Plus(b).Cap(capMs) : b;
+                list.Add(Bucket.From(t, weekly ? ActivityWeeks.WeekStart(t.Date) : t.Date, capMs));
             }
-            return map.Values.OrderBy(b => b.Date).ToArray();
+            list.Sort((a, b) => a.Date.CompareTo(b.Date));
+            var merged = 0;
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (merged > 0 && list[merged - 1].Date == list[i].Date)
+                    list[merged - 1] = list[merged - 1].Plus(list[i]).Cap(capMs);
+                else list[merged++] = list[i];
+            }
+            return merged == list.Count ? list.ToArray() : list.GetRange(0, merged).ToArray();
         }
 
-        private static void Latest(Dictionary<string, DateOnly> map, string key, DateOnly day)
+        private static void Latest(List<(string Version, DateOnly Last)> list, string key, DateOnly day)
         {
-            if (!map.TryGetValue(key, out var had) || day > had) map[key] = day;
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (!string.Equals(list[i].Version, key, StringComparison.OrdinalIgnoreCase)) continue;
+                if (day > list[i].Last) list[i] = (list[i].Version, day);
+                return;
+            }
+            list.Add((key, day));
         }
 
         private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
