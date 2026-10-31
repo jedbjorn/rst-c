@@ -369,7 +369,7 @@ public static class LoaderFixtures
     /// (2027) Revizto locked on by the administrator, DiRoots.One (machine-wide) and Ideate on.
     /// </summary>
     public static AddinInventory Inventory() => FakeAddinSwitching.InventoryOf(
-        FakeAddinSwitching.Item(2026, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "RSTC"),
+        FakeAddinSwitching.Item(2026, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "DSOS"),
         FakeAddinSwitching.Item(2026, "Batch Print", AddinScope.Machine, vendor: "ADSK"),
         FakeAddinSwitching.Item(2026, "PyRevitLoader", AddinScope.Machine, fileName: "pyRevit.addin"),
         FakeAddinSwitching.Item(2026, "Enscape", AddinScope.Machine),
@@ -377,7 +377,7 @@ public static class LoaderFixtures
         FakeAddinSwitching.Item(2026, "Guardian", AddinScope.Machine, adminLock: AdminLock.AlwaysDisabled),
         FakeAddinSwitching.Item(2026, "DiRoots.One", AddinScope.Machine, vendor: "www.diroots.com"),
         FakeAddinSwitching.Item(2026, "Ideate BIMLink", fileName: "IdeateBIMLink.addin"),
-        FakeAddinSwitching.Item(2027, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "RSTC"),
+        FakeAddinSwitching.Item(2027, "RST", fileName: "RST.addin", id: InventoryItem.RstClientId, vendor: "DSOS"),
         FakeAddinSwitching.Item(2027, "Enscape", AddinScope.Machine),
         FakeAddinSwitching.Item(2027, "DiRoots.One", AddinScope.Machine, vendor: "www.diroots.com"),
         FakeAddinSwitching.Item(2027, "Ideate BIMLink", fileName: "IdeateBIMLink.addin"),
