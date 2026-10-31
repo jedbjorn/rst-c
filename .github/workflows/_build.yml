@@ -552,7 +552,7 @@ jobs:
         shell: pwsh
         run: |
           $mode = '${{ matrix.mode }}'
-          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe -RstMachineMsi rst/RST-Machine.msi; exit $LASTEXITCODE }
+          if ($mode -eq 'UI') { installer-bundle/ci-bundle-ui.ps1 -Bundle setup/RST-Setup.exe -RstMachineMsi rst/RST-Machine.msi -RstMsi rst/RST.msi; exit $LASTEXITCODE }
           $bundle = if ($mode -eq 'Companions') { 'setup/RST-Setup.exe' } else { 'bundle-test/test/RST-Setup-Fixture.exe' }
           installer-bundle/ci-bundle-smoke.ps1 -Mode $mode -Bundle $bundle -RstMsi rst/RST.msi -FixtureDir bundle-test/test -OlderRstMsi msi-test/RST-older.msi -V220RstMsi v220/RST.msi -V220PreviewMsi v220/RST-R27.msi
       - name: Upload Burn and msiexec logs

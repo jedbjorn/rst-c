@@ -61,8 +61,10 @@
           by gen-revit-years.ps1)
       C:\Program Files\RST\Tray\                   the tray, HKLM Run
     The same Revit detection, launch condition and MajorUpgrade rules
-    apply. It grants nothing: no permission changes, no service, no
-    elevated helper; add-in switching stays per user. A first install is
+    apply. It grants nothing: no permission changes, no service, nothing
+    elevated left behind (its one custom action of its own, Tray.wxs
+    RstEndTrays, runs only while it installs or uninstalls); add-in
+    switching stays per user. A first install is
     refused while the installing user still has RST installed just for
     them (that copy would shadow this one; RST-Setup.exe removes it
     first). Restart Manager is off here (MSIRESTARTMANAGERCONTROL=Disable):
@@ -226,10 +228,13 @@
          elevated (WU1 review N8; CI showed "DisableShutdown" is not honoured
          in no-UI installs). It would also close other users' applications,
          Revit included, in their sessions. util:CloseApplication (Tray.wxs)
-         asks a running tray on the installer's desktop to exit, and nothing
-         restarts it: it starts again at the user's next sign-in, or when
-         Revit starts it. Files still in use elsewhere make the install ask
-         for a restart (3010), as any per-machine MSI does. -->
+         asks a running tray on the installer's desktop to exit, Tray.wxs's
+         RstEndTrays ends this package's trays in every other session
+         (SC-028), and nothing restarts them: each starts again at the user's
+         next sign-in, or when Revit starts it. Windows Installer itself
+         renames files in use and still returns 0, so RstEndTrays asks for
+         the restart (3010) when anything else, Revit with the engine loaded,
+         still uses them. -->
     <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
     <?endif?>
 
