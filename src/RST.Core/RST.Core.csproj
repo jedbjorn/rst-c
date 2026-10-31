@@ -28,6 +28,8 @@
   <ItemGroup>
     <!-- Tests use internal seams (for example PackageContents.Series). -->
     <InternalsVisibleTo Include="RST.Tests" />
+    <!-- The Windows-only handle delete of the activity cleanup (Telemetry/Rollups/OutboxFileTaker). -->
+    <InternalsVisibleTo Include="RST.RuntimeTests" />
   </ItemGroup>
 
 </Project>
