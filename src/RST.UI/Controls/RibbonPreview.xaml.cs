@@ -19,6 +19,7 @@ using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Ribbon;
 using RST.UI.Loader;
+using RST.UI.Mvvm;
 using RST.UI.Resources;
 using RST.UI.Theming;
 using ProfilePanel = RST.Core.Profiles.Panel;
@@ -120,7 +121,9 @@ public partial class RibbonPreview : UserControl
     /// <summary>Redraws now (after an in-place edit of <see cref="Profile"/>).</summary>
     public void Refresh() => Rebuild();
 
-    private static void Redraw(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((RibbonPreview)d).Rebuild();
+    // A property change from a binding: WPF would swallow an exception here without a trace (SC-046).
+    private static void Redraw(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
+        UiGuard.Run("Ribbon preview: redraw", ((RibbonPreview)d).Rebuild);
 
     private void Rebuild()
     {

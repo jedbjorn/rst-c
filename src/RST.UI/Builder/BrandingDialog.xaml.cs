@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Builder;
@@ -18,19 +19,20 @@ public partial class BrandingDialog : Window
         InitializeComponent();
         DarkTitleBar.Attach(this);
         DataContext = model ?? throw new ArgumentNullException(nameof(model));
-        Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PickLogoButton.Focus());
+        Loaded += (_, _) => UiGuard.Run("Branding dialog: loaded", () =>
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, () => UiGuard.Run("Branding dialog: focus", () => PickLogoButton.Focus())));
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        WindowPlacement.CapToWorkArea(this);
+        UiGuard.Run("Branding dialog: place", () => WindowPlacement.CapToWorkArea(this));
     }
 
     // The link is saved on change (blur or Enter); closing the dialog is a blur.
     protected override void OnClosing(CancelEventArgs e)
     {
-        BrandingUrlBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        UiGuard.Run("Branding dialog: save the link on close", () => BrandingUrlBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource());
         base.OnClosing(e);
     }
 }

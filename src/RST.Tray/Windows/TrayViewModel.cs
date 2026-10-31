@@ -5,6 +5,7 @@
 // and re-theming go through ITraySettingsHost (TrayHost in the app, a fake in RuntimeTests).
 
 using System.Windows.Input;
+using RST.Core.Logging;
 using RST.Core.Tray;
 using RST.Core.Updates;
 using RST.Tray.AddIns;
@@ -63,7 +64,7 @@ internal sealed class TrayViewModel : ObservableObject
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
         Updates = new UpdatesViewModel(updates ?? new NoUpdatesHost(host), () => _host.UpdateChecks);
         AddIns = addIns ?? new AddInsViewModel(NoTrayAddinsBackend.Instance, NoLoaderDialogs.Instance, new RST.UI.Dialogs.DialogService(), runInline: true);
-        if (page == TrayPage.AddIns) _ = AddIns.EnsureLoadedAsync();
+        if (page == TrayPage.AddIns) AddIns.EnsureLoadedAsync().Forget("tray: read the Add-ins page");
     }
 
     /// <summary>The Add-ins page (F17 WU2).</summary>
@@ -87,7 +88,7 @@ internal sealed class TrayViewModel : ObservableObject
             OnPropertyChanged(nameof(IsAddInsPage));
             OnPropertyChanged(nameof(IsSettingsPage));
             // Built lazily: the Add-ins page reads the disk the first time it is shown.
-            if (value == TrayPage.AddIns) _ = AddIns.EnsureLoadedAsync();
+            if (value == TrayPage.AddIns) AddIns.EnsureLoadedAsync().Forget("tray: read the Add-ins page");
         }
     }
 

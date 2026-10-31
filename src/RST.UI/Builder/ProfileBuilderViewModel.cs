@@ -46,7 +46,7 @@ using ProfilePanel = RST.Core.Profiles.Panel;
 
 namespace RST.UI.Builder;
 
-public sealed class ProfileBuilderViewModel : ObservableObject
+public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
 {
     public const string UnsavedChangesDialogId = MessageDialog.DiscardChangesId;
     public const string DeletePanelDialogId = "DeletePanelDialog";
@@ -138,8 +138,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
         PickLogoCommand = new RelayCommand(PickLogo, () => IsIdle);
         ClearLogoCommand = new RelayCommand(ClearLogo, () => IsIdle);
         ExportCommand = new RelayCommand(Export, () => IsIdle);
-        SaveCommand = new RelayCommand(() => _ = SaveAsync(), () => IsIdle && IsDirty);
-        ExitCommand = new RelayCommand(() => _ = ExitAsync(), () => IsIdle);
+        SaveCommand = new AsyncRelayCommand(SaveAsync, () => IsIdle && IsDirty);
+        ExitCommand = new AsyncRelayCommand(ExitAsync, () => IsIdle);
         AddPanelCommand = new RelayCommand(AddPanel, () => IsIdle);
         AddCatalogCommand = new RelayCommand<CatalogNodeViewModel>(n => AddToSelectedPanel(n.Command!), n => IsIdle && n.IsCommand);
         PickColorCommand = new RelayCommand(PickColor, () => IsIdle && SelectedPanel is not null);
@@ -295,11 +295,11 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             // Both run after the menu click is over: the switch rebuilds the menu's list.
             case DialogChoice.Secondary:
                 Log.Information("Builder: profile switch → discard unsaved changes");
-                _post(() => ApplySwitch(target));
+                _post(() => UiGuard.Run("Builder: discard and switch", () => ApplySwitch(target)));
                 break;
             case DialogChoice.Primary:
                 Log.Information("Builder: profile switch → save first");
-                _post(() => _ = SaveThenSwitchAsync(target.Key));
+                _post(() => UiGuard.Start("Builder: save and switch", () => SaveThenSwitchAsync(target.Key), this));
                 break;
         }
     }
@@ -345,8 +345,13 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     /// <param name="fileName">Its file; kept when the profile has no id, for the first save to replace (WU1 review F6).</param>
     private void LoadIntoEditor(Profile source, string? fileName = null)
     {
-        _supersededFile = string.IsNullOrEmpty(source.Id) ? fileName : null;
-        _profile = ProfileEditing.ForEditing(source);
+        // The file a first save replaces is set only once the load is complete (SC-046 review N3). A load that
+        // fails before the editor changes leaves the previous profile's as it was; one that fails part-way
+        // leaves none, so the next Save cannot remove a file that is not the editor's own.
+        var superseded = string.IsNullOrEmpty(source.Id) ? fileName : null;
+        var editing = ProfileEditing.ForEditing(source);
+        _supersededFile = null;
+        _profile = editing;
         _selectedPanelIndex = _profile.Panels.Count > 0 ? 0 : -1;
         _editMode = true;
         _originalName = _profile.ProfileName ?? "";
@@ -360,6 +365,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
                 _profile.ProfileName, repaired.Notes.Count);
         ProfileChanged();
         ProfileEdited();
+        _supersededFile = superseded;
         if (repaired.Changed) ShowToast(UiStrings.Builder_StacksRepaired(repaired.Notes.Count), BannerKind.Info);
     }
 
@@ -721,7 +727,8 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     internal void MovePanel(int index, int delta)
     {
         var to = index + delta;
-        if (to < 0 || to >= _profile.Panels.Count) return;
+        // Both ends checked (SC-046, R4): a panel drag's source index can be stale by the time it lands.
+        if (index < 0 || index >= _profile.Panels.Count || to < 0 || to >= _profile.Panels.Count) return;
         var p = _profile.Panels[index];
         _profile.Panels.RemoveAt(index);
         _profile.Panels.Insert(to, p);
@@ -1233,10 +1240,10 @@ public sealed class ProfileBuilderViewModel : ObservableObject
     }
 
     /// <summary>✎ on a Custom Tools row or a placed custom tool: edit everywhere.</summary>
-    internal void EditCustomTool(CustomTool tool) => _ = EditCustomToolAsync(tool);
+    internal void EditCustomTool(CustomTool tool) => UiGuard.Start("Builder: edit custom tool", () => EditCustomToolAsync(tool), this);
 
     /// <summary>× on a Custom Tools row: remove everywhere, after a confirmation that lists the profiles.</summary>
-    internal void RemoveCustomTool(CustomTool tool) => _ = RemoveCustomToolAsync(tool);
+    internal void RemoveCustomTool(CustomTool tool) => UiGuard.Start("Builder: remove custom tool", () => RemoveCustomToolAsync(tool), this);
 
     /// <summary>
     /// Edit everywhere (decision #20): the dialog filled in, with a warning naming every profile that
@@ -1604,7 +1611,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject
             case DialogChoice.Primary:
                 // This close is cancelled; the save runs once the Closing event is over and then
                 // closes the window (WPF refuses Close() while a window is still closing).
-                _post(() => _ = SaveThenCloseAsync());
+                _post(() => UiGuard.Start("Builder: save and exit", SaveThenCloseAsync, this));
                 return false;
             default:
                 return false;

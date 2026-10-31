@@ -98,14 +98,14 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             return;
         }
         Log.Information("install {Product} {Version} (asked by the user)", product.Name, latest);
-        _ = _installs.InstallAsync(product, latest);
+        _installs.InstallAsync(product, latest).Forget("tray: install " + product.Name);
     }
 
     public void ReinstallPrevious(ProductInfo product)
     {
         if (_quitting || _installs is null) return;
         Log.Information("reinstall the previous {Product} (asked by the user)", product.Name);
-        _ = _installs.ReinstallPreviousAsync(product);
+        _installs.ReinstallPreviousAsync(product).Forget("tray: reinstall the previous " + product.Name);
     }
 
     public void CancelInstall(ProductInfo product) => _installs?.Cancel(product.Id);
@@ -136,7 +136,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     {
         if (_quitting || _updates is null) return;
         Log.Information("check for updates now (asked by the user)");
-        _ = _updates.CheckNowAsync();
+        _updates.CheckNowAsync().Forget("tray: check for updates now");
     }
 
     /// <summary>The product's latest release page on github.com, built from the catalog's repo (never from data).</summary>
@@ -154,22 +154,50 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         }
     }
 
-    /// <summary>Starts the tray: settings, theme, icon, the show signal, then the window (unless --startup) and the notice.</summary>
+    /// <summary>
+    /// Starts the tray (SC-046, T2): the icon and the show signal first, so a tray that runs can always be seen and
+    /// found by a second launch; then the settings and theme, the update checker, installs, and the window (unless
+    /// --startup) and the notices. A later step that fails is logged and the tray runs without that feature. When
+    /// the icon cannot be made at all the tray ends, with <see cref="TrayStartup.FatalExitCode"/>, and its
+    /// single-instance mutex is released as Main returns, rather than running on with no icon.
+    /// </summary>
     public void Start()
     {
-        // Windows Installer's Restart Manager (on a repair, upgrade or uninstall that replaces the tray's files)
-        // and sign-out send WM_QUERYENDSESSION; WPF's Application then shuts the dispatcher down itself. The tray
-        // lets it, and records why. util:CloseApplication's WM_CLOSE (CloseRequested) is the path when Restart
-        // Manager is off or did not reach the tray.
-        if (Application.Current is { } app) app.SessionEnding += (_, e) => OnSessionEnding(e.ReasonSessionEnding.ToString());
+        Log.Information("RST tray {Version} starting (pid {Pid}, {Mode})",
+            Version, Environment.ProcessId, _args.StartHidden ? "--startup, hidden" : "window");
+        if (TrayStartup.Run(StartSteps()) is not { } failed) return;
+        ExitReason = "could not start: " + failed;
+        _quitting = true;
+        StopUpdates();
+        _icon?.Dispose();
+        _icon = null;
+        Application.Current?.Shutdown(TrayStartup.FatalExitCode);
+    }
 
-        _settings = TraySettings.Read(log: m => Log.Warning("{Message}", m));
-        _checks = UpdateChecksPolicy.Resolve(_settings.CheckForUpdates, WindowsState.UpdateChecksPresets());
-        ApplyTheme();
-        Log.Information("RST tray {Version} starting (pid {Pid}, {Mode}); theme {Choice} -> {Theme}; update checks {Checks}{Locked}",
-            Version, Environment.ProcessId, _args.StartHidden ? "--startup, hidden" : "window", _settings.Theme, RstTheme.Current,
-            _checks.Enabled ? "on" : "off", _checks.LockedOff ? " (UpdateChecks preset)" : "");
+    /// <summary>The start's steps, in order (a test reads the order).</summary>
+    internal IReadOnlyList<TrayStartStep> StartSteps() =>
+    [
+        new("icon", StartIcon, Essential: true),
+        new("show signal", WireShowSignal),
+        new("session end", WatchSessionEnd),
+        new("settings and theme", ReadSettingsAndTheme),
+        new("restart registration", () => AppRestart.Register(m => Log.Warning("{Message}", m))),
+        new("update checks", StartUpdateChecks),
+        new("installs", StartInstalls),
+        new("update loop", StartUpdateLoop),
+        new("window", () =>
+        {
+            if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
+        }),
+        new("notices", () => _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            ShowNoticeIfDue();
+            ShowShadowNoticeIfDue();
+        })),
+    ];
 
+    private void StartIcon()
+    {
         _icon = new TrayIcon(TrayAssets.IconFile(), TrayStrings.Tray_Tooltip, m => Log.Warning("{Message}", m));
         _icon.Activated += (_, _) => OpenWindow(null);
         _icon.MenuRequested += (_, point) => OpenMenu(point);
@@ -185,10 +213,39 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             if (_pendingAnnounce is { } pending) Announce(pending);
         };
         ShowIcon();
-        AppRestart.Register(m => Log.Warning("{Message}", m));
+    }
 
-        // Update checks (F17 WU3): the first automatic slot is 2–10 minutes away; nothing is sent before it, and
-        // nothing at all while checks are off. Detection waits for the window or that first check.
+    /// <summary>A later launch of the tray asks this one to show its window.</summary>
+    private void WireShowSignal() =>
+        _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
+        {
+            Log.Information("another launch asked for the window");
+            _installs?.RefreshSelfUpdateResult(); // the updater's launch, when this tray was restarted by the installer
+            OpenWindow(null);
+        }));
+
+    // Windows Installer's Restart Manager (on a repair, upgrade or uninstall that replaces the tray's files) and
+    // sign-out send WM_QUERYENDSESSION; WPF's Application then shuts the dispatcher down itself. The tray lets it,
+    // and records why. util:CloseApplication's WM_CLOSE (CloseRequested) is the path when Restart Manager is off or
+    // did not reach the tray.
+    private void WatchSessionEnd()
+    {
+        if (Application.Current is { } app) app.SessionEnding += (_, e) => OnSessionEnding(e.ReasonSessionEnding.ToString());
+    }
+
+    private void ReadSettingsAndTheme()
+    {
+        _settings = TraySettings.Read(log: m => Log.Warning("{Message}", m));
+        _checks = UpdateChecksPolicy.Resolve(_settings.CheckForUpdates, WindowsState.UpdateChecksPresets());
+        ApplyTheme();
+        Log.Information("theme {Choice} -> {Theme}; update checks {Checks}{Locked}", _settings.Theme, RstTheme.Current,
+            _checks.Enabled ? "on" : "off", _checks.LockedOff ? " (UpdateChecks preset)" : "");
+    }
+
+    // Update checks (F17 WU3): the first automatic slot is 2–10 minutes away; nothing is sent before it, and nothing
+    // at all while checks are off. Detection waits for the window or that first check.
+    private void StartUpdateChecks()
+    {
         _http = TrayHttp.CreateClient(TrayHttp.CreateHandler());
         _updates = new TrayUpdates(
             ProductCatalog.FromEmbedded(m => Log.Warning("{Message}", m)),
@@ -203,13 +260,17 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             m => Log.Information("{Message}", m));
         _updates.NewVersionsFound += (_, found) => Announce(found);
         _updates.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+    }
 
-        // Installs (F17 WU4): nothing runs until the user clicks Install or Update.
+    // Installs (F17 WU4): nothing runs until the user clicks Install or Update.
+    private void StartInstalls()
+    {
+        if (_updates is null) throw new InvalidOperationException("the update checker did not start");
         _revit = new RevitWatch(log: m => Log.Information("{Message}", m));
         _selfUpdater = new SelfUpdater(AppContext.BaseDirectory, TrayPaths.UpdaterDir, Environment.ProcessId, m => Log.Information("{Message}", m));
         _installs = new InstallCoordinator(
             _updates.Current.Products.Select(p => p.Product),
-            _http,
+            _http ?? throw new InvalidOperationException("the update checker has no HTTP client"),
             new MsiProducts(m => Log.Warning("{Message}", m)),
             new MsiDatabase(),
             new BundleReader(),
@@ -221,30 +282,20 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             action => _dispatcher.BeginInvoke(action),
             m => Log.Information("{Message}", m),
             quitForSelfUpdate: () => Quit("self-update: the updater installs RST"),
-            installsChanged: () => _ = _updates?.RefreshInstalledAsync());
+            installsChanged: () => _updates?.RefreshInstalledAsync().Forget("tray: read what is installed"));
         _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
         if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed or InstallPhase.Refused)
-            _ = _updates.RefreshInstalledAsync(); // the updater just ran: show what is installed now
+            _updates.RefreshInstalledAsync().Forget("tray: read what is installed"); // the updater just ran: show what is installed now
         // The updater found Revit open (review B2): this tray waits for Revit and hands over again.
-        _ = _installs.ResumeDeferredSelfUpdateAsync();
+        _installs.ResumeDeferredSelfUpdateAsync().Forget("tray: resume the deferred self-update");
+    }
 
+    private void StartUpdateLoop()
+    {
+        if (_updates is null) throw new InvalidOperationException("the update checker did not start");
         _updates.Start();
         if (_updates.Loop.NextDueUtc is { } due)
             Log.Information("first update check slot at {Due:u}{Off}", due, _checks.Enabled ? "" : " (checks are off: it will make no request)");
-
-        _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
-        {
-            Log.Information("another launch asked for the window");
-            _installs?.RefreshSelfUpdateResult(); // the updater's launch, when this tray was restarted by the installer
-            OpenWindow(null);
-        }));
-
-        if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
-        _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
-        {
-            ShowNoticeIfDue();
-            ShowShadowNoticeIfDue();
-        });
     }
 
     /// <summary>
@@ -292,7 +343,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             dialogs.Owner = built;
             messages.Owner = built;
             _window = built;
-            _ = _updates?.RefreshInstalledAsync(); // what is installed now (local only, no network)
+            _updates?.RefreshInstalledAsync().Forget("tray: read what is installed"); // what is installed now (local only, no network)
             built.ViewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(TrayViewModel.Page) && ReferenceEquals(_window, built)) _page = built.ViewModel.Page;
@@ -323,7 +374,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     /// (whose loop runs inside that handler and keeps draining the dispatcher) is closed first, and the quit runs
     /// once its loop has returned (SC-043 review N1).
     /// </summary>
-    public void Quit(string reason) => _dispatcher.BeginInvoke(() => QuitNow(reason));
+    public void Quit(string reason, int exitCode = 0) => _dispatcher.BeginInvoke(() => QuitNow(reason, exitCode: exitCode));
 
     public bool SetTheme(TrayThemeChoice choice)
     {
@@ -460,17 +511,17 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     }
 
     /// <summary>
-    /// Removes the icon, closes the windows and stops the dispatcher, so Application.Run returns 0. On the Quit and
+    /// Removes the icon, closes the windows and stops the dispatcher, so Application.Run returns <paramref name="exitCode"/> (0 but after a repeating UI fault). On the Quit and
     /// WM_CLOSE paths this runs from the dispatcher queue, so the hidden window is released here too; at sign-out it
     /// runs inside WM_ENDSESSION, where the window is left to Dispose after Run returns.
     /// </summary>
-    private void QuitNow(string reason, bool insideWindowMessage = false)
+    private void QuitNow(string reason, bool insideWindowMessage = false, int exitCode = 0)
     {
         if (_quitting) return;
         // SC-043 review N1: a quit that arrives while the menu is open closes it and runs again after its loop has
         // returned. Inside WM_ENDSESSION there is no later: the menu is ended and the quit goes on now.
         if (insideWindowMessage) TrayMenu.Close();
-        else if (TrayMenu.Close(() => QuitNow(reason))) return;
+        else if (TrayMenu.Close(() => QuitNow(reason, exitCode: exitCode))) return;
         _quitting = true;
         _iconRetry?.Stop();
         ExitReason = reason;
@@ -492,7 +543,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         {
             Log.Warning(ex, "closing windows on quit");
         }
-        Application.Current?.Shutdown(0);
+        Application.Current?.Shutdown(exitCode);
     }
 
     /// <summary>

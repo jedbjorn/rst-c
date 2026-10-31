@@ -610,6 +610,110 @@ public sealed class UpdateCheckLoopTests
         runs.Should().HaveCount(3);
     }
 
+    // SC-046 (T1): Timer.Change refuses a wait over about 49.7 days. A slot more than that away (the clock set back by
+    // about 48 days or more) threw on the timer thread and ended the tray. ManualTimeProvider's timer refuses such a
+    // wait as the real one does.
+    [Fact]
+    public void The_clock_set_back_60_days_never_arms_a_wait_the_timer_refuses_and_a_check_follows_within_10_minutes()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        runs.Should().HaveCount(1);
+
+        time.JumpClock(TimeSpan.FromDays(-60));
+        var resync = () => loop.Resync();
+        resync.Should().NotThrow("the old slot is 61 days away: the timer is never asked for a wait it refuses");
+        var jumped = time.GetUtcNow();
+        loop.NextDueUtc.Should().Be(jumped.AddMinutes(7), "no slot is ever more than a day away: the clock was set back, so it is re-anchored as at start");
+        time.ArmedTimers.Should().Be(1);
+
+        Advance(time, loop, TimeSpan.FromMinutes(10));
+        runs.Should().HaveCount(2);
+        runs[1].At.Should().Be(jumped.AddMinutes(7));
+        loop.NextDueUtc.Should().Be(jumped.AddMinutes(7).AddHours(24), "then daily, from the new clock");
+    }
+
+    [Fact]
+    public void The_clock_set_back_60_days_with_no_resync_is_caught_on_the_timer_thread_too()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+
+        // No Resync: the timer still fires a day after the last check, sees the slot 60 days off and re-anchors it.
+        time.JumpClock(TimeSpan.FromDays(-60));
+        var jumped = time.GetUtcNow();
+        var advance = () => Advance(time, loop, TimeSpan.FromDays(2));
+        advance.Should().NotThrow();
+        runs.Should().HaveCount(2, "the re-anchored check, 2–10 minutes after the timer fired");
+        runs[1].At.Should().Be(jumped.AddHours(24).AddMinutes(7));
+        loop.NextDueUtc.Should().Be(jumped.AddHours(48).AddMinutes(7), "then daily, from the new clock");
+        time.ArmedTimers.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Check_now_after_the_clock_was_set_back_makes_its_request()
+    {
+        var (time, loop, runs) = Make(() => false);
+        loop.Start();
+        await loop.CheckNowAsync();
+        runs.Should().ContainSingle();
+
+        // The last run now ended "60 days in the future": that is no recent run, so Check now is not refused.
+        time.JumpClock(TimeSpan.FromDays(-60));
+        await loop.CheckNowAsync();
+        runs.Should().HaveCount(2);
+        runs[1].Trigger.Should().Be(UpdateCheckTrigger.User);
+
+        // The 30-second gap still holds on the new clock.
+        await loop.CheckNowAsync();
+        runs.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void The_clock_set_forward_60_days_runs_the_missed_slot_soon_then_daily()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+
+        time.JumpClock(TimeSpan.FromDays(60));
+        loop.Resync();
+        loop.NextDueUtc.Should().Be(time.GetUtcNow().AddMinutes(7), "the slot was missed: it runs once the network is back");
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        runs.Should().HaveCount(2);
+        loop.NextDueUtc.Should().Be(time.GetUtcNow().AddHours(24));
+        Advance(time, loop, TimeSpan.FromHours(24));
+        runs.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void The_clock_set_forward_60_days_with_no_resync_still_checks_when_the_timer_fires()
+    {
+        var (time, loop, runs) = Make(() => true);
+        loop.Start();
+        Advance(time, loop, TimeSpan.FromMinutes(7));
+        time.JumpClock(TimeSpan.FromDays(60));
+        var advance = () => Advance(time, loop, TimeSpan.FromHours(24));
+        advance.Should().NotThrow();
+        runs.Should().HaveCount(2, "the slot is long past when the timer fires");
+        loop.NextDueUtc.Should().Be(time.GetUtcNow().AddHours(24));
+    }
+
+    [Fact]
+    public void A_timer_callback_that_fails_never_escapes_the_timer_thread()
+    {
+        var time = new ManualTimeProvider(Start);
+        using var loop = new UpdateCheckLoop(time, () => false, (_, _) => Task.CompletedTask, () => TimeSpan.FromMinutes(7),
+            log: _ => throw new IOException("the log is locked"));
+        loop.Start();
+        var advance = () => time.Advance(TimeSpan.FromHours(48));
+        advance.Should().NotThrow("the timer thread has no handler above it: an exception there ends the tray");
+        loop.NextDueUtc.Should().Be(Start.AddMinutes(7).AddHours(48), "the schedule is kept");
+        time.ArmedTimers.Should().Be(1);
+    }
+
     [Fact]
     public async Task Check_now_during_a_running_check_joins_it()
     {

@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Health;
@@ -22,12 +23,12 @@ public partial class HealthWindow : Window
         DataContext = viewModel;
         viewModel.RequestClose += OnRequestClose;
         viewModel.PropertyChanged += OnViewModelChanged;
-        Closed += (_, _) =>
+        Closed += (_, _) => UiGuard.Run("Health window: closed", () =>
         {
             viewModel.RequestClose -= OnRequestClose;
             viewModel.PropertyChanged -= OnViewModelChanged;
             viewModel.Dispose();
-        };
+        });
     }
 
     public HealthViewModel ViewModel { get; }
@@ -35,10 +36,10 @@ public partial class HealthWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        WindowPlacement.CapToWorkArea(this);
+        UiGuard.Run("Health window: place", () => WindowPlacement.CapToWorkArea(this));
     }
 
-    private void OnRequestClose(object? sender, EventArgs e) => Close();
+    private void OnRequestClose(object? sender, EventArgs e) => UiGuard.Run("Health window: close", Close);
 
     /// <summary>
     /// Escape closes Health the way Close does (SC-010): a fresh press only (a held Escape that closed a
@@ -49,18 +50,22 @@ public partial class HealthWindow : Window
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled) || !EscapeCloses) return;
-        e.Handled = true;
-        ViewModel.CloseCommand.Execute(null);
+        UiGuard.Run("Health window: Escape", () =>
+        {
+            if (!EscapeGuard.IsFreshEscape(e.Key, e.IsRepeat, e.Handled) || !EscapeCloses) return;
+            e.Handled = true;
+            ViewModel.CloseCommand.Execute(null);
+        });
     }
 
     private bool EscapeCloses =>
         !ViewModel.IsJunkOpen && ViewModel.CloseCommand.CanExecute(null) && !EscapeGuard.HasSomethingOpen(this);
 
     /// <summary>The Junk modal takes the keyboard focus when it opens (the content behind it is disabled).</summary>
-    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) => UiGuard.Run("Health window: focus the Junk modal", () =>
     {
         if (e.PropertyName != nameof(HealthViewModel.IsJunkOpen) || !ViewModel.IsJunkOpen) return;
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => JunkCard.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)));
-    }
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            UiGuard.Run("Health window: focus the Junk modal", () => JunkCard.MoveFocus(new TraversalRequest(FocusNavigationDirection.First))));
+    });
 }

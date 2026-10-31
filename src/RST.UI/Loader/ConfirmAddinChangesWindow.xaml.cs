@@ -1,6 +1,7 @@
 // rst-c's own (not vendored): the "Confirm Add-in Changes" dialog (spec #16, WU3; spec #18).
 
 using System.Windows;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Loader;
@@ -14,9 +15,9 @@ public partial class ConfirmAddinChangesWindow : Window
         DarkTitleBar.Attach(this);
         DataContext = model;
         // Enter cancels; changing add-ins takes a deliberate click (family rule for destructive confirms).
-        Loaded += (_, _) => CancelButton.Focus();
+        Loaded += (_, _) => UiGuard.Run("Confirm add-in changes: loaded", () => CancelButton.Focus());
     }
 
     // DialogResult from the click handler closes the window after the click; nothing runs in Closing.
-    private void OnConfirm(object sender, RoutedEventArgs e) => DialogResult = true;
+    private void OnConfirm(object sender, RoutedEventArgs e) => UiGuard.Run("Confirm add-in changes: confirm", () => DialogResult = true);
 }

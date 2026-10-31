@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using RST.Core.Picking;
+using RST.UI.Mvvm;
 
 namespace RST.UI.Swatches;
 
@@ -49,11 +50,11 @@ public partial class ScreenPickOverlay : Window
         Place(CentreOuter, Radius * CellSize - 1, CellSize + 2);
         Place(CentreInner, Radius * CellSize, CellSize);
 
-        SourceInitialized += (_, _) =>
+        SourceInitialized += (_, _) => UiGuard.Run("Screen picker overlay: source initialized", () =>
         {
             Handle = new WindowInteropHelper(this).Handle;
             HwndSource.FromHwnd(Handle)?.AddHook(PinHook);
-        };
+        });
     }
 
     /// <summary>The monitor this overlay covers, in physical pixels.</summary>

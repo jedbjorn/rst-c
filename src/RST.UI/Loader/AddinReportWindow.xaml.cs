@@ -1,6 +1,7 @@
 // rst-c's own (not vendored): the add-in report dialog (spec #16, WU3's "Add-in Check"; spec #18).
 
 using System.Windows;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Loader;
@@ -18,5 +19,5 @@ public partial class AddinReportWindow : Window
     }
 
     // DialogResult from the click handler closes the window after the click; nothing runs in Closing.
-    private void OnContinue(object sender, RoutedEventArgs e) => DialogResult = true;
+    private void OnContinue(object sender, RoutedEventArgs e) => UiGuard.Run("Add-in report: continue", () => DialogResult = true);
 }

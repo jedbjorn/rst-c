@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Interop;
 using RST.Core.Colors;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Swatches;
@@ -21,11 +22,11 @@ public partial class ColorPickerDialog : Window
         Title = title;
         DarkTitleBar.Attach(this);
         var model = new ColorPickerViewModel(current, palette, PickerSession.RecentColors, MoreColors, PickFromScreen);
-        model.Picked += color =>
+        model.Picked += color => UiGuard.Run("Color picker: picked", () =>
         {
             Result = color;
             DialogResult = true;
-        };
+        });
         DataContext = model;
 
         if (anchor is { } p)

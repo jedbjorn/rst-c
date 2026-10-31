@@ -50,7 +50,7 @@ public sealed class HealthViewModelOptions
     }
 }
 
-public sealed class HealthViewModel : ObservableObject, IDisposable
+public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 {
     public const int HealthTab = 0;
     public const int ActivityTab = 1;
@@ -107,11 +107,11 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
         SyncChart = new ChartCard(UiStrings.Health_ChartSync);
         Charts = [SessionChart, OpenChart, SyncChart];
 
-        ScanCommand = new RelayCommand(() => _ = ScanAsync(), () => CanStartWork);
+        ScanCommand = new AsyncRelayCommand(ScanAsync, () => CanStartWork);
         CleanCommand = new RelayCommand(OpenJunk, () => CanStartWork);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty), () => IsIdle);
         JunkCancelCommand = new RelayCommand(CancelJunk, () => IsIdle);
-        JunkRunCommand = new RelayCommand(() => _ = RunJunkAsync(), () => CanStartWork);
+        JunkRunCommand = new AsyncRelayCommand(RunJunkAsync, () => CanStartWork);
 
         // A scan or clean left running by a closed window keeps Scan and Clean disabled here until it ends.
         _context = SynchronizationContext.Current;
@@ -146,8 +146,12 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
             if (!SetField(ref _selectedTab, value)) return;
             OnPropertyChanged(nameof(IsHealthTab));
             OnPropertyChanged(nameof(IsActivityTab));
-            if (IsActivityTab) LoadActivity();
-            else StopTicker();
+            // A two-way binding's setter: WPF would swallow an exception here without a trace (SC-046, R6).
+            UiGuard.Run("Health: switch tab", () =>
+            {
+                if (IsActivityTab) LoadActivity();
+                else StopTicker();
+            });
         }
     }
 
@@ -253,7 +257,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
             if (_telemetryEnabled == value) return;
             _telemetryEnabled = value;
             OnPropertyChanged();
-            ApplyTelemetry(value);
+            UiGuard.Run("Health: collection toggle", () => ApplyTelemetry(value));
         }
     }
 
@@ -314,6 +318,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Health: Scan System failed");
             Inform(UiStrings.Health_ScanFailedTitle, Message(ex), BannerKind.Error);
         }
         finally
@@ -364,13 +369,14 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (!_dialogs.Confirm(UiStrings.Health_ConfirmCleanTitle, UiStrings.Health_ConfirmClean, [],
-                UiStrings.Health_ConfirmContinue, danger: true, ConfirmCleanId))
-            return;
-
-        Busy.Show(UiStrings.Health_CleaningTitle, UiStrings.Health_Cleaning);
         try
         {
+            // Inside the try (SC-046): a confirm that cannot open is a failed clean, said in the toast.
+            if (!_dialogs.Confirm(UiStrings.Health_ConfirmCleanTitle, UiStrings.Health_ConfirmClean, [],
+                    UiStrings.Health_ConfirmContinue, danger: true, ConfirmCleanId))
+                return;
+
+            Busy.Show(UiStrings.Health_CleaningTitle, UiStrings.Health_Cleaning);
             var ids = selected.Select(t => t.Id).ToList();
             CleanResult? result = null;
             await _options.RunInBackground(() => result = _service.Clean(ids));
@@ -388,6 +394,7 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Health: Clean Junk Files failed");
             Busy.Hide();
             Inform(UiStrings.Health_CleanupFailedTitle, Message(ex), BannerKind.Error);
         }
@@ -458,13 +465,14 @@ public sealed class HealthViewModel : ObservableObject, IDisposable
         Sections = report.Sections;
     }
 
-    private void OnRangeChosen(RangeOption option)
+    // Runs from a range pill's two-way IsSelected setter, where WPF would swallow an exception (SC-046, R6).
+    private void OnRangeChosen(RangeOption option) => UiGuard.Run("Health: range pill", () =>
     {
         foreach (var r in Ranges)
             if (!ReferenceEquals(r, option)) r.SetSelected(false);
         RangeDays = option.Days;
         LoadActivity();
-    }
+    });
 
     private void RenderActivity(ActivityData data)
     {

@@ -4,6 +4,7 @@
 
 using System.Windows;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.UI.Builder;
@@ -23,11 +24,11 @@ public partial class StackDialog : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        WindowPlacement.CapToWorkArea(this);
+        UiGuard.Run("Stack dialog: place", () => WindowPlacement.CapToWorkArea(this));
     }
 
-    private void OnConfirm(object sender, RoutedEventArgs e)
+    private void OnConfirm(object sender, RoutedEventArgs e) => UiGuard.Run("Stack dialog: confirm", () =>
     {
         if (Model.CanConfirm) DialogResult = true;
-    }
+    });
 }

@@ -5,6 +5,7 @@
 
 using System.Windows;
 using System.Windows.Automation;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 using RST.UI.Resources;
 
@@ -32,24 +33,24 @@ public partial class MessageDialog : Window
             ConfirmButton.Style = (Style)FindResource("DangerFilledButton");
             ConfirmButton.IsDefault = false;
             CancelButton.IsDefault = true;
-            Loaded += (_, _) => CancelButton.Focus();
+            Loaded += (_, _) => UiGuard.Run("Message dialog: loaded", () => CancelButton.Focus());
         }
     }
 
     /// <summary>Which button closed the dialog: Confirm (primary), the second action, or Cancel.</summary>
     public DialogChoice Choice { get; private set; } = DialogChoice.Cancel;
 
-    private void OnConfirm(object sender, RoutedEventArgs e)
+    private void OnConfirm(object sender, RoutedEventArgs e) => UiGuard.Run("Message dialog: confirm", () =>
     {
         Choice = DialogChoice.Primary;
         DialogResult = true;
-    }
+    });
 
-    private void OnSecondary(object sender, RoutedEventArgs e)
+    private void OnSecondary(object sender, RoutedEventArgs e) => UiGuard.Run("Message dialog: second action", () =>
     {
         Choice = DialogChoice.Secondary;
         DialogResult = true;
-    }
+    });
 }
 
 /// <summary>What a <see cref="MessageDialog"/> shows.</summary>
