@@ -156,7 +156,7 @@ internal static class SessionReplay
     /// whether it matched the current file at its open (or its last
     /// re-identifying save). The matched interval under a join key
     /// occupies its matching elements, not the key's bucket (SC-043).</summary>
-    private readonly record struct OpenDoc(DocumentIdentity Id, bool Matched);
+    private readonly record struct OpenDoc(DocumentIdentity Id, bool Matched, DateTimeOffset? ClosingTs = null);
 
     /// <summary>
     /// Replay one session file in seq order, appending the current file's
@@ -209,13 +209,42 @@ internal static class SessionReplay
 
         void CloseAll(DateTimeOffset endTs)
         {
-            foreach (var openedTs in openDocs.Values)
+            foreach (var (key, openedTs) in openDocs)
             {
                 AddInterval(intervals, openedTs, endTs, nowUtc);
-                AddInterval(sink.ActiveIntervals, openedTs, endTs, nowUtc);
+                AddInterval(sink.ActiveIntervals, openedTs, ActiveEndAt(key, endTs), nowUtc);
             }
             openDocs.Clear();
             allOpenDocs.Clear();
+        }
+
+        // A doc whose close had begun (doc_closing) when the session ended — a
+        // crash mid-close that recovery closes keys-only, or session_end — stops
+        // being active at its doc_closing. The matched interval under a key ends
+        // with its last matching doc, so it takes the latest of their ends.
+        DateTimeOffset ActiveEndAt(string key, DateTimeOffset endTs)
+        {
+            if (!allOpenDocs.TryGetValue(key, out var docs)) return endTs;
+            DateTimeOffset? end = null;
+            foreach (var d in docs)
+            {
+                if (!d.Matched) continue;
+                var de = d.ClosingTs is { } c && c < endTs ? c : endTs;
+                if (end is null || de > end) end = de;
+            }
+            return end ?? endTs;
+        }
+
+        // The live doc an identity names: the resolver's unique candidate, else
+        // a lone doc under its exact key; nothing when ambiguous (SC-038/SC-042).
+        (string? Key, int Index) Locate(DocumentIdentity id)
+        {
+            var (k, i, ambiguous) = ResolveOpenDoc(allOpenDocs, id);
+            if (ambiguous) return (null, -1);
+            if (k is null && id.JoinKey is { } exact
+                && allOpenDocs.TryGetValue(exact, out var exactDocs) && exactDocs.Count == 1)
+                return (exact, 0);
+            return (k, i);
         }
 
         // SC-043: the matched interval under a key ends when its last
@@ -353,10 +382,19 @@ internal static class SessionReplay
                 case TelemetryEventTypes.DocClosing:
                 {
                     var closingId = e.GetString(TelemetryFields.ClosingId);
+                    var closingIdentity = DocumentIdentity.ReadFrom(e);
                     if (closingId is not null)
                     {
-                        closingIds[closingId] = DocumentIdentity.ReadFrom(e);
+                        closingIds[closingId] = closingIdentity;
                         closingTs[closingId] = e.Ts;
+                    }
+                    // Remember on the doc itself that its close began here, so a
+                    // close recovery writes keys-only still clips active time.
+                    var (ck, cix) = Locate(closingIdentity);
+                    if (ck is not null)
+                    {
+                        var cdocs = allOpenDocs[ck];
+                        cdocs[cix] = cdocs[cix] with { ClosingTs = e.Ts };
                     }
                     break;
                 }
@@ -367,7 +405,22 @@ internal static class SessionReplay
                     if (status is not null &&
                         (status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) ||
                          status.Equals("Failed", StringComparison.OrdinalIgnoreCase)))
-                        break; // close didn't happen — doc is still open
+                    {
+                        // The close didn't happen — the doc is still open, and its
+                        // doc_closing no longer bounds its active time.
+                        var cancelledId = e.GetString(TelemetryFields.ClosingId);
+                        if (cancelledId is not null && closingIds.TryGetValue(cancelledId, out var cancelled))
+                        {
+                            closingTs.Remove(cancelledId);
+                            var (xk, xi) = Locate(cancelled);
+                            if (xk is not null)
+                            {
+                                var xdocs = allOpenDocs[xk];
+                                xdocs[xi] = xdocs[xi] with { ClosingTs = null };
+                            }
+                        }
+                        break;
+                    }
 
                     // Real closes carry no identity — join through the
                     // doc_closing's closing_id; synthetic closes carry
@@ -425,6 +478,7 @@ internal static class SessionReplay
                     }
                     if (key is null) break;
                     var closeDocs = allOpenDocs[key];
+                    if (closeDocs[index].ClosingTs is { } began && began < activeEnd) activeEnd = began;
                     closeDocs.RemoveAt(index);
                     RetireMatchedIfLast(key, closeDocs, e.Ts, activeEnd);
                     if (closeDocs.Count == 0) allOpenDocs.Remove(key);
@@ -520,10 +574,11 @@ internal static class SessionReplay
             var isLive = liveSessionGuid is not null &&
                 string.Equals(events[^1].SessionGuid, liveSessionGuid, StringComparison.OrdinalIgnoreCase);
             if (isLive)
-                foreach (var openedTs in openDocs.Values)
+                foreach (var (liveKey, openedTs) in openDocs)
                 {
                     if (sink.LiveOpenSince is null || openedTs < sink.LiveOpenSince) sink.LiveOpenSince = openedTs;
-                    if (nowUtc > openedTs) sink.LiveIntervals.Add((openedTs, nowUtc));
+                    var liveEnd = ActiveEndAt(liveKey, nowUtc);
+                    if (liveEnd > openedTs) sink.LiveIntervals.Add((openedTs, liveEnd));
                 }
             CloseAll(isLive ? nowUtc : events[^1].Ts);
         }

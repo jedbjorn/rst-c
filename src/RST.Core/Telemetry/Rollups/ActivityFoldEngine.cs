@@ -58,6 +58,9 @@ public sealed class RollupStoreOptions
     internal Action<string>? FaultHook { get; init; }
 
     internal RollupFileIO? FileIO { get; init; }
+
+    /// <summary>Test seam: how cleanup takes a raw file before deleting it.</summary>
+    internal IFileTaker? FileTaker { get; init; }
 }
 
 public sealed record FoldPassResult(
@@ -516,11 +519,13 @@ public sealed class FoldPass : IDisposable
     }
 
     /// <summary>
-    /// Delete one candidate, re-checking everything against the file as it is now: it is taken
-    /// under a handle that refuses writers (a live Revit session's writer refuses it in turn),
-    /// its length and last write must still be the folded ones, and both copies of every touched
-    /// rollup must hold the seal for exactly that file. The delete happens while the handle is
-    /// held, so nothing can change the file between the check and the delete.
+    /// Delete one candidate, re-checking everything against the file itself: it is held
+    /// exclusively (a live Revit session's writer refuses that, and nobody can write, rename or
+    /// replace it while held); through that handle its length and last write must still be the
+    /// folded ones, it must still be closed, and re-folding its content must touch exactly the
+    /// models the ledger lists; both copies of every touched rollup must hold the seal for
+    /// exactly that file; then it is deleted through the same handle — the file verified, never
+    /// one that took its path.
     /// </summary>
     private bool TryDelete(LedgerRow row, IReadOnlyList<IRetentionGate> gates)
     {
@@ -528,32 +533,44 @@ public sealed class FoldPass : IDisposable
         if (_o.IsLive(file.Path)) return false;
         _o.FaultHook?.Invoke("delete:" + row.Name);
 
-        FileStream guard;
-        try
+        using var taken = (_o.FileTaker ?? OutboxFileTaker.Default).TryTake(file.Path);
+        if (taken is null) return false; // live, locked or gone: not now
+        if (taken.Length != row.Size || taken.LastWriteUtc != RollupJson.TruncateMs(row.LastWriteUtc))
         {
-            guard = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.Delete);
+            Log("activity cleanup: " + row.Name + " changed since it was folded; re-folding first");
+            MarkForRefold(row);
+            return false;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        if (!SameMembership(row, taken.ReadAll()))
         {
-            return false; // live, locked or gone: not now
+            Log("activity cleanup: " + row.Name + " does not match its ledger row; re-folding first");
+            MarkForRefold(row);
+            return false;
         }
-        using (guard)
+        if (!SealVerified(row)) return false;
+        var candidate = new RetentionCandidate(file.Path, row.SessionGuid,
+            row.Models.Select(m => m.ModelId).ToList(), row.Size, row.LastWriteUtc);
+        if (!RetentionGates.AllAllow(gates, candidate, _o.Log)) return false;
+        _o.FaultHook?.Invoke("verified:" + row.Name);
+        return taken.Delete();
+    }
+
+    /// <summary>The held content is a closed session whose fold touches exactly the ledger's
+    /// models (a session that touched none is a genuinely empty contribution).</summary>
+    private bool SameMembership(LedgerRow row, byte[] content)
+    {
+        var events = new List<TelemetryEvent>();
+        using (var reader = new StreamReader(new MemoryStream(content)))
         {
-            var size = guard.Length;
-            var lastWrite = RollupJson.TruncateMs(new DateTimeOffset(File.GetLastWriteTimeUtc(file.Path), TimeSpan.Zero));
-            if (size != row.Size || lastWrite != RollupJson.TruncateMs(row.LastWriteUtc))
-            {
-                Log("activity cleanup: " + row.Name + " changed since it was folded; re-folding first");
-                MarkForRefold(row);
-                return false;
-            }
-            if (!SealVerified(row)) return false;
-            var candidate = new RetentionCandidate(file.Path, row.SessionGuid,
-                row.Models.Select(m => m.ModelId).ToList(), row.Size, row.LastWriteUtc);
-            if (!RetentionGates.AllAllow(gates, candidate, _o.Log)) return false;
-            File.Delete(file.Path);
-            return true;
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
+                if (TelemetryJson.TryParseLine(line) is { } e) events.Add(e);
         }
+        var info = SessionInfo.Read(events, row.Name);
+        if (!info.Closed || !string.Equals(info.SessionGuid, row.SessionGuid, StringComparison.OrdinalIgnoreCase)) return false;
+        var ids = ActivityFold.FoldSession(events, info, _o.Zone, DateTimeOffset.MaxValue)
+            .Select(c => c.Key.ModelId).OrderBy(i => i, StringComparer.Ordinal);
+        return ids.SequenceEqual(row.Models.Select(m => m.ModelId).OrderBy(i => i, StringComparer.Ordinal));
     }
 
     /// <summary>Re-read both copies of every touched rollup: each must hold the seal for exactly

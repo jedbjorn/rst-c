@@ -116,6 +116,8 @@ Decision #46. For each model, within each interval it is open in a session (from
 3. spans are clipped to the interval, so a gap never bridges a close or a collection gap;
 4. active time is the length of the union, split at local midnight.
 
+A close that began but never finished (Revit stopped during Close, so recovery wrote the close, or the session ended) still ends active time at its `doc_closing`.
+
 Edits Revit makes for you (a sync's reload, another add-in's change) count; a model open but untouched counts nothing. Open time (`open_seconds`) still runs to `doc_closed`.
 
 ## Model health
@@ -139,7 +141,7 @@ Long ranges (6M, 1Y) plot ISO weeks, Monday start, derived from the daily rows w
 
 The tray folds one closed outbox file (it has `session_end` and no Revit holds it) per step, oldest first, writing each touched rollup, then the index, then the ledger. A pass that finds the outbox unchanged ends there. A file folded in one pass is sealed on a later pass if unchanged; a seal reaches `.bak.json` when the model is next written, or on the following pass. A `model_stats` record is attributed by its keys, even when it lands after `doc_closing`.
 
-A raw outbox file is deleted only when **all** hold, re-checked right before the delete under a handle that refuses writers: it is closed and not live, and its size and last write are still the folded ones; its share is sealed for exactly that file in every model it touched, and both the rollup and its `.bak.json` (read back from disk) hold that seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. A failed index or ledger write stops the pass before cleanup. The age prune (`retentionDays`, default 180) stays as a backstop for files the tray never folds.
+A raw outbox file is deleted only when **all** hold, re-checked against the file itself while the tray holds it exclusively (nobody can write, rename or replace it, and a live Revit session's file cannot be held): its size and last write are still the folded ones; its content is still a closed session and re-folding it touches exactly the models its ledger row lists; its share is sealed for exactly that file in every one of those models, and both the rollup and its `.bak.json` (read back from disk) hold that seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. The delete then goes through the same handle, so the file deleted is the file verified. A session that touched no model (a genuinely empty contribution) has nothing to lose and cleans up the same way; a ledger row whose model list is missing or unreadable counts as unknown and re-folds — it never reads as "touched nothing". A failed index or ledger write stops the pass before cleanup. The age prune (`retentionDays`, default 180) stays as a backstop for files the tray never folds.
 
 ## Retention hook for forks
 

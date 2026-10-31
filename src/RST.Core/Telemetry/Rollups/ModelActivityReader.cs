@@ -257,20 +257,19 @@ public static class ModelActivityReader
     }
 
     private static ModelActivity Read(
-        RollupStore store, IReadOnlyList<string> ids, DocumentIdentity fallbackIdentity, string kind, ActivityReadOptions o)
+        RollupStore store, IReadOnlyList<string> ids, DocumentIdentity identity, string kind, ActivityReadOptions o)
     {
         var rollups = new List<ModelRollup>();
         foreach (var id in ids)
             if (store.LoadModel(id, ReadMode.Reader).Value is { } r) rollups.Add(r);
         rollups = rollups.OrderBy(r => new ModelKey(r.KeyKind, "").Rank).ThenBy(r => r.ModelId, StringComparer.Ordinal).ToList();
 
-        // One matcher for what is not folded yet, whichever entry point asked: the primary
-        // rollup's keys when there is one, else the caller's identity (a model never folded).
-        var identity = rollups.Count > 0 ? rollups[0].Keys.ToIdentity() : fallbackIdentity;
+        // Raw files not folded yet are replayed with the caller's own keys — the current model's
+        // in Revit, the requested model's in the tray — never a weaker rollup's: a
+        // creation-only rollup must not let a sibling central's events in (the ladder rejects
+        // a present key that differs).
         if (SessionReplay.BuildMatcher(identity) is not { } matcher) return ModelActivity.Empty;
-        var key = rollups.Count > 0
-            ? new ModelKey(rollups[0].KeyKind, rollups[0].ModelId)
-            : ModelKey.From(identity) ?? new ModelKey(matcher.Kind, "");
+        var key = ModelKey.From(identity) ?? new ModelKey(matcher.Kind, "");
 
         // The requested ids, not only the ones that loaded: a folded file of a model whose
         // rollup is unreadable here is folded in memory instead.

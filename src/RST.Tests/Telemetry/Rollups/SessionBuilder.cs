@@ -103,6 +103,15 @@ internal sealed class SessionBuilder
         return this;
     }
 
+    /// <summary>A doc_closing with no doc_closed (Revit stopped while closing).</summary>
+    public SessionBuilder ClosingOnly(DateTimeOffset ts, DocumentIdentity id)
+    {
+        var closing = Add(TelemetryEventTypes.DocClosing, ts);
+        id.WriteKeysTo(closing);
+        closing.SetField(TelemetryFields.ClosingId, "c" + (++_closing));
+        return this;
+    }
+
     /// <summary>doc_opened with no doc_opening before it: open, but no timed open.</summary>
     public SessionBuilder OpenedOnly(DateTimeOffset ts, DocumentIdentity id)
     {

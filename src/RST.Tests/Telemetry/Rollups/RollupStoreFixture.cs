@@ -30,6 +30,7 @@ internal sealed class RollupStoreFixture : IDisposable
     public List<string> Logs { get; } = new();
     public IReadOnlyList<IRetentionGate> Gates { get; set; } = Array.Empty<IRetentionGate>();
     public Action<string>? FaultHook { get; set; }
+    public IFileTaker? FileTaker { get; set; }
 
     public RollupStoreOptions Options => new()
     {
@@ -41,6 +42,7 @@ internal sealed class RollupStoreFixture : IDisposable
         IsLive = p => LiveFiles.Contains(p),
         Gates = Gates,
         FaultHook = FaultHook,
+        FileTaker = FileTaker,
     };
 
     public ActivityFoldEngine Engine => new(Options);
