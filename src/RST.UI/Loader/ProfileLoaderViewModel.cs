@@ -418,9 +418,10 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         foreach (var toggle in TabToggles)
         {
             // A ticked switch must always allow the user to show that tab again.
-            var tool = toggle.IsHidden ? null
-                : RstifyRules.BlockingTool(profile, _session.AllTabs, _catalog, hidden, toggle.Tab);
-            toggle.SetLock(tool);
+            string? tool = null;
+            var blocked = !toggle.IsHidden
+                && RstifyRules.BlockingTool(profile, _session.AllTabs, _catalog, hidden, toggle.Tab, out tool);
+            toggle.SetLock(blocked, tool);
         }
     }
 

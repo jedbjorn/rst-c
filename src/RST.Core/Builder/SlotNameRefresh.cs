@@ -10,8 +10,10 @@ public static class SlotNameRefresh
     /// <summary>Refresh exact enum labels in place; return the number changed. Typed labels stay as saved.</summary>
     public static int Apply(Profile profile, IReadOnlyList<ScannedCommand>? catalog)
     {
-        var native = (catalog ?? []).Where(c => c.Origin == CommandOrigin.Native && c.EnumName is not null)
-            .ToDictionary(c => c.Id, StringComparer.Ordinal);
+        var native = new Dictionary<string, ScannedCommand>(StringComparer.Ordinal);
+        foreach (var c in catalog ?? [])
+            if (c is not null && !string.IsNullOrEmpty(c.Id)
+                && c.Origin == CommandOrigin.Native && c.EnumName is not null) native.TryAdd(c.Id, c);
         if (native.Count == 0) return 0;
         var count = 0;
         var tools = profile.Panels.SelectMany(p => p.Slots)

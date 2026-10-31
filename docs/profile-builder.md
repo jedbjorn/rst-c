@@ -58,7 +58,7 @@ The catalogue is built once per Revit session, on the first Loader or Builder op
 
 - **Autodesk Native** groups every built-in Revit tab. It starts collapsed.
 - Below it, add-in tabs and vendor panels, in alphabetical order.
-- Each level runs tab → panel → command. A tool appears under every tab and panel it sits on, including Select. Hidden family-editor copies are left out. Groups count their rows; the Commands total and Autodesk Native count each command once. Commands show a short form of their command id (hover for the full id).
+- Each level runs tab → panel → command. A tool appears under every tab and panel it sits on. Hidden family-editor copies are left out. Groups count their rows; the Commands total and Autodesk Native count each command once. Commands show a short form of their command id (hover for the full id).
 
 Built-in tools use Revit’s own ribbon names, such as “Wall: Architectural”. A tool can have a different name on each tab.
 

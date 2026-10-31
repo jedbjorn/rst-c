@@ -81,6 +81,14 @@ public class SlotNameRefreshTests
     }
 
     [Fact]
+    public void Catalog_lookup_skips_null_entries_and_keeps_the_first_duplicate()
+    {
+        var tool = Tool(tab: "Missing");
+        SlotNameRefresh.Apply(Profile(tool), [null!, Wall, Wall with { DisplayName = "Later label" }]).Should().Be(1);
+        tool.Name.Should().Be("Wall: Architectural");
+    }
+
+    [Fact]
     public void Empty_catalog_or_missing_enum_name_leaves_everything_unchanged()
     {
         var profile = Profile(Tool());
