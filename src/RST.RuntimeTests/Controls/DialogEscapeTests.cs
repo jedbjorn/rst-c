@@ -494,8 +494,9 @@ public class DialogEscapeTests
     };
 
     /// <summary>
-    /// A new window in RST.UI fails this until it opts in to the Escape rules and its Escape test is
-    /// listed in <see cref="EscapeCoverage"/>. The eyedropper's ScreenPickOverlay is left out: it is not
+    /// A new window in RST.UI fails this until it is listed in <see cref="EscapeCoverage"/> with its
+    /// Escape test. The listing is all this checks; the test it names proves the window's Escape (its
+    /// opt-in to the Escape rules) works. The eyedropper's ScreenPickOverlay is left out: it is not
     /// a modal the user closes but the pick itself, and ScreenColorPicker takes its Escape (a fresh
     /// press cancels the pick, and the picker waits for the key's release before it shows again).
     /// </summary>
