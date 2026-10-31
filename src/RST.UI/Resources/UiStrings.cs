@@ -28,6 +28,9 @@ public static class UiStrings
 
     public static string Common_Cancel => Get(nameof(Common_Cancel));
 
+    /// <summary>Revit's message when the window safety net (Dialogs.WindowGuard) closed {0} after an error.</summary>
+    public static string Window_ClosedAfterError(object? arg0) => Format(nameof(Window_ClosedAfterError), arg0);
+
     public static string Dialog_Items => Get(nameof(Dialog_Items));
 
     public static string Edit_Cut => Get(nameof(Edit_Cut));

@@ -13,6 +13,7 @@ using RST.Engine.Ribbon;
 using RST.Engine.Scanning;
 using RST.Engine.Theming;
 using RST.UI.Loader;
+using RST.UI.Resources;
 using RST.Core.Logging;
 
 namespace RST.Engine.Commands;
@@ -34,7 +35,14 @@ public sealed class LoaderCommand : IExternalCommand
             var scheduler = RstApplication.GetSwitchScheduler();
             var allTabs = RibbonTabEnumerator.Enumerate();
             RevitThemeDetector.ApplyToWindows();
-            ProfileLoaderLauncher.Show(commandData.Application.MainWindowHandle, revitVersion, catalog, scheduler, allTabs);
+            var closedNormally = ProfileLoaderLauncher.Show(commandData.Application.MainWindowHandle, revitVersion, catalog, scheduler, allTabs);
+            if (!closedNormally)
+            {
+                // SC-045: the window safety net (WindowGuard) logged the error and closed the window.
+                Log.Warning("=== Loader session closed after a UI error: duration={Ms}ms ===", sw.ElapsedMilliseconds);
+                message = UiStrings.Window_ClosedAfterError(UiStrings.Loader_WindowTitle);
+                return Result.Failed;
+            }
             Log.Information("=== Loader session closed: duration={Ms}ms ===", sw.ElapsedMilliseconds);
             return Result.Succeeded;
         }
