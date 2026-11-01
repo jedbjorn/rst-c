@@ -98,11 +98,11 @@ Unloading a profile and **Restore All Add-ins** switch back on everything rst-c 
 
 Some add-ins are never switched off as "unused": RST itself, the add-ins inside Revit's own install folder, and add-ins published by Autodesk (Batch Print, eTransmit, …). You can still switch those yourself in Autodesk's Add-Ins Manager.
 
-Before a load changes anything, **Confirm Add-in Changes** shows the plan per Revit year, one line per add-in with the years it applies to (for example "DiRoots.One (2026, 2027)"): what will be switched off, what will be switched back on, the required add-ins that stay on, and what is already known not to change (for example "Revizto (2027): locked on by your administrator"). **Cancel** is its default button. The load then runs exactly that plan.
+Only when a load would switch an add-in, **Confirm Add-in Changes** shows the plan per Revit year, one line per add-in with the years it applies to (for example "DiRoots.One (2026, 2027)"): what will be switched off, what will be switched back on, the required add-ins that stay on, and what is already known not to change (for example "Revizto (2027): locked on by your administrator"). **Cancel** is its default button. The load then runs exactly that plan. A plan containing only administrator-locked changes skips confirmation; the Add-in Check still explains them after the load. An unreadable settings file still prompts before a planned change is retried, because the retry may succeed.
 
 ### The Add-in Check
 
-After every load, the **Add-in Check** reports what changed and what could not, with the year and the reason in plain words:
+After a load with changes, failed changes, notes, a plan failure, or missing or switched-off required add-ins, the **Add-in Check** reports what changed and what could not, with the year and the reason in plain words:
 
 | Reason | What it means |
 |---|---|
@@ -112,7 +112,7 @@ After every load, the **Add-in Check** reports what changed and what could not, 
 | no longer installed | The add-in was removed between the plan and the change |
 | Revit's add-in settings file could not be read or written | rst-c never overwrites a file it cannot read; Revit rebuilds an unreadable file itself at its next start |
 
-It also lists the required add-ins that are **Missing — Not Installed**, with a **download ↗** link where the profile has one (baked in from rst-c's curated registry when the profile is saved; only `http://` and `https://` links open), and those that are **Required but Switched Off**: switched off by you in Autodesk's Add-Ins Manager (turn them on there) or by your administrator. Every report ends with "Add-in changes apply the next time Revit starts." Unload and **Restore All Add-ins** show the same report. See [Profile Loader](profile-loader.md#loading-a-profile).
+It also lists the required add-ins that are **Missing — Not Installed**, with a **download ↗** link where the profile has one (baked in from rst-c's curated registry when the profile is saved; only `http://` and `https://` links open), and those that are **Required but Switched Off**: switched off by you in Autodesk's Add-Ins Manager (turn them on there) or by your administrator. Every report that is shown ends with "Add-in changes apply the next time Revit starts." When a load has nothing to report and all required add-ins are installed and on, it skips the Add-in Check and says "No add-in changes." in the closing summary. Unload and **Restore All Add-ins** show the same report. See [Profile Loader](profile-loader.md#loading-a-profile).
 
 ### How matching works
 
