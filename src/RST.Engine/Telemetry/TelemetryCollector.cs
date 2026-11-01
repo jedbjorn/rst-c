@@ -10,13 +10,14 @@
 //   - handlers do cheap capture + enqueue ONLY — the one file read
 //     (BasicFileInfo) happens solely on full-block events, and only
 //     against a LocalPathGuard-verified local path. The heavier
-//     model_stats capture (Document.GetWarnings + the local file's
-//     length, again only through LocalPathGuard) never runs inside an
-//     open handler: open/save/sync only REQUEST it, and it runs at the
-//     next Revit Idling (spec #24 Capture Additions, ModelStatsGate).
-//     The exception is a model that is closing — it is gone before
-//     Idling, so its pending or during-close capture runs in the
-//     closing/save/sync handler while the Document is valid;
+//     model_stats capture (the local file's length, again only through
+//     LocalPathGuard, plus Document.GetWarnings after a save or sync —
+//     never after an open, decision #71) never runs inside an event
+//     handler: open/save/sync only REQUEST it for that exact document,
+//     and it runs at the next Revit Idling (spec #24 Capture Additions,
+//     ModelStatsGate). The exception is a document that is closing —
+//     it is gone before Idling, so its pending or during-close capture
+//     runs in the closing/save/sync handler while the Document is valid;
 //   - telemetry never takes Revit down — every handler body is guarded;
 //     on failure the event drops, the first failure per site logs once
 //     (via the injected callback → Log), and collection keeps going.
@@ -64,9 +65,10 @@ public sealed class TelemetryCollector : IDisposable
     // subscribed. Idling is hooked only while a capture is pending —
     // never left on, since it fires continuously while Revit is idle.
     private bool _statsIdlingHooked;
-    // DocumentClosed carries only the id: the tracking key each closing
-    // document had, so the gate's closing state can be ended.
-    private readonly Dictionary<int, string> _closingStatsKeys = new();
+    // DocumentClosed carries only the event id (and the Document is gone
+    // by then): the IdentityCapture.DocumentId each closing document had,
+    // so the gate's closing state can be ended without touching it.
+    private readonly Dictionary<int, string> _closingStatsDocs = new();
     private readonly System.Collections.Generic.HashSet<string> _warnedSites = new();
 
     private readonly CollectorLifecycle _lifecycle;
@@ -281,7 +283,7 @@ public sealed class TelemetryCollector : IDisposable
             if (!_lifecycle.IsEnabled) return;
             var identity = IdentityCapture.CaptureFull(doc!);
             _lifecycle.TryEmit(TelemetryEventTypes.DocOpened, populate: identity.WriteTo);
-            RequestModelStats(doc!);
+            RequestModelStats(doc!, ModelStatsTrigger.Open);
         });
     }
 
@@ -338,7 +340,7 @@ public sealed class TelemetryCollector : IDisposable
             if (!IdentityCapture.IsTrackable(doc)) return;
             var identity = IdentityCapture.CaptureFull(doc!);
             _lifecycle.TryEmit(TelemetryEventTypes.DocSaved, populate: identity.WriteTo);
-            RequestModelStats(doc!);
+            RequestModelStats(doc!, ModelStatsTrigger.Save);
         });
     }
 
@@ -356,7 +358,7 @@ public sealed class TelemetryCollector : IDisposable
                 identity.WriteTo(e);
                 e.SetField(TelemetryFields.PreviousLocalPath, previousPath);
             });
-            RequestModelStats(doc!);
+            RequestModelStats(doc!, ModelStatsTrigger.Save);
         });
     }
 
@@ -397,7 +399,7 @@ public sealed class TelemetryCollector : IDisposable
                 keys.WriteKeysTo(e);
                 e.SetField(TelemetryFields.Status, status);
             });
-            RequestModelStats(doc!);
+            RequestModelStats(doc!, ModelStatsTrigger.Sync);
         });
     }
 
@@ -450,24 +452,24 @@ public sealed class TelemetryCollector : IDisposable
     // ---- model_stats (spec #24 Capture Additions) --------------------------
 
     /// <summary>
-    /// After an open, save or sync: ask for a model_stats capture at the
-    /// next Idling. Cheap — a tracking-key read, a set insert, and (for
-    /// the first pending model) one Idling subscription. The one
-    /// exception: a save or sync while the model is closing (Close →
-    /// Save, Synchronize and Close) captures at once, since the model is
-    /// gone before Idling (review WU2-01). Its own guard, so a failure
+    /// After an open, save or sync: ask for a model_stats capture of THIS
+    /// document at the next Idling. Cheap — two key reads, a list insert,
+    /// and (for the first pending document) one Idling subscription. The
+    /// one exception: a save or sync while the document is closing (Close
+    /// → Save, Synchronize and Close) captures at once, since the document
+    /// is gone before Idling (review WU2-01). Its own guard, so a failure
     /// here never costs the open/save/sync record already emitted.
     /// </summary>
-    private void RequestModelStats(Document doc)
+    private void RequestModelStats(Document doc, ModelStatsTrigger trigger)
     {
         Guarded("model_stats_request", () =>
         {
             if (!_lifecycle.IsEnabled) return;
             var key = IdentityCapture.TrackingKey(doc);
-            switch (_statsGate.Request(key))
+            switch (_statsGate.Request(IdentityCapture.DocumentId(doc), key, trigger))
             {
                 case ModelStatsDecision.CaptureNow:
-                    CaptureModelStats(doc, key);
+                    CaptureModelStats(doc, key, trigger.MeasuresWarnings());
                     break;
                 case ModelStatsDecision.Defer when !_statsIdlingHooked:
                     _uiApp.Idling += OnIdlingModelStats;
@@ -478,40 +480,43 @@ public sealed class TelemetryCollector : IDisposable
     }
 
     /// <summary>
-    /// DocumentClosing: mark the model closing (so a save or sync during
-    /// the close captures at once), and capture a request still pending
-    /// from an earlier save or sync. Runs whatever the collection flag
-    /// (marking is in-process only); captures only while collecting.
+    /// DocumentClosing: mark this document closing (so a save or sync
+    /// during the close captures at once), and capture its own request
+    /// still pending from an earlier open, save or sync. Another open copy
+    /// of the same model keeps its request. Runs whatever the collection
+    /// flag (marking is in-process only); captures only while collecting.
     /// </summary>
-    private void ModelStatsClosing(Document doc, int documentId)
+    private void ModelStatsClosing(Document doc, int closingId)
     {
         Guarded("model_stats_closing", () =>
         {
-            var key = IdentityCapture.TrackingKey(doc);
-            _closingStatsKeys[documentId] = key;
-            if (_statsGate.Closing(key) && _lifecycle.IsEnabled)
-                CaptureModelStats(doc, key);
+            var documentId = IdentityCapture.DocumentId(doc);
+            _closingStatsDocs[closingId] = documentId;
+            if (_statsGate.Closing(documentId) is { } request && _lifecycle.IsEnabled)
+                CaptureModelStats(doc, request.ModelKey, request.MeasureWarnings);
         });
     }
 
-    /// <summary>DocumentClosed, succeeded or cancelled: the model is no
-    /// longer closing (a cancelled close's later saves defer again).</summary>
-    private void ModelStatsClosingEnded(int documentId)
+    /// <summary>DocumentClosed, succeeded or cancelled: the document is no
+    /// longer closing (a cancelled close's later saves defer again). Uses
+    /// the id remembered at closing; never touches the closed Document.</summary>
+    private void ModelStatsClosingEnded(int closingId)
     {
         Guarded("model_stats_closed", () =>
         {
-            if (_closingStatsKeys.Remove(documentId, out var key))
-                _statsGate.ClosingEnded(key);
+            if (_closingStatsDocs.Remove(closingId, out var documentId))
+                _statsGate.ClosingEnded(documentId);
         });
     }
 
     /// <summary>
-    /// One-shot per batch of requests: unhook, then capture every
-    /// requested model that is still open. The open documents are found
-    /// through Idling's sender (the UIApplication) rather than held from
-    /// the requesting event, so a model closed before Idling is simply
-    /// not found. Each model has its own guard: one failing capture
-    /// never stops the others.
+    /// One-shot per batch of requests: unhook, then capture each requested
+    /// document that is still open — matched by its document id, so with
+    /// two copies of one model open the one that asked is the one sampled
+    /// (rc.1 VM, F2). The open documents are found through Idling's sender
+    /// (the UIApplication) rather than held from the requesting event, so
+    /// a document closed before Idling is simply not found. Each capture
+    /// has its own guard: one failing capture never stops the others.
     /// </summary>
     private void OnIdlingModelStats(object? sender, Autodesk.Revit.UI.Events.IdlingEventArgs args)
     {
@@ -525,20 +530,20 @@ public sealed class TelemetryCollector : IDisposable
 
             var requested = _statsGate.TakePending();
             if (requested.Count == 0 || !_lifecycle.IsEnabled) return;
-            var wanted = new HashSet<string>(requested, StringComparer.Ordinal);
 
             var documents = (sender as UIApplication)?.Application.Documents;
             if (documents is null) return;
-            foreach (Document doc in documents)
+            var open = new List<Document>();
+            foreach (Document doc in documents) open.Add(doc);
+
+            var resolved = ModelStatsGate.Resolve(requested, open,
+                doc => IdentityCapture.IsTrackable(doc) ? IdentityCapture.DocumentId(doc) : null);
+            foreach (var (doc, request) in resolved)
             {
-                if (wanted.Count == 0) break;
                 Guarded("model_stats", () =>
                 {
-                    if (!IdentityCapture.IsTrackable(doc)) return;
-                    var key = IdentityCapture.TrackingKey(doc);
-                    if (!wanted.Remove(key)) return;
-                    if (!_statsGate.CanEmit(key)) return;
-                    CaptureModelStats(doc, key);
+                    if (!_statsGate.CanEmit(request.ModelKey)) return;
+                    CaptureModelStats(doc, request.ModelKey, request.MeasureWarnings);
                 });
             }
         });
@@ -548,16 +553,25 @@ public sealed class TelemetryCollector : IDisposable
     /// Read the stats (Revit reads BEFORE the lifecycle gate, SC-030)
     /// and emit. file_size_bytes is the local file's length through
     /// LocalPathGuard only; null for cloud, network and unsaved models.
-    /// The timing line is AC 10's evidence ("under 100 ms per capture").
+    /// warnings_count is read only when <paramref name="measureWarnings"/>
+    /// (after a save or sync); an open-only capture writes it null, "not
+    /// measured" (decision #71: GetWarnings froze Revit 2026 for 3.2 s
+    /// after an open). The timing line is AC 10's evidence ("under 100 ms
+    /// per capture").
     /// </summary>
-    private void CaptureModelStats(Document doc, string key)
+    private void CaptureModelStats(Document doc, string key, bool measureWarnings)
     {
         var total = Stopwatch.StartNew();
         var keys = IdentityCapture.CaptureKeys(doc);
 
-        var warningsWatch = Stopwatch.StartNew();
-        var warnings = Get<int?>(() => doc.GetWarnings().Count);
-        warningsWatch.Stop();
+        int? warnings = null;
+        long warningsMs = 0;
+        if (measureWarnings)
+        {
+            var warningsWatch = Stopwatch.StartNew();
+            warnings = Get<int?>(() => doc.GetWarnings().Count);
+            warningsMs = warningsWatch.ElapsedMilliseconds;
+        }
 
         var size = keys.IsCloud == true
             ? null
@@ -576,9 +590,11 @@ public sealed class TelemetryCollector : IDisposable
 
         try
         {
+            var warningsPart = measureWarnings
+                ? "GetWarnings " + warningsMs + " ms, " + (warnings?.ToString() ?? "unknown") + " warnings"
+                : "GetWarnings skipped (open)";
             _info?.Invoke(
-                "model_stats captured: GetWarnings " + warningsWatch.ElapsedMilliseconds + " ms, " +
-                (warnings?.ToString() ?? "unknown") + " warnings, file size " +
+                "model_stats captured: " + warningsPart + ", file size " +
                 (size is null ? "not read" : "read") + ", capture " + total.ElapsedMilliseconds + " ms");
         }
         catch { /* logging must never take a handler down */ }

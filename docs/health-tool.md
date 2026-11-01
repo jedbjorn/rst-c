@@ -185,7 +185,7 @@ description: The model's health colour for each day used; per week at 6M
 | **Red** | Poor |
 | **Grey** | Not enough data yet |
 
-The colour comes from four things rst-c records about the model, each weighed equally: its **file size** (no concern up to 500 MB, the most at 4 GB), its **warnings per MB** (no concern up to 1 warning per 2 MB, the most at 2 per MB), and the **typical time to open** and **to synchronize** (the middle value of the last 10 of each; no concern up to 30 seconds, the most at 5 minutes). Anything not known for a model is left out rather than counted against it: a local model has no syncs, and a cloud model has no local file size, so it has no warnings per MB either. The chart has no numbers on purpose; hover over a dot to see its date and colour, for example "2026-10-30 — Yellow". The newest dot is the model as it is now.
+The colour comes from four things rst-c records about the model, each weighed equally: its **file size** (no concern up to 500 MB, the most at 4 GB), its **warnings per MB** (no concern up to 1 warning per 2 MB, the most at 2 per MB), and the **typical time to open** and **to synchronize** (the middle value of the last 10 of each; no concern up to 30 seconds, the most at 5 minutes). Anything not known for a model is left out rather than counted against it: a local model has no syncs, a cloud model has no local file size, so it has no warnings per MB either, and a model that has only been opened, never saved or synced, has no warning count yet (warnings are counted after a save or sync, not after an open). The chart has no numbers on purpose; hover over a dot to see its date and colour, for example "2026-10-30 — Yellow". The newest dot is the model as it is now.
 
 ### Data & privacy
 
@@ -197,7 +197,7 @@ rst-c records model activity on this PC so the Activity tab, and the RST tray's 
 - Opening, closing, saving and Save As of a model, and how long the open took. Each carries the model's identity: its title, its local and central paths, the ids Revit keeps for it (creation, central and cloud ids), whether it is workshared, cloud, a family or detached.
 - Each synchronize with central: its start, its end, and the text of the optional comment you typed in Revit's Synchronize with Central dialog.
 - That the model changed, at most once a minute per model, and that you switched to another open model, at most once a minute. Only the time and which model; never what changed.
-- The model's warning count and file size on disk, after it opens, saves or syncs, at most once every 5 minutes.
+- The model's file size on disk after it opens, and its warning count and file size after it saves or syncs, at most once every 5 minutes. Warnings are not counted after an open, so opening a model is never slowed down; the last count recorded is kept until the next save or sync.
 - Collection being turned off and on.
 
 **What is never recorded:** the model's content (elements, views, sheets, parameters, geometry, names inside the model), your keystrokes and clicks (the only text you type that is recorded is the sync comment above), the commands you ran, or anything from other programs. Linked models are not tracked.

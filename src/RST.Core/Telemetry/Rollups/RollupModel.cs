@@ -21,19 +21,51 @@ public static class RollupSchema
     public const int Version = 1;
 }
 
-/// <summary>The latest <c>model_stats</c> a model recorded (a day's, or overall).</summary>
+/// <summary>
+/// The latest <c>model_stats</c> a model recorded (a day's, or overall). A record taken after an
+/// open measures the file size only: its null warning count means NOT MEASURED, never zero
+/// (decision #71). So a merge keeps the size of the latest record and the warning count of the
+/// latest record that measured one, with <see cref="WarningsTs"/> saying when that was.
+/// </summary>
 public sealed record ModelStatsPoint(DateTimeOffset Ts, int? WarningsCount, long? FileSizeBytes)
 {
-    /// <summary>The later of two points; a tie on ts keeps the larger values, so the merge is order-independent.</summary>
+    private readonly DateTimeOffset? _warningsTs;
+
+    /// <summary>When <see cref="WarningsCount"/> was measured: <see cref="Ts"/> for a record that
+    /// measured it itself, earlier when it was kept from an earlier record; null with no count.</summary>
+    public DateTimeOffset? WarningsTs
+    {
+        get => WarningsCount is null ? null : _warningsTs ?? Ts;
+        init => _warningsTs = value == Ts ? null : value;
+    }
+
+    /// <summary>
+    /// Two points merged: the later one's ts and size, and the warning count of whichever measured
+    /// one later (a count beats no count). Ties keep the larger value. Each half is the maximum of
+    /// a total order, so the merge is commutative and associative: any fold order gives one point.
+    /// </summary>
     internal static ModelStatsPoint? Latest(ModelStatsPoint? a, ModelStatsPoint? b)
     {
         if (a is null) return b;
         if (b is null) return a;
         var c = a.Ts.CompareTo(b.Ts);
+        var sized = c > 0 || (c == 0 && Nullable.Compare(a.FileSizeBytes, b.FileSizeBytes) >= 0) ? a : b;
+        var counted = LaterCount(a, b);
+        if (counted is null || ReferenceEquals(sized, counted)) return sized;
+        return new ModelStatsPoint(sized.Ts, counted.WarningsCount, sized.FileSizeBytes)
+        {
+            WarningsTs = counted.WarningsTs,
+        };
+    }
+
+    /// <summary>The point with the later measured count; null when neither measured one.</summary>
+    private static ModelStatsPoint? LaterCount(ModelStatsPoint a, ModelStatsPoint b)
+    {
+        if (a.WarningsCount is null) return b.WarningsCount is null ? null : b;
+        if (b.WarningsCount is null) return a;
+        var c = Nullable.Compare(a.WarningsTs, b.WarningsTs);
         if (c != 0) return c > 0 ? a : b;
-        var w = Nullable.Compare(a.WarningsCount, b.WarningsCount);
-        if (w != 0) return w > 0 ? a : b;
-        return Nullable.Compare(a.FileSizeBytes, b.FileSizeBytes) >= 0 ? a : b;
+        return a.WarningsCount >= b.WarningsCount ? a : b;
     }
 }
 
@@ -62,7 +94,8 @@ public sealed class RollupDay
     /// <summary>Subversions (e.g. "2026.4"), sorted; empty for data from before v3.2.</summary>
     public List<string> RevitSubversions { get; set; } = new();
 
-    /// <summary>The day's latest model_stats; null when none was recorded that day.</summary>
+    /// <summary>The day's latest model_stats (its warning count the day's latest measured one, see
+    /// <see cref="ModelStatsPoint"/>); null when none was recorded that day.</summary>
     public ModelStatsPoint? Stats { get; set; }
 
     /// <summary>The four health inputs at the end of the day (spec #24, Model Health).</summary>
@@ -373,7 +406,8 @@ public sealed class ModelIndexRow
     /// <summary>Subversion ("2026.4") → the last day the model was open in it.</summary>
     public SortedDictionary<string, DateOnly> RevitSubversions { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>The latest model_stats, with its ts ("last known").</summary>
+    /// <summary>The latest model_stats, with its ts ("last known"); its warning count is the last
+    /// measured one, from <see cref="ModelStatsPoint.WarningsTs"/>.</summary>
     public ModelStatsPoint? LastStats { get; set; }
 
     /// <summary>The current health inputs (the last day's); score them with <see cref="ModelHealth"/>.</summary>

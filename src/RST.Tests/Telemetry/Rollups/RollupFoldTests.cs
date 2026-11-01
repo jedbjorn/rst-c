@@ -324,6 +324,117 @@ public sealed class RollupFoldTests : IDisposable
         _f.Index().Single().LastStats!.Ts.Should().Be(D(30, 16));
     }
 
+    // ---- open-only model_stats: null warnings = not measured (decision #71, rc.1 VM F1) ----
+
+    [Fact]
+    public void A_known_49_then_an_open_only_null_keeps_49_everywhere_and_takes_the_new_size()
+    {
+        var doc = SessionBuilder.Central("Snowdon");
+        // The 30th: Close → Save measured 49 warnings.
+        Workday(doc, 30).Stats(D(30, 16, 59), doc, 49, 97_882_112L).Write(_f.Outbox, D(30, 18));
+        // The 31st: opened, not saved: the open-only capture has the size and no count.
+        new SessionBuilder().Start(D(31, 8)).Open(D(31, 9), doc, 7)
+            .Stats(D(31, 9, 1), doc, null, 98_000_000L)
+            .Close(D(31, 10), doc).End(D(31, 10, 1)).Write(_f.Outbox, D(31, 11));
+        _f.PassUntilQuiet();
+
+        var days = _f.Rollup(doc)!.Days;
+        days.Select(d => d.Date.Day).Should().Equal(30, 31);
+        days[1].Stats!.WarningsCount.Should().BeNull("the 31st's own record measured none; never stored as 0");
+        days[1].Stats!.FileSizeBytes.Should().Be(98_000_000L);
+        days[1].Health.Should().Be(new HealthInputs(98_000_000L, 49, 13.5, 40),
+            "the day's health keeps the last known count with the new size");
+
+        var row = _f.Index().Single();
+        row.LastStats!.WarningsCount.Should().Be(49);
+        row.LastStats.WarningsTs.Should().Be(D(30, 16, 59), "when the 49 was measured");
+        row.LastStats.FileSizeBytes.Should().Be(98_000_000L);
+        row.LastStats.Ts.Should().Be(D(31, 9, 1));
+        row.Health!.WarningsCount.Should().Be(49);
+        row.Health.FileSizeBytes.Should().Be(98_000_000L);
+
+        // The tray's and Revit's cards (ModelActivityFacts.FromRollup reads LastStats) and health.
+        var read = ModelActivityReader.ReadCurrentModel(doc, _f.ReadOptions());
+        read.LastStats!.WarningsCount.Should().Be(49);
+        read.LastStats.FileSizeBytes.Should().Be(98_000_000L);
+        read.CurrentHealth!.WarningsCount.Should().Be(49);
+        ModelHealth.Evaluate(read.CurrentHealth).Colour.Should().Be(ModelHealthColour.Green,
+            "49 / 93.5 MB is the warning density the VM computed, not a zero-warning model");
+    }
+
+    [Fact]
+    public void An_open_only_null_later_the_same_day_keeps_the_count_through_a_rewrite_and_reread()
+    {
+        var doc = SessionBuilder.Central("Snowdon");
+        new SessionBuilder().Start(D(30, 8)).Open(D(30, 9), doc, 7)
+            .Stats(D(30, 9, 1), doc, null, 90_000_000L)       // open
+            .Stats(D(30, 12), doc, 49, 95_000_000L)           // sync
+            .Close(D(30, 13), doc).Open(D(30, 14), doc, 7)
+            .Stats(D(30, 14, 1), doc, null, 97_000_000L)      // reopen
+            .Close(D(30, 15), doc).End(D(30, 15, 1)).Write(_f.Outbox, D(30, 18));
+        _f.PassUntilQuiet();
+        _f.Pass(); // sealed, rewritten
+
+        var day = _f.Rollup(doc)!.Days.Single(); // read back from disk
+        day.Stats.Should().Be(new ModelStatsPoint(D(30, 14, 1), 49, 97_000_000L) { WarningsTs = D(30, 12) });
+        day.Health!.WarningsCount.Should().Be(49);
+        day.Health.FileSizeBytes.Should().Be(97_000_000L);
+    }
+
+    [Fact]
+    public void Open_only_nulls_never_invent_a_count()
+    {
+        var doc = SessionBuilder.Local("NeverSaved");
+        new SessionBuilder().Start(D(30, 8)).Open(D(30, 9), doc, 7)
+            .Stats(D(30, 9, 1), doc, null, 10_000_000L)
+            .Close(D(30, 10), doc).End(D(30, 10, 1)).Write(_f.Outbox, D(30, 18));
+        _f.Pass();
+
+        var day = _f.Rollup(doc)!.Days.Single();
+        day.Stats.Should().Be(new ModelStatsPoint(D(30, 9, 1), null, 10_000_000L));
+        day.Stats!.WarningsTs.Should().BeNull();
+        day.Health!.WarningsCount.Should().BeNull("not measured stays unknown; it is left out of the health colour");
+        _f.Index().Single().LastStats!.WarningsCount.Should().BeNull();
+    }
+
+    [Fact]
+    public void The_stats_merge_is_order_independent_with_open_only_nulls()
+    {
+        // Sessions of one day fold in any order: save 49 at 09:00, sync 50 at 12:00, open-only at 15:00.
+        var save = new ModelStatsPoint(D(30, 9), 49, 90L);
+        var sync = new ModelStatsPoint(D(30, 12), 50, 95L);
+        var open = new ModelStatsPoint(D(30, 15), null, 97L);
+        var expected = new ModelStatsPoint(D(30, 15), 50, 97L) { WarningsTs = D(30, 12) };
+
+        var points = new[] { save, sync, open };
+        foreach (var order in new[] { new[] { 0, 1, 2 }, new[] { 0, 2, 1 }, new[] { 1, 0, 2 }, new[] { 1, 2, 0 }, new[] { 2, 0, 1 }, new[] { 2, 1, 0 } })
+        {
+            ModelStatsPoint? left = null;
+            foreach (var i in order) left = ModelStatsPoint.Latest(left, points[i]);
+            left.Should().Be(expected, "fold order {0}", string.Join(",", order));
+            // and grouped the other way: a ⊕ (b ⊕ c)
+            ModelStatsPoint.Latest(points[order[0]], ModelStatsPoint.Latest(points[order[1]], points[order[2]]))
+                .Should().Be(expected);
+        }
+    }
+
+    [Fact]
+    public void A_day_row_written_before_warnings_ts_reads_its_count_as_measured_at_stats_ts()
+    {
+        const string oldRow =
+            "{\"columns\":[\"date\",\"stats_ts\",\"warnings_count\",\"file_size_bytes\"]," +
+            "\"rows\":[[\"2026-10-30\",\"2026-10-30T09:00:00.000Z\",49,90]]}";
+        var options = new System.Text.Json.JsonSerializerOptions(RollupJson.Options);
+        options.Converters.Add(new DayTableConverter());
+
+        var day = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<RollupDay>>(oldRow, options)!.Single();
+
+        day.Stats.Should().Be(new ModelStatsPoint(D(30, 9), 49, 90L));
+        day.Stats!.WarningsTs.Should().Be(D(30, 9));
+        new ModelStatsPoint(D(30, 9), 49, 90L) { WarningsTs = D(30, 9) }.Should().Be(day.Stats,
+            "an explicit warnings ts equal to ts is the same point");
+    }
+
     [Fact]
     public void Model_stats_written_after_doc_closing_are_attributed_by_keys_not_clipped_to_the_open_interval()
     {

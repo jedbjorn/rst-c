@@ -41,7 +41,9 @@ public static class TelemetryEventTypes
     public const string DocChangedPulse = "doc_changed_pulse";
     public const string ViewActivated = "view_activated";
     /// <summary>Keys-only; warnings_count + file_size_bytes (spec #24
-    /// Capture Additions). At most once per model per 5 min.</summary>
+    /// Capture Additions). At most once per model per 5 min. After an
+    /// open warnings_count is null, "not measured" (decision #71); after
+    /// a save, save-as or sync it is measured.</summary>
     public const string ModelStats = "model_stats";
     public const string SessionEnd = "session_end";
     public const string CollectionDisabled = "collection_disabled";
@@ -94,7 +96,8 @@ public static class TelemetryFields
     // sync_start.
     public const string Comment = "comment";
 
-    // model_stats (spec #24 Capture Additions).
+    // model_stats (spec #24 Capture Additions). warnings_count null =
+    // not measured (an open's capture, decision #71), never zero.
     public const string WarningsCount = "warnings_count";
     public const string FileSizeBytes = "file_size_bytes";
 }
