@@ -4,7 +4,8 @@
     tabs, Device and Captured), the Health tab's four collapsible sections, the Activity tab's stat
     cards, range pills and charts (spec #24: a ModelActivityPanel drawn by HealthResources.xaml's
     templates), the per-tab footer, the Junk modal, the Cleaning overlay and the toast. The
-    view-model is HealthViewModel.
+    view-model is HealthViewModel. On the open in Revit the Health tab shows a spinner until the
+    snapshot is read off the UI thread (SC-011).
 -->
 <Window x:Class="RST.UI.Health.HealthWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -69,11 +70,21 @@
                 </Grid>
             </Border>
 
-            <!-- Health tab: the four sections. -->
+            <!-- Health tab: the four sections; while the open reads the snapshot (SC-011), the spinner and "Loading…". -->
             <ScrollViewer x:Name="HealthPane" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="18,16,18,8"
                           Visibility="{Binding IsHealthTab, Converter={StaticResource BoolToVisible}}" Focusable="False">
-                <ItemsControl x:Name="Sections" ItemsSource="{Binding Sections}" ItemTemplate="{StaticResource SectionTemplate}"
-                              MaxWidth="820" Focusable="False" />
+                <Grid>
+                    <ItemsControl x:Name="Sections" ItemsSource="{Binding Sections}" ItemTemplate="{StaticResource SectionTemplate}"
+                                  MaxWidth="820" Focusable="False"
+                                  Visibility="{Binding IsLoading, Converter={StaticResource BoolToCollapsed}}" />
+                    <StackPanel x:Name="LoadingPanel" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                Margin="0,48,0,0" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisible}}"
+                                AutomationProperties.AutomationId="Health.Loading">
+                        <ProgressBar Style="{StaticResource BusySpinner}" Margin="0,0,8,0" />
+                        <TextBlock Text="{x:Static res:UiStrings.Health_Loading}" Foreground="{StaticResource MutedTextBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
             </ScrollViewer>
 
             <!-- Activity tab: six stat cards, the range pills and four charts (a ModelActivityPanel, shared with the tray). -->

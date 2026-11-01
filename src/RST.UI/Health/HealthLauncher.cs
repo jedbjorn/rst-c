@@ -1,5 +1,6 @@
 // rst-c's own (not vendored): opens the Health window for RST.Engine's HealthCommand (spec #16,
-// WU2, Launchers), replacing v2.2.0's HealthHost. The Engine never touches WPF types.
+// WU2, Launchers), replacing v2.2.0's HealthHost. The Engine never touches WPF types. The window shows before
+// anything is read (SC-011): see HealthWindow's first frame.
 
 using RST.Core.Health;
 using RST.UI.Dialogs;
@@ -21,7 +22,9 @@ public static class HealthLauncher
     {
         var dialogs = new DialogService { EscapeCancels = true, ReturnsFocus = true }; // decision #62; rc.3 VM finding F2
         var viewModel = new HealthViewModel(new HealthService(context, telemetryToggled), dialogs);
-        viewModel.Load();
+        // SC-011: nothing is read before the window shows. Its first frame is the themed chrome and the spinner;
+        // the window then reads the saved snapshot off the UI thread (HealthWindow.OnFirstFrame).
+        viewModel.BeginLoading();
         var window = new HealthWindow(viewModel);
         dialogs.Owner = window;
         WindowPlacement.Own(window, ownerHwnd);

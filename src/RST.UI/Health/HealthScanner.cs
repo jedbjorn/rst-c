@@ -35,7 +35,8 @@ public static class HealthScanner
         double? modelSizeMb = null,
         int? warningsCount = null,
         IReadOnlyDictionary<string, int>? warningsBySeverity = null,
-        IEnumerable<RST.Core.Profiles.CleanupTarget>? cleanupTargets = null)
+        IEnumerable<RST.Core.Profiles.CleanupTarget>? cleanupTargets = null,
+        int? cleanupYear = null)
     {
         Log.Information("HealthScanner.Capture: starting");
 
@@ -84,7 +85,7 @@ public static class HealthScanner
 
         if (cleanupTargets is not null)
         {
-            snap.Cleanup = MeasureCleanup(cleanupTargets);
+            snap.Cleanup = MeasureCleanup(cleanupTargets, cleanupYear);
         }
 
         Log.Information(
@@ -101,8 +102,16 @@ public static class HealthScanner
     /// size + file count. Surfaces in the Hardware section's Junk Files
     /// sub-list so users see how much space the next "Clean Junk Files"
     /// pass would reclaim, before deleting anything.
+    /// <para>
+    /// <paramref name="revitYear"/>: the running Revit's year (the add-in's Health tab). A year-specific
+    /// target (<c>{revit-version}</c>) is then measured, and shows its path, in that year's folder only
+    /// (SC-018). Null (the tray's Device page, decision #56) measures every <c>Autodesk Revit YYYY</c>
+    /// folder found, as before. Targets that are not year-specific are measured the same either way.
+    /// </para>
+    /// <paramref name="folders"/>: the user folders the path tokens stand for (null: this user's; tests pass their own).
     /// </summary>
-    public static CleanupSummary MeasureCleanup(IEnumerable<RST.Core.Profiles.CleanupTarget> targets)
+    public static CleanupSummary MeasureCleanup(IEnumerable<RST.Core.Profiles.CleanupTarget> targets,
+                                                int? revitYear = null, CleanupFolders? folders = null)
     {
         var summary = new CleanupSummary();
         foreach (var t in targets)
@@ -118,8 +127,12 @@ public static class HealthScanner
                 Path = t.Path,
                 Kind = t.Kind,
             };
-            var resolved = CleanupPathResolver.Resolve(t.Path);
-            ts.ResolvedPaths = resolved.ToList();
+            var resolved = (revitYear is { } year
+                    ? CleanupPathResolver.ResolveForYear(t.Path, year, folders)
+                    : CleanupPathResolver.ResolveEach(t.Path, folders))
+                .Select(p => p.Path)
+                .ToList();
+            ts.ResolvedPaths = resolved;
 
             foreach (var concrete in resolved)
             {

@@ -143,8 +143,11 @@ public sealed class HealthService : IHealthService
         try
         {
             // The scan measures the targets the user would actually clean (enabled only), for the
-            // Hardware section's Junk Files rows.
+            // Hardware section's Junk Files rows. Inside Revit a year-specific row (Journals, Collaboration
+            // Cache, Recent File List) describes the running Revit's year: its path, size and count (SC-018).
+            // Clean Junk Files still covers every year's folder (HealthCleaner, unchanged).
             var targets = ResolveActiveTargets().Where(t => t.Enabled).ToArray();
+            var year = CleanupYears.RunningYear(_context.RevitVersion);
             var snap = HealthScanner.Capture(
                 revitVersion: NullIfEmpty(_context.RevitVersion),
                 revitBuild: NullIfEmpty(_context.RevitBuild),
@@ -153,7 +156,8 @@ public sealed class HealthService : IHealthService
                 modelPath: NullIfEmpty(_context.ModelPath),
                 modelSizeMb: _context.ModelSizeMb,
                 warningsCount: _context.WarningsCount,
-                cleanupTargets: targets);
+                cleanupTargets: targets,
+                cleanupYear: year);
             HealthScanner.Save(snap, _snapshotPath);
             return snap;
         }

@@ -184,6 +184,8 @@ public static class UiStrings
 
     public static string Health_Scanning => Get(nameof(Health_Scanning));
 
+    public static string Health_Loading => Get(nameof(Health_Loading));
+
     public static string Health_CleanJunkFiles => Get(nameof(Health_CleanJunkFiles));
 
     public static string Health_Close => Get(nameof(Health_Close));

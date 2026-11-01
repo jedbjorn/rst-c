@@ -20,6 +20,10 @@
 // (from its "Autodesk Revit YYYY" folder), so the tray's Clean Junk Files
 // can list and clean a year-specific target once per year found (spec #25,
 // decision #56). Resolve is ResolveEach's paths, in the same order.
+//
+// ResolveForYear is the one path a target has in a given Revit year, without a scan: the add-in's Health
+// tab measures and shows the running Revit's year only (SC-018), where ResolveEach's oldest-first fan-out
+// put another year's folder first on the row.
 
 using System;
 using System.Collections.Generic;
@@ -72,6 +76,30 @@ internal static class CleanupPathResolver
             return new[] { new ResolvedCleanupPath(withFolders, null) };
         }
         return ExpandRevitVersion(withFolders);
+    }
+
+    /// <summary>
+    /// The concrete path of <paramref name="rawPath"/> in Revit <paramref name="revitYear"/>: the
+    /// {revit-version} token becomes that year's <c>Autodesk Revit YYYY</c> folder, whether or not it exists
+    /// (a missing folder measures as nothing). A path with no token resolves as <see cref="Resolve"/> does.
+    /// Empty for an empty path or a malformed token (one with no folder above it, which a scan refuses too).
+    /// </summary>
+    public static IReadOnlyList<ResolvedCleanupPath> ResolveForYear(string? rawPath, int revitYear, CleanupFolders? folders = null)
+    {
+        if (string.IsNullOrWhiteSpace(rawPath)) return Array.Empty<ResolvedCleanupPath>();
+
+        var withFolders = SubstituteFolderTokens(rawPath!, folders ?? CleanupFolders.Current);
+        if (!ContainsRevitVersionToken(withFolders))
+        {
+            return new[] { new ResolvedCleanupPath(withFolders, null) };
+        }
+        var idx = withFolders.IndexOf(TokenRevitVersion, StringComparison.OrdinalIgnoreCase);
+        if (idx <= 0 || withFolders.LastIndexOfAny(new[] { '\\', '/' }, idx - 1) <= 0)
+        {
+            Log.Debug("CleanupPathResolver: malformed {revit-version} usage in {Path}", withFolders);
+            return Array.Empty<ResolvedCleanupPath>();
+        }
+        return new[] { new ResolvedCleanupPath(CleanupYears.DisplayPath(withFolders, revitYear), revitYear) };
     }
 
     /// <summary>
