@@ -46,10 +46,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private HttpClient? _http;
     private TrayUpdates? _updates;
     private InstallCoordinator? _installs;
-    private RevitWatch? _revit;
     private SelfUpdater? _selfUpdater;
     private ActivityFoldWorker? _fold;
-    private CancellationTokenSource? _revitPageWatch;
     private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
     private TrayPage _page = TrayPage.Updates;
@@ -95,7 +93,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     public IReadOnlyDictionary<string, InstallProgress> Installs => _installs?.Current ?? ITrayUpdatesHost.EmptyInstalls;
 
-    public bool RevitRunning => _installs?.RevitRunning ?? false;
 
     public bool PerMachineTray => _selfUpdater?.PerMachineTray ?? false;
 
@@ -279,7 +276,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void StartInstalls()
     {
         if (_updates is null) throw new InvalidOperationException("the update checker did not start");
-        _revit = new RevitWatch(log: m => Log.Information("{Message}", m));
         _selfUpdater = new SelfUpdater(AppContext.BaseDirectory, TrayPaths.UpdaterDir, Environment.ProcessId, m => Log.Information("{Message}", m));
         _installs = new InstallCoordinator(
             _updates.Current.Products.Select(p => p.Product),
@@ -288,7 +284,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             new MsiDatabase(),
             new BundleReader(),
             new Msiexec(),
-            _revit,
             _selfUpdater,
             new InstallPaths(TrayPaths.CacheDir, TrayPaths.InstallLogsDir, TrayPaths.SelfUpdateResultFile),
             TimeProvider.System,
@@ -299,8 +294,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
         if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed or InstallPhase.Refused)
             _updates.RefreshInstalledAsync().Forget("tray: read what is installed"); // the updater just ran: show what is installed now
-        // The updater found Revit open (review B2): this tray waits for Revit and hands over again.
-        _installs.ResumeDeferredSelfUpdateAsync().Forget("tray: resume the deferred self-update");
     }
 
     private void StartUpdateLoop()
@@ -417,10 +410,8 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             {
                 if (!ReferenceEquals(_window, built)) return;
                 _window = null;
-                StopRevitPageWatch();
             };
             built.Show();
-            WatchRevitForPage();
             Log.Information("window opened ({Page}, {Theme})", _page, RstTheme.Current);
         }
         else
@@ -428,8 +419,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _window.ViewModel.Page = _page;
             if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
             _window.Show();
-            _window.ViewModel.Updates.Refresh(); // Revit may have started or closed since
-            WatchRevitForPage();
+            _window.ViewModel.Updates.Refresh();
         }
         _window.Activate();
     }
@@ -489,7 +479,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     /// </summary>
     private void StopUpdates()
     {
-        StopRevitPageWatch();
         try
         {
             _installs?.Dispose();
@@ -503,46 +492,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _installs = null;
         _updates = null;
         _http = null;
-    }
-
-    /// <summary>
-    /// While the window is open and Revit runs, the buttons read "… when Revit closes"; this waits for Revit's exit
-    /// (its process events, no polling) and refreshes the pages once, so they say Install and Update again.
-    /// </summary>
-    private void WatchRevitForPage()
-    {
-        if (_revit is not { } revit || _revitPageWatch is not null || !RevitRunning) return;
-        var cts = new CancellationTokenSource();
-        _revitPageWatch = cts;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await revit.WaitUntilNoneAsync(RevitWaitPurpose.Window, cts.Token).ConfigureAwait(false);
-                _ = _dispatcher.BeginInvoke(() =>
-                {
-                    if (ReferenceEquals(_revitPageWatch, cts)) _revitPageWatch = null;
-                    if (!_quitting) Changed?.Invoke(this, EventArgs.Empty);
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                // The window closed.
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "watching Revit for the pages");
-            }
-        });
-    }
-
-    private void StopRevitPageWatch()
-    {
-        var cts = _revitPageWatch;
-        _revitPageWatch = null;
-        if (cts is null) return;
-        try { cts.Cancel(); }
-        catch (ObjectDisposedException) { }
     }
 
     /// <summary>

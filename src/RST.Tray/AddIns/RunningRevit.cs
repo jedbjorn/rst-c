@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): which Revit years are open in this Windows session (spec #20 §3, "Revit <year> is
-// open: restart it to see the change"; F17 WU2). The one place the tray asks "is Revit running", so it can be
-// unified with WU4's RevitWatch (#147) in one change (review R4).
+// open: restart it to see the change"; F17 WU2). Installation is advisory-only (decision #73);
+// this detection is only for the Add-ins page's per-year restart notes.
 //
 // The image path is read with PROCESS_QUERY_LIMITED_INFORMATION and QueryFullProcessImageName, which a
 // non-elevated tray is granted on an elevated Revit too (Process.MainModule needs PROCESS_VM_READ, which it is not;

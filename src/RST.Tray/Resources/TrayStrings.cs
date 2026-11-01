@@ -174,7 +174,6 @@ public static class TrayStrings
 
     public static string Detail_Ranges => Get(nameof(Detail_Ranges));
 
-
     public static string Updates_Heading => Get(nameof(Updates_Heading));
 
     public static string Updates_Description => Get(nameof(Updates_Description));
@@ -182,8 +181,6 @@ public static class TrayStrings
     public static string Apps_Heading => Get(nameof(Apps_Heading));
 
     public static string Apps_Description => Get(nameof(Apps_Description));
-
-
 
     public static string Settings_Appearance => Get(nameof(Settings_Appearance));
 
@@ -308,13 +305,11 @@ public static class TrayStrings
 
     public static string App_LatestNone => Get(nameof(App_LatestNone));
 
+    public static string Install_CloseRevitAdvice => Get(nameof(Install_CloseRevitAdvice));
+
     public static string App_Install => Get(nameof(App_Install));
 
     public static string App_Update => Get(nameof(App_Update));
-
-    public static string App_InstallWhenRevitCloses => Get(nameof(App_InstallWhenRevitCloses));
-
-    public static string App_UpdateWhenRevitCloses => Get(nameof(App_UpdateWhenRevitCloses));
 
     public static string App_ReinstallPrevious(string version) => Format(nameof(App_ReinstallPrevious), version);
 
@@ -346,8 +341,6 @@ public static class TrayStrings
 
     public static string Install_Downloading(string app, string version) => Format(nameof(Install_Downloading), app, version);
 
-    public static string Install_WaitingForRevit(string app, string version) => Format(nameof(Install_WaitingForRevit), app, version);
-
     public static string Install_Installing(string app, string version) => Format(nameof(Install_Installing), app, version);
 
     public static string Install_RetryLater(string app, string version) => Format(nameof(Install_RetryLater), app, version);
@@ -355,8 +348,6 @@ public static class TrayStrings
     public static string Install_Queued(string app, string version) => Format(nameof(Install_Queued), app, version);
 
     public static string Install_QueuedRst(string app, string version) => Format(nameof(Install_QueuedRst), app, version);
-
-    public static string App_ReinstallPreviousWhenRevitCloses(string version) => Format(nameof(App_ReinstallPreviousWhenRevitCloses), version);
 
     public static string Install_HandingOff(string app, string version) => Format(nameof(Install_HandingOff), app, version);
 
