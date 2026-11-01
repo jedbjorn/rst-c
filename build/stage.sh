@@ -26,8 +26,10 @@
 # -p:Version to every target: each RST assembly gets FileVersion a.b.c.0 and
 # InformationalVersion a.b.c+<commit> (Directory.Build.props), which the
 # session, boot and tray logs and the tray's About page print. Unset or empty
-# (a dev or PR build), it is 0.1.0-dev. build/check-version-stamp.py then
-# checks the staged binaries carry it.
+# (a dev or PR build), it is <RstDevVersion>-dev, RstDevVersion read from
+# Directory.Build.props (the one value RST.msi's and RST-Setup.exe's fallbacks
+# use too). build/check-version-stamp.py then checks the staged binaries
+# carry it.
 
 set -euo pipefail
 
@@ -39,7 +41,9 @@ fi
 MAJOR="$1"
 KIND="${2:-Release}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${RST_VERSION:-0.1.0-dev}"
+DEV_VERSION="$(sed -n 's:.*<RstDevVersion>\([0-9][0-9.]*\)</RstDevVersion>.*:\1:p' "$ROOT/Directory.Build.props")"
+if [ -z "$DEV_VERSION" ]; then echo "no <RstDevVersion> in Directory.Build.props" >&2; exit 2; fi
+VERSION="${RST_VERSION:-$DEV_VERSION-dev}"
 
 # ---- tray target: one build for every Revit year.
 if [ "$MAJOR" = "tray" ]; then

@@ -4,7 +4,7 @@
 Usage: build/check-version-stamp.py <version> <file.dll|file.exe>...
 
 <version> is what build/stage.sh passed as -p:Version (a.b.c, or a.b.c-pre such as the
-0.1.0-dev default of a dev or PR build). Each file's Win32 version resource must say:
+<RstDevVersion>-dev default of a dev or PR build, 3.1.99-dev). Each file's Win32 version resource must say:
   - FileVersion (the fixed VS_FIXEDFILEINFO and the string) = a.b.c.0
   - ProductVersion (the SDK writes InformationalVersion there) = <version> or <version>+<commit>
 Reads the PE's version resource directly (no Windows tools on the Linux runner). Exits 1 on
