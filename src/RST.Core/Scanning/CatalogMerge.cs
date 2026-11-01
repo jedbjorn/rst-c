@@ -9,7 +9,7 @@ public static class CatalogMerge
     /// Keeps the first hit per (tab, panel), using the seed's origin and enum name for native
     /// labels. Hits must arrive with panel items before launchers. Seeds without a home are dropped.
     /// </summary>
-    public static IReadOnlyList<ScannedCommand> Merge(IEnumerable<ScannedCommand> seed, IEnumerable<RibbonHit> hits)
+    public static IReadOnlyList<ScannedCommand> Merge(IEnumerable<ScannedCommand> seed, IEnumerable<RibbonHit> hits, int? revitYear = null)
     {
         // Preserve the old seed behavior if two enum members resolve to the same id.
         var byId = new Dictionary<string, ScannedCommand>(StringComparer.Ordinal);
@@ -22,7 +22,7 @@ public static class CatalogMerge
             if (!byId.TryGetValue(hit.Id, out var command))
             {
                 command = new ScannedCommand(hit.Id, hit.Id,
-                    OriginClassifier.ClassifyRibbonButton(hit.SourceTab, hit.Id), null, null, null, null);
+                    OriginClassifier.ClassifyRibbonButton(hit.SourceTab, hit.Id, revitYear), null, null, null, null);
                 byId.Add(hit.Id, command);
             }
             if (!placements.TryGetValue(hit.Id, out var homes)) placements.Add(hit.Id, homes = []);
