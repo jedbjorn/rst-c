@@ -63,8 +63,9 @@ public sealed class CommandCatalog
         var postableIds = new HashSet<string>(seed.Select(c => c.Id), System.StringComparer.Ordinal);
         Log.Information("BuiltinCommandScanner: {Count} commands", seed.Count);
 
-        var hits = RibbonScanner.Enumerate(postableIds).ToList();
-        var merged = CatalogMerge.Merge(seed, hits);
+        int? revitYear = int.TryParse(revitVersion, out var year) ? year : null;
+        var hits = RibbonScanner.Enumerate(postableIds, revitYear).ToList();
+        var merged = CatalogMerge.Merge(seed, hits, revitYear);
         var headlessDropped = postableIds.Count - merged.Count(c => postableIds.Contains(c.Id));
         Log.Information("RibbonScanner: {Hits} hits → {Commands} commands, {Placements} placements (headless={Headless})",
                         hits.Count, merged.Count, merged.Sum(c => c.Placements?.Count ?? 0), headlessDropped);

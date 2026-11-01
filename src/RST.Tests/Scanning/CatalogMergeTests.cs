@@ -99,6 +99,17 @@ public class CatalogMergeTests
     }
 
     [Fact]
+    public void Ribbon_only_Concrete_command_is_native_only_from_2027()
+    {
+        var fixture = new RibbonCapture(2027);
+        var hit = fixture.Hits.Single(h => h.TabId == "Concrete" && h.Id == "ID_REBAR_PLACE");
+        // An empty seed exercises ribbon classification instead of inheriting the seed's Native origin.
+        CatalogMerge.Merge([], [hit], revitYear: 2027).Single().Origin.Should().Be(CommandOrigin.Native);
+        CatalogMerge.Merge([], [hit], revitYear: 2026).Single().Origin.Should().Be(CommandOrigin.Unknown);
+        CatalogMerge.Merge([], [hit]).Single().Origin.Should().Be(CommandOrigin.Unknown);
+    }
+
+    [Fact]
     public void Merge_preserves_seed_metadata_first_home_and_per_placement_labels_and_drops_headless()
     {
         ScannedCommand[] seed = [new("ID_W", "Old", CommandOrigin.Native, "native.addin", "native.dll", null, null, EnumName: "ArchitecturalWall"),

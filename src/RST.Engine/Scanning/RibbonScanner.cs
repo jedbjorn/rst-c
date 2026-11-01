@@ -75,7 +75,7 @@ internal static class RibbonScanner
     /// every id Revit would not let an add-in post (SC-051). Null or empty turns that check off
     /// (an empty seed would otherwise drop every Revit tool, so it is logged and ignored).
     /// </param>
-    public static IEnumerable<RibbonHit> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null)
+    public static IEnumerable<RibbonHit> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null, int? revitYear = null)
     {
         RibbonControl? ribbon;
         IEnumerable<RibbonTab?>? tabs;
@@ -193,8 +193,8 @@ internal static class RibbonScanner
             Log.Debug("RibbonScanner: tab={Tab} → {Count} buttons", tabTitle, perTab);
         }
 
-        Log.Debug("RibbonScanner: skippedRestricted={Restricted}, skippedRst={Rst}",
-                  tabsSkippedRestricted, tabsSkippedRst);
+        Log.Debug("RibbonScanner: revit={Year}, skippedRestricted={Restricted}, skippedRst={Rst}",
+                  revitYear, tabsSkippedRestricted, tabsSkippedRst);
         // SC-027: one line per scan, so a VM run or a new Revit year can be checked from the log.
         Log.Information("RibbonScanner: {Summary}", counts.Summary());
         // SC-051: one line per reason, so each list can be checked on its own.
