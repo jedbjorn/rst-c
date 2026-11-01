@@ -16,16 +16,6 @@ using RST.UI.Mvvm;
 
 namespace RST.Tray.Windows;
 
-/// <summary>The window's pages, in tab order.</summary>
-public enum TrayPage
-{
-    Updates,
-    Apps,
-    AddIns,
-    Health,
-    Settings,
-}
-
 /// <summary>What the window needs from the tray.</summary>
 internal interface ITraySettingsHost
 {

@@ -17,6 +17,7 @@ using System.Windows.Threading;
 using RST.Core.Health;
 using RST.Core.Profiles;
 using RST.Core.Theming;
+using RST.Core.Tray;
 using RST.RuntimeTests.Health;
 using RST.RuntimeTests.Support;
 using RST.Tray.Windows;
@@ -393,11 +394,12 @@ public class TrayHealthViewModelTests
     {
         var service = new CountingService();
         var health = new TrayHealthViewModel(service, new FakeDialogs(), TrayHealthSamples.Options());
-        var tray = new TrayViewModel(new FakeTrayHost(), TrayPage.Updates, health: health);
+        var tray = new TrayViewModel(new FakeTrayHost(), TrayPage.AddIns, health: health);
         Assert.Equal(HealthSubPage.Models, health.SubPage);
         Assert.True(health.IsModelsPage);
         Assert.Equal(1, health.SubPageIndex);
         Assert.Equal(0, health.Models.TimesShown);
+        Assert.Equal(0, service.Loads);
 
         tray.Page = TrayPage.Health;
         Assert.True(tray.IsHealthPage);

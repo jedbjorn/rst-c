@@ -50,18 +50,19 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private ActivityFoldWorker? _fold;
     private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
-    private TrayPage _page = TrayPage.Updates;
+    private TrayPage _page = TrayPage.AddIns;
     private bool _quitting;
     private int _iconFailures;
     private DispatcherTimer? _iconRetry;
-    private readonly ITrayAddinsBackend _addins = new TrayAddinsBackend();
+    private readonly ITrayAddinsBackend _addins;
     private readonly AddinsWork _addinsWork = new();
 
-    public TrayHost(TrayArguments args, SingleInstance instance)
+    public TrayHost(TrayArguments args, SingleInstance instance, ITrayAddinsBackend? addins = null)
     {
         _args = args ?? throw new ArgumentNullException(nameof(args));
         _instance = instance ?? throw new ArgumentNullException(nameof(instance));
         _dispatcher = Dispatcher.CurrentDispatcher;
+        _addins = addins ?? new TrayAddinsBackend();
     }
 
     public TrayThemeChoice ThemeChoice => _settings.Theme;
@@ -200,7 +201,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         new("activity fold", StartActivityFold),
         new("window", () =>
         {
-            if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
+            if (!_args.StartHidden) OpenWindow(null);
         }),
         // Decision #65: no update-check notice at first run; docs/tray.md explains the checks and how to turn them off.
         new("notices", () => _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowShadowNoticeIfDue)),
@@ -367,11 +368,11 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         }, _dispatcher);
     }
 
-    /// <summary>Shows the window (building it the first time), on <paramref name="page"/> or the last page, and brings it forward.</summary>
+    /// <summary>Opens on the target or RST Profiles; an untargeted activation keeps a shown window's page.</summary>
     public void OpenWindow(TrayPage? page)
     {
         if (_quitting) return;
-        if (page is { } p) _page = p;
+        _page = TrayNavigation.PageOnOpen(page, _window?.IsVisible == true, _page);
         if (_window is null)
         {
             // The Add-ins page (F17 WU2) shows the Loader's own dialogs (Confirm Add-in Changes, the reports, "Adopt
@@ -599,16 +600,18 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     {
         if (_quitting || _icon is null) return;
         // SC-043: the native menu; Open returns once the user picked an item (its action has run) or dismissed it.
-        TrayMenu.Open(new TrayMenuActions(
-            Open: () => OpenWindow(TrayPage.Updates),
+        TrayMenu.Open(MenuActions(), screenPixels, _icon.Source);
+    }
+
+    internal TrayMenuActions MenuActions() => new(
+            Open: () => OpenWindow(null),
             CheckForUpdates: () =>
             {
                 CheckNow();
                 OpenWindow(TrayPage.Updates);
             },
             Settings: () => OpenWindow(TrayPage.Settings),
-            Quit: () => Quit("menu")), screenPixels, _icon.Source);
-    }
+            Quit: () => Quit("menu"));
 
     private void OnWindowsThemeChanged()
     {
@@ -627,7 +630,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         var maximized = old.WindowState == WindowState.Maximized;
         _window = null;
         old.Close();
-        OpenWindow(null);
+        OpenWindow(_page); // A theme rebuild preserves the page; it is not a fresh user open.
         if (_window is { } rebuilt && !bounds.IsEmpty)
         {
             rebuilt.WindowStartupLocation = WindowStartupLocation.Manual;
