@@ -595,32 +595,45 @@ public class TrayModelDetailScreenshotTests
             var offset = list.Scroller.VerticalOffset;
             Assert.True(offset > 0, "the list scrolls");
 
-            // Escape, from the keyboard: back to the list, nothing else.
-            OpenCard(page, "station-plaza");
-            Assert.Equal("6M", page.Detail.Range.Label);
-            var back = (Button)ById(page.Window.HealthPage.DetailPage, "Tray.Health.Detail.Back").Single();
-            Assert.Same(back, Keyboard.FocusedElement); // the detail takes the keyboard, so Escape reaches it
-            PressKey(page.Window, Key.Escape);
+            // Escape with the keyboard on Back (where the detail puts it), on the Models sub-tab and on the footer's
+            // Close: each time back to the list as it was, and the window stays open.
+            foreach (var where in new[] { "Tray.Health.Detail.Back", "Tray.Health.TabModels", "Tray.Close" })
+            {
+                OpenCard(page, "station-plaza");
+                Assert.True(page.Detail.IsOpen);
+                Assert.Equal("6M", page.Detail.Range.Label);
+                var back = (Button)ById(page.Window.HealthPage.DetailPage, "Tray.Health.Detail.Back").Single();
+                Assert.Same(back, Keyboard.FocusedElement); // the detail takes the keyboard
+                Assert.True(ById(page.Window, where).Single().Focus(), where + " takes the keyboard");
+                Settle();
 
-            Assert.False(page.Detail.IsOpen);
-            Assert.True(list.IsVisible);
-            Assert.True(page.Window.IsVisible);
-            Assert.Equal(0, closes);
-            Assert.Equal(ModelTimeChip.SixMonths, page.Models.Chip);
-            Assert.Contains("2025", page.Models.CollapsedGroups);
-            Assert.InRange(list.Scroller.VerticalOffset, offset - 1, offset + 1);
+                PressKey(page.Window, Key.Escape);
+
+                Assert.False(page.Detail.IsOpen, where);
+                Assert.True(list.IsVisible, where);
+                Assert.True(page.Window.IsVisible, where);
+                Assert.Equal(0, closes);
+                Assert.Equal(ModelTimeChip.SixMonths, page.Models.Chip);
+                Assert.Contains("2025", page.Models.CollapsedGroups);
+                Assert.InRange(list.Scroller.VerticalOffset, offset - 1, offset + 1);
+            }
 
             // Back, by its button: the same.
             OpenCard(page, "station-plaza");
-            back.Command.Execute(null);
+            ((Button)ById(page.Window.HealthPage.DetailPage, "Tray.Health.Detail.Back").Single()).Command.Execute(null);
             Settle();
             Assert.True(list.IsVisible);
             Assert.InRange(list.Scroller.VerticalOffset, offset - 1, offset + 1);
             Assert.Equal(0, closes);
+
+            // With the list showing, Escape is the window's own again, exactly as before (decision #62): its Close.
+            Assert.True(ById(page.Window, "Tray.Close").Single().Focus());
+            PressKey(page.Window, Key.Escape);
+            Assert.Equal(1, closes);
         }
         finally
         {
-            page.Window.Close();
+            if (closes == 0) page.Window.Close();
         }
     });
 }

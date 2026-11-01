@@ -50,10 +50,18 @@ internal sealed class RollupModelActivitySource : IModelActivitySource
     });
 }
 
+/// <summary>No read (a Health page built without one, in tests): every model reads empty, "no longer on this PC".</summary>
+internal sealed class EmptyModelActivitySource : IModelActivitySource
+{
+    public static readonly EmptyModelActivitySource Instance = new();
+
+    public ModelActivity Read(string modelId) => ModelActivity.Empty;
+}
+
 /// <summary>The detail's seams.</summary>
 internal sealed class ModelDetailViewModelOptions
 {
-    /// <summary>The model's activity. Default: <see cref="RollupModelActivitySource"/>.</summary>
+    /// <summary>The model's activity (<see cref="RollupModelActivitySource"/> in the tray). Default: none (<see cref="EmptyModelActivitySource"/>).</summary>
     public IModelActivitySource? Source { get; init; }
 
     /// <summary>The Models list's thumbnails (the same instance; the list owns and disposes it); null: the card's image only.</summary>
@@ -101,7 +109,7 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
     private ModelHealthColour _health = ModelHealthColour.Grey;
     private ImageSource? _thumbnail;
 
-    /// <summary>A detail over spec #24's read path (a Health page built without options, in tests).</summary>
+    /// <summary>A detail with no read (a Health page built without one, in tests).</summary>
     public ModelDetailViewModel()
         : this(null)
     {
@@ -110,7 +118,7 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
     public ModelDetailViewModel(ModelDetailViewModelOptions? options)
     {
         var o = options ?? new ModelDetailViewModelOptions();
-        _source = o.Source ?? new RollupModelActivitySource();
+        _source = o.Source ?? EmptyModelActivitySource.Instance;
         _thumbnails = o.Thumbnails;
         _run = o.RunInBackground ?? Task.Run;
         var dispatcher = Dispatcher.CurrentDispatcher;

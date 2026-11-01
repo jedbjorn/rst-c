@@ -30,7 +30,7 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
     /// <param name="dialogs">"Delete selected junk?" and its kin, owned by the tray window.</param>
     /// <param name="options">The Health view-model's seams (tests); its <see cref="HealthViewModelOptions.Scope"/> is always the tray's.</param>
     /// <param name="models">The Models page (spec #25 WU3); null: one with no index ("No model activity yet").</param>
-    /// <param name="detail">A model's detail (spec #25 WU4); null: one over spec #24's read path.</param>
+    /// <param name="detail">A model's detail (spec #25 WU4); null: one with no read (the tray passes spec #24's read path).</param>
     public TrayHealthViewModel(IHealthService device, IDialogService dialogs, HealthViewModelOptions? options = null, ModelsViewModel? models = null,
                                ModelDetailViewModel? detail = null)
     {
@@ -77,6 +77,9 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
     public bool IsDevicePage => _subPage == HealthSubPage.Device;
 
     public bool IsModelsPage => _subPage == HealthSubPage.Models;
+
+    /// <summary>Models shows a model's detail in place of the list (Escape goes Back).</summary>
+    public bool IsDetailShowing => IsModelsPage && Detail.IsOpen;
 
     /// <summary>The window shows the Health page (the tray view-model calls this each time it is selected).</summary>
     public void Shown() => OnSubPageShown();
