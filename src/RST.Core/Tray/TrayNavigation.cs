@@ -14,6 +14,10 @@ public enum TrayPage
 
 public static class TrayNavigation
 {
+    /// <summary>A result counts as presented only when its note can be seen on Updates.</summary>
+    public static bool CanPresentSelfUpdateResult(bool visible, bool minimized, TrayPage page, bool hasNote) =>
+        visible && !minimized && page == TrayPage.Updates && hasNote;
+
     /// <summary>
     /// An explicit target always wins. An ordinary open (start, icon, menu Open or show signal) starts on
     /// RST Profiles when no window is shown; activating a shown window keeps its current page.
