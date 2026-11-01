@@ -37,9 +37,15 @@ internal sealed record ProfileOption(ProfileEntry Entry)
 }
 
 /// <summary>One installed Revit year on the page.</summary>
-internal sealed class AddInsYearViewModel(TrayAddinYear year)
+internal sealed class AddInsYearViewModel(TrayAddinYear year, AddInsViewModel owner)
 {
     public TrayAddinYear Year { get; } = year;
+
+    public ICommand LaunchCommand { get; } = new AsyncRelayCommand(() => owner.LaunchAsync(year.Year), () => owner.CanApply);
+
+    public string LaunchAutomationId => "Tray.AddIns.Launch" + Year.Year.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    public string LaunchHint => AddInsStrings.LaunchHint(Year.Year);
 
     public string Label => Year.Label;
 
@@ -298,7 +304,7 @@ internal sealed class AddInsViewModel : ObservableObject
                    ?? options.FirstOrDefault();
         var kept = pick is not null && keep is not null && Same(pick, keep);
         IsLoaded = true;
-        Years = status.Years.Select(y => new AddInsYearViewModel(y)).ToList();
+        Years = status.Years.Select(y => new AddInsYearViewModel(y, this)).ToList();
 
         // Every read makes new options (Profile is a class), so the picker's selected item is never in the new list.
         // Left to itself, the picker clears its selection when the list is swapped and writes null back through its
@@ -339,12 +345,25 @@ internal sealed class AddInsViewModel : ObservableObject
     /// ask (review B2); the plan; Confirm Add-in Changes when add-ins would change; the load; the Add-in Check with
     /// the running-Revit notes; then the page again. A failure stays on the page (review B3).
     /// </summary>
-    public async Task ApplyAsync()
+    public Task ApplyAsync() => ApplyProfileAsync(null);
+
+    /// <summary>Apply the pick through the Loader, then start a new instance of the chosen installed year.</summary>
+    public Task LaunchAsync(int year) => ApplyProfileAsync(year);
+
+    private async Task ApplyProfileAsync(int? launchYear)
     {
         if (!CanApply || _selected is not { } option) return;
+        if (launchYear is { } requested && !Years.Any(y => y.Year.Year == requested)) return;
         await JoinRefresh();
+        try { await ApplySelectedAsync(option, launchYear); }
+        finally { Idle(); }
+    }
+
+    private async Task ApplySelectedAsync(ProfileOption option, int? launchYear)
+    {
         var entry = option.Entry;
         StartAction();
+        Busy(AddInsStrings.BusyPlanning);
         Log.Information("add-ins: Apply profile {Name} (disable unused {Disable})", option.Name, DisableUnused);
 
         // The saved choices as they are on disk now, not as the page last read them: a Loader in an open Revit may
@@ -399,6 +418,7 @@ internal sealed class AddInsViewModel : ObservableObject
             {
                 Idle();
                 FailAction(AddInsStrings.ApplyFailed(outcome.Error));
+                Busy(AddInsStrings.Loading);
                 await RefreshAsync(fresh: true);
                 return;
             }
@@ -431,6 +451,7 @@ internal sealed class AddInsViewModel : ObservableObject
             Log.Error(ex, "add-ins: Apply threw");
             Idle();
             FailAction(AddInsStrings.ApplyFailed(ex.Message));
+            Busy(AddInsStrings.Loading);
             await RefreshAsync(fresh: true);
             return;
         }
@@ -439,6 +460,7 @@ internal sealed class AddInsViewModel : ObservableObject
         {
             Log.Warning("add-ins: Apply failed: {Warnings}", string.Join(" ", result.Warnings));
             FailAction(AddInsStrings.ApplyFailed(string.Join(" ", result.Warnings.DefaultIfEmpty(UiStrings.Loader_LoadFailedText))));
+            Busy(AddInsStrings.Loading);
             await RefreshAsync(fresh: true);
             return;
         }
@@ -448,8 +470,28 @@ internal sealed class AddInsViewModel : ObservableObject
         report = TrayAddinService.WithRunningNotes(report, running);
         _dialogs.ShowAddinReport(AddinReportModel.ForLoad(option.Name, report, TrayAddinService.QaFor(entry, plan)));
         ResultText = AddInsStrings.Applied(option.Name);
+        if (launchYear is { } year)
+        {
+            Busy(AddInsStrings.BusyLaunching(year));
+            try
+            {
+                // The shared profile and add-in settings are saved, and the existing report has been dismissed.
+                // Running instances are left alone; every click starts a new instance using those shared files.
+                await Run(() => { _backend.LaunchRevit(year); return true; });
+                ResultText = AddInsStrings.Launched(year, option.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "profiles: Revit {Year} could not start after Apply", year);
+                ResultText = null;
+                FailAction(AddInsStrings.LaunchFailed(year, ex.Message));
+            }
+            finally { Idle(); }
+        }
+        Busy(AddInsStrings.Loading);
         await RefreshAsync(fresh: true);
     }
+
 
     /// <summary>Restore All Add-ins: the Loader's, with its report and the running-Revit notes.</summary>
     public async Task RestoreAllAsync()
