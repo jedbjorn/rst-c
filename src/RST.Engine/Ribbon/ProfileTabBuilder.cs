@@ -43,6 +43,8 @@ using RST.Core.Configuration;
 using RST.Core.Profiles;
 using RST.Core.Ribbon;
 using RST.Core.Logging;
+using RST.Core.Theming;
+using RST.Engine.Theming;
 using AwComponentManager = Autodesk.Windows.ComponentManager;
 using AwRibbonTab = Autodesk.Windows.RibbonTab;
 using AwRibbonPanel = Autodesk.Windows.RibbonPanel;
@@ -110,6 +112,7 @@ internal static class ProfileTabBuilder
         int stackCount = 0;
         int skippedCount = 0;
         int failedCount = 0;
+        var dark = RevitThemeDetector.Detect() == UiTheme.Dark;
 
         // Spec #17 (review N5): problems that do not stop a profile loading, such as a stack no
         // panel places (it is not drawn), are logged when the profile is built.
@@ -119,7 +122,7 @@ internal static class ProfileTabBuilder
         foreach (var panelDef in profile.Panels)
         {
             var layout = RibbonLayoutPlanner.PlanPanel(profile, panelDef, panelIndex);
-            var panel = BuildPanel(layout, handler, _ => failedCount++);
+            var panel = BuildPanel(layout, handler, _ => failedCount++, dark);
             tab.Panels.Add(panel);
             _managedPanels.Add(panel);
             PanelStyling.ApplyColor(panel, panelDef.Color, alpha, RibbonLayoutPlanner.EstimatePanelWidth(layout));
@@ -246,7 +249,8 @@ internal static class ProfileTabBuilder
     /// <param name="layout">The panel's layout.</param>
     /// <param name="handler">A button's click handler.</param>
     /// <param name="failed">Told about each item that threw while it was built (it is skipped).</param>
-    internal static AwRibbonPanel BuildPanel(PanelLayout layout, Func<SlotTarget, System.Windows.Input.ICommand> handler, Action<RibbonLayoutItem>? failed = null)
+    /// <param name="dark">Use the dark companion artwork for the theme captured at build time.</param>
+    internal static AwRibbonPanel BuildPanel(PanelLayout layout, Func<SlotTarget, System.Windows.Input.ICommand> handler, Action<RibbonLayoutItem>? failed = null, bool dark = false)
     {
         var source = new AwRibbonPanelSource
         {
@@ -265,11 +269,11 @@ internal static class ProfileTabBuilder
                 switch (item)
                 {
                     case LargeButtonItem large:
-                        source.Items.Add(RibbonItemFactory.LargeButton(large.Button, Icon32(large.Button), handler(large.Button.Target)));
+                        source.Items.Add(RibbonItemFactory.LargeButton(large.Button, Icon32(large.Button, dark), handler(large.Button.Target)));
                         break;
 
                     case StackItem stack:
-                        source.Items.Add(RibbonItemFactory.Stack(stack, Icon16, Icon32, b => handler(b.Target)));
+                        source.Items.Add(RibbonItemFactory.Stack(stack, b => Icon16(b, dark), b => Icon32(b, dark), b => handler(b.Target)));
                         Log.Information("ProfileTabBuilder: panel {Panel} '{PanelName}' slot {Slot}: stack '{Stack}' with {Count} buttons ({Id})",
                                   layout.PanelIndex, layout.Name, stack.SlotIndex, stack.StackName, stack.Buttons.Count, stack.Id);
                         break;
@@ -291,15 +295,17 @@ internal static class ProfileTabBuilder
         return panel;
     }
 
-    // Precedence: explicit pack icon (admin override) → branded icon for
-    // RST native tools → generic default.
-    internal static System.Windows.Media.ImageSource? Icon32(PlannedButton b) =>
+    // Precedence: explicit pack icon → companion default (only with no stored icon)
+    // → branded icon for RST native tools → generic default.
+    internal static System.Windows.Media.ImageSource? Icon32(PlannedButton b, bool dark = false) =>
         IconAssets.ResolveSlotIcon(b.IconFile)
+        ?? IconAssets.ResolveCompanionIcon(b.Source, 32, dark)
         ?? IconAssets.ResolveNativeToolIcon(b.CommandId)
         ?? IconAssets.Default32;
 
-    internal static System.Windows.Media.ImageSource? Icon16(PlannedButton b) =>
+    internal static System.Windows.Media.ImageSource? Icon16(PlannedButton b, bool dark = false) =>
         IconAssets.ResolveSlotIcon16(b.IconFile)
+        ?? IconAssets.ResolveCompanionIcon(b.Source, 16, dark)
         ?? IconAssets.ResolveNativeToolIcon16(b.CommandId)
         ?? IconAssets.Default16;
 }
