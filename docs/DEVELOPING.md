@@ -685,7 +685,7 @@ changing only its `using` line (`using Serilog;` became `using RST.Core.Logging;
   one `Version`: `FileVersion` `a.b.c.0` and `InformationalVersion` `a.b.c+<7-character commit>`
   (target `RstShortSourceRevision`). CI passes the release's `a.b.c` as `RST_VERSION` to
   `build/stage.sh`, which builds with `-p:Version`. An untagged (dev or PR) build is
-  `<RstDevVersion>-dev` (`3.1.99-dev`, FileVersion `3.1.99.0`), the same `RstDevVersion` the MSI
+  `<RstDevVersion>-dev` (`3.2.99-dev`, FileVersion `3.2.99.0`), the same `RstDevVersion` the MSI
   and bundle fallbacks use. It must sort above the latest release and is bumped after each one; see
   [installer/README.md, Untagged builds](../installer/README.md#untagged-builds) for why and how.
   The stage then

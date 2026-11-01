@@ -47,13 +47,13 @@ dotnet build installer\RST.Installer.wixproj -c Release
 
 ### Untagged builds
 
-Local and push/PR builds are stamped with one version, `RstDevVersion` in `Directory.Build.props` (now `3.1.99`):
+Local and push/PR builds are stamped with one version, `RstDevVersion` in `Directory.Build.props` (now `3.2.99`):
 
 - RST.msi's ProductVersion, when no `-p:RstMsiVersion=` is passed (`RST.Installer.wixproj` reads the property);
 - RST-Setup.exe's bundle version, when no `-p:RstBundleVersion=` is passed (`RST.Setup.wixproj`);
-- every RST binary, the tray included: FileVersion `3.1.99.0`, informational version `3.1.99-dev+<commit>` (`build/stage.sh` reads the same line when `RST_VERSION` is unset).
+- every RST binary, the tray included: FileVersion `3.2.99.0`, informational version `3.2.99-dev+<commit>` (`build/stage.sh` reads the same line when `RST_VERSION` is unset).
 
-It must sort above the latest release (v3.1.1) and below the next (v3.2.0). Then a dev build upgrades a released install in place, and the next release still upgrades a dev build. Both halves matter. An MSI refuses to install over a newer ProductVersion. And Windows Installer does not install a file older than the one on disk, after which the MajorUpgrade removes the old file and leaves none. That is how a dev build with `0.0.0.0` files lost v3.1.1's tray (`3.1.1.0`).
+It must sort above the latest release (v3.2.0) and below the next (v3.3.0). Then a dev build upgrades a released install in place, and the next release still upgrades a dev build. Both halves matter. An MSI refuses to install over a newer ProductVersion. And Windows Installer does not install a file older than the one on disk, after which the MajorUpgrade removes the old file and leaves none. That is how a dev build with `0.0.0.0` files lost v3.1.1's tray (`3.1.1.0`).
 
 **After each release, bump `RstDevVersion` to `<that release's a.b>.99`, in one place: `Directory.Build.props`.** Also move the newest `msi-migrate` leg in `.github/workflows/_build.yml` to that release. Its `-TrayStaged` check fails when any staged tray file is missing after the upgrade.
 
@@ -73,7 +73,7 @@ It must sort above the latest release (v3.1.1) and below the next (v3.2.0). Then
   - all three, same-version rebuild: one product;
   - uninstall: every tree is gone, and user data survives.
   - the tray (SC-044): the first install leaves exactly one tray running, `--startup`, as the runner's user, in its session, not elevated (like the user's Explorer), no window, started by `RstStartTray`; a refused install starts none; a repair or upgrade with a tray running leaves exactly one, started by `RstStartTray` (its log names it; not a child of `msiexec`), and `MSIDISABLERMRESTART=1` is in the package; a no-op reinstall leaves the running one alone (`RstStartTray`: "already holds"); an uninstall starts none and runs no `RstStartTray`. `ci-machine-smoke.ps1`, `ci-tray-selfupdate.ps1` and `installer-bundle/ci-bundle-smoke.ps1` check their own paths (shared checks: `ci-tray-start.ps1`).
-- **`-Mode Migrate`** (job `msi-migrate`) upgrades from the public v2.2.0 preview MSI, from v2.2.0 `RST.msi` and from v3.0.0 `RST.msi`. Each upgrade leaves exactly one tray running, hidden, as the runner's user, not elevated.
+- **`-Mode Migrate`** (job `msi-migrate`) upgrades from the public v2.2.0 preview MSI, from v2.2.0 `RST.msi`, from v3.0.0 `RST.msi` and from the latest release's `RST.msi` (v3.2.0, with `-TrayStaged`). Each upgrade leaves exactly one tray running, hidden, as the runner's user, not elevated.
 
 ## Setup UI & branding
 

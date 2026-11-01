@@ -3,9 +3,10 @@
 // list's state and restores it in ReturnFromDetail).
 //
 //   - The model is read off the UI thread through spec #24's shared read path, ModelActivityReader.ReadModel (the
-//     rollups plus closed outbox files not folded yet, no live session), so for the same range the numbers are the
-//     ones Revit's Activity tab shows (spec #25 AC 4). A loading state shows meanwhile; a read for a model the user has
-//     since left is dropped.
+//     rollups plus every outbox file not folded yet), so for the same range the numbers are the ones Revit's Activity
+//     tab shows (spec #25 AC 4). A session still open in Revit counts up to its last recorded event, as an
+//     unrecovered crash does (no LiveSessionGuid here); Revit's own Activity tab is the live view. A loading state
+//     shows meanwhile; a read for a model the user has since left is dropped.
 //   - It renders through RST.UI's ModelActivityPanel without Activity (Session): Activity (Total), Longest Sync,
 //     Longest Open Time, and Warning Count and File Size as last known ("As of <date>"); the four charts in Revit's
 //     order. Range pills 7D · 1M · 3M · 6M · 1Y; it opens on the range the list hands over. A pill re-renders the same
@@ -39,7 +40,8 @@ internal interface IModelActivitySource
     ModelActivity Read(string modelId);
 }
 
-/// <summary>%LocalAppData%\RST\telemetry: the model's rollup plus the outbox files not folded yet (ReadModel, which writes nothing).</summary>
+/// <summary>%LocalAppData%\RST\telemetry: the model's rollup plus the outbox files not folded yet, a session still open
+/// in Revit up to its last recorded event (ReadModel, which writes nothing).</summary>
 internal sealed class RollupModelActivitySource : IModelActivitySource
 {
     public ModelActivity Read(string modelId) => ModelActivityReader.ReadModel(modelId, new ActivityReadOptions
@@ -127,7 +129,7 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
         _zone = o.Zone ?? TimeZoneInfo.Local;
         _today = o.Today ?? (() => ModelList.LocalToday(DateTimeOffset.UtcNow, _zone));
 
-        // Activity (Session) is Revit's only: the tray has no live session.
+        // Activity (Session) is Revit's only: the tray reads a session still open in Revit only up to its last event.
         Panel = new ModelActivityPanel(includeSession: false, o.Culture ?? CultureInfo.CurrentCulture, _zone);
         Ranges = ModelDetail.Ranges
             .Select(r => new RangeOption(r.Days, r.Label, r.Days == _range.Days, OnRangeChosen))

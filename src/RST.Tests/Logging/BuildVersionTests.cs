@@ -77,9 +77,9 @@ public class BuildVersionTests
 
         var numeric = BuildVersion.Product(informational).Split('-')[0];
         core.GetCustomAttribute<AssemblyFileVersionAttribute>()!.Version.Should().Be(numeric + ".0");
-        // Above v3.1.1, the latest release, whose tray files are 3.1.1.0: Windows Installer would not install an
+        // Above v3.2.0, the latest release, whose tray files are 3.2.0.0: Windows Installer would not install an
         // "older" file over it, and the MajorUpgrade would then leave none (installer/README.md, "Untagged builds").
-        Version.Parse(numeric).Should().BeGreaterThan(new Version(3, 1, 1));
+        Version.Parse(numeric).Should().BeGreaterThan(new Version(3, 2, 0));
         var plus = informational.IndexOf('+');
         if (plus >= 0) informational[(plus + 1)..].Should().HaveLength(7, "the commit is the short hash (RstShortSourceRevision)");
     }

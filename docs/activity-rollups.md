@@ -32,7 +32,7 @@ The code is in `src/RST.Core/Telemetry/` (`ActiveTime`, `SessionReplay`) and `sr
 
 All files are UTF-8 JSON, written compactly. Timestamps are UTC, ISO-8601 with milliseconds (`2026-10-30T14:03:07.123Z`). Dates are local calendar days (`2026-10-30`) in the user's Windows time zone. Durations are **seconds** with millisecond precision.
 
-**Writes are atomic.** The tray writes a temp file, flushes it to disk, then replaces the file, keeping the previous one as `.bak.json`. Open a file for reading with read/write/delete sharing; if it is briefly locked, retry, then read `.bak.json`. Never write to these files: the tray would treat your change as corruption and restore from `.bak.json`.
+**Writes are atomic.** The tray writes a temp file, flushes it to disk, then replaces the file, keeping the previous one as `.bak.json`. Open a file for reading with read/write/delete sharing; if it is briefly locked, retry, then read `.bak.json`. Never write to these files; the tray is their only writer. The tray does not undo a change: a rollup whose length or last write no longer matches its index row is read again, and if it still parses and passes validation it is kept as it is, re-indexed, and folded onto from then on (the change becomes part of the history, and of `.bak.json` after the next write). Only a rollup that no longer parses or validates (for example `"days": null`) is renamed `.corrupt.json` and restored from `.bak.json`, and the outbox files still on disk that touched it fold again.
 
 ## Model identity
 
@@ -144,7 +144,9 @@ The tray folds one closed outbox file (it has `session_end` and no Revit holds i
 
 **`model_stats` after an open has no warning count.** Revit records `model_stats` after a model opens, saves or syncs (at most once per model per 5 minutes). After an open it measures the file size only and writes `warnings_count: null`, meaning **not measured**: counting warnings right after an open can stall Revit for seconds on a large model. After a save, Save As or sync the count is measured. The fold never reads that null as zero: a day, the index row and the health inputs keep the size of the latest record and the warning count of the latest record that measured one (`warnings_ts` says when). A model that has only been opened, never saved or synced, has no warning count yet, and its health is scored without warning density.
 
-A raw outbox file is deleted only when **all** hold, re-checked against the file itself while the tray holds it exclusively (nobody can write, rename or replace it, and a live Revit session's file cannot be held): its size and last write are still the folded ones; its content is still a closed session and re-folding it touches exactly the models its ledger row lists; its share is sealed for exactly that file in every one of those models, and both the rollup and its `.bak.json` (read back from disk) hold that seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. The delete then goes through the same handle, so the file deleted is the file verified. A session that touched no model (a genuinely empty contribution) has nothing to lose and cleans up the same way; a ledger row whose model list is missing or unreadable counts as unknown and re-folds — it never reads as "touched nothing". A failed index or ledger write stops the pass before cleanup. The age prune (`retentionDays`, default 180) stays as a backstop for files the tray never folds.
+A raw outbox file is deleted only when **all** hold, re-checked against the file itself while the tray holds it exclusively (nobody can write, rename or replace it, and a live Revit session's file cannot be held): its size and last write are still the folded ones; its content is still a closed session and re-folding it touches exactly the models its ledger row lists; its share is sealed for exactly that file in every one of those models, and both the rollup and its `.bak.json` (read back from disk) hold that seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. The delete then goes through the same handle, so the file deleted is the file verified. A session that touched no model (a genuinely empty contribution) has nothing to lose and cleans up the same way; a ledger row whose model list is missing or unreadable counts as unknown and re-folds — it never reads as "touched nothing". A failed index or ledger write stops the pass before cleanup.
+
+**The age backstop does not ask the retention gates.** `RetentionPruner` (`retentionDays` in the telemetry prefs, default 180) deletes every closed outbox file whose newest event is older than that, folded or not, sealed or not, without consulting `RetentionGates`. It runs when Revit starts and from the tray after a fold pass, at most once a day. A gate therefore holds a raw file back from the fold's cleanup only: past `retentionDays` the file is deleted even when a fork's gate refuses (flag SC-060). What was folded from it stays in the rollups.
 
 ## Retention hook for forks
 
@@ -162,7 +164,7 @@ sealed class ShippedGate : IRetentionGate
 }
 ```
 
-Return false to keep the file for now (it is asked again next pass). A gate that throws counts as a refusal.
+Return false to keep the file for now (it is asked again next pass). A gate that throws counts as a refusal. A gate does not keep a file past `retentionDays` (default 180): the age backstop deletes it without asking ([Folding and cleanup](#folding-and-cleanup), flag SC-060).
 
 ## Reading from code
 

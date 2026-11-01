@@ -51,9 +51,9 @@
          .wixproj fallbacks read this property). It must sort above the latest release and below
          the next: Windows Installer does not install a file older than the one on disk (and the
          MajorUpgrade then removes the old one, leaving none: the tray lost on a dev build over
-         v3.1.1, whose tray files are 3.1.1.0), and an MSI refuses to install over a newer
+         v3.1.1, whose tray files are 3.1.1.0; the latest release is v3.2.0), and an MSI refuses to install over a newer
          ProductVersion. Bump it after each release (installer/README.md, "Untagged builds"). -->
-    <RstDevVersion>3.1.99</RstDevVersion>
+    <RstDevVersion>3.2.99</RstDevVersion>
     <Version Condition="'$(Version)' == ''">$(RstDevVersion)-dev</Version>
     <!-- AssemblyVersion stays fixed at the value every release has shipped (0.1.0.0), whatever
          the release: the bootstrap's assembly resolver (docs/DEVELOPING.md, "The bootstrap's
@@ -62,7 +62,7 @@
          process refuse another. Change it only with the resolver in mind. -->
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <!-- The SDK would copy AssemblyVersion into FileVersion: derive it from Version instead
-         (3.2.0 and 3.2.0-rc.1 give 3.2.0.0; 3.1.99-dev gives 3.1.99.0). -->
+         (3.2.0 and 3.2.0-rc.1 give 3.2.0.0; 3.2.99-dev gives 3.2.99.0). -->
     <RstNumericVersion>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</RstNumericVersion>
     <FileVersion Condition="'$(FileVersion)' == '' and '$(RstNumericVersion)' != ''">$(RstNumericVersion).0</FileVersion>
     <RepositoryUrl>https://github.com/jedbjorn/RST-C</RepositoryUrl>
