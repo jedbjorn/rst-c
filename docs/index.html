@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="RST is a native Revit add-in for curated ribbon profiles. Admins build the right toolset; users load it in one click. No pyRevit, no external runtime.">
+  <meta name="theme-color" content="#172033">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="RST — Revit Standardization Tool">
+  <meta property="og:description" content="A Revit ribbon that fits the work. Build curated profiles, share them with your team, and switch without restarting Revit.">
+  <meta property="og:url" content="https://jedbjorn.github.io/rst-c/">
+  <meta property="og:image" content="https://jedbjorn.github.io/rst-c/images/ribbon-profile-loaded.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>RST — Revit Standardization Tool</title>
+  <link rel="canonical" href="https://jedbjorn.github.io/rst-c/">
+  <link rel="icon" href="assets/rst-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="RST home">
+        <img src="assets/rst-mark.svg" alt="" width="42" height="42">
+        <span class="brand-type">
+          <strong>RST</strong>
+          <span>Revit Standardization Tool</span>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#workflow">How it works</a>
+        <a href="#tray">Tray</a>
+        <a href="#docs">Docs</a>
+      </nav>
+      <a class="github-link" href="https://github.com/jedbjorn/rst-c">
+        GitHub <span aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container">
+        <div class="hero-copy">
+          <p class="eyebrow hero-eyebrow"><span aria-hidden="true"></span> Native add-in for Revit 2025–2027</p>
+          <h1>A Revit ribbon<br><span>that fits the work.</span></h1>
+          <p class="hero-lede">Admins build curated ribbon profiles. Every user gets the right tools in one click. No pyRevit, no external runtime, no hunting through tabs.</p>
+          <div class="button-row">
+            <a class="button button-primary" href="https://github.com/jedbjorn/rst-c/releases/latest/download/RST.msi">Download for Windows <span aria-hidden="true">↓</span></a>
+            <a class="button button-secondary" href="https://github.com/jedbjorn/rst-c">Explore on GitHub <span aria-hidden="true">↗</span></a>
+          </div>
+          <ul class="hero-notes" aria-label="Installation highlights">
+            <li>Per-user install</li>
+            <li>No admin rights required</li>
+            <li>MIT licensed</li>
+          </ul>
+        </div>
+
+        <figure class="hero-shot">
+          <div class="window-bar" aria-hidden="true">
+            <span class="window-dots"><i></i><i></i><i></i></span>
+            <span>A curated RST profile in Autodesk Revit</span>
+            <span>RST-C</span>
+          </div>
+          <img src="images/ribbon-profile-loaded.png" alt="A customised Revit ribbon with company branding and colour-coded tool panels, including the RST-C tools, above a Revit project workspace" width="2714" height="1836" fetchpriority="high">
+          <figcaption>Company branding, colour-coded panels, and a ribbon shaped around the work.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="facts" aria-label="Product highlights">
+      <div class="container fact-grid">
+        <div><strong>One managed add-in</strong><span>Runs inside Revit’s own .NET host</span></div>
+        <div><strong>Live profile switching</strong><span>No Revit restart required</span></div>
+        <div><strong>Three Revit years</strong><span>2025, 2026, and 2027 in one MSI</span></div>
+      </div>
+    </section>
+
+    <section class="section features" id="features">
+      <div class="container">
+        <div class="section-heading">
+          <p class="eyebrow">One add-in. A cleaner workflow.</p>
+          <h2>Built for curators and the people who use Revit every day.</h2>
+          <p>RST turns a crowded ribbon into a deliberate toolset for each role, while keeping administration and everyday use straightforward.</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-number">01</span>
+            <h3>Profile Builder</h3>
+            <p>Search the live Revit command catalogue, arrange panels and stacks, set branding, and export a self-contained profile for the team.</p>
+            <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/profile-builder.md">Builder documentation <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card">
+            <span class="feature-number">02</span>
+            <h3>Profile Loader</h3>
+            <p>Preview a profile, check its required add-ins, and load the chosen ribbon without restarting Revit.</p>
+            <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/profile-loader.md">Loader documentation <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card">
+            <span class="feature-number">03</span>
+            <h3>Branding &amp; Custom Tools</h3>
+            <p>Add company branding, panel colours, web links, email addresses, and file shortcuts to the same curated surface.</p>
+            <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/appearance.md">Appearance documentation <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card">
+            <span class="feature-number">04</span>
+            <h3>RSTify &amp; required add-ins</h3>
+            <p>Hide tabs the profile does not need, keep its dependencies visible, and restore the previous setup when you switch back.</p>
+            <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/ribbon-tools.md">Ribbon Tools documentation <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card">
+            <span class="feature-number">05</span>
+            <h3>Health &amp; Activity</h3>
+            <p>Inspect workstation and model health, review active time, and clean known junk locations. Activity data stays on the local PC.</p>
+            <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/health-tool.md">Health documentation <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card">
+            <span class="feature-number">06</span>
+            <h3>Tray &amp; updates</h3>
+            <p>Prepare profiles before Revit starts, manage companion add-ins, check for updates, and review model activity outside Revit.</p>
+            <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/tray.md">Tray documentation <span aria-hidden="true">→</span></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section workflow" id="workflow">
+      <div class="container">
+        <div class="section-heading section-heading-light">
+          <p class="eyebrow">From curated to ready</p>
+          <h2>One profile. Three simple steps.</h2>
+          <p>Profiles travel as portable packages, so the person curating the ribbon and the person loading it can focus on different jobs.</p>
+        </div>
+        <ol class="step-grid">
+          <li>
+            <span class="step-number">1</span>
+            <h3>Build</h3>
+            <p>Choose commands, organise panels, and add the branding and resources your team needs.</p>
+          </li>
+          <li>
+            <span class="step-number">2</span>
+            <h3>Share</h3>
+            <p>Export a self-contained <code>.zip</code> with the profile, icons, and branding included.</p>
+          </li>
+          <li>
+            <span class="step-number">3</span>
+            <h3>Load</h3>
+            <p>Import, preview, and apply the profile. Switching is live; Revit stays open.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section tray-section" id="tray">
+      <div class="container tray-grid">
+        <figure class="tray-shot">
+          <img src="images/tray-profiles.png" alt="The RST tray on its RST Profiles page, with profile selection, add-in controls, and options to launch Revit 2026 or 2027 with a profile" width="817" height="623" loading="lazy">
+          <figcaption>RST Profiles in the Windows tray app</figcaption>
+        </figure>
+        <div class="tray-copy">
+          <p class="eyebrow">Outside Revit, still RST</p>
+          <h2>Set up before you start.</h2>
+          <p>The small RST tray app brings profile switching, updates, companion apps, and health information together in one place. Nothing in Revit depends on it.</p>
+          <ul class="check-list">
+            <li>Apply a profile or restore all add-ins before launch</li>
+            <li>Launch an installed Revit year with the selected profile</li>
+            <li>See installed and available versions at a glance</li>
+            <li>Keep model activity and health data on your PC</li>
+          </ul>
+          <a class="text-link" href="https://github.com/jedbjorn/rst-c/blob/main/docs/tray.md">Read the tray guide <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section docs-section" id="docs">
+      <div class="container docs-grid">
+        <div class="docs-intro">
+          <p class="eyebrow">Clear by design</p>
+          <h2>Documentation for setup and everyday use.</h2>
+          <p>Install for one Windows account or the whole PC, then learn the Loader, Builder, ribbon tools, and tray at your own pace.</p>
+          <a class="text-link" href="https://github.com/jedbjorn/rst-c#install">Read the installation guide <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="doc-links">
+          <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/profile-loader.md"><span><strong>Profile Loader</strong><small>Choose, preview, and load a profile</small></span><span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/profile-builder.md"><span><strong>Profile Builder</strong><small>Create and export curated ribbons</small></span><span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/ribbon-tools.md"><span><strong>Ribbon Tools</strong><small>Control tabs and required add-ins</small></span><span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/jedbjorn/rst-c/blob/main/docs/tray.md"><span><strong>RST Tray</strong><small>Profiles, updates, apps, and health</small></span><span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="download-section">
+      <div class="container">
+        <div class="download-card">
+          <div>
+            <p class="eyebrow">Ready when you are</p>
+            <h2>Give your team a cleaner Revit.</h2>
+            <p>One installer for Revit 2025, 2026, and 2027. Install only for the Revit years already on the PC.</p>
+          </div>
+          <div class="download-actions">
+            <a class="button button-light" href="https://github.com/jedbjorn/rst-c/releases/latest/download/RST.msi">Download RST.msi <span aria-hidden="true">↓</span></a>
+            <a href="https://github.com/jedbjorn/rst-c/releases/latest">See all release options <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <a class="brand brand-footer" href="#top" aria-label="Back to top">
+        <img src="assets/rst-mark.svg" alt="" width="34" height="34">
+        <span class="brand-type"><strong>RST</strong><span>Revit Standardization Tool</span></span>
+      </a>
+      <p>Native Revit add-in · MIT licensed</p>
+      <div class="footer-links">
+        <a href="https://github.com/jedbjorn/rst-c">GitHub</a>
+        <a href="https://github.com/jedbjorn/rst-c/releases">Releases</a>
+        <a href="https://github.com/jedbjorn/rst-c/blob/main/LICENSE">License</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
