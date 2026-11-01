@@ -23,7 +23,7 @@ public static class BuiltinTabs
 {
     private static readonly HashSet<string> _names = new(StringComparer.Ordinal)
     {
-        "Architecture", "Structure", "Systems", "Steel", "Precast", "Concrete",
+        "Architecture", "Structure", "Systems", "Steel", "Precast",
         "Insert", "Annotate", "Analyze", "Massing & Site", "Collaborate",
         "View", "Manage", "Modify", "Create", "RST",
         "Modify | Walls", "Modify | Floors", "Modify | Roofs",
@@ -32,6 +32,17 @@ public static class BuiltinTabs
 
     public static IReadOnlyCollection<string> Names => _names;
 
-    public static bool Contains(string? tabName) =>
-        tabName is not null && _names.Contains(tabName);
+    // Tabs introduced after the earliest supported Revit year. Shared with Loader/Builder.
+    private static readonly Dictionary<string, int> _introducedIn = new(StringComparer.Ordinal)
+    {
+        ["Concrete"] = 2027,
+    };
+
+    public static bool Contains(string? tabName, int? revitYear = null) =>
+        tabName is not null && (_names.Contains(tabName) || IsIntroducedTab(tabName, revitYear));
+
+    // An unknown year preserves the pre-2027 tab rules.
+    internal static bool IsIntroducedTab(string? tabName, int? revitYear) =>
+        tabName is not null && revitYear is { } year
+        && _introducedIn.TryGetValue(tabName, out var firstYear) && year >= firstYear;
 }

@@ -92,7 +92,7 @@ public static class RequiredAddinRules
     /// </summary>
     public static readonly IReadOnlySet<string> BuiltinTabs = new HashSet<string>(StringComparer.Ordinal)
     {
-        "Architecture", "Structure", "Systems", "Steel", "Precast", "Concrete",
+        "Architecture", "Structure", "Systems", "Steel", "Precast",
         "Insert", "Annotate", "Analyze", "Massing & Site", "Collaborate",
         "View", "Manage", "Modify", "Add-Ins", "Create", "RST",
         "FormIt", "FormIt Converter", "eTransmit",
@@ -100,7 +100,8 @@ public static class RequiredAddinRules
 
     public const string NativeFileColumn = "Revit Built-in";
 
-    public static bool IsNativeTab(string? tabName) => tabName is not null && BuiltinTabs.Contains(tabName);
+    public static bool IsNativeTab(string? tabName, int? revitYear = null) =>
+        tabName is not null && (BuiltinTabs.Contains(tabName) || Scanning.BuiltinTabs.IsIntroducedTab(tabName, revitYear));
 
     /// <summary>The object format (what <see cref="Profile.RequiredAddins"/> holds).</summary>
     public static IReadOnlyList<NormalizedRequiredAddin> Normalize(IEnumerable<RequiredAddin>? requiredAddins) =>
@@ -143,7 +144,7 @@ public static class RequiredAddinRules
 
     /// <summary>The running year's add-ins that satisfy <paramref name="addin"/> (the one matcher).</summary>
     public static IReadOnlyList<InventoryItem> Matches(NormalizedRequiredAddin addin, AddinSessionContext context) =>
-        RequiredAddinMatch.Match(ToRequirement(addin), context.Installed);
+        RequiredAddinMatch.Match(ToRequirement(addin), context.Installed, context.RunningYear);
 
     /// <summary>The requirement the planner sees for this row: file, id, tab and native flag, all passed through (review N2).</summary>
     public static RequiredAddin ToRequirement(NormalizedRequiredAddin addin) => new()
@@ -171,7 +172,7 @@ public static class RequiredAddinRules
     public static RequiredAddinRow Describe(NormalizedRequiredAddin addin, AddinSessionContext context)
     {
         var tabName = addin.TabName;
-        var native = IsNativeTab(tabName) || addin.Native;
+        var native = IsNativeTab(tabName, context.RunningYear) || addin.Native;
         var known = context.LookupFor(tabName);
         var matches = native ? [] : Matches(addin, context);
         var year = context.RunningYear?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
