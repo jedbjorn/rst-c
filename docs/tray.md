@@ -204,10 +204,10 @@ From the top: a search box, the filters, totals over the models shown, then the 
 Opening a card shows that model's detail in place of the list. **Back**, or **Escape**, returns to the list as you left it: the same search, filters, folded groups and scroll position.
 
 - **At the top:** the thumbnail, the title (and file name), the health colour with its name, the Revit versions the model was opened in (for example "Opened in Revit 2027.1, 2026.4"), its local file and its central (or cloud) model, and Workshared or Cloud.
-- **Cards:** **Activity (Total)**, **Longest Sync** and **Longest Open Time** over the range, and **Warning Count** and **File Size**, the last ones recorded, with the day they were recorded ("As of Oct 28, 2026"). Activity (Session) is Revit's only: the tray shows no Revit session under way.
+- **Cards:** **Activity (Total)**, **Longest Sync** and **Longest Open Time** over the range, and **Warning Count** and **File Size**, the last ones recorded, with the day they were recorded ("As of Oct 28, 2026"). Activity (Session) is Revit's only: it is the session under way, which only Revit sees live.
 - **Range:** **7D**, **1M**, **3M**, **6M** or **1Y**. The detail opens on the range nearest the list's time frame: Recent opens 1M, 3M, 6M and 1Y open their own, and a search opens 1Y.
 - **Charts:** the four of Revit's Activity tab, in the same order: Active time, Opening time, Sync history (workshared and cloud models) and Health ([Charts](health-tool.md#charts)). At 7D, 1M and 3M, one point per day or per open or sync; at 6M and 1Y, one per week.
-- **The same numbers as Revit:** the detail reads the model the way Revit's Activity tab does, including the sessions the tray has not folded yet, so for the same range both show the same figures, except for the session open in Revit right now. Revit's Health window has no 1Y range.
+- **The same numbers as Revit:** the detail reads the model the way Revit's Activity tab does, including the sessions the tray has not folded yet, so for the same range both show the same figures. A session still open in Revit counts up to its last recorded event (as a session that ended in a crash does until it is recovered), so it can trail Revit by the time since then; Revit's own Activity tab is the live view. The Models list adds that session only after Revit closes. Revit's Health window has no 1Y range.
 - If a model's history is no longer on this PC (its files deleted, or unreadable), the detail says so.
 
 ## Turning update checks off for everyone (IT)
