@@ -180,7 +180,7 @@ public class ProfileLoaderScreenshotTests
         var header = window.Header;
         Assert.Same(window.FindResource("HeaderStrip"), header.Style);
         Assert.Equal(54, header.ActualHeight);
-        Assert.Equal(new Thickness(16, 0, 16, 0), header.Padding);
+        Assert.Equal(new Thickness(0, 0, 16, 0), header.Padding);
         AssertColor(Palette(theme, UiPalette.AccentSoft), At(bitmap, header, root, header.ActualWidth / 2, 4), $"{what} header tint");
         AssertColor(Palette(theme, UiPalette.AccentSoft), At(bitmap, header, root, header.ActualWidth - 4, header.ActualHeight / 2), $"{what} header tint, right");
         AssertColor(Palette(theme, UiPalette.InfoBorder), At(bitmap, header, root, header.ActualWidth / 2, header.ActualHeight - 0.5), $"{what} header bottom line");
@@ -192,6 +192,13 @@ public class ProfileLoaderScreenshotTests
         var divider = WindowCapture.Descendants<System.Windows.Shapes.Rectangle>(header).Single();
         Assert.Same(window.FindResource("HeaderDivider"), divider.Style);
         AssertColor(Palette(theme, UiPalette.InfoBorder), At(bitmap, divider, root, 0.5, divider.ActualHeight / 2), $"{what} header divider");
+        var dividerRight = divider.TranslatePoint(new Point(divider.ActualWidth, 0), root).X;
+        var paneRight = window.ProfilesPane.TranslatePoint(new Point(window.ProfilesPane.ActualWidth, 0), root).X;
+        Assert.Equal(paneRight, dividerRight, 1);
+        var detailInset = window.DetailHeader.TranslatePoint(new Point(window.DetailHeader.Padding.Left, 0), root).X;
+        Assert.Equal(detailInset, title.TranslatePoint(new Point(), root).X, 1);
+        Assert.True(window.ImportButton.TranslatePoint(new Point(window.ImportButton.ActualWidth, 0), root).X < dividerRight);
+        Assert.Same(Assert.IsType<ProfileLoaderViewModel>(window.DataContext).ImportCommand, window.ImportButton.Command);
 
         var pane = window.ProfilesHeader;
         Assert.Same(window.FindResource("PaneHeader"), pane.Style);
@@ -210,6 +217,10 @@ public class ProfileLoaderScreenshotTests
         {
             var bitmap = CaptureLoader(opened, theme, "f18-loader-main");
             AssertBuilderFlavour(opened.Window, bitmap, theme, "main");
+            // The header's groups keep the same pane alignment at the Loader's minimum width.
+            bitmap = WindowCapture.Content(opened.Window, new Size(opened.Window.MinWidth, LoaderSize.Height));
+            Screenshots.Save(bitmap, Name("f18-loader-header-min-width", theme));
+            AssertBuilderFlavour(opened.Window, bitmap, theme, "minimum width");
         }
         finally
         {
