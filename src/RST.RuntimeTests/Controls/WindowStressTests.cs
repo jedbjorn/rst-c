@@ -2,12 +2,14 @@
 // ShowDialog when its collapsed spinner was Loaded. A screenshot test shows a window and renders it once; this opens
 // each RST window in a real nested ShowDialog loop, as its launcher does, with a dispatcher hook that fails the test
 // on any unhandled exception, flips its busy, overlay and collapsed states on and off while the loop runs, and
-// closes it by timer.
+// closes it by timer. SC-046 / #166 N5: swallowed guard faults also fail, and a cancelled Close
+// must not defeat the modal timeout (Hide ends the loop, including any prompt opened by Close).
 
 using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 using RST.Core.Theming;
+using RST.Core.Logging;
 using RST.RuntimeTests.Builder;
 using RST.RuntimeTests.Health;
 using RST.RuntimeTests.Loader;
@@ -18,6 +20,7 @@ using RST.UI.Dialogs;
 using RST.UI.Health;
 using RST.UI.Loader;
 using RST.UI.Theming;
+using RST.UI.Mvvm;
 using Xunit;
 
 namespace RST.RuntimeTests.Controls;
@@ -44,9 +47,12 @@ public class WindowStressTests
     /// loop, then closes it. Every unhandled dispatcher exception is collected (and handled, so the test reports it
     /// rather than the host dying); a backstop closes the window if the steps stall.
     /// </summary>
-    private static void RunModal(Window window, IReadOnlyList<(string Name, Action Act)> steps, Action? beforeClose = null)
+    private static void RunModal(Window window, IReadOnlyList<(string Name, Action Act)> steps, Action? beforeClose = null, TimeSpan? timeout = null)
     {
         var faults = new List<string>();
+        var events = new List<LogEvent>();
+        var previousLog = Log.Logger;
+        using var logger = new Logger(LogLevel.Verbose, new ListSink(events));
         void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             faults.Add(e.Exception.ToString());
@@ -62,6 +68,7 @@ public class WindowStressTests
         var done = new List<string>();
         var backstopFired = false;
         var next = 0;
+        var closing = false;
         var dispatcher = window.Dispatcher;
         var ticker = new DispatcherTimer(StepGap, DispatcherPriority.Background, (s, _) =>
         {
@@ -73,15 +80,34 @@ public class WindowStressTests
                 return;
             }
             ((DispatcherTimer)s!).Stop();
-            beforeClose?.Invoke();
-            window.Close();
+            closing = true;
+            try
+            {
+                beforeClose?.Invoke();
+                window.Close();
+            }
+            finally { closing = false; }
         }, dispatcher);
-        var backstop = new DispatcherTimer(TimeSpan.FromSeconds(60), DispatcherPriority.Normal, (s, _) =>
+        var backstop = new DispatcherTimer(timeout ?? TimeSpan.FromSeconds(60), DispatcherPriority.Normal, (s, _) =>
         {
             ((DispatcherTimer)s!).Stop();
             backstopFired = true;
-            beforeClose?.Invoke();
-            window.Close();
+            ticker.Stop();
+            // Queue this before Close: Closing may itself open a nested unsaved-changes prompt.
+            // The nested loop runs the queued hide, so Close cannot hold us inside that prompt.
+            dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => ModalCleanup.HideTree(window)));
+            try
+            {
+                if (!closing)
+                {
+                    beforeClose?.Invoke();
+                    window.Close();
+                }
+            }
+            finally
+            {
+                ModalCleanup.HideTree(window);
+            }
         }, dispatcher);
         window.Closed += (_, _) =>
         {
@@ -90,21 +116,90 @@ public class WindowStressTests
         };
 
         dispatcher.UnhandledException += OnUnhandled;
+        Log.Logger = logger;
         try
         {
             window.ContentRendered += (_, _) => ticker.Start();
             backstop.Start();
             window.ShowDialog();
+            WindowCapture.DoEvents(); // keep both nets for queued work after the modal returns
         }
         finally
         {
+            ticker.Stop();
+            backstop.Stop();
+            ModalCleanup.HideTree(window);
             dispatcher.UnhandledException -= OnUnhandled;
+            Log.Logger = previousLog;
         }
 
-        Assert.Empty(faults);
+        lock (events)
+            faults.AddRange(events.Where(IsGuardFault).Select(e => e.RenderMessage() + "\n" + e.Exception));
+        Assert.True(faults.Count == 0, "guard-swallowed faults:\n" + string.Join("\n---\n", faults));
         Assert.False(backstopFired, $"the window did not close on its own; steps done: {string.Join(", ", done)}");
         Assert.Equal(steps.Select(s => s.Name), done);
     }
+
+    private static bool IsGuardFault(LogEvent e) => e.Level >= LogLevel.Error &&
+        // RelayCommand reports through UiGuard.Report and uses the same FaultTemplate.
+        (e.MessageTemplate == UiGuard.FaultTemplate || e.MessageTemplate == TaskGuard.FaultTemplate ||
+         e.MessageTemplate == WindowGuard.FaultTemplate);
+
+    private sealed class ListSink(List<LogEvent> events) : ILogSink
+    {
+        public void Emit(LogEvent logEvent, IReadOnlyDictionary<string, object?> properties)
+        {
+            lock (events) events.Add(logEvent);
+        }
+
+        public void Dispose() { }
+    }
+
+    [Theory]
+    [InlineData("handler")]
+    [InlineData("command")]
+    [InlineData("task")]
+    public void The_harness_fails_on_guard_swallowed_faults(string route) => Sta(UiTheme.Light, () =>
+    {
+        void Fail() => throw new InvalidOperationException("SC-046 stress harness self-test");
+        var error = Record.Exception(() => RunModal(new Window(), [("fault", () =>
+        {
+            if (route == "handler") UiGuard.Run("stress self-test", Fail);
+            else if (route == "command") new RelayCommand(Fail).Execute(null);
+            else Task.FromException(new InvalidOperationException("SC-046 stress harness self-test")).Forget("stress self-test");
+        })]));
+        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(error);
+        Assert.Contains("SC-046 stress harness self-test", error!.Message);
+    });
+
+    [Fact]
+    public void The_backstop_ends_the_modal_even_when_Closing_cancels() => Sta(UiTheme.Light, () =>
+    {
+        var window = new Window();
+        window.Closing += (_, e) => e.Cancel = true;
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var error = Record.Exception(() => RunModal(window, [], timeout: TimeSpan.FromMilliseconds(250)));
+        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(error);
+        Assert.Contains("did not close on its own", error!.Message);
+        Assert.False(window.IsVisible);
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10));
+    });
+
+    [Fact]
+    public void The_backstop_also_ends_a_prompt_opened_by_Closing() => Sta(UiTheme.Light, () =>
+    {
+        var window = new Window();
+        window.Closing += (_, e) =>
+        {
+            var prompt = new Window { Owner = window };
+            prompt.ShowDialog();
+            e.Cancel = true;
+        };
+        var error = Record.Exception(() => RunModal(window, [], timeout: TimeSpan.FromMilliseconds(250)));
+        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(error);
+        Assert.Contains("did not close on its own", error!.Message);
+        Assert.False(window.IsVisible);
+    });
 
     private static void Sta(UiTheme theme, Action action) => Screenshots.RunSta(() =>
     {
