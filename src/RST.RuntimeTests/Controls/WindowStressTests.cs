@@ -135,7 +135,7 @@ public class WindowStressTests
 
         lock (events)
             faults.AddRange(events.Where(IsGuardFault).Select(e => e.RenderMessage() + "\n" + e.Exception));
-        Assert.Empty(faults);
+        Assert.True(faults.Count == 0, "guard-swallowed faults:\n" + string.Join("\n---\n", faults));
         Assert.False(backstopFired, $"the window did not close on its own; steps done: {string.Join(", ", done)}");
         Assert.Equal(steps.Select(s => s.Name), done);
     }
