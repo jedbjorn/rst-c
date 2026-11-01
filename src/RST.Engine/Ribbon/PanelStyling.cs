@@ -30,6 +30,9 @@
 // Source.Name carries the active profile name for diagnostics. Caller
 // (ProfileTabBuilder) inserts at index 0 of the profile tab.
 //
+// SC-046 R9: decode branding at its displayed size (including ribbon DPI),
+// so a shared PNG with huge dimensions does not allocate a full-size UI bitmap.
+//
 // Thread model: every method must be called on the UI thread (Revit's
 // ribbon and WPF have the usual STA constraint). Initial color
 // application happens in OnStartup, which is UI-thread.
@@ -187,6 +190,18 @@ internal static class PanelStyling
             bmp.BeginInit();
             bmp.UriSource = new Uri(Path.GetFullPath(logoAbsolutePath), UriKind.Absolute);
             bmp.CacheOption = BitmapCacheOption.OnLoad;
+            var dpi = new DpiScale(1, 1);
+            try
+            {
+                if (AwComponentManager.Ribbon is { } ribbon) dpi = VisualTreeHelper.GetDpi(ribbon);
+            }
+            catch (Exception ex)
+            {
+                // SC-046 review L5: early startup DPI lookup must not suppress the logo.
+                Log.Debug(ex, "PanelStyling: ribbon DPI unavailable; decoding branding at 100%");
+            }
+            bmp.DecodePixelWidth = BrandingDefaults.DecodePixels(dpi.DpiScaleX);
+            bmp.DecodePixelHeight = BrandingDefaults.DecodePixels(dpi.DpiScaleY);
             // The branding logo is user-mutable — BrandingLogo.Store (the Builder) rewrites
             // the same %AppData%\RST\branding.png on every pick. WPF caches
             // BitmapImage by URI process-wide; without IgnoreImageCache the

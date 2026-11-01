@@ -1,4 +1,6 @@
 // rst-c's own (not vendored): RST updating itself, tray included (spec #20 §5; research Q5; F17 WU4).
+// SC-046 T5: the old tray can exit between PID lookup, name inspection and waiting;
+// treat that race as gone, while access/Win32 failures still abort conservatively.
 //
 //   SelfUpdater   in the running tray: copies the tray's folder to %LocalAppData%\RST\Tray\updater\, with RST.Tray.exe
 //                 renamed RST.TrayUpdater.exe (the apphost still loads RST.Tray.dll beside it), and starts that copy
@@ -278,6 +280,10 @@ internal sealed class UpdaterHost : ISelfUpdateHost
         catch (ArgumentException)
         {
             return true; // already gone
+        }
+        catch (InvalidOperationException)
+        {
+            return true; // exited after lookup, before ProcessName or WaitForExit
         }
     }
 

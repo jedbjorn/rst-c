@@ -1,5 +1,6 @@
 // rst-c's own. SC-046 (follow-up to issue #163; the crash-path audit's checks 2 and 3): source scans that keep the
-// hardening in place.
+// hardening in place. SC-046 / #166 N4: async subscriptions and anonymous delegates are handlers too;
+// the async-void comment only exempts event-shaped methods whose whole body awaits UiGuard.
 //   - No `async void` in product code: its exception has no task to land in and goes straight to the dispatcher (in
 //     Revit: Revit's). An event handler that must be async void says so with the allow-list comment.
 //   - No discarded `_ = SomethingAsync(...)`: the task's failure is never observed, so it is never logged. Await it,
@@ -28,7 +29,7 @@ public class CrashPathSourceTests
         @"\bvoid\s+(?<name>On\w*)\s*\((?<params>[^()]*EventArgs\s+\w+)\)", RegexOptions.Compiled);
 
     private static readonly Regex SubscribedLambda = new(
-        @"(?:\+=\s*|new\s+\w*EventHandler\(\s*)(?:\([^()]*\)|\w+)\s*=>\s*", RegexOptions.Compiled);
+        @"(?:\+=\s*|new\s+\w*EventHandler\(\s*)(?<async>async\s+)?(?:(?:\([^()]*\)|\w+)\s*=>\s*|delegate\s*(?:\([^()]*\)\s*)?)", RegexOptions.Compiled);
 
     // ---- the rules ----------------------------------------------------------------------------
 
@@ -78,6 +79,7 @@ public class CrashPathSourceTests
             }
             """;
         AsyncVoidViolations(source).Should().ContainSingle().Which.Should().Contain("RunLoad");
+        UnguardedHandlers(source).Should().BeEmpty("the allowed async event also passes the code-behind rule");
     }
 
     [Fact]
@@ -162,13 +164,16 @@ public class CrashPathSourceTests
     private static IEnumerable<string> AsyncVoidViolations(string source)
     {
         var lines = source.Split('\n');
-        for (var i = 0; i < lines.Length; i++)
+        var code = ModalFocusSourceTests.StripTrivia(source);
+        foreach (Match match in AsyncVoid.Matches(code))
         {
-            var code = CodeOf(lines[i]);
-            if (!AsyncVoid.IsMatch(code)) continue;
-            var allowed = lines[i].Contains(AsyncVoidAllowed, StringComparison.Ordinal)
-                          || (i > 0 && lines[i - 1].Contains(AsyncVoidAllowed, StringComparison.Ordinal));
-            if (!allowed) yield return $"line {i + 1}: {code.Trim()}";
+            var line = LineOf(code, match.Index) - 1;
+            var allowed = lines[line].Contains(AsyncVoidAllowed, StringComparison.Ordinal)
+                          || (line > 0 && lines[line - 1].Contains(AsyncVoidAllowed, StringComparison.Ordinal));
+            var signature = Regex.Match(code[(match.Index + match.Length)..],
+                @"^\s+\w+\s*\(\s*object\??\s+\w+\s*,\s*[\w.]*EventArgs\s+\w+\s*\)");
+            if (!allowed || !signature.Success || !FullyGuarded(BodyAfter(code, match.Index + match.Length + signature.Length), true))
+                yield return $"line {line + 1}: {lines[line].Trim()}";
         }
     }
 
@@ -186,21 +191,76 @@ public class CrashPathSourceTests
     /// <summary>"line N: …" for each handler method (an On… taking EventArgs) or subscribed lambda not going through UiGuard.Run.</summary>
     private static IEnumerable<string> UnguardedHandlers(string source)
     {
-        var code = string.Join('\n', source.Split('\n').Select(CodeOf));
+        var code = ModalFocusSourceTests.StripTrivia(source);
         foreach (Match m in HandlerMethod.Matches(code))
         {
             var body = BodyAfter(code, m.Index + m.Length);
-            if (!body.Contains("UiGuard.Run(", StringComparison.Ordinal))
+            // Keep the existing method-body rule: tightening it also flags reserved Health
+            // key/close handling. Subscriptions and async-void exemptions below require the whole body.
+            var isAsync = Regex.IsMatch(code[..m.Index], @"\basync\s+$");
+            if (isAsync ? !FullyGuarded(body, true) : !body.Contains("UiGuard.Run(", StringComparison.Ordinal))
                 yield return $"line {LineOf(code, m.Index)}: {m.Groups["name"].Value}({m.Groups["params"].Value}) does not run through UiGuard.Run";
         }
         foreach (Match m in SubscribedLambda.Matches(code))
         {
             var rest = code[(m.Index + m.Length)..];
-            if (rest.StartsWith("UiGuard.Run(", StringComparison.Ordinal)) continue;
+            var body = rest.StartsWith("{", StringComparison.Ordinal) ? BodyAfter(code, m.Index + m.Length) : BodyAfter("=> " + rest, 0);
+            if (FullyGuarded(body, m.Groups["async"].Success)) continue;
             var shown = rest.Split('\n')[0].Trim();
             yield return $"line {LineOf(code, m.Index)}: {m.Value.Trim()} {shown} does not run through UiGuard.Run";
         }
     }
+
+    private static bool FullyGuarded(string body, bool async)
+    {
+        var text = body.Trim();
+        if (text.StartsWith("=>", StringComparison.Ordinal)) text = text[2..].Trim();
+        else if (text.StartsWith('{') && text.EndsWith('}')) text = text[1..^1].Trim();
+        var call = Regex.Match(text, async ? @"^await\s+UiGuard\.RunAsync\s*\(" : @"^UiGuard\.Run\s*\(");
+        if (!call.Success || (!async && Regex.IsMatch(text, @"\basync\b"))) return false;
+        var depth = 1;
+        for (var i = call.Length; i < text.Length; i++)
+        {
+            if (text[i] == '(') depth++;
+            if (text[i] == ')' && --depth == 0) return text[(i + 1)..].Trim().TrimEnd(';').Trim().Length == 0;
+        }
+        return false;
+    }
+
+    [Theory]
+    [InlineData("Loaded += async (_, _) => await Work();", false)]
+    [InlineData("Loaded += async x => await Work();", false)]
+    [InlineData("Loaded += async delegate { await Work(); };", false)]
+    [InlineData("Loaded += async delegate(object s, EventArgs e) { await Work(); };", false)]
+    [InlineData("Loaded += async delegate { await UiGuard.RunAsync(\"x\", Work); };", true)]
+    [InlineData("Loaded += async delegate(object s, EventArgs e) { await UiGuard.RunAsync(\"x\", Work); };", true)]
+    [InlineData("Loaded += async delegate { UiGuard.Run(\"x\", Work); };", false)]
+    [InlineData("Loaded += delegate { Work(); };", false)]
+    [InlineData("Loaded += delegate(object s, EventArgs e) { Work(); };", false)]
+    [InlineData("Loaded += async x => await UiGuard.RunAsync(\"x\", Work);", true)]
+    [InlineData("Loaded += delegate { UiGuard.Run(\"x\", Work); };", true)]
+    [InlineData("Loaded += x => { UiGuard.Run(\"x\", Work); Throw(); };", false)]
+    [InlineData("Loaded += x => UiGuard.Run(\"x\", async () => await Work());", false)]
+    public void Subscriptions_require_a_guard_for_the_whole_body(string source, bool guarded) =>
+        UnguardedHandlers(source).Any().Should().Be(!guarded);
+
+    [Fact]
+    public void Interpolated_handler_labels_do_not_hide_unguarded_subscriptions()
+    {
+        const string source = """
+            Loaded += x => UiGuard.Run($"label {NameOf("text")}", Work);
+            var text = $"{Subscribe(() => { Loaded += async delegate { await Work(); }; })}";
+            """;
+        UnguardedHandlers(source).Should().ContainSingle().Which.Should().Contain("async delegate");
+    }
+
+    [Theory]
+    [InlineData("async void Work() => await UiGuard.RunAsync(\"x\", Work);", false)]
+    [InlineData("async void OnClick(object s, EventArgs e) => await Work();", false)]
+    [InlineData("async void OnClick(object s, EventArgs e) { await UiGuard.RunAsync(\"x\", Work); Throw(); }", false)]
+    [InlineData("async void OnClick(object? s, RoutedEventArgs e) { await UiGuard.RunAsync(\"x\", Work); }", true)]
+    public void An_async_void_comment_only_allows_a_guarded_event(string method, bool allowed) =>
+        AsyncVoidViolations(AsyncVoidAllowed + "\n" + method).Any().Should().Be(!allowed);
 
     /// <summary>A method's body after its parameter list: an expression body to its `;`, or a block to its closing brace.</summary>
     private static string BodyAfter(string code, int at)
@@ -215,6 +275,7 @@ public class CrashPathSourceTests
                 switch (code[j])
                 {
                     case '(' or '{' or '[': depth++; break;
+                    case ')' or '}' or ']' when depth == 0: return code[i..j];
                     case ')' or '}' or ']': depth--; break;
                     case ';' when depth == 0: return code[i..j];
                 }

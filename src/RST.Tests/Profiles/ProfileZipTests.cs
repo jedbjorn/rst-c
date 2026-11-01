@@ -1,5 +1,6 @@
 // ProfileZipTests.cs — pack / unpack / install round-trip for the
-// .zip profile package format (RST-018 / RST-019).
+// .zip profile package format (RST-018 / RST-019). SC-046 R9 / F1: oversized shared
+// entries must be refused by declared and actual byte counts, before anything is installed.
 
 using System;
 using System.IO;
@@ -141,6 +142,72 @@ public sealed class ProfileZipTests : IDisposable
 
         var act = () => ProfileZip.Unpack(ms);
         act.Should().Throw<InvalidDataException>().WithMessage("*profile.json*");
+    }
+
+    // SC-046 R9 / F1: both declared and actual decompressed sizes are bounded before Install.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Oversized_entries_are_refused_before_anything_is_installed(bool logo)
+    {
+        var entryName = logo ? ProfileZip.LogoEntryName : ProfileZip.ProfileJsonEntryName;
+        var limit = logo ? ProfileZip.MaxLogoBytes : ProfileZip.MaxProfileJsonBytes;
+        using var zip = SizedPackage(logo, limit + 1);
+        zip.Length.Should().BeLessThan(100_000, "the oversized entry is highly compressible");
+
+        var act = () => ProfileZip.Install(ProfileZip.Unpack(zip), _root, Path.Combine(_root, "Profiles"));
+        act.Should().Throw<InvalidDataException>().WithMessage($"*{entryName}*limit*");
+        Directory.EnumerateFileSystemEntries(_root).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Entries_at_the_limit_are_accepted(bool logo)
+    {
+        var limit = logo ? ProfileZip.MaxLogoBytes : ProfileZip.MaxProfileJsonBytes;
+        using var zip = SizedPackage(logo, limit);
+        var package = ProfileZip.Unpack(zip);
+        package.Profile.ProfileName.Should().Be("Boundary");
+        if (logo) package.LogoBytes!.Length.Should().Be(limit);
+        else package.LogoBytes.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_decoder_reading_past_the_budget_is_refused(bool logo)
+    {
+        // SDK 10's ZipArchive truncates a forged central-directory length before our reader
+        // sees it. Exercise the actual-byte boundary directly, also covering older decoders
+        // that continue decompressing past that header. Only a fixed, modest test buffer is needed.
+        var name = logo ? ProfileZip.LogoEntryName : ProfileZip.ProfileJsonEntryName;
+        var limit = logo ? ProfileZip.MaxLogoBytes : ProfileZip.MaxProfileJsonBytes;
+        using var decoded = new MemoryStream(new byte[limit + 8192]);
+        var act = () => ProfileZip.ReadEntryBytes(decoded, name, limit);
+        act.Should().Throw<InvalidDataException>().WithMessage($"*{name}*limit*");
+        decoded.Position.Should().Be(limit + 1, "read only one byte beyond the budget");
+    }
+
+    private static MemoryStream SizedPackage(bool logo, int size)
+    {
+        using var json = new MemoryStream();
+        ProfileSerializer.Write(MakeProfile("Boundary"), json);
+        using var zip = new MemoryStream();
+        using (var archive = new ZipArchive(zip, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var entry = archive.CreateEntry(ProfileZip.ProfileJsonEntryName, CompressionLevel.Optimal).Open())
+            {
+                entry.Write(json.ToArray());
+                if (!logo) entry.Write(Enumerable.Repeat((byte)' ', size - (int)json.Length).ToArray());
+            }
+            if (logo)
+            {
+                using var entry = archive.CreateEntry(ProfileZip.LogoEntryName, CompressionLevel.Optimal).Open();
+                entry.Write(new byte[size]);
+            }
+        }
+        return new MemoryStream(zip.ToArray());
     }
 
     [Fact]

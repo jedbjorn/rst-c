@@ -28,6 +28,21 @@ public sealed class BrandingDefaultsTests : IDisposable
         if (Directory.Exists(_tempRoot)) Directory.Delete(_tempRoot, recursive: true);
     }
 
+    [Theory]
+    [InlineData(1, 85)]
+    [InlineData(1.25, 107)]
+    [InlineData(1.5, 128)]
+    [InlineData(2, 170)]
+    [InlineData(0, 85)]
+    [InlineData(-1, 85)]
+    [InlineData(double.NaN, 85)]
+    [InlineData(double.PositiveInfinity, 85)]
+    [InlineData(double.NegativeInfinity, 85)]
+    [InlineData(double.Epsilon, 1)]
+    [InlineData(double.MaxValue, int.MaxValue)]
+    public void Decode_pixels_bounds_the_display_size_and_defaults_invalid_DPI(double dpiScale, int pixels) =>
+        BrandingDefaults.DecodePixels(dpiScale).Should().Be(pixels);
+
     [Fact]
     public void Load_MissingFile_ReturnsEmptyDefaults()
     {

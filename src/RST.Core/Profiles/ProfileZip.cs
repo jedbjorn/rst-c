@@ -1,6 +1,9 @@
 // ProfileZip.cs — pack/unpack a profile + its referenced assets as a
 // single distributable .zip archive.
 //
+// SC-046 R9 / F1: shared packages must be bounded before parsing or installing;
+// a compressed entry can expand far beyond the size of the ZIP.
+//
 // Zip layout:
 //   profile.json                 — the profile JSON (schemaVersion 1+)
 //   assets/branding.png          — company branding logo bytes (optional;
@@ -27,6 +30,11 @@ public static class ProfileZip
 {
     public const string ProfileJsonEntryName = "profile.json";
     public const string LogoEntryName = "assets/branding.png";
+
+    // The checked-in profile fixtures are under 3 KiB and the shipped branding PNG is 900 bytes.
+    // 8 MiB each leaves ample room for large real profiles/logos without unbounded shared input.
+    public const int MaxProfileJsonBytes = 8 * 1024 * 1024;
+    public const int MaxLogoBytes = 8 * 1024 * 1024;
 
     /// <summary>
     /// Write <paramref name="profile"/> + (optional) logo bytes into a
@@ -104,7 +112,7 @@ public static class ProfileZip
                 $"Profile package is missing required entry '{ProfileJsonEntryName}'.");
 
         Profile profile;
-        using (var ps = profileEntry.Open())
+        using (var ps = new MemoryStream(ReadEntry(profileEntry, MaxProfileJsonBytes), writable: false))
         {
             profile = ProfileSerializer.Read(ps);
         }
@@ -113,16 +121,36 @@ public static class ProfileZip
         var logoEntry = archive.GetEntry(LogoEntryName);
         if (logoEntry is not null)
         {
-            using var ms = new MemoryStream();
-            using (var ls = logoEntry.Open())
-            {
-                ls.CopyTo(ms);
-            }
-            logoBytes = ms.ToArray();
+            logoBytes = ReadEntry(logoEntry, MaxLogoBytes);
         }
 
         return new ProfilePackage(profile, logoBytes);
     }
+
+    private static byte[] ReadEntry(ZipArchiveEntry entry, int limit)
+    {
+        if (entry.Length > limit) throw EntryTooLarge(entry.FullName, limit);
+        using var input = entry.Open();
+        return ReadEntryBytes(input, entry.FullName, limit);
+    }
+
+    // Kept at the stream boundary so tests can exercise a decoder that exceeds its declared length.
+    internal static byte[] ReadEntryBytes(Stream input, string name, int limit)
+    {
+        using var output = new MemoryStream();
+        var buffer = new byte[8192];
+        int read;
+        // Read at most one byte past the budget, even if the ZIP's declared length lies.
+        while ((read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, limit - output.Length + 1))) != 0)
+        {
+            if (output.Length + read > limit) throw EntryTooLarge(name, limit);
+            output.Write(buffer, 0, read);
+        }
+        return output.ToArray();
+    }
+
+    private static InvalidDataException EntryTooLarge(string name, int limit) =>
+        new($"Profile package entry '{name}' exceeds the {limit}-byte decompressed limit.");
 
     /// <summary>
     /// Install <paramref name="package"/> on the local machine: write

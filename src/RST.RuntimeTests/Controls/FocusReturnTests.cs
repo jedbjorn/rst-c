@@ -5,6 +5,8 @@
 // the Builder at all. These tests run the real windows and dialogs modally, with Win32 focus moving into
 // the dialog and back, and press Escape the way WPF delivers a key: InputManager raises PreviewKeyDown
 // and KeyDown on Keyboard.FocusedElement, and on nothing when no element has keyboard focus.
+// SC-046 / #172 review (a): FocusCoverageTests extends the real routes; failed modal callbacks
+// unwind through Hide so a focus assertion cannot strand the test in a nested loop.
 
 using System.IO;
 using System.Windows;
@@ -31,7 +33,7 @@ using Xunit;
 namespace RST.RuntimeTests.Controls;
 
 [Collection(WpfThemeCollection.Name)]
-public sealed class FocusReturnTests : IDisposable
+public sealed partial class FocusReturnTests : IDisposable
 {
     private readonly TempFolder _dir = new();
 
@@ -96,6 +98,7 @@ public sealed class FocusReturnTests : IDisposable
     private static WhileOpen WhileModal<T>(Window owner, UIElement? opener, Action<T> close, Action open) where T : Window
     {
         var seen = new WhileOpen();
+        Exception? failure = null;
         var attempts = 0;
         var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
         timer.Tick += (_, _) =>
@@ -106,12 +109,18 @@ public sealed class FocusReturnTests : IDisposable
                 seen.Found = true;
                 seen.FocusInDialog = dialog.IsKeyboardFocusWithin;
                 seen.OpenerHidden = opener is not null && !opener.IsVisible;
-                close(dialog);
+                try { close(dialog); }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                    HideFocusDialogs(owner);
+                }
                 return;
             }
             if (++attempts < 50) return;
             timer.Stop();
-            foreach (var w in owner.OwnedWindows.OfType<Window>().ToList()) w.Close();
+            failure ??= new TimeoutException($"{typeof(T).Name} did not open and close within the focus-test deadline.");
+            HideFocusDialogs(owner);
         };
         timer.Start();
         try
@@ -122,7 +131,15 @@ public sealed class FocusReturnTests : IDisposable
         {
             timer.Stop();
         }
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         return seen;
+    }
+
+    // SC-046 / #172 review (a): failed focus assertions still end nested modal loops.
+    private static void HideFocusDialogs(Window owner)
+    {
+        foreach (var child in owner.OwnedWindows.OfType<Window>().ToList())
+            ModalCleanup.HideTree(child);
     }
 
     // ── the Builder ───────────────────────────────────────────────────────
@@ -141,7 +158,7 @@ public sealed class FocusReturnTests : IDisposable
     {
         var backend = CustomToolFixtures.Backend(_dir.Path);
         var fake = new FakeDialogs();
-        var builderDialogs = new BuilderDialogs();
+        var builderDialogs = new BuilderDialogs(dialogs as DialogService);
         var model = new ProfileBuilderViewModel(backend, dialogs ?? fake, new ManualClock().Schedule, post: a => a(), builderDialogs: builderDialogs);
         model.Initialize();
         // As BuilderHarness does: from + New profile, then Structure, so it opens clean.
@@ -160,8 +177,10 @@ public sealed class FocusReturnTests : IDisposable
     private static void CloseBuilder(Builder b)
     {
         if (b.Closed) return;
-        b.Dialogs.ChooseAnswers.Enqueue(DialogChoice.Secondary);
-        b.Window.Close();
+        // SC-046 review M3: the active service may be real, and a failed assertion may leave
+        // edits dirty. Abandon stops queued saves; bounded cleanup also ends any close prompt.
+        b.Model.Abandon();
+        ModalCleanup.Close(b.Window);
     }
 
     private static Border Row(ProfileBuilderWindow w, string label) =>

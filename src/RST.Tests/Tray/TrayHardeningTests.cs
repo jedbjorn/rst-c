@@ -1,6 +1,7 @@
 // rst-c's own. SC-046: the tray's start runs its steps so a failed one leaves the tray up without that feature
 // (T2), the same UI exception coming back too often is counted (T7), and work started and not awaited is observed
 // and logged (TaskGuard, T3/R5).
+// SC-046 / #166 N7: changing messages still repeat, while different throwing frames stay distinct.
 
 using System;
 using System.Collections.Generic;
@@ -98,6 +99,7 @@ public sealed class TrayHardeningTests
 
     // ---- T7: a UI exception that keeps coming back --------------------------------------------
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static Exception Thrown(string message)
     {
         try
@@ -132,11 +134,36 @@ public sealed class TrayHardeningTests
             now += TimeSpan.FromSeconds(2);
         }
 
-        var other = Thrown("something else");
+        var other = ThrownElsewhere();
         for (var i = 0; i < 10; i++)
         {
             repeats.Record(i % 2 == 0 ? ex : other).Should().BeFalse("alternating exceptions start the count again");
         }
+    }
+
+    // SC-046 / #166 N7: messages vary; the throwing site identifies a repeat.
+    [Fact]
+    public void Changing_messages_at_the_same_frame_still_trip()
+    {
+        var repeats = new RepeatingFault(3, TimeSpan.FromSeconds(5));
+        for (var i = 0; i < 3; i++) repeats.Record(Thrown($"index {i}")).Should().BeFalse();
+        repeats.Record(Thrown("index 3")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void The_same_message_at_different_top_frames_does_not_merge()
+    {
+        var repeats = new RepeatingFault(1, TimeSpan.FromSeconds(5));
+        repeats.Record(Thrown("layout failed")).Should().BeFalse();
+        repeats.Record(ThrownElsewhere()).Should().BeFalse();
+        repeats.Count.Should().Be(1);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static Exception ThrownElsewhere()
+    {
+        try { throw new InvalidOperationException("layout failed"); }
+        catch (Exception ex) { return ex; }
     }
 
     [Fact]
