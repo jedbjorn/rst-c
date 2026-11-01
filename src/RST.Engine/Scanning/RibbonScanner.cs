@@ -75,7 +75,7 @@ internal static class RibbonScanner
     /// every id Revit would not let an add-in post (SC-051). Null or empty turns that check off
     /// (an empty seed would otherwise drop every Revit tool, so it is logged and ignored).
     /// </param>
-    public static IEnumerable<ScannedCommand> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null)
+    public static IEnumerable<ScannedCommand> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null, int? revitYear = null)
     {
         RibbonControl? ribbon;
         IEnumerable<RibbonTab?>? tabs;
@@ -104,7 +104,7 @@ internal static class RibbonScanner
         {
             Log.Warning("RibbonScanner: no PostableCommand ids were read, so tools Revit won't let add-ins run are not left out of this scan");
         }
-        return EnumerateTabs(tabs, IsPostable, isPostableCommand: isPostableCommand);
+        return EnumerateTabs(tabs, IsPostable, isPostableCommand: isPostableCommand, revitYear: revitYear);
     }
 
     /// <summary>
@@ -116,7 +116,7 @@ internal static class RibbonScanner
     /// </summary>
     internal static IReadOnlyList<ScannedCommand> EnumerateTabs(
         IEnumerable<RibbonTab?>? tabs, Func<string, bool> resolves, RibbonScanCounts? counts = null,
-        Func<string, bool>? isPostableCommand = null)
+        Func<string, bool>? isPostableCommand = null, int? revitYear = null)
     {
         counts ??= new RibbonScanCounts();
         var walker = new RibbonWalker<RibbonItem>(Describe, resolves, counts, isPostableCommand);
@@ -178,13 +178,13 @@ internal static class RibbonScanner
 
                 foreach (var hit in walker.WalkItems(panelItems, onSkip))
                 {
-                    items.Add(ToCommand(hit, tabTitle, panelTitle));
+                    items.Add(ToCommand(hit, tabTitle, panelTitle, revitYear));
                     perTab++;
                 }
                 // Held back: see "Order (B1)" in the file header.
                 foreach (var hit in walker.WalkDialogLauncher(launcher, onSkip))
                 {
-                    launchers.Add(ToCommand(hit, tabTitle, panelTitle));
+                    launchers.Add(ToCommand(hit, tabTitle, panelTitle, revitYear));
                     perTab++;
                 }
             }
@@ -207,13 +207,13 @@ internal static class RibbonScanner
         return items;
     }
 
-    private static ScannedCommand ToCommand(RibbonHit hit, string? tabTitle, string? panelTitle) =>
+    private static ScannedCommand ToCommand(RibbonHit hit, string? tabTitle, string? panelTitle, int? revitYear) =>
         new(
             Id: hit.Id,
             DisplayName: hit.DisplayName,
             // SC-007 (spec #18): Revit's own buttons on its own tabs are Native; an add-in's
             // CustomCtrl_ button is Custom wherever it sits.
-            Origin: OriginClassifier.ClassifyRibbonButton(tabTitle, hit.Id),
+            Origin: OriginClassifier.ClassifyRibbonButton(tabTitle, hit.Id, revitYear),
             AddinFile: null,
             AssemblyPath: null,
             SourceTab: tabTitle,

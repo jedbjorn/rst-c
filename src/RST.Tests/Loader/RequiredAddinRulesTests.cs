@@ -87,6 +87,24 @@ public class RequiredAddinRulesTests
     }
 
     [Theory]
+    [InlineData(null, false)]
+    [InlineData(2025, false)]
+    [InlineData(2026, false)]
+    [InlineData(2027, true)]
+    [InlineData(2028, true)]
+    public void Concrete_row_uses_the_session_year(int? year, bool native)
+    {
+        var required = new NormalizedRequiredAddin("Concrete", "AcmeConcrete.addin", "https://acme.example");
+        var item = FakeAddinSwitching.Item(year ?? 2026, "Acme Concrete", fileName: "AcmeConcrete.addin");
+        var installed = new AddinSessionContext(runningYear: year, installed: [item]);
+        RequiredAddinRules.IsNativeTab("Concrete", year).Should().Be(native);
+        RequiredAddinRules.Describe(required, installed).Status.Should().Be(native ? AddinRowStatus.Native : AddinRowStatus.Loaded);
+        RequiredAddinRules.Describe(required, new AddinSessionContext(runningYear: year)).Status
+            .Should().Be(native ? AddinRowStatus.Native : AddinRowStatus.NotFound);
+        RequiredAddinRules.Matches(required, installed).Should().Equal(native ? [] : new[] { item });
+    }
+
+    [Theory]
     [InlineData("architecture")]
     [InlineData("Kinship")]
     [InlineData(null)]
