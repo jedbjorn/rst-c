@@ -70,18 +70,41 @@ public class BuildVersionTests
     [Fact]
     public void RSTs_assemblies_carry_one_release_version_in_file_and_informational_version()
     {
-        // Directory.Build.props: every RST assembly from one Version (0.1.0-dev here, the release's a.b.c in CI).
+        // Directory.Build.props: every RST assembly from one Version (RstDevVersion-dev here, the release's a.b.c in CI).
         var core = typeof(BuildVersion).Assembly;
         var informational = core.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
         BuildVersion.Informational(core).Should().Be(informational);
 
         var numeric = BuildVersion.Product(informational).Split('-')[0];
         core.GetCustomAttribute<AssemblyFileVersionAttribute>()!.Version.Should().Be(numeric + ".0");
-        // Never below the 0.1.0.0 every release through v3.1.1 shipped: Windows Installer would not install the
-        // "older" file over it, and an MSI upgrade would leave it missing (msi-migrate).
-        Version.Parse(numeric).Should().BeGreaterThanOrEqualTo(new Version(0, 1, 0));
+        // Above v3.1.1, the latest release, whose tray files are 3.1.1.0: Windows Installer would not install an
+        // "older" file over it, and the MajorUpgrade would then leave none (installer/README.md, "Untagged builds").
+        Version.Parse(numeric).Should().BeGreaterThan(new Version(3, 1, 1));
         var plus = informational.IndexOf('+');
         if (plus >= 0) informational[(plus + 1)..].Should().HaveLength(7, "the commit is the short hash (RstShortSourceRevision)");
+    }
+
+    [Fact]
+    public void Untagged_binaries_msi_and_bundle_share_one_version_RstDevVersion()
+    {
+        // One source (installer/README.md, "Untagged builds"): the wixproj fallbacks and stage.sh read
+        // Directory.Build.props' RstDevVersion and carry no number of their own, so they cannot drift apart.
+        var root = Builder.RequiredAddinDetectorTests.RepoRoot();
+        var props = File.ReadAllText(Path.Combine(root, "Directory.Build.props"));
+        var dev = System.Text.RegularExpressions.Regex.Match(props, @"<RstDevVersion>(\d+\.\d+\.\d+)</RstDevVersion>");
+        dev.Success.Should().BeTrue("Directory.Build.props defines RstDevVersion as a.b.c");
+        props.Should().Contain("<Version Condition=\"'$(Version)' == ''\">$(RstDevVersion)-dev</Version>");
+
+        var msi = File.ReadAllText(Path.Combine(root, "installer", "RST.Installer.wixproj"));
+        msi.Should().Contain("<RstMsiVersionEffective Condition=\"'$(RstMsiVersionEffective)' == ''\">$(RstDevVersion)</RstMsiVersionEffective>");
+        var bundle = File.ReadAllText(Path.Combine(root, "installer-bundle", "RST.Setup.wixproj"));
+        bundle.Should().Contain("<RstBundleVersionEffective Condition=\"'$(RstBundleVersionEffective)' == ''\">$(RstDevVersion)</RstBundleVersionEffective>");
+        File.ReadAllText(Path.Combine(root, "build", "stage.sh")).Should().Contain("<RstDevVersion>");
+
+        // This test build is untagged: its binaries carry RstDevVersion.
+        var informational = typeof(BuildVersion).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
+        if (Environment.GetEnvironmentVariable("RST_VERSION") is not { Length: > 0 })
+            BuildVersion.Product(informational).Should().Be(dev.Groups[1].Value + "-dev");
     }
 
     [Fact]
