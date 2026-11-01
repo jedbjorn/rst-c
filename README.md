@@ -22,7 +22,9 @@ purpose: Native Revit add-in for curated ribbon profiles
 
 **Topics:** `revit` · `revit-addin` · `bim` · `ribbon` · `wpf` · `dotnet` · `wix` · `autodesk`
 
-![A loaded rst-c profile on the Revit ribbon: branding at the leading edge of the tab, followed by coloured panels grouping the profile's tools, with large buttons and stacks of small ones](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
+**[Project website →](https://jedbjorn.github.io/rst-c/)**
+
+![A customised Revit ribbon with company branding and colour-coded tool panels, including the RST-C tools, above a Revit project workspace](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/ribbon-profile-loaded.png)
 
 ## Overview
 
@@ -96,10 +98,12 @@ Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, dis
 
 From v3.1, RST installs a small tray app, `RST.Tray.exe`, in the Windows notification area (the icons by the clock). It runs while you are signed in, uses the .NET that Revit already installs, and nothing in Revit depends on it. Click its icon to open its window; closing the window leaves it running. The window has five pages:
 
+- **RST Profiles:** switch your profile and Revit add-ins before you start Revit, with the Profile Loader's own switching.
 - **Updates** and **Apps:** which versions of RST, Gantt-It and Splash-It are installed and whether a newer one is out, with one-click **Update** and **Install** (an install waits for Revit to close).
-- **Add-ins:** switch your profile and Revit add-ins before you start Revit, with the Profile Loader's own switching.
 - **Health:** this PC's health and every model you have worked on (below).
 - **Settings:** the theme, automatic update checks, and the version and log folder.
+
+![The RST tray on its RST Profiles page: choose and apply a profile, disable unused add-ins, restore all add-ins, or launch an installed Revit year with the selected profile](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/tray-profiles.png)
 
 Once a day the tray asks GitHub whether a newer release is out, and shows a notification when one is; it sends nothing about you, your PC or your models. To stop the checks, turn off **Check for updates automatically** in its Settings (IT can turn them off for every user with one registry value). Installing RST shows no welcome or first-run popups: what each feature does, and how to turn it off, is in the docs.
 

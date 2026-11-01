@@ -1,0 +1,8 @@
+<!-- rst-c's own: SC-048 item 2. A bold R in the existing brand blue (#3B5998), with a
+     light rim for dark taskbars. Paths, not fonts; designed on the notification area's 16 px grid. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <rect x="0.5" y="0.5" width="15" height="15" rx="3" fill="#3B5998" stroke="#D8E3F7"/>
+  <path fill="white" fill-rule="evenodd"
+        d="M4 3H8.5Q12 3 12 6.5Q12 9 9.5 9.8L12.5 13H9.5L6.8 10H6.5V13H4Z
+           M6.5 5.3V7.8H8.3Q9.5 7.8 9.5 6.55Q9.5 5.3 8.3 5.3Z"/>
+</svg>
