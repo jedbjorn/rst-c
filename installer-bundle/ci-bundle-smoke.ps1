@@ -458,6 +458,21 @@ if ($Mode -eq 'BareMsiFirst') {
   Assert (Select-String -Path $log -Pattern 'Planned package: RST,.*expected install registration state: Present' -Quiet) '[AC5] Burn adopts it (expected install registration state: Present)'
   Assert ($visible.Count -eq 2) '[AC5] Settings > Apps shows two "RST" entries: the bundle and the bare MSI'
 
+  # SC-057 PROBE (diagnostic only, never fails): does a Windows Installer maintenance run of the adopted product
+  # with ARPSYSTEMCOMPONENT=1 hide its existing ARP entry, and does a later plain repair bring it back?
+  foreach ($probe in @(@{ Name = 'probe-hide'; Extra = 'ARPSYSTEMCOMPONENT=1' }, @{ Name = 'probe-plain-repair'; Extra = '' })) {
+    $plog = Join-Path $LogDir "$($probe.Name).log"
+    $pargs = "/i `"$RstMsi`" REINSTALL=ALL REINSTALLMODE=cmuse $($probe.Extra) /qn /norestart /l*v `"$plog`""
+    Write-Host "SC-057 probe: msiexec $pargs"
+    $pp = Start-Process msiexec.exe -ArgumentList $pargs -PassThru
+    Wait-Own $pp "msiexec $($probe.Name)"
+    Show-State "SC-057 $($probe.Name)"
+    $pv = Get-ArpVisible 'RST'
+    $msiKey = @((Get-Arp) | Where-Object { $_.Key -like "*$pcBare*" })
+    Observe "SC-057 $($probe.Name): exit $($pp.ExitCode); visible 'RST' entries $($pv.Count) ($(($pv | ForEach-Object { "$($_.Hive)\$($_.Key)" }) -join ', ')); MSI key SystemComponent=$(($msiKey | ForEach-Object { "$($_.Hive):$($_.SystemComponent)" }) -join ',')"
+    Observe "SC-057 $($probe.Name): RST products $((Get-Related $RstCode).Count), product $((Get-Related $RstCode)[0].ProductCode)"
+  }
+
   $log = Uninstall-BundleViaArp 'uninstall-bundle'
   Show-State 'bundle uninstalled'
   Observe "Burn plan on uninstall: $((Select-String -Path $log -Pattern 'Planned package: RST,' -SimpleMatch | Select-Object -First 1).Line)"
