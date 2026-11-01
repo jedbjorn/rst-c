@@ -201,6 +201,11 @@ internal sealed class FakeThumbnails : IModelThumbnails
 {
     public Dictionary<string, ImageSource?> Images { get; } = new();
 
+    /// <summary>Answers any model at once (after <see cref="Images"/>); null: the rest stay pending.</summary>
+    public Func<string, ImageSource?>? Answer { get; set; }
+
+    private readonly Dictionary<string, int> _generations = new();
+
     public List<string> Requested { get; } = new();
 
     public ThumbnailRequest? LastRequest { get; private set; }
@@ -215,13 +220,19 @@ internal sealed class FakeThumbnails : IModelThumbnails
     {
         Requested.Add(request.ModelId);
         LastRequest = request;
+        _generations[request.ModelId] = request.Generation;
         if (Images.TryGetValue(request.ModelId, out var image)) Complete(request.ModelId, image);
+        else if (Answer is { } answer) Complete(request.ModelId, answer(request.ModelId));
     }
 
     public void Cancel(string modelId) => Cancelled.Add(modelId);
 
-    public void Complete(string modelId, ImageSource? image) =>
-        Ready?.Invoke(this, new ThumbnailReadyEventArgs(modelId, image, image is null ? ThumbnailOutcome.NoShellThumbnail : ThumbnailOutcome.ShellOk));
+    /// <summary>The worker answers, for the generation of the model's last request unless <paramref name="generation"/> says otherwise.</summary>
+    public void Complete(string modelId, ImageSource? image, int? generation = null) =>
+        Ready?.Invoke(this, new ThumbnailReadyEventArgs(modelId, image, image is null ? ThumbnailOutcome.NoShellThumbnail : ThumbnailOutcome.ShellOk,
+            generation ?? _generations.GetValueOrDefault(modelId)));
+
+    public int GenerationOf(string modelId) => _generations.GetValueOrDefault(modelId);
 
     public void Dispose() => Disposed = true;
 }
@@ -399,49 +410,89 @@ public class TrayModelsViewModelTests
     }
 
     [Fact]
-    public void A_refresh_checks_remembered_thumbnails_again_including_failures_and_moved_files()
+    public void An_answer_queued_before_a_refresh_is_dropped_and_the_new_check_wins()
+    {
+        // Review R3: the worker answers an old lookup and its UI callback waits in the queue; the file is saved and the
+        // page refreshes before that callback runs. The old answer must not stand for the new refresh.
+        var ui = new Queue<Action>();
+        void Drain()
+        {
+            while (ui.Count > 0) ui.Dequeue()();
+        }
+        var thumbnails = new FakeThumbnails();
+        var model = ModelsHarness.Model(new FakeModelSource(ModelsSamples.Rows), new FakeFold(), thumbnails, post: ui.Enqueue);
+        model.Shown();
+        Drain();
+        ModelCardItem Card() => ModelsHarness.Cards(model).Single(c => c.ModelId == "riverside-tower");
+
+        var first = Card();
+        model.ThumbnailWanted(first);
+        var oldImage = ModelsSamples.Picture(1);
+        thumbnails.Complete("riverside-tower", oldImage); // queued on the UI thread, not run yet
+
+        model.Shown(); // the user comes back: a refresh (the list is rebuilt), before the queued answer runs
+        var current = Card();
+        Assert.NotSame(first, current);
+        model.ThumbnailWanted(current);
+        Assert.Equal(2, thumbnails.Requested.Count); // the realized card asked again, for the new refresh
+        Assert.True(thumbnails.GenerationOf("riverside-tower") > 0);
+
+        Drain(); // the stale answer runs now: dropped
+        Assert.Null(current.Thumbnail);
+
+        var newImage = ModelsSamples.Picture(2);
+        thumbnails.Complete("riverside-tower", newImage);
+        Drain();
+        Assert.Same(newImage, current.Thumbnail);
+
+        // Memory holds the new image, never the stale one: a rebuilt list shows it at once.
+        model.Chip = ModelTimeChip.OneYear;
+        Assert.Same(newImage, Card().Thumbnail);
+    }
+
+    [Fact]
+    public void A_card_revisited_after_its_image_left_memory_asks_again_and_shows_it()
+    {
+        // Review R7: more than 300 thumbnails remembered, then the first model's card shows again.
+        var picture = ModelsSamples.Picture(4);
+        var thumbnails = new FakeThumbnails { Answer = _ => picture };
+        var model = ModelsHarness.Shown(new FakeModelSource(() => ModelsSamples.Many(400)), thumbnails: thumbnails);
+        model.SearchText = "Project"; // every model, all time
+        var cards = ModelsHarness.Cards(model).ToList();
+        Assert.True(cards.Count > 300, $"{cards.Count} cards");
+        foreach (var card in cards) model.ThumbnailWanted(card);
+        Assert.All(cards, c => Assert.NotNull(c.Thumbnail));
+        var firstId = cards[0].ModelId;
+
+        thumbnails.Answer = null; // the next answers wait
+        model.GroupBy = ModelGroupBy.None;
+        var revisited = ModelsHarness.Cards(model).Single(c => c.ModelId == firstId);
+        Assert.Null(revisited.Thumbnail); // evicted: the placeholder for now
+        var asked = thumbnails.Requested.Count;
+        model.ThumbnailWanted(revisited);
+        Assert.Equal(asked + 1, thumbnails.Requested.Count);
+        var image = ModelsSamples.Picture(9);
+        thumbnails.Complete(firstId, image);
+        Assert.Same(image, revisited.Thumbnail);
+    }
+
+    [Fact]
+    public void A_moved_or_failed_model_is_asked_with_its_current_paths_on_every_realization()
     {
         var thumbnails = new FakeThumbnails();
-        var picture = ModelsSamples.Picture(2);
-        thumbnails.Images["riverside-tower"] = picture;
         thumbnails.Images["harbor-library"] = null; // no shell thumbnail
         var rows = ModelsSamples.Rows();
         var fold = new FakeFold();
         var model = ModelsHarness.Shown(new FakeModelSource(() => rows), fold, thumbnails);
         ModelCardItem Card(string id) => ModelsHarness.Cards(model).Single(c => c.ModelId == id);
 
-        model.ThumbnailWanted(Card("riverside-tower"));
         model.ThumbnailWanted(Card("harbor-library"));
-        model.ThumbnailWanted(Card("riverside-tower")); // realized again: remembered, already checked
-        Assert.Equal(new[] { "riverside-tower", "harbor-library" }, thumbnails.Requested);
+        model.ThumbnailWanted(Card("harbor-library")); // a failure is retried: the worker's disk cache keeps it cheap
+        Assert.Equal(2, thumbnails.Requested.Count(id => id == "harbor-library"));
 
-        // A pass changed the store (the model was saved): the remembered image shows at once and the worker checks
-        // the file's last-write time again; so does the remembered failure.
-        fold.Complete(changed: true);
-        thumbnails.Images.Remove("riverside-tower"); // the worker's answer is pending
-        var tower = Card("riverside-tower");
-        model.ThumbnailWanted(tower);
-        Assert.Same(picture, tower.Thumbnail);
-        model.ThumbnailWanted(Card("harbor-library"));
-        Assert.Equal(new[] { "riverside-tower", "harbor-library", "riverside-tower", "harbor-library" }, thumbnails.Requested);
-        model.ThumbnailWanted(tower); // asked already, still pending: not twice
-        Assert.Equal(4, thumbnails.Requested.Count);
-
-        // The page shown again is a refresh too.
-        thumbnails.Complete("riverside-tower", picture);
-        model.ThumbnailWanted(tower);
-        Assert.Equal(4, thumbnails.Requested.Count);
-        model.Shown();
-        model.ThumbnailWanted(Card("riverside-tower"));
-        Assert.Equal(5, thumbnails.Requested.Count);
-
-        // A model that moved (another local path) is checked with its new path at once.
-        thumbnails.Complete("riverside-tower", picture);
         rows[0].LocalPath = @"C:\Moved\Riverside Tower_jb.rvt";
         fold.Complete(changed: true);
-        thumbnails.Complete("riverside-tower", picture);
         model.ThumbnailWanted(Card("riverside-tower"));
-        Assert.Equal(6, thumbnails.Requested.Count);
         Assert.Equal(@"C:\Moved\Riverside Tower_jb.rvt", thumbnails.LastRequest!.LocalPath);
     }
 
@@ -644,12 +695,11 @@ public class TrayModelsViewModelTests
     }
 
     [Fact]
-    public void Cards_ask_for_their_thumbnail_once_cancel_when_they_scroll_away_and_keep_the_image()
+    public void Every_realized_card_asks_for_its_thumbnail_cancels_when_it_scrolls_away_and_shows_its_last_image_at_once()
     {
         var thumbnails = new FakeThumbnails();
         var model = ModelsHarness.Shown(new FakeModelSource(ModelsSamples.Rows), thumbnails: thumbnails);
         var cards = ModelsHarness.Cards(model).ToList();
-        model.ThumbnailWanted(cards[0]);
         model.ThumbnailWanted(cards[0]);
         model.ThumbnailWanted(cards[1]);
         Assert.Equal(new[] { cards[0].ModelId, cards[1].ModelId }, thumbnails.Requested);
@@ -662,12 +712,14 @@ public class TrayModelsViewModelTests
         Assert.Same(image, cards[0].Thumbnail);
         Assert.True(cards[0].HasThumbnail);
 
-        // A rebuilt list (a chip change) shows it at once, without asking again.
+        // A rebuilt list (a chip change) shows it at once, and the realized card asks the worker again (its disk cache
+        // answers an unchanged file cheaply).
         model.Chip = ModelTimeChip.OneYear;
         var again = ModelsHarness.Cards(model).Single(c => c.ModelId == cards[0].ModelId);
         Assert.Same(image, again.Thumbnail);
         model.ThumbnailWanted(again);
-        Assert.Equal(2, thumbnails.Requested.Count);
+        Assert.Equal(3, thumbnails.Requested.Count);
+        Assert.Same(image, again.Thumbnail);
 
         model.Dispose();
         Assert.True(thumbnails.Disposed);
@@ -791,7 +843,7 @@ public class ModelThumbnailCacheTests : IDisposable
             done.Release();
         };
 
-        worker.Request(new ThumbnailRequest(id, @"C:\A.rvt", null, false));
+        worker.Request(new ThumbnailRequest(id, @"C:\A.rvt", null, false, Generation: 3));
         Assert.True(done.Wait(TimeSpan.FromSeconds(10)), "the first thumbnail came back");
         worker.Request(new ThumbnailRequest(id, @"C:\A.rvt", null, false));
         Assert.True(done.Wait(TimeSpan.FromSeconds(10)), "the second came back");
@@ -801,6 +853,7 @@ public class ModelThumbnailCacheTests : IDisposable
         Assert.Equal(new[] { ThumbnailOutcome.ShellOk, ThumbnailOutcome.Cached, ThumbnailOutcome.SkippedNonLocal }, ready.Select(r => r.Args.Outcome));
         Assert.All(ready, r => Assert.NotEqual(Environment.CurrentManagedThreadId, r.Thread));
         Assert.Null(ready[2].Args.Image);
+        Assert.Equal(3, ready[0].Args.Generation); // the request's generation comes back with its answer
         lock (lines)
         {
             Assert.Contains($"thumbnail: {id} shell ok", lines);

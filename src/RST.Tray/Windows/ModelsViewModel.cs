@@ -83,7 +83,8 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     /// <summary>A card's width before it stretches to share its row (ModelsView lays the cards out on this grid).</summary>
     public const double CardWidth = 260;
 
-    /// <summary>Decoded thumbnails kept in memory; the rest are re-read from the disk cache when their card shows again.</summary>
+    /// <summary>Decoded thumbnails kept in memory to show at once while the worker checks again; the rest show the
+    /// placeholder for that moment.</summary>
     private const int ThumbnailMemory = 300;
 
     private readonly IModelListSource _source;
@@ -94,14 +95,14 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     private readonly Func<DateOnly> _today;
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
     private readonly List<string> _selectedVersions = new();
-    private readonly Dictionary<string, ImageSource?> _thumbs = new(StringComparer.Ordinal);
+    // Thumbnails (review R3, R7): every card the list realizes asks the worker, whose disk cache answers a model whose
+    // file is unchanged from its last-write check (a saved model gets its new image; a past failure is retried). Memory
+    // is only a lookup, so a card shows its last image at once while it waits; an entry evicted past the limit just
+    // waits with the placeholder. Each refresh (a reload, the page shown again) starts a new generation, and an answer
+    // to an older one is dropped: the card realized in the new generation has asked again.
+    private readonly Dictionary<string, (ImageSource? Image, int Generation)> _thumbs = new(StringComparer.Ordinal);
     private readonly Queue<string> _thumbOrder = new();
-    private readonly HashSet<string> _thumbsAsked = new(StringComparer.Ordinal);
-    // Memory entries checked by the worker since the last refresh, and the paths each was checked with. A refresh (a
-    // reload, the page shown again) clears the first, so a realized card shows its remembered image at once and asks the
-    // worker again (the last-write check: a saved model gets its new thumbnail; a past failure is retried).
-    private readonly HashSet<string> _thumbsChecked = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _thumbKeys = new(StringComparer.Ordinal);
+    private int _thumbGeneration;
     private readonly Dictionary<string, ModelCardItem> _cards = new(StringComparer.Ordinal);
     private readonly ModelsAggregatesRow _aggregates;
     private ModelListIndex _index = ModelListIndex.Empty;
@@ -346,7 +347,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     {
         TimesShown++;
         if (_disposed) return;
-        _thumbsChecked.Clear();
+        _thumbGeneration++;
         if (!_hasLoaded && !_loading) Reload();
         else if (_hasLoaded) Requery(_query, scrollTop: false);
         if (_fold is null) return;
@@ -399,28 +400,19 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     /// <summary>Back from the detail (WU4): the list as it was, scrolled where it was, the opened card focused.</summary>
     public void ReturnFromDetail()
     {
-        ScrollRequested?.Invoke(this, ScrollAnchorKey is null ? 0 : ScrollOffset);
+        ScrollRequested?.Invoke(this, ScrollOffset); // the view prefers the anchor when it has one
         if (LastOpenedModelId is { } id) FocusCardRequested?.Invoke(this, id);
     }
 
-    /// <summary>The list realized this card: show its remembered image at once, and ask the worker unless it already
-    /// checked this model, with these paths, since the last refresh.</summary>
+    /// <summary>The list realized this card: show its last image at once when memory has one, and ask the worker (its
+    /// disk cache makes an unchanged file cheap), with the card's current paths and this refresh's generation.</summary>
     public void ThumbnailWanted(ModelCardItem card)
     {
         if (_thumbnails is null || _disposed) return;
         var c = card.Card;
-        var key = ThumbKey(c);
-        if (_thumbs.TryGetValue(c.ModelId, out var image)) card.Thumbnail = image;
-        if (_thumbsChecked.Contains(c.ModelId) && _thumbKeys.TryGetValue(c.ModelId, out var checkedWith) && checkedWith == key) return;
-        if (_thumbsAsked.Contains(c.ModelId) && _thumbKeys.TryGetValue(c.ModelId, out var askedWith) && askedWith == key) return;
-        _thumbsAsked.Add(c.ModelId);
-        _thumbsChecked.Remove(c.ModelId);
-        _thumbKeys[c.ModelId] = key;
-        _thumbnails.Request(new ThumbnailRequest(c.ModelId, c.LocalPath, c.CentralPath, c.IsCloud));
+        if (_thumbs.TryGetValue(c.ModelId, out var remembered)) card.Thumbnail = remembered.Image;
+        _thumbnails.Request(new ThumbnailRequest(c.ModelId, c.LocalPath, c.CentralPath, c.IsCloud, _thumbGeneration));
     }
-
-    /// <summary>What a thumbnail was checked with: a moved model, or one now in the cloud, is checked again.</summary>
-    private static string ThumbKey(ModelCard c) => (c.IsCloud ? "cloud" : "file") + "|" + c.LocalPath + "|" + c.CentralPath;
 
     /// <summary>The card scrolled away before its thumbnail was ready: drop the request. A card of a list since rebuilt
     /// (a chip change, a reload) changes nothing: its model's current card may be showing and waiting for the same image.</summary>
@@ -428,7 +420,6 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     {
         if (_thumbnails is null) return;
         if (!_cards.TryGetValue(card.ModelId, out var current) || !ReferenceEquals(current, card)) return;
-        if (!_thumbsAsked.Remove(card.ModelId)) return;
         _thumbnails.Cancel(card.ModelId);
     }
 
@@ -473,7 +464,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         var first = !_hasLoaded;
         _index = index;
         _hasLoaded = true;
-        _thumbsChecked.Clear(); // a refresh: every card's thumbnail is checked again as it shows
+        _thumbGeneration++; // a refresh: answers to earlier requests are dropped
         Log.Information("models: list read ({Models} models)", index.Count);
         Requery(_query, scrollTop: first);
         OnPropertyChanged(nameof(IsLoading));
@@ -500,9 +491,8 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _post(() => UiGuard.Run("Models: show a thumbnail", () =>
         {
-            if (_disposed) return;
-            _thumbsAsked.Remove(e.ModelId);
-            _thumbsChecked.Add(e.ModelId);
+            // An answer to an earlier refresh is stale (the file may have changed since): the card realized now asked again.
+            if (_disposed || e.Generation != _thumbGeneration) return;
             Remember(e.ModelId, e.Image);
             if (_cards.TryGetValue(e.ModelId, out var card)) card.Thumbnail = e.Image;
         }));
@@ -511,7 +501,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     private void Remember(string modelId, ImageSource? image)
     {
         if (!_thumbs.ContainsKey(modelId)) _thumbOrder.Enqueue(modelId);
-        _thumbs[modelId] = image;
+        _thumbs[modelId] = (image, _thumbGeneration);
         while (_thumbOrder.Count > ThumbnailMemory && _thumbOrder.TryDequeue(out var oldest)) _thumbs.Remove(oldest);
     }
 
@@ -614,7 +604,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
                     for (var k = 0; k < n; k++)
                     {
                         var item = new ModelCardItem(group.Cards[i + k]);
-                        if (_thumbs.TryGetValue(item.ModelId, out var image)) item.Thumbnail = image;
+                        if (_thumbs.TryGetValue(item.ModelId, out var remembered)) item.Thumbnail = remembered.Image;
                         _cards[item.ModelId] = item;
                         items[k] = item;
                     }

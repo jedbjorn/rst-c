@@ -24,8 +24,9 @@ using RST.Core.Tray;
 
 namespace RST.Tray.Thumbnails;
 
-/// <summary>A card asking for its model's thumbnail.</summary>
-internal sealed record ThumbnailRequest(string ModelId, string? LocalPath, string? CentralPath, bool IsCloud);
+/// <summary>A card asking for its model's thumbnail. <paramref name="Generation"/> is the asker's refresh generation,
+/// echoed on <see cref="ThumbnailReadyEventArgs"/>, so an answer to an older refresh can be told apart and dropped.</summary>
+internal sealed record ThumbnailRequest(string ModelId, string? LocalPath, string? CentralPath, bool IsCloud, int Generation = 0);
 
 /// <summary>What became of a request (logged once per model and outcome).</summary>
 internal enum ThumbnailOutcome
@@ -59,9 +60,12 @@ internal enum ThumbnailOutcome
 }
 
 /// <summary>A thumbnail is ready (raised on the worker thread). A null image is the placeholder.</summary>
-internal sealed class ThumbnailReadyEventArgs(string modelId, ImageSource? image, ThumbnailOutcome outcome) : EventArgs
+internal sealed class ThumbnailReadyEventArgs(string modelId, ImageSource? image, ThumbnailOutcome outcome, int generation = 0) : EventArgs
 {
     public string ModelId { get; } = modelId;
+
+    /// <summary>The generation of the request this answers.</summary>
+    public int Generation { get; } = generation;
     public ImageSource? Image { get; } = image;
     public ThumbnailOutcome Outcome { get; } = outcome;
 }
@@ -69,7 +73,8 @@ internal sealed class ThumbnailReadyEventArgs(string modelId, ImageSource? image
 /// <summary>What the Models list uses: ask for a card's thumbnail, cancel it when the card scrolls away, hear when one is ready.</summary>
 internal interface IModelThumbnails : IDisposable
 {
-    /// <summary>Queues a request (a repeat for a model already queued is ignored). Never blocks; never throws.</summary>
+    /// <summary>Queues a request; a repeat for a model already queued takes its place (its paths and generation), keeping
+    /// its turn. Never blocks; never throws.</summary>
     void Request(ThumbnailRequest request);
 
     /// <summary>Drops a queued request (the card scrolled away); one being built finishes.</summary>
@@ -260,7 +265,11 @@ internal sealed class ModelThumbnails : IModelThumbnails
         if (_stopped || string.IsNullOrEmpty(request.ModelId)) return;
         lock (_gate)
         {
-            if (_queued.ContainsKey(request.ModelId)) return;
+            if (_queued.TryGetValue(request.ModelId, out var queued))
+            {
+                queued.Value = request;
+                return;
+            }
             _queued[request.ModelId] = _queue.AddLast(request);
         }
         _wake.Set();
@@ -326,7 +335,7 @@ internal sealed class ModelThumbnails : IModelThumbnails
         if (_stopped) return;
         try
         {
-            Ready?.Invoke(this, new ThumbnailReadyEventArgs(request.ModelId, image, outcome));
+            Ready?.Invoke(this, new ThumbnailReadyEventArgs(request.ModelId, image, outcome, request.Generation));
         }
         catch (Exception ex)
         {
