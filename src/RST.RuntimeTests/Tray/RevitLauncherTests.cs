@@ -16,9 +16,9 @@ public class RevitLauncherTests
         var executable = Path.Combine(directory, "Revit.exe");
         var launcher = new RevitLauncher(
             () => [new RevitYear(2025, @"C:\Other Revit"), new RevitYear(2026, directory)],
-            path => path == executable, info => started = info);
+            path => path == executable, info => { started = info; return 4242; });
 
-        launcher.Launch(2026);
+        Assert.Equal(4242, launcher.Launch(2026));
 
         Assert.NotNull(started);
         Assert.Equal(executable, started.FileName);
@@ -38,7 +38,7 @@ public class RevitLauncherTests
     public void Missing_unsupported_or_relative_installations_do_not_start(int year, string? directory, bool exists)
     {
         var started = false;
-        var launcher = new RevitLauncher(() => [new RevitYear(2026, directory)], _ => exists, _ => started = true);
+        var launcher = new RevitLauncher(() => [new RevitYear(2026, directory)], _ => exists, _ => { started = true; return 4242; });
 
         Assert.Throws<InvalidOperationException>(() => launcher.Launch(year));
 

@@ -31,8 +31,8 @@ internal interface ITrayAddinsBackend
     /// <summary>The Loader's Load with the confirmed plan.</summary>
     LoadResult Apply(ProfileEntry entry, bool disableUnused, IReadOnlyList<string> hiddenTabs, ActivationPlan? plan);
 
-    /// <summary>Starts a new instance of this installed Revit year. Throws if it cannot start.</summary>
-    void LaunchRevit(int year);
+    /// <summary>Starts a new instance of this installed Revit year. Returns its pid; throws if it cannot start.</summary>
+    int LaunchRevit(int year);
 
     /// <summary>The Loader's Restore All Add-ins.</summary>
     RestoreOutcome RestoreAll();
@@ -63,7 +63,7 @@ internal sealed class TrayAddinsBackend : ITrayAddinsBackend
     public LoadResult Apply(ProfileEntry entry, bool disableUnused, IReadOnlyList<string> hiddenTabs, ActivationPlan? plan) =>
         _service.Apply(entry, disableUnused, hiddenTabs, plan);
 
-    public void LaunchRevit(int year) => new RevitLauncher().Launch(year);
+    public int LaunchRevit(int year) => new RevitLauncher().Launch(year);
 
     public RestoreOutcome RestoreAll() => _service.RestoreAll();
 
@@ -91,7 +91,7 @@ internal sealed class NoTrayAddinsBackend : ITrayAddinsBackend
     public LoadResult Apply(ProfileEntry entry, bool disableUnused, IReadOnlyList<string> hiddenTabs, ActivationPlan? plan) =>
         LoadResult.Fail("No add-ins here.");
 
-    public void LaunchRevit(int year) => throw new InvalidOperationException(Resources.AddInsStrings.RevitNotFound(year));
+    public int LaunchRevit(int year) => throw new InvalidOperationException(Resources.AddInsStrings.RevitNotFound(year));
 
     public RestoreOutcome RestoreAll() => new(true, null, ActivationReport.Empty(ActivationIntent.RestoreAll));
 

@@ -5,7 +5,7 @@
 // its timers are the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing;
 // and the activity fold worker's (F19 #24 WU3, ActivityFoldWorker): folds the add-in's local session logs into rollups
 // on its own below-normal thread, 1–3 minutes after start, then every 15 minutes; it reads and writes local files only.
-// Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, never while Revit runs, msiexec for
+// Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, advice to close Revit, msiexec for
 // a companion, and for RST itself the updater copy (SelfUpdater), after which the tray quits.
 
 using System.Diagnostics;
@@ -201,7 +201,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         new("activity fold", StartActivityFold),
         new("window", () =>
         {
-            if (!_args.StartHidden) OpenWindow(null);
+            if (!_args.StartHidden) OpenLaunchWindow();
         }),
         // Decision #65: no update-check notice at first run; docs/tray.md explains the checks and how to turn them off.
         new("notices", () => _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowShadowNoticeIfDue)),
@@ -231,8 +231,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
         {
             Log.Information("another launch asked for the window");
-            _installs?.RefreshSelfUpdateResult(); // the updater's launch, when this tray was restarted by the installer
-            OpenWindow(null);
+            OpenLaunchWindow();
         }));
 
     // Windows Installer's Restart Manager (on a repair, upgrade or uninstall that replaces the tray's files) and
@@ -270,7 +269,11 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             action => _dispatcher.BeginInvoke(action),
             m => Log.Information("{Message}", m));
         _updates.NewVersionsFound += (_, found) => Announce(found);
-        _updates.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+        _updates.Changed += (_, _) =>
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+            PresentSelfUpdateResult();
+        };
     }
 
     // Installs (F17 WU4): nothing runs until the user clicks Install or Update.
@@ -368,11 +371,27 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         }, _dispatcher);
     }
 
+    private void OpenLaunchWindow()
+    {
+        // Restart Manager may already have consumed the result while hidden, or it may have arrived since startup.
+        _installs?.RefreshSelfUpdateResult();
+        OpenWindow(_installs?.HasUnpresentedSelfUpdateResult == true ? TrayPage.Updates : null);
+    }
+
+    private void PresentSelfUpdateResult()
+    {
+        if (_window is { IsVisible: true } window && window.ViewModel.Page == TrayPage.Updates &&
+            window.ViewModel.Updates.Rst.HasNote)
+            _installs?.MarkSelfUpdateResultPresented();
+    }
+
     /// <summary>Opens on the target or RST Profiles; an untargeted activation keeps a shown window's page.</summary>
     public void OpenWindow(TrayPage? page)
     {
         if (_quitting) return;
-        _page = TrayNavigation.PageOnOpen(page, _window?.IsVisible == true, _page);
+        var shown = _window?.IsVisible == true;
+        if (!shown) _window?.ViewModel.AddIns.ClearLaunchSuccess();
+        _page = TrayNavigation.PageOnOpen(page, shown, _page);
         if (_window is null)
         {
             // The Add-ins page (F17 WU2) shows the Loader's own dialogs (Confirm Add-in Changes, the reports, "Adopt
@@ -405,7 +424,11 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _updates?.RefreshInstalledAsync().Forget("tray: read what is installed"); // what is installed now (local only, no network)
             built.ViewModel.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(TrayViewModel.Page) && ReferenceEquals(_window, built)) _page = built.ViewModel.Page;
+                if (e.PropertyName == nameof(TrayViewModel.Page) && ReferenceEquals(_window, built))
+                {
+                    _page = built.ViewModel.Page;
+                    PresentSelfUpdateResult();
+                }
             };
             built.Closed += (_, _) =>
             {
@@ -423,6 +446,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _window.ViewModel.Updates.Refresh();
         }
         _window.Activate();
+        PresentSelfUpdateResult();
     }
 
     /// <summary>

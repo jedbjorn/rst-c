@@ -9,9 +9,9 @@ namespace RST.Tray.AddIns;
 internal sealed class RevitLauncher(
     Func<IReadOnlyList<RevitYear>>? installed = null,
     Func<string, bool>? fileExists = null,
-    Action<ProcessStartInfo>? start = null)
+    Func<ProcessStartInfo, int>? start = null)
 {
-    public void Launch(int year)
+    public int Launch(int year)
     {
         var installation = RevitInstallations.SupportedYears.Contains(year)
             ? (installed?.Invoke() ?? RevitInstallations.Detect(AddinRoots.FromEnvironment())).SingleOrDefault(x => x.Year == year)
@@ -25,11 +25,12 @@ internal sealed class RevitLauncher(
             throw new InvalidOperationException(AddInsStrings.RevitNotFound(year));
 
         var info = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = directory };
-        if (start is not null) start(info);
+        if (start is not null) return start(info);
         else
         {
             using var process = Process.Start(info);
             if (process is null) throw new InvalidOperationException(AddInsStrings.RevitNotFound(year));
+            return process.Id;
         }
     }
 }

@@ -402,7 +402,7 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
     <comment>Windows Installer could not be read for this app.</comment>
   </data>
   <data name="Updates_RstUpdateNote" xml:space="preserve">
-    <value>RST closes while it updates, then opens again. Nothing is installed while Revit is open.</value>
+    <value>RST closes while it updates, then opens again.</value>
     <comment>Beside RST's Update button, with the Release page link (F17 WU4).</comment>
   </data>
   <data name="Updates_OtherApps" xml:space="preserve">
@@ -412,7 +412,7 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
     <value>More on the Apps page.</value>
   </data>
   <data name="Apps_InstallsNote" xml:space="preserve">
-    <value>Installs are for your account only and need no administrator. RST checks each download against its release before installing it, and never installs while Revit is open.</value>
+    <value>Installs are for your account only and need no administrator. RST checks each download against its release before installing it.</value>
   </data>
   <data name="Apps_Detecting" xml:space="preserve">
     <value>Looking for installed apps…</value>
