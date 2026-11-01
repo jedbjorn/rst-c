@@ -61,7 +61,6 @@ internal sealed class FakeUpdatesHost : ITrayUpdatesHost
 
     public IReadOnlyDictionary<string, InstallProgress> Installs { get; set; } = new Dictionary<string, InstallProgress>();
 
-    public bool RevitRunning { get; set; }
 
     public bool PerMachineTray { get; set; }
 

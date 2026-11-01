@@ -378,7 +378,6 @@ public sealed class InstallCoordinatorTests : IDisposable
     private readonly FakeGitHub _github = new();
     private readonly FakeInstalledProducts _installed = new();
     private readonly FakeMsiexec _msiexec = new();
-    private readonly FakeRevit _revit = new();
     private readonly FakeSelfUpdater _self = new();
     private readonly ManualTimeProvider _time = new(Start);
     private readonly List<string> _log = new();
@@ -402,7 +401,7 @@ public sealed class InstallCoordinatorTests : IDisposable
     private InstallPaths Paths => new(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
 
     private InstallCoordinator Make() => new(
-        ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _revit, _self, Paths,
+        ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _self, Paths,
         _time, action => action(), _log.Add, () => _quits++, () => _changes++);
 
     public void Dispose()
@@ -450,33 +449,12 @@ public sealed class InstallCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task While_Revit_runs_it_waits_and_installs_when_Revit_closes()
+    public async Task A_verified_companion_installs_without_a_Revit_detection_dependency()
     {
-        _revit.Open();
         using var c = Make();
-        c.RevitRunning.Should().BeTrue();
-        var install = c.InstallAsync(_gantt, new ReleaseVersion(1, 2, 0));
-        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.WaitingForRevit);
-        _msiexec.Calls.Should().BeEmpty("never while Revit runs");
-        _log.Should().Contain(l => l.Contains("installs when it closes"));
-        _revit.Close();
-        await install;
+        await c.InstallAsync(_gantt, new ReleaseVersion(1, 2, 0));
         _msiexec.Calls.Should().ContainSingle();
         c.For("gantt-it").Phase.Should().Be(InstallPhase.Installed);
-    }
-
-    [Fact]
-    public async Task Cancel_while_waiting_for_Revit_installs_nothing()
-    {
-        _revit.Open();
-        using var c = Make();
-        var install = c.InstallAsync(_gantt, new ReleaseVersion(1, 2, 0));
-        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.WaitingForRevit);
-        c.Cancel("gantt-it");
-        await install;
-        c.For("gantt-it").Phase.Should().Be(InstallPhase.Idle);
-        _revit.Close();
-        _msiexec.Calls.Should().BeEmpty();
     }
 
     [Fact]
@@ -606,15 +584,11 @@ public sealed class InstallCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task RST_hands_over_to_the_updater_after_Revit_closes_then_the_tray_quits()
+    public async Task RST_hands_over_to_the_updater_then_the_tray_quits()
     {
         _installed.With(ProductCatalog.RstUpgradeCode, "3.1.0");
-        _revit.Open();
         using var c = Make();
         var install = c.InstallAsync(_rst, new ReleaseVersion(3, 1, 1));
-        await WaitFor(() => c.For("rst").Phase == InstallPhase.WaitingForRevit);
-        _self.Started.Should().BeEmpty();
-        _revit.Close();
         await install;
         _self.Started.Should().ContainSingle().Which.Should().EndWith(Path.Combine("rst", "3.1.1", "RST.msi"));
         c.For("rst").Phase.Should().Be(InstallPhase.HandingOff);
@@ -683,14 +657,15 @@ public sealed class InstallCoordinatorTests : IDisposable
     [Fact]
     public async Task A_second_click_while_busy_does_nothing()
     {
-        _revit.Open();
+        _msiexec.Then(1618, 0);
         using var c = Make();
         var first = c.InstallAsync(_gantt, new ReleaseVersion(1, 2, 0));
-        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.WaitingForRevit);
+        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.RetryLater && _time.ArmedTimers > 0);
         await c.InstallAsync(_gantt, new ReleaseVersion(1, 2, 0)); // returns at once
-        _revit.Close();
-        await first;
         _msiexec.Calls.Should().ContainSingle();
+        _time.Advance(InstallCoordinator.BusyRetryDelay);
+        await first;
+        _msiexec.Calls.Should().HaveCount(2);
     }
 
     private static async Task WaitFor(Func<bool> condition)

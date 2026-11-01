@@ -114,6 +114,10 @@
     <SetVariable Id="ScopeUser" Variable="InstallScope" Value="user" After="ScopeMachine"
                  Condition="NOT (InstallScope = &quot;machine&quot;)" />
 
+    <!-- Tray self-updates advise closing Revit and must not ask Restart Manager to close applications.
+         Standalone setup retains its existing default. -->
+    <Variable Name="RstRestartManagerControl" Type="string" Value="0" bal:Overridable="yes" />
+
     <Chain>
       <!-- rst-c for everyone on this PC (RST-Machine.msi), first on the
            machine path (review D1). Visible: it keeps its own "RST (all
@@ -163,7 +167,9 @@
            to remove it if it is installed at this version; the helper above
            already has, and Burn logs the absent product and goes on. -->
       <MsiPackage Id="RST" SourceFile="$(var.RstMsi)"
-                  InstallCondition="NOT (InstallScope = &quot;machine&quot;)" />
+                  InstallCondition="NOT (InstallScope = &quot;machine&quot;)">
+        <MsiProperty Name="MSIRESTARTMANAGERCONTROL" Value="[RstRestartManagerControl]" />
+      </MsiPackage>
 
       <!-- Companions: Permanent, Visible, Vital="no", InstallCondition
            bound to the checkbox. Generated from the registry. -->
