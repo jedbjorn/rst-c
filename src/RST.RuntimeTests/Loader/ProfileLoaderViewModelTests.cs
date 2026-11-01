@@ -191,7 +191,7 @@ public class ProfileLoaderViewModelTests
         var profile = new Profile
         {
             Id = LoaderFixtures.ArchId, ProfileName = "Walls", Tab = "Studio",
-            Panels = [new Panel { Slots = [new Slot
+            Panels = [new RST.Core.Profiles.Panel { Slots = [new Slot
             {
                 CommandId = "ID_OBJECTS_WALL", Name = name!, SourceTab = "Architecture", SourcePanel = "Build",
             }] }],
