@@ -8,8 +8,8 @@
 //     in the last minute; decision #29: the tray owns the worker, no IPC). Never blocks: the pass runs on the worker's
 //     own thread and its end is marshalled here.
 //   - A chip, filter, Group by or search change re-queries the prepared index on the UI thread (a few ms for 500 models;
-//     spec #25 AC 9) and rebuilds the rows: the aggregate cards, then per group a header row and rows of cards, as many
-//     per row as fit (Columns, set by the view from its width). ModelsView virtualizes the rows.
+//     spec #25 AC 9) and rebuilds the rows: the aggregate cards, then per group a header row and one model card
+//     per row. ModelsView virtualizes the rows.
 //   - A card asks for its Windows thumbnail when the list realizes it (IModelThumbnails), and cancels when it scrolls away.
 //   - Activating a card raises DetailRequested with the range the detail opens on (spec #25 Model Detail; WU4 shows it).
 //     Everything Back needs is kept here: the query, the collapsed groups, the scroll offset and the card that was opened.
@@ -80,9 +80,6 @@ internal sealed class ModelsViewModelOptions
 
 internal sealed class ModelsViewModel : ObservableObject, IDisposable
 {
-    /// <summary>A card's width before it stretches to share its row (ModelsView lays the cards out on this grid).</summary>
-    public const double CardWidth = 260;
-
     /// <summary>Decoded thumbnails kept in memory to show at once while the worker checks again; the rest show the
     /// placeholder for that moment.</summary>
     private const int ThumbnailMemory = 300;
@@ -111,7 +108,6 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     private IReadOnlyList<ModelsRow> _rows = Array.Empty<ModelsRow>();
     private IReadOnlyList<VersionOption> _versions = Array.Empty<VersionOption>();
     private string _searchText = "";
-    private int _columns = 3;
     private bool _loading;
     private bool _reloadQueued;
     private bool _hasLoaded;
@@ -170,7 +166,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     public event EventHandler<ModelDetailRequestedEventArgs>? DetailRequested;
 
     /// <summary>The view should scroll the list to this offset once the rows are laid out (0 after a filter change; the
-    /// kept offset after a reload, a reflow, a group toggle or Back).</summary>
+    /// kept offset after a reload, a group toggle or Back).</summary>
     public event EventHandler<double>? ScrollRequested;
 
     /// <summary>The view should focus this model's card (Back to the list, for keyboard users).</summary>
@@ -285,23 +281,11 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     /// <summary>Opens a card's detail (the card's command; Enter on a focused card).</summary>
     public ICommand OpenDetailCommand { get; }
 
-    /// <summary>Cards per row, from the view's width (at least 1). A change reflows the rows.</summary>
-    public int Columns
-    {
-        get => _columns;
-        set
-        {
-            value = Math.Max(1, value);
-            if (!SetField(ref _columns, value)) return;
-            BuildRows(scrollTo: ScrollOffset);
-        }
-    }
-
     /// <summary>The list's scroll offset, kept by the view as the user scrolls (the fallback when no anchor is kept).</summary>
     public double ScrollOffset { get; set; }
 
     /// <summary>The row at the top of the list as the user left it (<see cref="RowKey"/>): restored after a reload, a
-    /// reflow, a group toggle and on Back, so the same card stays at the top. Null after a filter change (the top).</summary>
+    /// group toggle and on Back, so the same card stays at the top. Null after a filter change (the top).</summary>
     public string? ScrollAnchorKey { get; set; }
 
     /// <summary>That row's top relative to the viewport's top (0 or less: how far it is scrolled past).</summary>
@@ -316,7 +300,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         _ => null,
     };
 
-    /// <summary>The index of the row an anchor names now (a card's row may differ after a reflow); -1 when it is gone.</summary>
+    /// <summary>The index of the row an anchor names now (a card's row may differ after regrouping); -1 when it is gone.</summary>
     public int RowIndexOf(string key)
     {
         for (var i = 0; i < _rows.Count; i++)
@@ -582,7 +566,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         Versions = new ReadOnlyCollection<VersionOption>(list);
     }
 
-    /// <summary>The aggregate row, then per group its header and (open) its rows of <see cref="Columns"/> cards.</summary>
+    /// <summary>The aggregate row, then per group its header and (open) its single-card rows.</summary>
     private void BuildRows(double scrollTo)
     {
         if (!_hasLoaded) return;
@@ -597,18 +581,12 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
                 var open = flat || !_collapsed.Contains(group.Key);
                 if (!flat) rows.Add(new ModelsGroupHeaderRow(group, open, Toggled));
                 if (!open) continue;
-                for (var i = 0; i < group.Cards.Count; i += _columns)
+                for (var i = 0; i < group.Cards.Count; i++)
                 {
-                    var n = Math.Min(_columns, group.Cards.Count - i);
-                    var items = new ModelCardItem[n];
-                    for (var k = 0; k < n; k++)
-                    {
-                        var item = new ModelCardItem(group.Cards[i + k]);
-                        if (_thumbs.TryGetValue(item.ModelId, out var remembered)) item.Thumbnail = remembered.Image;
-                        _cards[item.ModelId] = item;
-                        items[k] = item;
-                    }
-                    rows.Add(new ModelsCardRow(items, _columns, inGroup: !flat, isLast: i + n >= group.Cards.Count));
+                    var item = new ModelCardItem(group.Cards[i]);
+                    if (_thumbs.TryGetValue(item.ModelId, out var remembered)) item.Thumbnail = remembered.Image;
+                    _cards[item.ModelId] = item;
+                    rows.Add(new ModelsCardRow([item], inGroup: !flat, isLast: i + 1 == group.Cards.Count));
                 }
             }
         }
