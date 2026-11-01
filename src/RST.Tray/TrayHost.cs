@@ -389,13 +389,21 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             // tray_health_scan.json; its "Delete selected junk?" is owned by this window too. Its Models sub-tab
             // (spec #25 WU3): the activity index, freshened by asking the fold worker for a pass each time it is
             // shown, and the cards' Windows thumbnails (local files only), cached under %LocalAppData%\RST\Tray.
+            // A card opens its detail (WU4): the model read through spec #24's shared read path, off the UI thread, its
+            // header thumbnail from the same thumbnails the list uses.
+            var thumbnails = ModelThumbnails.ForTray();
             var models = new ModelsViewModel(new ModelsViewModelOptions
             {
                 Source = new IndexModelListSource(),
                 Fold = _fold,
-                Thumbnails = ModelThumbnails.ForTray(),
+                Thumbnails = thumbnails,
             });
-            var health = new TrayHealthViewModel(new DeviceHealthService(), messages, models: models);
+            var detail = new ModelDetailViewModel(new ModelDetailViewModelOptions
+            {
+                Source = new RollupModelActivitySource(),
+                Thumbnails = thumbnails,
+            });
+            var health = new TrayHealthViewModel(new DeviceHealthService(), messages, models: models, detail: detail);
             var built = new TrayWindow(new TrayViewModel(this, _page, this, new AddInsViewModel(_addins, dialogs, messages, _addinsWork), health));
             dialogs.Owner = built;
             messages.Owner = built;

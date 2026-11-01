@@ -92,6 +92,23 @@ Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, dis
 
 **[Health Tool docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/health-tool.md)**
 
+### Tray
+
+From v3.1, RST installs a small tray app, `RST.Tray.exe`, in the Windows notification area (the icons by the clock). It runs while you are signed in, uses the .NET that Revit already installs, and nothing in Revit depends on it. Click its icon to open its window; closing the window leaves it running. The window has five pages:
+
+- **Updates** and **Apps:** which versions of RST, Gantt-It and Splash-It are installed and whether a newer one is out, with one-click **Update** and **Install** (an install waits for Revit to close).
+- **Add-ins:** switch your profile and Revit add-ins before you start Revit, with the Profile Loader's own switching.
+- **Health:** this PC's health and every model you have worked on (below).
+- **Settings:** the theme, automatic update checks, and the version and log folder.
+
+Once a day the tray asks GitHub whether a newer release is out, and shows a notification when one is; it sends nothing about you, your PC or your models. To stop the checks, turn off **Check for updates automatically** in its Settings (IT can turn them off for every user with one registry value). Installing RST shows no welcome or first-run popups: what each feature does, and how to turn it off, is in the docs.
+
+**Health** has two sub-tabs. **Device** is Health's PC snapshot and junk file cleanup, run without Revit, for every installed Revit year at once. **Models** lists every model you have worked on on this PC, in any Revit version: filter by time frame and Revit version, group by major or minor version, or search every model you have ever opened. Each card shows the model's thumbnail, its health colour by name, and its active time; open one for the same cards and charts as Revit's Activity tab. Everything is read from this PC; nothing is sent anywhere.
+
+![The tray's Health page on Models: a search box, the Recent, 3M, 6M and 1Y time frames, the Revit version filter and Group by, six totals (Models, Active time, Opens, Avg open time, Syncs, Avg sync time), then the model cards grouped by Revit version, each with a thumbnail, its title, its health colour and name, its Revit version, the day it was last open and its active time](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/tray-health-models.png)
+
+**[Tray docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/tray.md)**
+
 ### Logging
 
 rst-c writes a session log under `%AppData%\RST\logs\` for every Revit launch. The engine and rst-c's windows run in the same process and log to the same file, so a single log captures the full picture when something misbehaves. The latest log is the first place to look when a profile behaves unexpectedly.

@@ -1,11 +1,15 @@
 // rst-c's own (not vendored): the tray window's code-behind (spec #20 §1; F17 WU1). Built lazily by TrayHost the
 // first time it is opened and rebuilt when the theme changes (Theme.xaml reads RstTheme when a window loads it).
-// Closing it only closes the window; the tray keeps running.
+// Closing it only closes the window; the tray keeps running. Escape is the window's Close (its IsCancel button), except
+// while a model's detail shows on Health › Models (spec #25 WU4): then a fresh Escape nothing else used goes Back to the
+// list, wherever the keyboard is in the window (the detail, the tabs, the footer), and never closes the window.
 
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using RST.UI.Dialogs;
+using RST.UI.Mvvm;
 using RST.UI.Theming;
 
 namespace RST.Tray.Windows;
@@ -21,6 +25,7 @@ internal partial class TrayWindow : Window
         Icon = WindowIcon();
         DataContext = viewModel;
         viewModel.RequestClose += OnRequestClose;
+        KeyDown += OnKeyDown;
         Closed += (_, _) =>
         {
             viewModel.RequestClose -= OnRequestClose;
@@ -38,6 +43,16 @@ internal partial class TrayWindow : Window
     }
 
     private void OnRequestClose(object? sender, EventArgs e) => Close();
+
+    // Bubbling, so a press a control inside used (a drop-down closing its list) is left alone; marked handled, so the
+    // Close button's IsCancel (the access-key pass after routing) never sees it.
+    private void OnKeyDown(object sender, KeyEventArgs e) => UiGuard.Run("tray: Escape", () =>
+    {
+        if (e.Handled || e.Key != Key.Escape || e.IsRepeat) return;
+        if (!ViewModel.IsHealthPage || !ViewModel.Health.IsDetailShowing) return;
+        e.Handled = true;
+        ViewModel.Health.Detail.Back();
+    });
 
     /// <summary>RST.msi's icon, embedded in the tray (null if it cannot be read: Windows' default icon then).</summary>
     internal static BitmapFrame? WindowIcon()
