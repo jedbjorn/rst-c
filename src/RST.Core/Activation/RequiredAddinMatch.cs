@@ -8,7 +8,7 @@
 //   3. fuzzy: the requirement's tab name contains, or is contained by, the manifest's file stem or
 //      an entry's Name (the v2.x isAddinLoaded rule), only when tiers 1 and 2 found nothing.
 // Every manifest a tier matches counts, not just the first. A requirement on one of Revit's own
-// tabs (RequiredAddinRules.BuiltinTabs, e.g. "Architecture"), or marked native, is never an add-in.
+// tabs for that year (RequiredAddinRules.IsNativeTab), or marked native, is never an add-in.
 
 using RST.Core.Loader;
 using RST.Core.Profiles;
@@ -18,16 +18,16 @@ namespace RST.Core.Activation;
 public static class RequiredAddinMatch
 {
     /// <summary>False for a requirement that names one of Revit's own tabs, or names nothing.</summary>
-    public static bool IsAddinRequirement(RequiredAddin? required) =>
+    public static bool IsAddinRequirement(RequiredAddin? required, int? revitYear = null) =>
         required is not null
         && required.Native != true
-        && !RequiredAddinRules.IsNativeTab(required.TabName)
+        && !RequiredAddinRules.IsNativeTab(required.TabName, revitYear)
         && (!string.IsNullOrWhiteSpace(required.TabName) || !string.IsNullOrWhiteSpace(required.AddinFile) || !string.IsNullOrWhiteSpace(required.AddinId));
 
     /// <summary>The items of one year that satisfy <paramref name="required"/>.</summary>
-    public static IReadOnlyList<InventoryItem> Match(RequiredAddin required, IEnumerable<InventoryItem> sameYear)
+    public static IReadOnlyList<InventoryItem> Match(RequiredAddin required, IEnumerable<InventoryItem> sameYear, int? revitYear = null)
     {
-        if (!IsAddinRequirement(required)) return [];
+        if (!IsAddinRequirement(required, revitYear)) return [];
         var items = sameYear as IReadOnlyList<InventoryItem> ?? sameYear.ToList();
 
         if (!string.IsNullOrWhiteSpace(required.AddinFile))
@@ -53,13 +53,14 @@ public static class RequiredAddinMatch
     public static HashSet<InventoryItem> RequiredItems(IEnumerable<RequiredAddin>? required, AddinInventory inventory)
     {
         var set = new HashSet<InventoryItem>(ReferenceEqualityComparer.Instance);
-        var list = (required ?? []).Where(IsAddinRequirement).ToList();
+        // Native tab names depend on the inventory group's year, so filter inside Match.
+        var list = (required ?? []).ToList();
         if (list.Count == 0) return set;
         foreach (var year in inventory.Items.GroupBy(i => i.Year))
         {
             var items = year.ToList();
             foreach (var r in list)
-                foreach (var hit in Match(r, items))
+                foreach (var hit in Match(r, items, year.Key))
                     set.Add(hit);
         }
         return set;

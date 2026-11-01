@@ -67,7 +67,7 @@ public sealed class AddinScannerTests
         foreach (var entry in item.Entries)
         {
             // Classifier must not throw regardless of assembly path content.
-            var origin = OriginClassifier.Classify(tabName: entry.Name, assemblyPath: entry.AssemblyPath);
+            var origin = OriginClassifier.Classify(tabName: entry.Name, assemblyPath: entry.AssemblyPath, revitYear: item.Year);
             _output.WriteLine($"  {item.FileName} / {entry.Name} → {origin}");
         }
     }

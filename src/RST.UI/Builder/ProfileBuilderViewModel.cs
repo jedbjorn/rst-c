@@ -64,6 +64,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
     ];
 
     private readonly IProfileBuilderBackend _backend;
+    private readonly int? _revitYear;
     private readonly IDialogService _dialogs;
     private readonly IBuilderDialogs _builderDialogs;
     private readonly Action<Action> _post;
@@ -132,6 +133,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         IBuilderDialogs? builderDialogs = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        _revitYear = int.TryParse(backend.RevitVersion, out var year) ? year : null;
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _builderDialogs = builderDialogs ?? NoBuilderDialogs.Instance;
         _post = post ?? (a => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, a));
@@ -560,7 +562,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
         if (!_builderDialogs.EditName(dialog) || Check(dialog.Result) != NameCheck.Ok) return;
 
         var copy = ProfileNaming.DuplicateOf(_profile, dialog.Result);
-        copy.RequiredAddins = RequiredAddinDetector.Compute(copy, _catalog, _lookup);
+        copy.RequiredAddins = RequiredAddinDetector.Compute(copy, _catalog, _lookup, _revitYear);
         Log.Information("Builder: duplicate {Name} ({Id}) as {Copy}", ProfileName, _profile.Id, copy.ProfileName);
         var result = Safe(() => _backend.Save(copy), SaveOutcome.Fail("unknown"), "save_profile (duplicate)");
         if (!result.Ok || result.Saved is not { } written)
@@ -1527,7 +1529,7 @@ public sealed class ProfileBuilderViewModel : ObservableObject, IHasToast
             return false;
         }
 
-        _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup);
+        _profile.RequiredAddins = RequiredAddinDetector.Compute(_profile, _catalog, _lookup, _revitYear);
         Log.Information("Builder: save {Name} (edit={Edit}, requiredAddins={Required})",
             _profile.ProfileName, _editMode, _profile.RequiredAddins.Count);
         var result = Safe(() => _backend.Save(_profile), SaveOutcome.Fail("unknown"), "save_profile");

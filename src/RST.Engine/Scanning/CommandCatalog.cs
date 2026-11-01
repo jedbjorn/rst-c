@@ -99,7 +99,8 @@ public sealed class CommandCatalog
         var ribbonAdded = 0;
         var ribbonEnriched = 0;
         var ribbonRedundant = 0;
-        foreach (var c in RibbonScanner.Enumerate(postableIds))
+        int? revitYear = int.TryParse(revitVersion, out var year) ? year : null;
+        foreach (var c in RibbonScanner.Enumerate(postableIds, revitYear))
         {
             if (byId.TryGetValue(c.Id, out var existing))
             {

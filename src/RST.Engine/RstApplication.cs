@@ -114,6 +114,10 @@ public sealed class RstApplication : IExternalApplication
             _uiControlledApp = application;
             application.ViewActivated += OnViewActivated;
 
+            // SC-005: changing theme can rebuild tabs without activating a view.
+            // Keep an explicit backstop alongside the pre-render visibility watcher.
+            application.ThemeChanged += OnThemeChanged;
+
             Log.Information("=== RST.OnStartup OK ===");
             return Result.Succeeded;
         }
@@ -281,13 +285,28 @@ public sealed class RstApplication : IExternalApplication
     }
 
     private void OnViewActivated(object? sender, Autodesk.Revit.UI.Events.ViewActivatedEventArgs e)
+        => QueueIdlingReassert();
+
+    private void OnThemeChanged(object? sender, Autodesk.Revit.UI.Events.ThemeChangedEventArgs e)
+    {
+        try
+        {
+            QueueIdlingReassert();
+            // Reattach to any replacement tab objects now; the Idling pass also
+            // catches a rebuild that finishes after this notification returns.
+            RstifyToggle.ReassertIfDrifted();
+        }
+        catch (Exception ex) { Log.Warning(ex, "ThemeChanged: RSTify re-assert failed"); }
+    }
+
+    private void QueueIdlingReassert()
     {
         // Cheap gate on the UI thread: nothing to protect, nothing to do.
         if (_reassertQueued || !RstifyToggle.HasActiveHideRule) return;
         if (_uiControlledApp is null) return;
         try
         {
-            // Defer to Idling — ViewActivated can fire before Revit
+            // Defer to Idling — ViewActivated/ThemeChanged can fire before Revit
             // finishes rebuilding the tab set, and a re-hide applied
             // mid-rebuild would itself be reset.
             _uiControlledApp.Idling += OnIdlingReassert;
@@ -295,7 +314,7 @@ public sealed class RstApplication : IExternalApplication
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "ViewActivated: failed to queue RSTify re-assert");
+            Log.Warning(ex, "RSTify: failed to queue Idling re-assert");
         }
     }
 
@@ -359,6 +378,8 @@ public sealed class RstApplication : IExternalApplication
         {
             try { _uiControlledApp.ViewActivated -= OnViewActivated; }
             catch { /* fine */ }
+            try { _uiControlledApp.ThemeChanged -= OnThemeChanged; }
+            catch (Exception ex) { Log.Debug(ex, "ThemeChanged unsubscribe failed (non-fatal)"); }
             if (_reassertQueued)
             {
                 try { _uiControlledApp.Idling -= OnIdlingReassert; }
@@ -372,6 +393,8 @@ public sealed class RstApplication : IExternalApplication
             }
             _uiControlledApp = null;
         }
+        try { RstifyToggle.Shutdown(); }
+        catch (Exception ex) { Log.Debug(ex, "RSTify watcher shutdown failed (non-fatal)"); }
         try { _switchScheduler?.Dispose(); }
         catch (Exception ex) { Log.Debug(ex, "Switch scheduler dispose failed (non-fatal)"); }
         _switchScheduler = null;
