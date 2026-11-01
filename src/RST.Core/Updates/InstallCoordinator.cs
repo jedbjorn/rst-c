@@ -6,18 +6,15 @@
 //      installed over: the page says who can update it (decision #34)
 //   2. VerifiedDownload: the four checks; any refusal stops here, with a logged reason. RST is updated the way it
 //      was installed (decision #34): RST-Setup.exe when the bundle's per-user registration is present, else RST.msi
-//   3. never while Revit runs: if any Revit.exe runs in this session the product waits ("Install when Revit
-//      closes"), watching the process exit (IRevitWatch), cancellable from the page. A Revit check that fails counts
-//      as "Revit may be running": the install waits and looks again (review N3)
+//   3. The pages advise closing Revit; installs do not inspect or wait for Revit (decision #73).
 //   4. ONE queue for every install (review B1): a companion's msiexec waits its turn ("Queued"); RST's self-update
 //      waits until no other product's install is running, waiting or queued, so every install the user asked for
 //      runs, and its result is recorded, before the tray hands over and quits. Nothing is dropped.
 //   5. right before msiexec the MSI is held against writes, re-hashed and re-identified, and what is installed is
 //      looked at again (check 4 once more; review N1)
 //   6. RST itself: ISelfUpdater copies the tray to the updater folder and starts it with --apply; the tray then
-//      quits and the copy installs (SelfUpdateApply). If the copy finds Revit open it hands the wait back: the tray
-//      starts again and waits for Revit itself (review B2)
-//      a companion: msiexec /i <msi> /qn /norestart /l*v <log> (IMsiexec):
+//      quits and the copy installs (SelfUpdateApply), then starts the tray to show the result.
+//      a companion: msiexec /i <msi> /qn /norestart MSIRESTARTMANAGERCONTROL=Disable /l*v <log> (IMsiexec):
 //        0     installed; the cache keeps this MSI as the product's "previous version" from now on
 //        3010  installed, Windows needs a restart: the user is told; the tray never restarts the PC
 //        1618  another installation is running: tried again after 3 minutes, three runs in all
@@ -47,7 +44,6 @@ public enum InstallPhase
 {
     Idle,
     Downloading,
-    WaitingForRevit,
 
     /// <summary>Waiting its turn: another install runs (or, for RST's self-update, another is still under way).</summary>
     Queued,
@@ -93,7 +89,7 @@ public sealed record InstallProgress(
     public static InstallProgress Idle { get; } = new(InstallPhase.Idle);
 
     /// <summary>Something is under way: the product's button is not offered.</summary>
-    public bool IsBusy => Phase is InstallPhase.Downloading or InstallPhase.WaitingForRevit or InstallPhase.Queued
+    public bool IsBusy => Phase is InstallPhase.Downloading or InstallPhase.Queued
                           or InstallPhase.Installing or InstallPhase.RetryLater or InstallPhase.HandingOff;
 }
 
@@ -105,41 +101,8 @@ public interface IMsiexec
 {
     Task<int> InstallAsync(string msiPath, string logPath, CancellationToken cancel);
 
-    /// <summary>RST-Setup.exe /quiet /norestart /log &lt;log&gt;: per-user, no companion switches (decision #34).</summary>
+    /// <summary>RST-Setup.exe /quiet /norestart RstRestartManagerControl=Disable /log &lt;log&gt;: per-user, no companion switches (decision #34).</summary>
     Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel);
-}
-
-/// <summary>Revit in this user's session (RST.Tray: Revit.exe processes, their exit events).</summary>
-public interface IRevitWatch
-{
-    /// <summary>Any Revit.exe runs in this session now.</summary>
-    bool AnyRunning();
-
-    /// <summary>Completes when no Revit.exe runs in this session (at once when none does).</summary>
-    Task WaitUntilNoneAsync(CancellationToken cancel);
-}
-
-/// <summary>
-/// THE "is Revit running" rule for installs (the coordinator and the updater copy both use it; WU2's own check is
-/// unified with it at merge): any Revit.exe in this session, and a check that fails counts as "Revit may be running"
-/// (review N3), so nothing is ever installed on a guess.
-/// </summary>
-public static class RevitCheck
-{
-    public static bool MayBeRunning(IRevitWatch revit, Action<string>? log)
-    {
-        ArgumentNullException.ThrowIfNull(revit);
-        try
-        {
-            return revit.AnyRunning();
-        }
-        catch (Exception ex)
-        {
-            try { log?.Invoke("install: could not list Revit processes (" + ex.Message + "); treating Revit as running"); }
-            catch { /* logging must never throw */ }
-            return true;
-        }
-    }
 }
 
 /// <summary>RST updating itself (RST.Tray: the updater copy).</summary>
@@ -184,7 +147,7 @@ public sealed record InstallPaths(string CacheRoot, string LogsDir, string SelfU
 /// <param name="Version">The RST version it was to install.</param>
 /// <param name="ExitCode">msiexec's or the bundle's exit code (null when it never ran).</param>
 /// <param name="Problem">
-/// None or InstallFailed (it ran); RevitRunning (Revit was open: the tray waits for it and tries again); anything
+/// None or InstallFailed (it ran); anything
 /// else is a refusal (the package changed, or is not RST's) or UpdaterFailed.
 /// </param>
 public sealed record SelfUpdateResult(
@@ -230,16 +193,10 @@ public sealed class InstallCoordinator : IDisposable
     /// <summary>How many times msiexec is run when it keeps answering 1618.</summary>
     public const int BusyAttempts = 3;
 
-    /// <summary>When the Revit check itself fails, how long before it is tried again (the install waits meanwhile).</summary>
-    public static readonly TimeSpan RevitCheckRetry = TimeSpan.FromSeconds(30);
-
     private enum RunMode
     {
         Install,
         Reinstall,
-
-        /// <summary>RST's self-update after the updater found Revit open: from the cache, waiting for Revit again.</summary>
-        Resume,
     }
 
     private readonly VerifiedDownload _download;
@@ -247,7 +204,6 @@ public sealed class InstallCoordinator : IDisposable
     private readonly IMsiReader _msi;
     private readonly IBundleReader? _bundles;
     private readonly IMsiexec _msiexec;
-    private readonly IRevitWatch _revit;
     private readonly ISelfUpdater _self;
     private readonly InstallPaths _paths;
     private readonly TimeProvider _time;
@@ -264,8 +220,6 @@ public sealed class InstallCoordinator : IDisposable
     private readonly Dictionary<string, CancellationTokenSource> _running = new(StringComparer.Ordinal);
     private Dictionary<string, InstallProgress> _progress = new(StringComparer.Ordinal);
     private TaskCompletionSource _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private ReleaseVersion? _resume;
-    private readonly ProductInfo? _rst;
     private bool _handingOff;
     private volatile bool _disposed;
 
@@ -280,7 +234,6 @@ public sealed class InstallCoordinator : IDisposable
         IMsiReader msi,
         IBundleReader? bundles,
         IMsiexec msiexec,
-        IRevitWatch revit,
         ISelfUpdater self,
         InstallPaths paths,
         TimeProvider time,
@@ -291,12 +244,10 @@ public sealed class InstallCoordinator : IDisposable
     {
         ArgumentNullException.ThrowIfNull(products);
         var catalog = products.ToList();
-        _rst = catalog.FirstOrDefault(p => p.IsRst);
         _installed = installed ?? throw new ArgumentNullException(nameof(installed));
         _msi = msi ?? throw new ArgumentNullException(nameof(msi));
         _bundles = bundles;
         _msiexec = msiexec ?? throw new ArgumentNullException(nameof(msiexec));
-        _revit = revit ?? throw new ArgumentNullException(nameof(revit));
         _self = self ?? throw new ArgumentNullException(nameof(self));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _time = time ?? throw new ArgumentNullException(nameof(time));
@@ -330,12 +281,6 @@ public sealed class InstallCoordinator : IDisposable
         lock (_gate) return _progress.TryGetValue(productId, out var p) ? p : InstallProgress.Idle;
     }
 
-    /// <summary>
-    /// Any Revit.exe runs in this session now (the button then says "… when Revit closes"). When the check itself
-    /// fails it answers true: "Revit may be running", so nothing installs on a guess (review N3).
-    /// </summary>
-    public bool RevitRunning => RevitCheck.MayBeRunning(_revit, _log);
-
     /// <summary>Install or Update: <paramref name="version"/> of <paramref name="product"/>. Never throws.</summary>
     public Task InstallAsync(ProductInfo product, ReleaseVersion version) => RunAsync(product, version, RunMode.Install);
 
@@ -347,24 +292,7 @@ public sealed class InstallCoordinator : IDisposable
         return RunAsync(product, previous, RunMode.Reinstall);
     }
 
-    /// <summary>
-    /// RST's self-update that the updater handed back because Revit was open (review B2): it waits for Revit here,
-    /// with the cached, re-checked package, then hands over again. Nothing when there is none. Never throws.
-    /// </summary>
-    public Task ResumeDeferredSelfUpdateAsync()
-    {
-        ReleaseVersion? version;
-        lock (_gate)
-        {
-            version = _resume;
-            _resume = null;
-        }
-        if (version is not { } v || _rst is null) return Task.CompletedTask;
-        _log($"install: the updater found Revit open; RST {v} installs when Revit closes");
-        return RunAsync(_rst, v, RunMode.Resume);
-    }
-
-    /// <summary>Stops the product's install while it downloads, waits for Revit, waits its turn or waits to retry.</summary>
+    /// <summary>Stops the product's install while it downloads, waits its turn or waits to retry.</summary>
     public void Cancel(string productId)
     {
         CancellationTokenSource? cts;
@@ -402,7 +330,7 @@ public sealed class InstallCoordinator : IDisposable
         var previous = before.Previous;
         try
         {
-            _log($"install: {product.Name} {version} asked for ({mode switch { RunMode.Reinstall => "reinstall previous version", RunMode.Resume => "resumed after Revit", _ => "Install/Update" }})");
+            _log($"install: {product.Name} {version} asked for ({mode switch { RunMode.Reinstall => "reinstall previous version", _ => "Install/Update" }})");
             Set(product, new InstallProgress(InstallPhase.Downloading, version, Previous: previous));
             await RunCoreAsync(product, version, mode, previous, cts.Token).ConfigureAwait(false);
         }
@@ -470,12 +398,11 @@ public sealed class InstallCoordinator : IDisposable
                 ? "install: RST was installed by RST-Setup.exe; it is updated with the release's RST-Setup.exe"
                 : "install: RST was installed by RST.msi; it is updated with the release's RST.msi");
 
-        // 2. The four checks (a reinstall or a resumed self-update uses the cached package when it is still the verified one).
+        // 2. The four checks (a reinstall uses the cached package when it is still the verified one).
         VerifyResult verified;
         var cached = mode switch
         {
             RunMode.Reinstall => InstallCache.InstalledMsi(_paths.CacheRoot, product.Id, version, _log),
-            RunMode.Resume => CachedPackage(product, version, kind),
             _ => null,
         };
         if (cached is not null)
@@ -500,38 +427,8 @@ public sealed class InstallCoordinator : IDisposable
         else await InstallCompanionAsync(product, version, verified.Msi!, current, reinstall, previous, cancel).ConfigureAwait(false);
     }
 
-    /// <summary>3. Never while Revit runs: waits on the processes' exit; a failing check waits and looks again (N3).</summary>
-    private async Task WaitForRevitAsync(ProductInfo product, ReleaseVersion version, ReleaseVersion? previous, CancellationToken cancel)
-    {
-        var logged = false;
-        while (RevitRunning)
-        {
-            if (!logged)
-            {
-                _log($"install: Revit is running; {product.Name} {version} installs when it closes");
-                logged = true;
-            }
-            Set(product, new InstallProgress(InstallPhase.WaitingForRevit, version, Previous: previous));
-            try
-            {
-                await _revit.WaitUntilNoneAsync(cancel).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _log($"install: watching Revit failed ({ex.Message}); looking again in {RevitCheckRetry.TotalSeconds:0} s");
-                await Task.Delay(RevitCheckRetry, _time, cancel).ConfigureAwait(false);
-            }
-        }
-        if (logged) _log($"install: Revit has closed; {product.Name} {version} goes ahead");
-    }
-
     /// <summary>
-    /// 4b/5. A companion's turn in the queue: held, re-checked, msiexec. 1618 tries again; a Revit that appears while
-    /// it waits its turn sends it back to waiting without using up a try (review N6).
+    /// 4b/5. A companion's turn in the queue: held, re-checked, msiexec. 1618 tries again.
     /// </summary>
     private async Task InstallCompanionAsync(ProductInfo product, ReleaseVersion version, VerifiedMsi msi, InstalledProduct? before,
                                              bool reinstall, ReleaseVersion? previous, CancellationToken cancel)
@@ -539,7 +436,6 @@ public sealed class InstallCoordinator : IDisposable
         var runs = 0;
         while (true)
         {
-            await WaitForRevitAsync(product, version, previous, cancel).ConfigureAwait(false);
             if (_queue.CurrentCount == 0)
             {
                 _log($"install: {product.Name} {version} waits its turn: another installation is running");
@@ -550,8 +446,6 @@ public sealed class InstallCoordinator : IDisposable
             string logPath;
             try
             {
-                if (RevitRunning) continue; // Revit started while it waited its turn: wait for it again (not a try)
-
                 // 5. Right before msiexec: hold the file against writes, re-hash, re-identify, look at what is installed.
                 using var hold = InstallCache.HoldVerified(msi.Path, msi.Sha256, _log);
                 if (hold is null)
@@ -595,7 +489,7 @@ public sealed class InstallCoordinator : IDisposable
                 Set(product, new InstallProgress(InstallPhase.Installing, version, Previous: previous));
                 Directory.CreateDirectory(_paths.LogsDir);
                 logPath = _paths.LogFor(product.Id, _time.GetUtcNow());
-                _log($"install: msiexec /i \"{msi.Path}\" /qn /norestart /l*v \"{logPath}\"");
+                _log($"install: msiexec /i \"{msi.Path}\" /qn /norestart MSIRESTARTMANAGERCONTROL=Disable /l*v \"{logPath}\"");
                 // Not cancellable once started: msiexec runs to its end and its result is recorded.
                 code = await _msiexec.InstallAsync(msi.Path, logPath, CancellationToken.None).ConfigureAwait(false);
                 runs++;
@@ -642,8 +536,6 @@ public sealed class InstallCoordinator : IDisposable
         var version = package.Version;
         while (true)
         {
-            await WaitForRevitAsync(product, version, null, cancel).ConfigureAwait(false);
-
             Task changed;
             bool othersBusy;
             lock (_gate)
@@ -666,10 +558,9 @@ public sealed class InstallCoordinator : IDisposable
             var handedOff = false;
             try
             {
-                if (RevitRunning) continue;
                 lock (_gate)
                 {
-                    // A click during the process listing must finish before we quit (SC-017 DN1).
+                    // Admit the hand-off atomically with companion requests (SC-017 DN1).
                     if (OthersBusyLocked(product.Id)) continue;
                     _handingOff = true; // RunAsync refuses new requests under this same gate
                 }
@@ -743,14 +634,6 @@ public sealed class InstallCoordinator : IDisposable
     private static InstalledProduct? Highest(IReadOnlyList<InstalledProduct> found) =>
         found.OrderByDescending(p => p.Version ?? new ReleaseVersion(-1, 0, 0)).FirstOrDefault();
 
-    /// <summary>RST's package as the tray left it in the cache for <paramref name="kind"/>, if there.</summary>
-    private string? CachedPackage(ProductInfo product, ReleaseVersion version, PackageKind kind)
-    {
-        var name = kind == PackageKind.Bundle ? ProductCatalog.RstBundleAsset : ProductCatalog.RstAsset;
-        var path = Path.Combine(InstallCache.VersionDir(_paths.CacheRoot, product.Id, version), name);
-        return File.Exists(path) ? path : null;
-    }
-
     /// <summary>
     /// Looks for the updater's result again: when Windows Installer's Restart Manager started this tray before the
     /// updater had written it, the updater's own launch of the tray only brings this one forward (the
@@ -766,7 +649,6 @@ public sealed class InstallCoordinator : IDisposable
         }
         _post(() => Changed?.Invoke(this, EventArgs.Empty));
         _installsChanged();
-        ResumeDeferredSelfUpdateAsync().Forget("installs: resume the deferred self-update");
     }
 
     /// <summary>The updater's result from the last self-update, shown once on RST's row, then removed.</summary>
@@ -795,12 +677,6 @@ public sealed class InstallCoordinator : IDisposable
         var code = result.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none";
         switch (result.Problem)
         {
-            case InstallProblem.RevitRunning:
-                // Review B2: the updater found Revit open and installed nothing; this tray waits for Revit and
-                // hands over again (TrayHost calls ResumeDeferredSelfUpdateAsync).
-                _resume = version;
-                _log($"install: the updater reported RST {version}: deferred, Revit was open");
-                return;
             case InstallProblem.None or InstallProblem.InstallFailed when result.ExitCode is { } exit && MsiExit.Installed(exit):
                 _progress[ProductCatalog.RstId] = new InstallProgress(InstallPhase.Installed, version, ExitCode: exit, LogPath: result.Log,
                                                                        RestartNeeded: exit != MsiExit.Success);

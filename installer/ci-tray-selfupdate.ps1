@@ -375,7 +375,7 @@ Assert ($h.closed) '(5) the old tray was asked to quit after the hand-off'
 Wait-Until { -not (Get-Process -Id $bundleTray -ErrorAction SilentlyContinue) } 60 '(5) the old tray exits'
 $lines = Wait-Updater $before 'bundle'
 Assert (@($lines | Where-Object { $_ -match "RST updater \(pid \d+\) applying .*\\cache\\rst\\$([regex]::Escape($NewVersion))\\RST-Setup\.exe" }).Count -eq 1) '(5) RST.TrayUpdater.exe applied the verified RST-Setup.exe from the cache'
-Assert (@($lines | Where-Object { $_ -match 'updater: ".*RST-Setup\.exe" /quiet /norestart /log' }).Count -eq 1) '(5) it ran the bundle /quiet /norestart, with no companion switches'
+Assert (@($lines | Where-Object { $_ -match 'updater: ".*RST-Setup\.exe" /quiet /norestart RstRestartManagerControl=Disable /log' }).Count -eq 1) '(5) it ran the bundle /quiet /norestart, with no companion switches'
 Assert (@($lines | Where-Object { $_ -match 'updater: RST-Setup\.exe exited 0 ' }).Count -eq 1) '(5) RST-Setup.exe exited 0'
 Assert (@($lines | Where-Object { $_ -match 'updater: holding the tray.s single-instance mutex' }).Count -eq 1) '(5) the updater held the tray''s single-instance mutex while RST was replaced'
 $bundleNew = Wait-OneTray $before '(5)'
@@ -383,10 +383,16 @@ Assert ($bundleNew.ProcessId -ne $bundleTray) '(5) it is a new process'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewVersion)): installed" }).Count -gt 0 } 30 '(5) the new tray shows the updater''s result'
 Assert-OneRst $NewVersion '(5) after the bundle self-update' -Bundle
 $bundleLogs = @($lines | ForEach-Object {
-  if ($_ -match 'updater: ".*RST-Setup\.exe" /quiet /norestart /log "([^"]+)"$') { $Matches[1] }
+  if ($_ -match 'updater: ".*RST-Setup\.exe" /quiet /norestart RstRestartManagerControl=Disable /log "([^"]+)"$') { $Matches[1] }
 })
 Assert ($bundleLogs.Count -eq 1) '(5) exactly one bundle upgrade log'
 Assert-BundleUpgradeLog $bundleLogs[0]
+# Verify the nested MSI received the authored Burn variable, not just the updater command line.
+$nestedLogs = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'RST\Tray\logs') -Filter '*.log' |
+  Where-Object { $_.LastWriteTime -ge $since5 -and $_.Name -match '_RST\.log$' })
+Assert ($nestedLogs.Count -gt 0) '(5) the nested RST MSI log exists'
+$nestedText = ($nestedLogs | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+Assert ($nestedText -match 'MSIRESTARTMANAGERCONTROL = Disable') '(5) Restart Manager is disabled in the nested MSI'
 Assert-StartTraySkipped $since5 '(5)'
 Show-State '(5) after'
 
