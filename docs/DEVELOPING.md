@@ -568,8 +568,8 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
 ## Revit API floor
 
 rst-c supports every update of Revit 2025, 2026 and 2027 (decision #26). Revit 2025 is
-partially supported: it is assumed to behave like 2026, takes the same code paths, and is
-verified by hand after a public release because the test machine has no 2025 (decision #21).
+supported and takes the same code paths as 2026. The test machine has no 2025, so it was
+verified by hand on a separate machine (decision #78, superseding #21).
 
 Every project compiles against each year's **earliest** update, so the compiler refuses any
 API that a later update added. A user on that first update would otherwise get a

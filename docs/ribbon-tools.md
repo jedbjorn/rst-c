@@ -77,7 +77,7 @@ rst-c switches add-ins through **Revit's own Add-Ins Manager**, in Revit 2025, 2
 - **For your Windows user only.** It works for add-ins installed for all users too, without admin rights, and other people on the same computer are not affected.
 - **Every installed Revit year.** A switch applies to each Revit year installed on the computer, each with its own settings file.
 - **At the next start.** Revit reads the file when it starts, so every change applies the next time that Revit year starts. rst-c can write it while Revit is running.
-- **Revit 2025 is partially supported.** rst-c treats it exactly like 2026, but switching only works on **Revit 2025.3 or later**: Autodesk's Add-Ins Manager arrived in 2025.3, and an older 2025 build ignores the settings file. Update Revit 2025 to switch add-ins there. Revit years before 2025 are not supported and are left alone.
+- **Revit 2025 needs 2025.3 or later to switch.** rst-c treats 2025 exactly like 2026, but switching only works on **Revit 2025.3 or later**: Autodesk's Add-Ins Manager arrived in 2025.3, and an older 2025 build ignores the settings file. Update Revit 2025 to switch add-ins there. Revit years before 2025 are not supported and are left alone.
 
 rst-c keeps its own record of the add-ins **it** switched off, in `%AppData%\RST\addin_switches.json`. Switching back on only ever touches what is in that record: an add-in you switched off yourself in Autodesk's Add-Ins Manager stays off. An entry is cleared once the add-in is back on, or once it is no longer installed.
 

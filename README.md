@@ -200,7 +200,7 @@ rst-c supports **every update** of Revit 2025, 2026 and 2027. Each year is built
 
 | Revit year | Supported updates | Built against | Support |
 |---|---|---|---|
-| 2025 | every update | 2025.0.2 | **Partial.** Assumed to behave like 2026 and takes the same code paths; not on the test machine, so it is verified by hand after each public release |
+| 2025 | every update | 2025.0.2 | Full (add-in switching needs 2025.3 or later) |
 | 2026 | every update | 2026.0.4 | Full |
 | 2027 | every update | 2027.0.0 | Full |
 

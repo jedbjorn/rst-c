@@ -6,7 +6,7 @@ name: integration
 # may be offline or in use. Trigger manually or it auto-runs after main merges.
 #
 # Runner registration labels required: self-hosted, windows, revit
-# Setup doc: docs/integration-runner-setup.md
+# Setup doc: docs/integration-runner.md
 
 on:
   workflow_dispatch:
