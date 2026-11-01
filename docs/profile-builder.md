@@ -248,7 +248,7 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 
 ## Notes & limits
 
-- The catalogue is built on the first Loader or Builder open and cached for the Revit session. To include add-in commands that need a project, open a project (even a blank one) before that first open. A failed build leaves an empty catalogue for the session. If you see "No commands available.", restart Revit and try again (the RST log has the details).
+- The catalogue is built on the first Loader or Builder open and cached for the Revit session. Revit enables the Loader and Builder buttons only while a document is open, so that first open always happens with a document open. Add-in commands that appear on the ribbon after that first open are not listed until Revit restarts. A failed build leaves an empty catalogue for the session. If you see "No commands available.", restart Revit and try again (the RST log has the details).
 - The catalogue lists only tools that Revit lets an add-in run: Revit's own postable commands and add-in commands. Revit tools outside that set, such as Text Types (the arrow on Annotate › Text), are left out, and the set comes from the running Revit, so each Revit year gets its own. A profile saved with an earlier version keeps any such button where it is; clicking it says that Revit doesn't let add-ins run this command, and you can remove it in the Builder.
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.
