@@ -3,7 +3,7 @@
 // by minor, flat, searching, and the three empty states, light and dark: tray-health-models-*. AC 9 (render): a
 // 500-model index renders in at most 1 s with the cards virtualized, and a chip change takes at most 100 ms (inferred
 // from synthetic timing: CI is a guard, not a lab). Keyboard: Tab reaches the search box, the filters and the cards;
-// Enter on a card asks for its detail. The cards reflow with the window's width; a reload keeps the scroll position.
+// Enter on a card asks for its detail. Cards stay in one column as the window resizes; a reload keeps the scroll position.
 
 using System.Diagnostics;
 using System.Globalization;
@@ -30,7 +30,7 @@ namespace RST.RuntimeTests.Tray;
 [Collection(WpfThemeCollection.Name)]
 public class TrayModelsScreenshotTests
 {
-    private static readonly Size WindowSize = new(720, 540);
+    private static readonly Size WindowSize = new(850, 650);
     private readonly ITestOutputHelper _out;
 
     public TrayModelsScreenshotTests(ITestOutputHelper output) => _out = output;
@@ -71,7 +71,7 @@ public class TrayModelsScreenshotTests
 
     /// <summary>The tray window on Health → Models over <paramref name="model"/>.</summary>
     /// <summary>The tray window on Health → Models over <paramref name="model"/>; <paramref name="detail"/> opens a card (WU4).</summary>
-    private static Page Open(ModelsViewModel model, double width = 720, double height = 540, ModelDetailViewModel? detail = null)
+    private static Page Open(ModelsViewModel model, double width = 850, double height = 650, ModelDetailViewModel? detail = null)
     {
         var health = new TrayHealthViewModel(NoHealthService.Instance, new FakeDialogs(), TrayHealthSamples.Options(), model, detail);
         var window = new TrayWindow(new TrayViewModel(new FakeTrayHost(), TrayPage.Health, health: health)) { Width = width, Height = height };
@@ -112,7 +112,7 @@ public class TrayModelsScreenshotTests
         {
             Capture(page, Name("grouped", theme));
             // The whole list, as tall as its content (the window scrolls), for the review and the checks below.
-            Capture(page, Name("grouped-full", theme), new Size(720, 1040));
+            Capture(page, Name("grouped-full", theme), new Size(850, 1500));
             Assert.True(page.Window.HealthPage.ModelsPage.IsVisible);
             var headers = ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>().Select(t => t.Text).ToList();
             Assert.Equal(new[] { "Revit 2027", "Revit 2026", "Revit 2025" }, headers);
@@ -158,7 +158,7 @@ public class TrayModelsScreenshotTests
             model.Rows.OfType<ModelsGroupHeaderRow>().Single(h => h.Title == "Revit 2026.3").IsExpanded = false;
             Settle();
             // As tall as the content, so every group (the closed one too) is in the picture.
-            Capture(page, Name("minor", theme), new Size(720, 1200));
+            Capture(page, Name("minor", theme), new Size(850, 1500));
             Assert.Contains(ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>(), t => t.Text == "Revit 2026.3");
             Assert.Contains(ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>(), t => t.Text == "Revit 2025.4");
             // The rows (the list virtualizes, so not every header is realized in the capture).
@@ -174,7 +174,7 @@ public class TrayModelsScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void Flat_with_Group_by_None_reflows_to_three_columns_on_a_wider_window(UiTheme theme) => Sta(theme, () =>
+    public void Flat_with_Group_by_None_keeps_one_column_on_a_wider_window(UiTheme theme) => Sta(theme, () =>
     {
         var model = ModelsHarness.Model(new FakeModelSource(ModelsSamples.Rows), thumbnails: Pictures());
         var page = Open(model, width: 980, height: 600);
@@ -183,13 +183,14 @@ public class TrayModelsScreenshotTests
             model.GroupBy = ModelGroupBy.None;
             model.Chip = ModelTimeChip.OneYear;
             Settle();
-            Assert.Equal(3, model.Columns);
+            Assert.All(model.Rows.OfType<ModelsCardRow>(), r => Assert.Single(r.Cards));
             Capture(page, Name("flat", theme), new Size(980, 600));
             Assert.Empty(ById(page.View, "Tray.Health.Models.Group"));
-            // One row of three cards, side by side.
+            // Consecutive cards occupy different rows, even on a wide window.
             var cards = Cards(page);
+            Assert.True(cards.Count >= 3);
             var tops = cards.Take(3).Select(c => Math.Round(c.TranslatePoint(new Point(), page.View).Y)).Distinct();
-            Assert.Single(tops);
+            Assert.Equal(3, tops.Count());
         }
         finally
         {
@@ -450,21 +451,29 @@ public class TrayModelsScreenshotTests
         }
     });
 
-    [Fact]
-    public void The_cards_reflow_with_the_windows_width() => Sta(UiTheme.Light, () =>
+    [Theory]
+    [InlineData(ModelGroupBy.MajorVersion)]
+    [InlineData(ModelGroupBy.MinorVersion)]
+    [InlineData(ModelGroupBy.None)]
+    public void Cards_stay_in_one_column_capped_at_700_and_shrink_to_fit(ModelGroupBy groupBy) => Sta(UiTheme.Light, () =>
     {
         var model = ModelsHarness.Model(new FakeModelSource(ModelsSamples.Rows));
         var page = Open(model);
         try
         {
-            Assert.Equal(2, model.Columns);
-            page.Window.Width = 980;
-            Settle();
-            Assert.Equal(3, model.Columns);
-            page.Window.Width = 560; // the window's minimum
-            Settle();
-            Assert.Equal(1, model.Columns);
-            Assert.All(model.Rows.OfType<ModelsCardRow>(), r => Assert.Single(r.Cards));
+            model.GroupBy = groupBy;
+            foreach (var width in new[] { 850d, 980d, 560d })
+            {
+                page.Window.Width = width;
+                Settle();
+                Assert.All(model.Rows.OfType<ModelsCardRow>(), r => Assert.Single(r.Cards));
+                var cards = Cards(page);
+                Assert.NotEmpty(cards);
+                Assert.All(cards, card => Assert.InRange(card.ActualWidth, 1, 700));
+                if (width >= 850) Assert.Equal(700, cards[0].ActualWidth, 1);
+                else Assert.True(cards[0].ActualWidth < 560);
+                Assert.Equal(0, page.View.Scroller!.ScrollableWidth);
+            }
         }
         finally
         {

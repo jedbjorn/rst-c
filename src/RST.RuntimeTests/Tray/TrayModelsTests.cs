@@ -2,7 +2,7 @@
 // without a window: the view-model over a fake index, fold worker and thumbnails (filters, search, empty states, rows,
 // the detail request, the freshness pass and reload), and the thumbnail cache's rules over a fake shell (local only,
 // last-write refresh, a missing file keeps its image, a network or cloud path is never touched). The window's
-// screenshots, timing, keyboard and reflow are TrayModelsScreenshotTests.
+// screenshots, timing, keyboard and resizing are TrayModelsScreenshotTests.
 
 using System.IO;
 using System.Windows;
@@ -595,7 +595,6 @@ public class TrayModelsViewModelTests
     public void Rows_are_the_aggregates_then_each_groups_header_and_card_rows_and_flat_has_no_headers()
     {
         var model = ModelsHarness.Shown(Samples());
-        model.Columns = 2;
         Assert.IsType<ModelsAggregatesRow>(model.Rows[0]);
         var headers = model.Rows.OfType<ModelsGroupHeaderRow>().ToList();
         Assert.Equal(new[] { "Revit 2027", "Revit 2026", "Revit 2025" }, headers.Select(h => h.Title));
@@ -603,8 +602,8 @@ public class TrayModelsViewModelTests
         Assert.Equal("1 model", headers[2].Count);
         Assert.EndsWith(" active", headers[0].Active);
         var rows2027 = model.Rows.SkipWhile(r => r != headers[0]).Skip(1).TakeWhile(r => r is ModelsCardRow).Cast<ModelsCardRow>().ToList();
-        Assert.Equal(new[] { 2, 1 }, rows2027.Select(r => r.Cards.Count));
-        Assert.Equal(new[] { false, true }, rows2027.Select(r => r.IsLastInGroup));
+        Assert.Equal(new[] { 1, 1, 1 }, rows2027.Select(r => r.Cards.Count));
+        Assert.Equal(new[] { false, false, true }, rows2027.Select(r => r.IsLastInGroup));
         Assert.All(rows2027, r => Assert.True(r.InGroup));
 
         // The aggregate cards over the visible cards.
@@ -627,8 +626,7 @@ public class TrayModelsViewModelTests
         Assert.All(model.Rows.OfType<ModelsCardRow>(), r => Assert.False(r.InGroup));
         Assert.Equal(model.Result.Cards.Select(c => c.ModelId), ModelsHarness.Cards(model).Select(c => c.ModelId));
 
-        model.Columns = 3;
-        Assert.All(model.Rows.OfType<ModelsCardRow>().SkipLast(1), r => Assert.Equal(3, r.Cards.Count));
+        Assert.All(model.Rows.OfType<ModelsCardRow>(), r => Assert.Single(r.Cards));
     }
 
     [Fact]

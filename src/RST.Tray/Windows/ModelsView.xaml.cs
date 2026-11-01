@@ -1,9 +1,8 @@
 // rst-c's own (not vendored): the Health → Models sub-tab's code-behind (spec #25 Models; F19 #25 WU3). The view-model
-// is ModelsViewModel. Here: the cards per row from the list's width (the reflow), the scroll offset kept and restored
+// is ModelsViewModel. Here: the scroll offset kept and restored
 // (a reload, a group toggle, Back), the cards asking for their thumbnails as the list realizes them (and cancelling as
 // they scroll away), focusing a card on Back, and the Revit version menu (a ContextMenu, which is not in the tree).
 
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -15,12 +14,6 @@ namespace RST.Tray.Windows;
 
 internal partial class ModelsView : UserControl
 {
-    /// <summary>A card's outer margin on each side (the ModelCard style's Margin).</summary>
-    private const double CardMargin = 4;
-
-    /// <summary>A group's card row: 1 px borders and 10 px padding each side (the card row template).</summary>
-    private const double GroupInset = 2 * (1 + 10);
-
     private ModelsViewModel? _model;
     private ScrollViewer? _scroller;
     private bool _restoring;
@@ -32,8 +25,6 @@ internal partial class ModelsView : UserControl
         Loaded += (_, _) => UiGuard.Run("Models: bind", () => Bind(DataContext as ModelsViewModel));
         Unloaded += (_, _) => UiGuard.Run("Models: unbind", () => Bind(null));
         List.Loaded += (_, _) => UiGuard.Run("Models: find the scroller", AttachScroller);
-        List.SizeChanged += (_, _) => UiGuard.Run("Models: reflow", UpdateColumns);
-        SizeChanged += (_, _) => UiGuard.Run("Models: reflow", UpdateColumns);
     }
 
     /// <summary>The list's scroller (tests read its offset and its realized rows).</summary>
@@ -46,24 +37,16 @@ internal partial class ModelsView : UserControl
         {
             _model.ScrollRequested -= OnScrollRequested;
             _model.FocusCardRequested -= OnFocusCardRequested;
-            _model.PropertyChanged -= OnModelChanged;
         }
         _model = model;
         if (_model is null) return;
         _model.ScrollRequested += OnScrollRequested;
         _model.FocusCardRequested += OnFocusCardRequested;
-        _model.PropertyChanged += OnModelChanged;
         VersionMenu.DataContext = _model;
         VersionMenu.PlacementTarget = VersionButton;
         VersionMenu.Placement = PlacementMode.Bottom;
         VersionMenu.VerticalOffset = 4;
-        UpdateColumns();
     }
-
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => UiGuard.Run("Models: reflow", () =>
-    {
-        if (e.PropertyName is nameof(ModelsViewModel.GroupBy) or nameof(ModelsViewModel.HasCards)) UpdateColumns();
-    });
 
     private void AttachScroller()
     {
@@ -73,26 +56,10 @@ internal partial class ModelsView : UserControl
         if (_scroller is null) return;
         _scroller.ScrollChanged += (_, e) => UiGuard.Run("Models: scrolled", () =>
         {
-            if (e.ViewportWidthChange != 0) UpdateColumns();
             // Keep where the user is (not while a restore is settling, and not while the list is hidden: a hidden
             // list's offset reads 0, and Back must find the old one).
             if (!_restoring && _model is not null && List.IsVisible) KeepPosition();
         });
-        UpdateColumns();
-    }
-
-    /// <summary>As many cards per row as fit at <see cref="ModelsViewModel.CardWidth"/>; the cards share the rest.</summary>
-    private void UpdateColumns()
-    {
-        if (_model is null) return;
-        // The scroller's viewport once the list shows; before that (the first read, an empty state) the page's width
-        // less the list's padding and a scroll bar, so the first rows are built at the right width.
-        var width = _scroller is { ViewportWidth: > 0 } s && List.IsVisible
-            ? s.ViewportWidth
-            : ActualWidth - 44 - SystemParameters.VerticalScrollBarWidth;
-        if (width <= 0) return;
-        var content = _model.GroupBy == RST.Core.Tray.ModelGroupBy.None ? width + 2 * CardMargin : width - GroupInset;
-        _model.Columns = Math.Max(1, (int)Math.Floor(content / (ModelsViewModel.CardWidth + 2 * CardMargin)));
     }
 
     /// <summary>Remembers the offset and the anchor: the row at the top of the viewport and how far it is scrolled past.</summary>
@@ -124,7 +91,7 @@ internal partial class ModelsView : UserControl
     private VirtualizingStackPanel? ItemsHost() =>
         Descendants<VirtualizingStackPanel>(List).FirstOrDefault(p => p.IsItemsHost);
 
-    // A rebuild (a reload, a reflow, a group toggle) or Back: the same row back at the top, as far scrolled past as it
+    // A rebuild (a reload, a group toggle) or Back: the same row back at the top, as far scrolled past as it
     // was. The panel estimates the height of rows it has not realized, so an offset alone can land a few pixels apart
     // on identical data (VM review R5); the anchor is measured after layout and corrected until it sits where it was.
     // A filter change has no anchor: the top.

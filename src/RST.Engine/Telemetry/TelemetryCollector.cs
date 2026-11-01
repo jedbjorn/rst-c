@@ -266,6 +266,7 @@ public sealed class TelemetryCollector : IDisposable
         {
             if (!_lifecycle.IsEnabled) return;
             var path = Get(() => args.PathName);
+            if (!DocumentCapturePolicy.AllowsOpening(path)) return;
             _lifecycle.TryEmit(TelemetryEventTypes.DocOpening,
                 populate: e => e.SetField(TelemetryFields.LocalPath, path));
         });
