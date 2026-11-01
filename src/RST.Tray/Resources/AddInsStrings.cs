@@ -69,5 +69,17 @@ public static class AddInsStrings
 
     public static string ApplyFailed(object? reason) => Format(nameof(ApplyFailed), reason);
 
+    public static string LaunchButton => Get(nameof(LaunchButton));
+
+    public static string LaunchHint(object? year) => Format(nameof(LaunchHint), year);
+
+    public static string BusyLaunching(object? year) => Format(nameof(BusyLaunching), year);
+
+    public static string Launched(object? year, object? profile) => Format(nameof(Launched), year, profile);
+
+    public static string LaunchFailed(object? year, object? reason) => Format(nameof(LaunchFailed), year, reason);
+
+    public static string RevitNotFound(object? year) => Format(nameof(RevitNotFound), year);
+
     public static string RefreshLink => Get(nameof(RefreshLink));
 }
