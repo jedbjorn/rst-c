@@ -14,7 +14,7 @@ The bare `RST.msi` and `RST-Machine.msi` are still published beside it, for IT d
 |---|---|
 | Bundle `UpgradeCode` | **`2BE2BE5D-9203-4344-A70D-E735D3B041A3`**: never change it once shipped |
 | Name in Settings → Apps | `RST` (Designs/OS) |
-| Version | the numeric `a.b.c` of the rst-c tag, the same value stamped into `RST.msi` (`v3.0.0-rc.1` → `3.0.0`); untagged builds `3.1.99` (bump it after each release so a dev build still upgrades the latest one) |
+| Version | the numeric `a.b.c` of the rst-c tag, the same value stamped into `RST.msi` (`v3.0.0-rc.1` → `3.0.0`); untagged builds `RstDevVersion` (`3.1.99`, from `Directory.Build.props`; see [installer/README.md, Untagged builds](../installer/README.md#untagged-builds)) |
 | Scope | per-user: the bundle is registered in HKCU, for the user who ran it, on both install-scope paths. "Just for me" chains only per-user packages and never asks for elevation; "Everyone on this PC" elevates once, for `RST-Machine.msi` |
 | Engine | x64, `WixStandardBootstrapperApplication` (`WixToolset.BootstrapperApplications.wixext` 6.0.2), RTF license theme |
 

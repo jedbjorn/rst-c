@@ -32,15 +32,17 @@
     *local* effective version instead (which the global can't shadow) and feed
     that to the preprocessor constant.
 
-    The fallback must sort ABOVE the latest public release (v3.0.0) and below
-    the next one (v3.1.0): a push/PR RST.msi then installs over a released
-    RST.msi as an in-place MajorUpgrade (CI's msi-migrate job and the VM
-    check depend on it), and the v3.1.0 release still upgrades a dev build.
-    Move it after each release so it stays between the latest and the next.
+    The fallback is $(RstDevVersion) from Directory.Build.props, the same
+    value the untagged build's binaries carry (FileVersion), so the two cannot
+    drift. It must sort ABOVE the latest public release and below the next
+    one: a push/PR RST.msi then installs over a released RST.msi as an
+    in-place MajorUpgrade (CI's msi-migrate job and the VM check depend on
+    it), and the next release still upgrades a dev build. Bump it there after
+    each release (installer/README.md, "Untagged builds").
   -->
   <PropertyGroup>
     <RstMsiVersionEffective>$(RstMsiVersion)</RstMsiVersionEffective>
-    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">3.1.99</RstMsiVersionEffective>
+    <RstMsiVersionEffective Condition="'$(RstMsiVersionEffective)' == ''">$(RstDevVersion)</RstMsiVersionEffective>
     <DefineConstants>$(DefineConstants);RstMsiVersion=$(RstMsiVersionEffective)</DefineConstants>
   </PropertyGroup>
 
@@ -114,6 +116,7 @@
   </PropertyGroup>
   <Target Name="RstCheckScope" BeforeTargets="RstGenerateRevitYears">
     <Error Condition="'$(RstScope)' != 'user' and '$(RstScope)' != 'machine'" Text="RstScope must be user or machine (got '$(RstScope)')." />
+    <Error Condition="'$(RstMsiVersionEffective)' == ''" Text="No MSI version: pass -p:RstMsiVersion=a.b.c, or check that Directory.Build.props (RstDevVersion) is imported." />
   </Target>
   <Target Name="RstGenerateRevitYears" BeforeTargets="CoreCompile">
     <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\gen-revit-years.ps1&quot; -BuildRoot &quot;$(MSBuildProjectDirectory)\..\build&quot; -Out &quot;$(RstRevitYearsWxs)&quot; -Scope $(RstScope)" />

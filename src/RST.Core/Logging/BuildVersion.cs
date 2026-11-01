@@ -1,7 +1,7 @@
 // rst-c's own (not vendored): the build's version as the startup log lines print it (SC-054, SC-015).
 //
 // Directory.Build.props stamps every RST assembly from one Version: FileVersion a.b.c.0 and
-// InformationalVersion a.b.c+<short commit> (0.1.0-dev+<commit> in a dev or PR build).
+// InformationalVersion a.b.c+<short commit> (<RstDevVersion>-dev+<commit>, 3.1.99-dev+…, in a dev or PR build).
 // AssemblyVersion stays 0.1.0.0 for the bootstrap's resolver, so it never says which build this
 // is: the startup lines read the informational version instead.
 

@@ -23,7 +23,8 @@
                            (filled by fetch-companions.ps1).
       RstBundleVersion     the bundle version: the numeric a.b.c of the
                            rst-c tag, the same value release.yml stamps into
-                           RST.msi. Empty -> the RST.msi fallback (3.1.99).
+                           RST.msi. Empty -> the RST.msi fallback,
+                           $(RstDevVersion) (Directory.Build.props).
 
     Windows only, like every WiX build here (gen-companions.ps1 runs under
     powershell.exe).
@@ -31,9 +32,9 @@
 
   <PropertyGroup>
     <RstBundleVersionEffective>$(RstBundleVersion)</RstBundleVersionEffective>
-    <!-- Same fallback as installer/RST.Installer.wixproj: between the
-         latest release (v3.0.0) and the next (v3.1.0). -->
-    <RstBundleVersionEffective Condition="'$(RstBundleVersionEffective)' == ''">3.1.99</RstBundleVersionEffective>
+    <!-- Same fallback as installer/RST.Installer.wixproj: RstDevVersion
+         (Directory.Build.props), between the latest release and the next. -->
+    <RstBundleVersionEffective Condition="'$(RstBundleVersionEffective)' == ''">$(RstDevVersion)</RstBundleVersionEffective>
     <RstMsi Condition="'$(RstMsi)' == ''">$(MSBuildProjectDirectory)\..\installer\bin\$(Configuration)\RST.msi</RstMsi>
     <RstMachineMsi Condition="'$(RstMachineMsi)' == ''">$(MSBuildProjectDirectory)\..\installer\bin\$(Configuration)\RST-Machine.msi</RstMachineMsi>
     <CompanionRegistry Condition="'$(CompanionRegistry)' == ''">$(MSBuildProjectDirectory)\..\companions\companions.json</CompanionRegistry>
@@ -102,6 +103,7 @@
        gen-companions.ps1 also re-checks each payload's sha256 against its
        pin and fails the build on a mismatch or a missing payload. -->
   <Target Name="RstGenerateCompanions" BeforeTargets="CoreCompile">
+    <Error Condition="'$(RstBundleVersionEffective)' == ''" Text="No bundle version: pass -p:RstBundleVersion=a.b.c, or check that Directory.Build.props (RstDevVersion) is imported." />
     <Error Condition="!Exists('$(RstMsi)')" Text="RST.msi not found at $(RstMsi). Build installer\RST.Installer.wixproj first, or pass -p:RstMsi=&lt;path&gt;." />
     <Error Condition="!Exists('$(RstMachineMsi)')" Text="RST-Machine.msi not found at $(RstMachineMsi). Build installer\RST.Installer.wixproj -p:RstScope=machine first, or pass -p:RstMachineMsi=&lt;path&gt;." />
     <!-- PSModulePath cleared: a build started from pwsh 7 would otherwise
