@@ -11,6 +11,7 @@ using RST.Core.Profiles;
 using RST.RuntimeTests.Loader;
 using RST.RuntimeTests.Support;
 using RST.Core.Ribbon;
+using RST.Core.Scanning;
 using RST.UI.Builder;
 using RST.UI.Dialogs;
 using RST.UI.Loader;
@@ -398,14 +399,16 @@ public sealed record BuilderHarness(ProfileBuilderViewModel Model, IProfileBuild
     /// so by default the harness then picks + New profile, as a user would (discarding the changes a
     /// profile can open with: a legacy file with no id, a stack repair). False: the editor as it opened.
     /// </param>
-    public static BuilderHarness Create(IProfileBuilderBackend? backend = null, bool deferPosts = false, bool startOnNew = true)
+    /// <param name="catalog">The scanned catalogue for Builder-open label repair.</param>
+    public static BuilderHarness Create(IProfileBuilderBackend? backend = null, bool deferPosts = false, bool startOnNew = true,
+                                        IReadOnlyList<ScannedCommand>? catalog = null)
     {
         var b = backend ?? BuilderFixtures.Backend();
         var dialogs = new FakeDialogs();
         var clock = new ManualClock();
         var posted = deferPosts ? new Queue<Action>() : null;
         var modals = new FakeBuilderDialogs();
-        var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: posted is null ? a => a() : posted.Enqueue, builderDialogs: modals);
+        var model = new ProfileBuilderViewModel(b, dialogs, clock.Schedule, post: posted is null ? a => a() : posted.Enqueue, builderDialogs: modals, catalog: catalog);
         model.Initialize();
         var h = new BuilderHarness(model, b, dialogs, clock, posted, modals);
         if (startOnNew && model.SelectedProfileOption is { IsNew: false })

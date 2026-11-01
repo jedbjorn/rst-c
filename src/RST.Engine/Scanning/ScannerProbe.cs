@@ -77,7 +77,7 @@ public sealed class ScannerProbe : IExternalCommand
     }
 
     private sealed record ProbedCommand(
-        RST.Core.Scanning.ScannedCommand Command,
+        RST.Core.Scanning.RibbonHit Command,
         bool LookupOk);
 
     private sealed record ScanEnvelope(

@@ -103,7 +103,7 @@ public sealed class RibbonScannerWalkTests
         return Tab("Massing & Site", Panel("Conceptual Mass", siteSettings, showMass, stack));
     }
 
-    private static (List<ScannedCommand> Commands, RibbonScanCounts Counts) Scan(Func<string, bool>? isPostable = null)
+    private static (List<RibbonHit> Commands, RibbonScanCounts Counts) Scan(Func<string, bool>? isPostable = null)
     {
         var counts = new RibbonScanCounts();
         var commands = RibbonScanner
@@ -111,6 +111,41 @@ public sealed class RibbonScannerWalkTests
             .ToList();
         return (commands, counts);
     }
+
+    [Fact]
+    public void Family_and_mode_copies_are_excluded_by_id_even_with_ordinary_titles() => Screenshots.RunSta(() =>
+    {
+        var family = Tab("Create", Panel("Build", null, Button("ID_FAMILY_ONLY", "Family")));
+        family.Id = "Home_Family";
+        var second = Tab("Modify", Panel("Tools", null, Button("ID_MODE_ONLY", "Mode")));
+        second.Id = "Second_Modify";
+        var modify = Tab("Modify", Panel("Properties", null, Button("ID_PROPERTIES", "Properties")));
+        modify.IsVisible = false; // RSTify visibility must never exclude a normal tab.
+        var contextual = Tab("Modify | Walls", Panel("Tools", null, Button("ID_CONTEXT", "Context")));
+        contextual.IsContextualTab = true;
+        var counts = new RibbonScanCounts();
+
+        var hits = RibbonScanner.EnumerateTabs([family, second, modify, contextual], _ => true, counts);
+
+        hits.Select(h => h.Id).Should().Equal("ID_PROPERTIES", "ID_CONTEXT");
+        hits.Select(h => h.TabId).Should().Equal("Modify", "Modify | Walls");
+        counts.TabsWalked.Should().Be(2);
+    });
+
+    [Fact]
+    public void Scan_keeps_raw_names_and_tab_id_for_the_Core_merge() => Screenshots.RunSta(() =>
+    {
+        var beam = Button("ID_OBJECTS_BEAM", "  Beam\n");
+        beam.Name = "Structural Framing: Beam";
+        var tab = Tab("Structure", Panel("Structure", null, beam));
+        tab.Id = "StructureId";
+        var hits = RibbonScanner.EnumerateTabs([tab], _ => true);
+        hits.Single().Text.Should().Be("  Beam\n");
+        hits.Single().Name.Should().Be("Structural Framing: Beam");
+        hits.Single().TabId.Should().Be("StructureId");
+        var seed = new ScannedCommand("ID_OBJECTS_BEAM", "Beam", CommandOrigin.Native, null, null, null, null, EnumName: "Beam");
+        CatalogMerge.Merge([seed], hits).Single().DisplayName.Should().Be("Structural Framing: Beam");
+    });
 
     [Fact]
     public void Revit_menu_items_checklist_commands_and_dialog_launchers_reach_the_scan() => Screenshots.RunSta(() =>
@@ -131,8 +166,8 @@ public sealed class RibbonScannerWalkTests
         var lineStyles = commands.Single(c => c.Id == "ID_SETTINGS_LINE_STYLES");
         lineStyles.SourceTab.Should().Be("Manage");
         lineStyles.SourcePanel.Should().Be("Settings");
-        lineStyles.DisplayName.Should().Be("Line Styles");
-        commands.Single(c => c.Id == "ID_GRAPHIC_DISPLAY_OPTIONS").DisplayName.Should().Be("Graphic Display Options");
+        lineStyles.Text.Should().Be("Line Styles");
+        commands.Single(c => c.Id == "ID_GRAPHIC_DISPLAY_OPTIONS").Name.Should().Be("Graphic Display Options");
         commands.Single(c => c.Id == "ID_SITE_SETTINGS").SourcePanel.Should().Be("Conceptual Mass");
     });
 
@@ -224,7 +259,7 @@ public sealed class RibbonScannerWalkTests
         var first = commands.First(c => c.Id == "ID_STRUCTURAL_SETTINGS");
         first.SourceTab.Should().Be("Manage");
         first.SourcePanel.Should().Be("Settings");
-        // What CommandCatalog keeps: the first hit per id.
+        // The primary placement remains the first hit; the merge also keeps the launcher home.
         var kept = commands.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
         kept["ID_STRUCTURAL_SETTINGS"].SourceTab.Should().Be("Manage");
         kept["ID_SETTINGS_TEXT"].SourceTab.Should().Be("Annotate", "a launcher-only command keeps its own tab");

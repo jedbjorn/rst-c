@@ -54,15 +54,19 @@ Choosing another profile, or **+ New profile**, with unsaved changes asks first 
 
 ### The command catalogue
 
-The catalogue is read from Revit when the Builder opens. It is a tree:
+The catalogue is built once per Revit session, on the first Loader or Builder open, and kept for that session. If the build fails, the empty catalogue is kept until Revit restarts. It is a tree:
 
 - **Autodesk Native** groups every built-in Revit tab. It starts collapsed.
 - Below it, add-in tabs and vendor panels, in alphabetical order.
-- Each level runs tab → panel → command. Groups show how many commands they hold, and commands show a short form of their command id (hover for the full id).
+- Each level runs tab → panel → command. A tool appears under every tab and panel it sits on. Hidden family-editor copies are left out. Groups count their rows; the Commands total and Autodesk Native count each command once. Commands show a short form of their command id (hover for the full id).
+
+Built-in tools use Revit’s own ribbon names, such as “Wall: Architectural”. A tool can have a different name on each tab.
 
 Typing in **Filter…** keeps the commands whose name or id contains the text (case does not matter), opens the groups that hold matches and updates their counts. It filters the Custom Tools too. "No matches for "<text>"." means nothing matched.
 
-To add a command, **drag** it onto a panel card or a tile, or **double-click** it to add it to the end of the selected panel (a panel is created if there is none).
+To add a command, **drag** it onto a panel card or a tile, or **double-click** it to add it to the end of the selected panel (a panel is created if there is none). The placed tool keeps the name, tab and panel of the catalogue row you chose.
+
+When the Builder opens a profile, names still exactly matching old generated names such as “ArchitecturalWall” become the ribbon name for their saved tab and panel, or the command’s main ribbon name if that placement is no longer known. Other names, such as “My Wall”, stay. A toast reports the update, and it counts as an unsaved change. The Loader and the ribbon at Revit start-up keep the old names until you save the profile from the Builder. Long names are kept in full; you can shorten them in the Builder.
 
 ### Custom Tools
 
@@ -244,7 +248,7 @@ Import happens in the Loader: click **+ Import from File** and choose the `.zip`
 
 ## Notes & limits
 
-- The catalogue is read from the running Revit session when the Builder opens. Open a project (even a blank one) first if you want add-in commands to appear. "No commands available." means Revit's commands could not be read: restart Revit and open the Builder again (the RST log has the details).
+- The catalogue is built on the first Loader or Builder open and cached for the Revit session. To include add-in commands that need a project, open a project (even a blank one) before that first open. A failed build leaves an empty catalogue for the session. If you see "No commands available.", restart Revit and try again (the RST log has the details).
 - The catalogue lists only tools that Revit lets an add-in run: Revit's own postable commands and add-in commands. Revit tools outside that set, such as Text Types (the arrow on Annotate › Text), are left out, and the set comes from the running Revit, so each Revit year gets its own. A profile saved with an earlier version keeps any such button where it is; clicking it says that Revit doesn't let add-ins run this command, and you can remove it in the Builder.
 - An imported profile shows its own logo. Once you edit and save it in the Builder, it uses this machine's branding instead, because the Builder treats branding as a machine setting.
 - A profile's `schemaVersion` keeps profiles compatible across versions. Older pyRevit-era profiles (no `schemaVersion`, treated as v0) can be loaded and saved again.

@@ -52,10 +52,10 @@ public static class RequiredAddinDetector
         int? revitYear = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        // commandId → { sourceTab, sourcePanel, origin }; a later duplicate id wins, as in the JS object.
+        // commandId → { sourceTab, sourcePanel, origin }; the first placement is the primary home (SC-030).
         var byId = new Dictionary<string, CatalogCommand>(StringComparer.Ordinal);
         foreach (var c in catalog ?? [])
-            if (c is not null && !string.IsNullOrEmpty(c.Id)) byId[c.Id] = c;
+            if (c is not null && !string.IsNullOrEmpty(c.Id)) byId.TryAdd(c.Id, c);
 
         var tabs = new OrderedSet();
         var panels = new OrderedSet();

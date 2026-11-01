@@ -113,7 +113,8 @@ public sealed class ProfileBuilderBackend : IProfileBuilderBackend
         _save = new ProfileSaveService(p.ProfilesDir, log);
         _lookup = new AddinLookupService(lookupPath ?? LoaderAssets.LookupPath, log);
         _customTools = new CustomToolEditor(p.ProfilesDir, _save, log);
-        Log.Information("Builder catalog: {Count} commands ({Promoted} host-tab promoted)", Catalog.Count, promoted);
+        Log.Information("Builder catalog: {Count} commands, {Placements} placements ({Promoted} host-tab promoted)",
+                        Catalog.Select(c => c.Id).Distinct(StringComparer.Ordinal).Count(), Catalog.Count, promoted);
     }
 
     public string RevitVersion { get; }
