@@ -58,6 +58,26 @@ public class BuilderRulesTests
         BuilderRules.NormalizeHex(input).Should().Be(expected);
 
     [Fact]
+    public void Wall_dragged_from_Structure_saves_that_placement_and_label()
+    {
+        var entries = CatalogCommand.FromScanned(new RST.Tests.Scanning.RibbonCapture(2026).Merge());
+        var wall = entries.Single(c => c.Id == "ID_OBJECTS_WALL" && c.SourceTab == "Structure");
+        var slot = BuilderRules.ToolSlot(wall);
+        slot.SourceTab.Should().Be("Structure");
+        slot.SourcePanel.Should().Be("Structure");
+        slot.Name.Should().Be(wall.Label).And.Be("Wall: Architectural");
+        var profile = new Profile { ProfileName = "Placement", Tab = "Placement", Panels = [new Panel { Slots = [slot] }] };
+        var json = ProfileSerializer.WriteString(profile);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var saved = document.RootElement.GetProperty("panels")[0].GetProperty("slots")[0];
+        saved.GetProperty("sourceTab").GetString().Should().Be("Structure");
+        saved.GetProperty("sourcePanel").GetString().Should().Be("Structure");
+        saved.GetProperty("name").GetString().Should().Be(wall.Label);
+        var loaded = ProfileSerializer.ReadString(json).Panels[0].Slots[0];
+        loaded.Should().BeEquivalentTo(slot);
+    }
+
+    [Fact]
     public void A_new_panel_is_Panel_N_in_the_default_blue()
     {
         var p = BuilderRules.NewPanel(2);

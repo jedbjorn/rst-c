@@ -1424,4 +1424,10 @@ The other profiles were changed and stay changed.</value>
   <data name="Rstify_ConfigureTabs" xml:space="preserve">
     <value>Set up tab visibility in the Loader (RSTify section).</value>
   </data>
+  <data name="Loader_RstifyLastHome" xml:space="preserve">
+    <value>This tab is the last visible home of “{0}”. Show another of its tabs before hiding this one.</value>
+  </data>
+  <data name="Builder_NamesRefreshed" xml:space="preserve">
+    <value>This profile's old tool names were updated to Revit's ribbon names ({0}). Save to keep the names.</value>
+  </data>
 </root>

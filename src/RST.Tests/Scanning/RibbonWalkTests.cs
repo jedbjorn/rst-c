@@ -84,6 +84,48 @@ public sealed class RibbonWalkTests
             MenuItem("ID_BROWSER_ORGANIZATION"),
             MenuItem("ID_KEYBOARD_SHORTCUT_DIALOG"));
 
+    [Theory]
+    [InlineData(true, "Beam", "Structural Framing: Beam", "Beam", "Structural Framing: Beam")]
+    [InlineData(false, "  Add\tin ", "InternalName", null, "Add in")]
+    [InlineData(true, " Wall: Architectural ", "", "ArchitecturalWall", "Wall: Architectural")]
+    [InlineData(true, " Spot\r\n  Elevation\t ", "  ", null, "Spot Elevation")]
+    [InlineData(true, null, " Wall\n Opening ", null, "Wall Opening")]
+    [InlineData(true, "  ", null, "ArchitecturalWall", "Architectural Wall")]
+    [InlineData(true, null, "\t", "HVACLoadAnalysis", "HVAC Load Analysis")]
+    [InlineData(true, null, null, "Export2DView", "Export2 D View")]
+    [InlineData(true, null, null, "XML", "XML")]
+    [InlineData(true, null, null, " ", "ID_X")]
+    [InlineData(false, null, "  My\r\nTool ", "UnusedEnum", "My Tool")]
+    [InlineData(false, " ", "\t", "UnusedEnum", "ID_X")]
+    public void Names_follow_native_or_addin_order_and_normalize_whitespace(bool native, string? text,
+        string? name, string? enumName, string expected) =>
+        RibbonWalkRules.DisplayNameFor(text, name, "ID_X", native, enumName).Should().Be(expected);
+
+    [Theory]
+    [InlineData("Home_Family", true)]
+    [InlineData("Insert_AnnotationDetailModelMassConceptualProfileTrussFamily", true)]
+    [InlineData("InPlaceZoneFamilyTab", true)]
+    [InlineData("FamilyEditorTab", true)]
+    [InlineData("Second_Modify", true)]
+    [InlineData("Modify", false)]
+    [InlineData("Architecture", false)]
+    [InlineData("FamilyTools", false)]
+    [InlineData("home_family", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Restricted_tab_ids_do_not_depend_on_titles_or_visibility(string? id, bool expected) =>
+        ModeRestrictedTabs.ContainsId(id).Should().Be(expected);
+
+    [Fact]
+    public void Walker_keeps_both_raw_name_sources_until_merge()
+    {
+        var walker = new RibbonWalker<N>(_ => RibbonNode<N>.Leaf(RibbonLeafKind.Button, "ID_BEAM",
+            "  Beam\n", name: "Structural\tFraming: Beam"), _ => true);
+        var hit = walker.WalkItems([Leaf(RibbonLeafKind.Button, "ID_BEAM")]).Single();
+        hit.Text.Should().Be("  Beam\n");
+        hit.Name.Should().Be("Structural\tFraming: Beam");
+    }
+
     [Fact]
     public void Revit_pulldown_menu_items_and_its_sub_menu_are_collected()
     {

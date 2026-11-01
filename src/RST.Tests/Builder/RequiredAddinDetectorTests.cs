@@ -204,11 +204,27 @@ public class RequiredAddinDetectorTests
     }
 
     [Fact]
-    public void A_later_duplicate_catalogue_id_wins()
+    public void The_primary_catalogue_placement_supplies_origin()
     {
         var profile = new Profile { Panels = [new Panel { Slots = [Tool("x", "Twinmotion")] }] };
-        RequiredAddinDetector.Compute(profile, [Cmd("x", "Twinmotion", null, "ThirdParty"), Cmd("x", "Twinmotion", null, "Native")], ShippedLookup())
+        RequiredAddinDetector.Compute(profile, [Cmd("x", "Twinmotion", null, "Native"), Cmd("x", "Twinmotion", null, "ThirdParty")], ShippedLookup())
             .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Stack_tools_use_the_primary_home_and_loose_tools_keep_their_saved_home()
+    {
+        var catalog = CatalogCommand.FromScanned([
+            new ScannedCommand("CustomCtrl_A", "First", CommandOrigin.Custom, null, null, "First vendor", "Tools",
+                [new("First vendor", "Tools", "First", "first"), new("Second vendor", "Tools", "Second", "second")])]);
+        var profile = new Profile
+        {
+            Panels = [new Panel { Slots = [new Slot { SlotType = "stack", Name = "S" }] }],
+            Stacks = new() { ["S"] = new RST.Core.Profiles.Stack { Tools = [Tool("CustomCtrl_A", null)] } },
+        };
+        RequiredAddinDetector.Compute(profile, catalog, null).Select(r => r.TabName).Should().Equal("First vendor");
+        profile.Panels[0].Slots = [Tool("CustomCtrl_A", "Second vendor", "Tools")];
+        RequiredAddinDetector.Compute(profile, catalog, null).Select(r => r.TabName).Should().Equal("Second vendor");
     }
 
     [Fact]

@@ -5,6 +5,7 @@
 using FluentAssertions;
 using RST.Core.Builder;
 using RST.Core.Scanning;
+using RST.Tests.Scanning;
 using Xunit;
 
 namespace RST.Tests.Builder;
@@ -28,6 +29,74 @@ public class CatalogTreeTests
     ];
 
     private static string Shape(CatalogNode n) => n.Label + (n.Children.Count == 0 ? "" : "[" + string.Join(",", n.Children.Select(Shape)) + "]");
+
+    [Theory]
+    [InlineData(2026)]
+    [InlineData(2027)]
+    public void Captured_placements_have_unique_keys_distinct_totals_and_no_Create_tab(int year)
+    {
+        var scanned = new RibbonCapture(year).Merge();
+        var entries = CatalogCommand.FromScanned(scanned);
+        var tree = CatalogTree.Build(entries);
+        var commands = tree.NativeGroup!.Children.SelectMany(t => t.Children).SelectMany(p => p.Children).ToArray();
+        commands.Select(c => c.Key).Should().OnlyHaveUniqueItems();
+        commands.Should().HaveCount(scanned.Sum(c => c.Placements!.Count));
+        tree.CommandCount.Should().Be(scanned.Count);
+        tree.Filter("").Count(tree.NativeGroup).Should().Be(scanned.Count);
+        tree.NativeGroup.Children.Should().NotContain(t => t.Label == "Create");
+        foreach (var tab in tree.NativeGroup.Children)
+        {
+            tree.Filter("").Count(tab).Should().Be(entries.Count(e => e.SourceTab == tab.Label));
+            foreach (var panel in tab.Children)
+                tree.Filter("").Count(panel).Should().Be(panel.Children.Count);
+        }
+        var wall = tree.Filter("ID_OBJECTS_WALL");
+        commands.Where(wall.IsVisible).Should().HaveCount(2);
+        wall.Count(tree.NativeGroup).Should().Be(1);
+    }
+
+    [Fact]
+    public void Eligible_Select_commands_are_listed_under_every_tab_and_filter_matches_each_label()
+    {
+        var entries = CatalogCommand.FromScanned([
+            new ScannedCommand("ID_SHARED", "Select home", CommandOrigin.Native, null, null, "Architecture", "Select",
+                [new("Architecture", "Select", "First home", "Architecture"),
+                 new("Structure", "Select", "Second home", "Structure"),
+                 new("Modify", "Select", "Third home", "Modify")])]);
+        var tree = CatalogTree.Build(entries);
+        tree.CommandCount.Should().Be(1);
+        var group = tree.NativeGroup!;
+        tree.Filter("").Count(group).Should().Be(1);
+        group.Children.Should().HaveCount(3);
+        foreach (var tab in group.Children)
+        {
+            var panel = tab.Children.Single();
+            panel.Label.Should().Be("Select");
+            var command = panel.Children.Single();
+            command.Key.Should().Be($"cmd:{tab.Label}/Select/ID_SHARED");
+            tree.Filter(command.Label).Count(group).Should().Be(1);
+            tree.Filter(command.Label).IsVisible(command).Should().BeTrue();
+        }
+        tree.Filter("First home").IsVisible(group.Children.Single(t => t.Label == "Structure")).Should().BeFalse();
+        var byId = tree.Filter("id_shared");
+        group.Children.Should().OnlyContain(t => byId.IsVisible(t));
+    }
+
+    [Fact]
+    public void Host_promotion_runs_for_each_home_and_keys_use_literal_tabs()
+    {
+        var entries = CatalogCommand.FromScanned([
+            new ScannedCommand("CustomCtrl_A", "Go", CommandOrigin.Custom, "Acme.addin", "Acme.dll", "Add-Ins", "Acme",
+                [new("Add-Ins", "Acme", "First", "Add-Ins"), new("FormIt", "Acme", "Second", "FormIt")])], out var promoted);
+        promoted.Should().Be(2);
+        entries.Select(e => e.SourceTab).Should().Equal("Acme", "Acme");
+        entries.Select(e => e.HostTab).Should().Equal("Add-Ins", "FormIt");
+        entries.Select(e => e.Label).Should().Equal("First", "Second");
+        entries.Should().OnlyContain(e => e.AddinFile == "Acme.addin" && e.AssemblyPath == "Acme.dll");
+        var tree = CatalogTree.Build(entries);
+        tree.CommandCount.Should().Be(1);
+        tree.Roots[0].Children[0].Children.Select(c => c.Key).Should().Equal("cmd:Add-Ins/Acme/CustomCtrl_A", "cmd:FormIt/Acme/CustomCtrl_A");
+    }
 
     [Fact]
     public void Native_commands_group_under_Autodesk_Native_and_other_tabs_sit_at_the_top_sorted()

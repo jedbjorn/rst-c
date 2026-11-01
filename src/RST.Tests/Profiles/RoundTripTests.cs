@@ -2,6 +2,7 @@
 
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using FluentAssertions;
 using RST.Core.Profiles;
 using Xunit;
@@ -12,6 +13,46 @@ public class RoundTripTests
 {
     private static string FixturePath(string name) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "Profiles", name);
+
+    [Theory]
+    [InlineData("full.json")]
+    [InlineData("stacks.json")]
+    [InlineData("legacy_v0.json")]
+    public void Saving_keeps_the_existing_JSON_property_set_except_the_existing_v0_version_stamp(string fixture)
+    {
+        var source = File.ReadAllText(FixturePath(fixture));
+        var saved = ProfileSerializer.WriteString(ProfileSerializer.ReadString(source));
+        using var before = JsonDocument.Parse(source);
+        using var after = JsonDocument.Parse(saved);
+        var expected = PropertyPaths(before.RootElement).ToList();
+        // Baseline v0 migration adds this field; SC-030 does not change the serializer or schema.
+        if (fixture == "legacy_v0.json") expected.Add("schemaVersion");
+        PropertyPaths(after.RootElement).Should().BeEquivalentTo(expected);
+        using var second = JsonDocument.Parse(ProfileSerializer.WriteString(ProfileSerializer.ReadString(saved)));
+        PropertyPaths(second.RootElement).Should().BeEquivalentTo(PropertyPaths(after.RootElement));
+    }
+
+    private static IEnumerable<string> PropertyPaths(JsonElement element, string path = "")
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                var next = path + property.Name;
+                yield return next;
+                foreach (var child in PropertyPaths(property.Value, next + ".")) yield return child;
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var child in element.EnumerateArray())
+            {
+                foreach (var property in PropertyPaths(child, path + index + ".")) yield return property;
+                index++;
+            }
+        }
+    }
 
     [Theory]
     [InlineData("minimal.json")]

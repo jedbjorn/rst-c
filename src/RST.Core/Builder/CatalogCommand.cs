@@ -34,26 +34,33 @@ public sealed record CatalogCommand(
         FromScanned(catalog, out _);
 
     /// <inheritdoc cref="FromScanned(IEnumerable{ScannedCommand})"/>
-    /// <param name="promoted">How many commands moved from a host tab to their panel's group (for the log).</param>
+    /// <param name="promoted">How many placements moved from a host tab to their panel's group (for the log).</param>
     public static IReadOnlyList<CatalogCommand> FromScanned(IEnumerable<ScannedCommand>? catalog, out int promoted)
     {
         var count = 0;
-        var result = (catalog ?? []).Where(c => c is not null).Select(c =>
+        var result = new List<CatalogCommand>();
+        foreach (var c in catalog ?? [])
         {
-            var isHost = HostTabs.Contains(c.SourceTab);
-            var group = isHost ? c.SourcePanel ?? c.SourceTab : c.SourceTab;
-            if (isHost && !string.IsNullOrEmpty(c.SourcePanel)) count++;
-            return new CatalogCommand(
-                c.Id,
-                c.DisplayName,
-                c.Origin.ToString(),
-                group,
-                isHost ? null : c.SourcePanel,
-                isHost ? c.SourceTab : null,
-                isHost ? c.SourcePanel : null,
-                c.AddinFile,
-                c.AssemblyPath);
-        }).ToList();
+            if (c is null) continue;
+            // Older callers can still supply the original single-placement shape.
+            var placements = c.Placements ?? [new CommandPlacement(c.SourceTab!, c.SourcePanel!, c.DisplayName, null)];
+            foreach (var placement in placements)
+            {
+                var isHost = HostTabs.Contains(placement.Tab);
+                var group = isHost ? placement.Panel ?? placement.Tab : placement.Tab;
+                if (isHost && !string.IsNullOrEmpty(placement.Panel)) count++;
+                result.Add(new CatalogCommand(
+                    c.Id,
+                    placement.Label,
+                    c.Origin.ToString(),
+                    group,
+                    isHost ? null : placement.Panel,
+                    isHost ? placement.Tab : null,
+                    isHost ? placement.Panel : null,
+                    c.AddinFile,
+                    c.AssemblyPath));
+            }
+        }
         promoted = count;
         return result;
     }

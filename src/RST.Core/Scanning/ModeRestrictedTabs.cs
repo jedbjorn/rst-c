@@ -20,6 +20,12 @@ public static class ModeRestrictedTabs
 
     public static IReadOnlyCollection<string> Names => _names;
 
+    /// <summary>Family-editor and hidden mode copies, identified independently of the localized title.</summary>
+    public static bool ContainsId(string? tabId) =>
+        tabId is not null && (tabId.EndsWith("Family", StringComparison.Ordinal)
+            || tabId.EndsWith("FamilyTab", StringComparison.Ordinal)
+            || tabId is "FamilyEditorTab" or "Second_Modify");
+
     public static bool Contains(string? tabName) =>
         tabName is not null && _names.Contains(tabName);
 }

@@ -54,6 +54,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace RST.Core.Scanning;
 
@@ -115,30 +116,40 @@ public enum RibbonNodeRole
 /// <param name="ContainerKind">For a container: the kind its children are reached through.</param>
 /// <param name="LeafKind">For a leaf: what it is. For a container that is also a command: Button.</param>
 /// <param name="Id">The item's command Id, opaque.</param>
-/// <param name="DisplayName">The ribbon text (or name) to show.</param>
+/// <param name="Text">The raw ribbon text.</param>
 /// <param name="Children">For a container: its items.</param>
+/// <param name="Name">The raw ribbon name, kept until the catalog knows the origin.</param>
 /// <param name="IsCheckable">The item says it holds a check state (RibbonCommandItem.IsCheckable).</param>
 public readonly record struct RibbonNode<TNode>(
     RibbonNodeRole Role,
     RibbonContainerKind ContainerKind,
     RibbonLeafKind LeafKind,
     string? Id,
-    string? DisplayName,
+    string? Text,
     IEnumerable<TNode?>? Children,
-    bool IsCheckable = false)
+    bool IsCheckable = false,
+    string? Name = null)
     where TNode : class
 {
     public static RibbonNode<TNode> Ignored => new(RibbonNodeRole.Ignore, default, default, null, null, null);
 
-    public static RibbonNode<TNode> Leaf(RibbonLeafKind kind, string? id, string? displayName, bool isCheckable = false) =>
-        new(RibbonNodeRole.Leaf, default, kind, id, displayName, null, isCheckable);
+    public static RibbonNode<TNode> Leaf(RibbonLeafKind kind, string? id, string? text, bool isCheckable = false, string? name = null) =>
+        new(RibbonNodeRole.Leaf, default, kind, id, text, null, isCheckable, name);
 
-    public static RibbonNode<TNode> Container(RibbonContainerKind kind, IEnumerable<TNode?>? children, string? id = null, string? displayName = null) =>
-        new(RibbonNodeRole.Container, kind, RibbonLeafKind.Button, id, displayName, children);
+    public static RibbonNode<TNode> Container(RibbonContainerKind kind, IEnumerable<TNode?>? children, string? id = null, string? text = null, string? name = null) =>
+        new(RibbonNodeRole.Container, kind, RibbonLeafKind.Button, id, text, children, Name: name);
 }
 
 /// <summary>A collected leaf.</summary>
-public readonly record struct RibbonHit(string Id, string DisplayName, RibbonContainerKind Container, RibbonLeafKind Leaf);
+public readonly record struct RibbonHit(
+    string Id,
+    string? Text,
+    RibbonContainerKind Container,
+    RibbonLeafKind Leaf,
+    string? Name = null,
+    string? SourceTab = null,
+    string? SourcePanel = null,
+    string? TabId = null);
 
 public static class RibbonWalkRules
 {
@@ -182,13 +193,23 @@ public static class RibbonWalkRules
         leaf is RibbonLeafKind.Button or RibbonLeafKind.ToggleButton
         && container is RibbonContainerKind.Panel or RibbonContainerKind.Stack or RibbonContainerKind.SplitButton;
 
-    /// <summary>The first of text, name and Id that is not blank.</summary>
-    public static string DisplayNameFor(string? text, string? name, string id)
+    /// <summary>Ribbon label: native Name → Text → split enum → id; add-ins Text → Name → id.</summary>
+    public static string DisplayNameFor(string? text, string? name, string id, bool native = false, string? enumName = null)
     {
-        if (!string.IsNullOrWhiteSpace(text)) return text!;
-        if (!string.IsNullOrWhiteSpace(name)) return name!;
+        var first = native ? name : text;
+        var second = native ? text : name;
+        if (!string.IsNullOrWhiteSpace(first)) return NormalizeWhitespace(first!);
+        if (!string.IsNullOrWhiteSpace(second)) return NormalizeWhitespace(second!);
+        if (native && !string.IsNullOrWhiteSpace(enumName)) return SplitEnumName(enumName!);
         return id;
     }
+
+    /// <summary>Collapses ribbon line breaks, tabs and runs of spaces without changing punctuation.</summary>
+    public static string NormalizeWhitespace(string value) => Regex.Replace(value, @"\s+", " ").Trim();
+
+    /// <summary>Splits camel case and the last capital of an acronym run.</summary>
+    public static string SplitEnumName(string value) =>
+        NormalizeWhitespace(Regex.Replace(value, @"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " "));
 }
 
 /// <summary>Counts for the one Information line RibbonScanner logs per scan.</summary>
@@ -385,7 +406,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
         switch (node.Role)
         {
             case RibbonNodeRole.Leaf:
-                Emit(node.LeafKind, node.Id, node.DisplayName, node.IsCheckable, container, hits, tally);
+                Emit(node.LeafKind, node.Id, node.Text, node.Name, node.IsCheckable, container, hits, tally);
                 return;
 
             case RibbonNodeRole.Container:
@@ -420,7 +441,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
     private void EmitContainer(RibbonNode<TNode> node, RibbonContainerKind container, List<RibbonHit> hits, RibbonScanCounts tally)
     {
         if (RibbonWalkRules.ContainerIsAlsoACommand(node.ContainerKind))
-            Emit(RibbonLeafKind.Button, node.Id, node.DisplayName, isCheckable: false, container, hits, tally);
+            Emit(RibbonLeafKind.Button, node.Id, node.Text, node.Name, isCheckable: false, container, hits, tally);
     }
 
     private static List<TNode?> Materialize(IEnumerable<TNode?>? items, string what, RibbonScanCounts tally, Action<Exception, string>? onSkip) =>
@@ -450,7 +471,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
         catch { /* reporting must not stop the walk */ }
     }
 
-    private void Emit(RibbonLeafKind leaf, string? id, string? displayName, bool isCheckable, RibbonContainerKind container,
+    private void Emit(RibbonLeafKind leaf, string? id, string? text, string? name, bool isCheckable, RibbonContainerKind container,
                       List<RibbonHit> hits, RibbonScanCounts tally)
     {
         if (string.IsNullOrEmpty(id)) return;
@@ -471,7 +492,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
             return;
         }
         tally.AddCollected(container, leaf);
-        hits.Add(new RibbonHit(id!, string.IsNullOrWhiteSpace(displayName) ? id! : displayName!, container, leaf));
+        hits.Add(new RibbonHit(id!, text, container, leaf, name));
     }
 
     private bool SafeResolves(string id)
