@@ -76,7 +76,7 @@ internal partial class ModelsView : UserControl
             if (e.ViewportWidthChange != 0) UpdateColumns();
             // Keep where the user is (not while a restore is settling, and not while the list is hidden: a hidden
             // list's offset reads 0, and Back must find the old one).
-            if (!_restoring && _model is not null && List.IsVisible) _model.ScrollOffset = _scroller.VerticalOffset;
+            if (!_restoring && _model is not null && List.IsVisible) KeepPosition();
         });
         UpdateColumns();
     }
@@ -95,30 +95,82 @@ internal partial class ModelsView : UserControl
         _model.Columns = Math.Max(1, (int)Math.Floor(content / (ModelsViewModel.CardWidth + 2 * CardMargin)));
     }
 
+    /// <summary>Remembers the offset and the anchor: the row at the top of the viewport and how far it is scrolled past.</summary>
+    private void KeepPosition()
+    {
+        if (_model is null || _scroller is null) return;
+        _model.ScrollOffset = _scroller.VerticalOffset;
+        if (TopRow() is not { } top) return;
+        _model.ScrollAnchorKey = top.Key;
+        _model.ScrollAnchorDelta = top.Delta;
+    }
+
+    /// <summary>The row at the top of the viewport (the first realized row not wholly above it) and its top relative to
+    /// the viewport's top; null when no row is realized.</summary>
+    internal (string Key, double Delta)? TopRow()
+    {
+        if (_scroller is null || ItemsHost() is not { } panel) return null;
+        (string Key, double Delta)? best = null;
+        foreach (UIElement child in panel.Children)
+        {
+            if (child is not FrameworkElement { IsVisible: true } row || ModelsViewModel.RowKey(row.DataContext) is not { } key) continue;
+            var top = row.TransformToAncestor(_scroller).Transform(new Point()).Y;
+            if (top + row.ActualHeight <= 0.5) continue; // wholly above the viewport (the panel's cache)
+            if (best is null || top < best.Value.Delta) best = (key, top);
+        }
+        return best;
+    }
+
+    private VirtualizingStackPanel? ItemsHost() =>
+        Descendants<VirtualizingStackPanel>(List).FirstOrDefault(p => p.IsItemsHost);
+
+    // A rebuild (a reload, a reflow, a group toggle) or Back: the same row back at the top, as far scrolled past as it
+    // was. The panel estimates the height of rows it has not realized, so an offset alone can land a few pixels apart
+    // on identical data (VM review R5); the anchor is measured after layout and corrected until it sits where it was.
+    // A filter change has no anchor: the top.
     private void OnScrollRequested(object? sender, double offset)
     {
         if (_scroller is null) return;
         _restoring = true;
-        // After the new rows are measured, or the offset is clamped to the old extent.
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => UiGuard.Run("Models: restore the scroll position", () =>
         {
             try
             {
-                // The panel estimates the height of rows it has not realized yet, so the first jump can land a few
-                // pixels off; once the rows there are measured, a second (rarely a third) jump lands exactly.
-                for (var i = 0; i < 3; i++)
+                if (_model?.ScrollAnchorKey is { } key)
+                    RestoreAnchor(key, _model.ScrollAnchorDelta, offset);
+                else
                 {
                     _scroller.ScrollToVerticalOffset(offset);
                     _scroller.UpdateLayout();
-                    if (Math.Abs(_scroller.VerticalOffset - Math.Min(offset, _scroller.ScrollableHeight)) < 0.5) break;
                 }
             }
             finally
             {
                 _restoring = false;
             }
-            if (_model is not null && List.IsVisible) _model.ScrollOffset = _scroller.VerticalOffset;
+            if (_model is not null && List.IsVisible) KeepPosition();
         }));
+    }
+
+    private void RestoreAnchor(string key, double delta, double fallbackOffset)
+    {
+        var index = _model!.RowIndexOf(key);
+        if (index < 0 || ItemsHost() is not { } panel)
+        {
+            _scroller!.ScrollToVerticalOffset(fallbackOffset); // the row is gone (a reload dropped it): about where it was
+            _scroller.UpdateLayout();
+            return;
+        }
+        for (var i = 0; i < 4; i++)
+        {
+            panel.BringIndexIntoViewPublic(index);
+            _scroller!.UpdateLayout();
+            if (List.ItemContainerGenerator.ContainerFromIndex(index) is not FrameworkElement row) return;
+            var diff = row.TransformToAncestor(_scroller).Transform(new Point()).Y - delta;
+            if (Math.Abs(diff) < 0.5) return;
+            _scroller.ScrollToVerticalOffset(_scroller.VerticalOffset + diff);
+            _scroller.UpdateLayout();
+        }
     }
 
     private void OnFocusCardRequested(object? sender, string modelId) =>

@@ -97,6 +97,11 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, ImageSource?> _thumbs = new(StringComparer.Ordinal);
     private readonly Queue<string> _thumbOrder = new();
     private readonly HashSet<string> _thumbsAsked = new(StringComparer.Ordinal);
+    // Memory entries checked by the worker since the last refresh, and the paths each was checked with. A refresh (a
+    // reload, the page shown again) clears the first, so a realized card shows its remembered image at once and asks the
+    // worker again (the last-write check: a saved model gets its new thumbnail; a past failure is retried).
+    private readonly HashSet<string> _thumbsChecked = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _thumbKeys = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ModelCardItem> _cards = new(StringComparer.Ordinal);
     private readonly ModelsAggregatesRow _aggregates;
     private ModelListIndex _index = ModelListIndex.Empty;
@@ -291,8 +296,36 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The list's scroll offset, kept by the view as the user scrolls (restored after a reload and on Back).</summary>
+    /// <summary>The list's scroll offset, kept by the view as the user scrolls (the fallback when no anchor is kept).</summary>
     public double ScrollOffset { get; set; }
+
+    /// <summary>The row at the top of the list as the user left it (<see cref="RowKey"/>): restored after a reload, a
+    /// reflow, a group toggle and on Back, so the same card stays at the top. Null after a filter change (the top).</summary>
+    public string? ScrollAnchorKey { get; set; }
+
+    /// <summary>That row's top relative to the viewport's top (0 or less: how far it is scrolled past).</summary>
+    public double ScrollAnchorDelta { get; set; }
+
+    /// <summary>A row's anchor key: "aggregates", "group:&lt;key&gt;", or "card:&lt;model_id&gt;" for its first card.</summary>
+    public static string? RowKey(object? row) => row switch
+    {
+        ModelsAggregatesRow => "aggregates",
+        ModelsGroupHeaderRow h => "group:" + h.Key,
+        ModelsCardRow { Cards.Count: > 0 } r => "card:" + r.Cards[0].ModelId,
+        _ => null,
+    };
+
+    /// <summary>The index of the row an anchor names now (a card's row may differ after a reflow); -1 when it is gone.</summary>
+    public int RowIndexOf(string key)
+    {
+        for (var i = 0; i < _rows.Count; i++)
+        {
+            if (string.Equals(RowKey(_rows[i]), key, StringComparison.Ordinal)) return i;
+            if (key.StartsWith("card:", StringComparison.Ordinal) && _rows[i] is ModelsCardRow r &&
+                r.Cards.Any(c => string.Equals("card:" + c.ModelId, key, StringComparison.Ordinal))) return i;
+        }
+        return -1;
+    }
 
     /// <summary>The groups the user collapsed (by <see cref="ModelGroup.Key"/>); every other group is open.</summary>
     public IReadOnlyCollection<string> CollapsedGroups => _collapsed;
@@ -305,13 +338,17 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// The Models sub-tab is shown (the Health page opened on it, or the user switched to it): read the index the first
-    /// time, and ask the fold worker for a pass (spec #25 Freshness); the list reloads when it ends with changes.
+    /// time, otherwise re-query it against today's local date (the window may have crossed midnight since: Recent's 14
+    /// days move on even when no fold changes the store), keeping the user's search, filters, groups and scroll; and ask
+    /// the fold worker for a pass (spec #25 Freshness); the list reloads when it ends with changes.
     /// </summary>
     public void Shown()
     {
         TimesShown++;
         if (_disposed) return;
+        _thumbsChecked.Clear();
         if (!_hasLoaded && !_loading) Reload();
+        else if (_hasLoaded) Requery(_query, scrollTop: false);
         if (_fold is null) return;
         FoldRequestOutcome outcome;
         try
@@ -362,23 +399,28 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
     /// <summary>Back from the detail (WU4): the list as it was, scrolled where it was, the opened card focused.</summary>
     public void ReturnFromDetail()
     {
-        ScrollRequested?.Invoke(this, ScrollOffset);
+        ScrollRequested?.Invoke(this, ScrollAnchorKey is null ? 0 : ScrollOffset);
         if (LastOpenedModelId is { } id) FocusCardRequested?.Invoke(this, id);
     }
 
-    /// <summary>The list realized this card: ask for its thumbnail (the cached one at once when it is in memory).</summary>
+    /// <summary>The list realized this card: show its remembered image at once, and ask the worker unless it already
+    /// checked this model, with these paths, since the last refresh.</summary>
     public void ThumbnailWanted(ModelCardItem card)
     {
         if (_thumbnails is null || _disposed) return;
-        if (_thumbs.TryGetValue(card.ModelId, out var image))
-        {
-            card.Thumbnail = image;
-            return;
-        }
-        if (!_thumbsAsked.Add(card.ModelId)) return;
         var c = card.Card;
+        var key = ThumbKey(c);
+        if (_thumbs.TryGetValue(c.ModelId, out var image)) card.Thumbnail = image;
+        if (_thumbsChecked.Contains(c.ModelId) && _thumbKeys.TryGetValue(c.ModelId, out var checkedWith) && checkedWith == key) return;
+        if (_thumbsAsked.Contains(c.ModelId) && _thumbKeys.TryGetValue(c.ModelId, out var askedWith) && askedWith == key) return;
+        _thumbsAsked.Add(c.ModelId);
+        _thumbsChecked.Remove(c.ModelId);
+        _thumbKeys[c.ModelId] = key;
         _thumbnails.Request(new ThumbnailRequest(c.ModelId, c.LocalPath, c.CentralPath, c.IsCloud));
     }
+
+    /// <summary>What a thumbnail was checked with: a moved model, or one now in the cloud, is checked again.</summary>
+    private static string ThumbKey(ModelCard c) => (c.IsCloud ? "cloud" : "file") + "|" + c.LocalPath + "|" + c.CentralPath;
 
     /// <summary>The card scrolled away before its thumbnail was ready: drop the request. A card of a list since rebuilt
     /// (a chip change, a reload) changes nothing: its model's current card may be showing and waiting for the same image.</summary>
@@ -431,6 +473,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         var first = !_hasLoaded;
         _index = index;
         _hasLoaded = true;
+        _thumbsChecked.Clear(); // a refresh: every card's thumbnail is checked again as it shows
         Log.Information("models: list read ({Models} models)", index.Count);
         Requery(_query, scrollTop: first);
         OnPropertyChanged(nameof(IsLoading));
@@ -445,7 +488,9 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         if (!e.StoreChanged || _disposed) return;
         _post(() => UiGuard.Run("Models: reload after a fold pass", () =>
         {
-            if (_disposed || !_hasLoaded) return; // the first read is still to come, and reads the new index
+            // Before the page was first shown, nothing is read yet: the first read sees the new index. While that read
+            // runs it may already hold the old one, so Reload queues another read after it.
+            if (_disposed || (!_hasLoaded && !_loading)) return;
             Reload();
         }));
     }
@@ -457,6 +502,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         {
             if (_disposed) return;
             _thumbsAsked.Remove(e.ModelId);
+            _thumbsChecked.Add(e.ModelId);
             Remember(e.ModelId, e.Image);
             if (_cards.TryGetValue(e.ModelId, out var card)) card.Thumbnail = e.Image;
         }));
@@ -526,6 +572,7 @@ internal sealed class ModelsViewModel : ObservableObject, IDisposable
         StatCards[3].Value = HealthFormat.Dur(a.AverageOpenSeconds);
         StatCards[4].Value = ModelsText.Count(a.Syncs);
         StatCards[5].Value = HealthFormat.Dur(a.AverageSyncSeconds);
+        if (scrollTop) ScrollAnchorKey = null;
         BuildRows(scrollTo: scrollTop ? 0 : ScrollOffset);
         OnPropertyChanged(nameof(Result));
         OnPropertyChanged(nameof(IsSearching));
