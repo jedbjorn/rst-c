@@ -400,8 +400,8 @@ public sealed class InstallCoordinatorTests : IDisposable
 
     private InstallPaths Paths => new(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
 
-    private InstallCoordinator Make() => new(
-        ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _self, Paths,
+    private InstallCoordinator Make(HttpMessageHandler? handler = null) => new(
+        ProductCatalog.Default.Products, new HttpClient(handler ?? _github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _self, Paths,
         _time, action => action(), _log.Add, () => _quits++, () => _changes++);
 
     public void Dispose()
@@ -666,6 +666,66 @@ public sealed class InstallCoordinatorTests : IDisposable
         _time.Advance(InstallCoordinator.BusyRetryDelay);
         await first;
         _msiexec.Calls.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task A_pending_self_update_result_is_cleared_when_an_RST_retry_is_cancelled()
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(Paths.SelfUpdateResultFile,
+            new SelfUpdateResult("3.1.1", 1603, InstallProblem.InstallFailed, null, _time.GetUtcNow()).ToJson());
+        using var handler = new PendingDownloadHandler();
+        using var c = Make(handler);
+        c.HasUnpresentedSelfUpdateResult.Should().BeTrue();
+        c.For("rst").Phase.Should().Be(InstallPhase.Failed);
+
+        var retry = c.InstallAsync(_rst, new ReleaseVersion(3, 1, 1));
+        try
+        {
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            c.For("rst").Phase.Should().Be(InstallPhase.Downloading);
+        }
+        finally
+        {
+            c.Cancel("rst");
+            await retry.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        c.For("rst").Should().Be(InstallProgress.Idle);
+        c.RefreshSelfUpdateResult(); // a later single-instance launch cannot resurrect the intent
+        c.HasUnpresentedSelfUpdateResult.Should().BeFalse();
+        _self.Started.Should().BeEmpty();
+        _msiexec.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_new_RST_install_clears_the_pending_result_as_soon_as_it_starts()
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(Paths.SelfUpdateResultFile,
+            new SelfUpdateResult("3.1.0", 0, InstallProblem.None, null, _time.GetUtcNow()).ToJson());
+        using var handler = new PendingDownloadHandler();
+        using var c = Make(handler);
+        c.HasUnpresentedSelfUpdateResult.Should().BeTrue();
+        bool? pendingWhenDownloading = null;
+        c.Changed += (_, _) =>
+        {
+            if (c.For("rst").Phase == InstallPhase.Downloading)
+                pendingWhenDownloading = c.HasUnpresentedSelfUpdateResult;
+        };
+
+        var install = c.InstallAsync(_rst, new ReleaseVersion(3, 1, 1));
+        try
+        {
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            pendingWhenDownloading.Should().Be(false, "the result is superseded before observers see the new progress");
+            c.HasUnpresentedSelfUpdateResult.Should().BeFalse();
+        }
+        finally
+        {
+            c.Cancel("rst");
+            await install.WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 
     private static async Task WaitFor(Func<bool> condition)
