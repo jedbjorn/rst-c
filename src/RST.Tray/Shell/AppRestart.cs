@@ -1,8 +1,7 @@
-// rst-c's own (not vendored): registers the RST tray with Windows' Restart Manager (spec #20 §1; review N1). When
-// Windows Installer closes a running tray to replace its files (a full-UI repair through the Files in Use dialog,
-// an RST-Setup.exe upgrade, a silent install with Restart Manager on), it then restarts registered apps; this
-// brings the tray back, hidden (--startup). Crash, hang and reboot restarts are excluded, so a failing tray never
-// restart-loops. util:CloseApplication's WM_CLOSE path is unchanged.
+// rst-c's own (not vendored): Restart Manager's hidden restart (decision #40). RST's installers suppress RM
+// restarts, but a third-party installer (e.g. a runtime update) can still close and restart us. Program refuses
+// --startup with a full UAC token or as SYSTEM before creating an icon (SC-047 R3); accounts without a split
+// token keep their normal sign-in token. Crash, hang and reboot restarts stay excluded to avoid restart loops.
 
 using System.Runtime.InteropServices;
 using RST.Core.Tray;

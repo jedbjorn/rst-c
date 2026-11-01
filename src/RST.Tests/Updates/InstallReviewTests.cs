@@ -44,9 +44,10 @@ public sealed class InstallQueueTests : IDisposable
 
     private InstallPaths Paths => new(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
 
-    private InstallCoordinator Make() => new(
+    private InstallCoordinator Make(Action<string>? beforeLog = null) => new(
         ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec,
-        _revit, _self, Paths, _time, action => action(), AddLog, () => { lock (_events) _events.Add("quit"); }, () => { });
+        _revit, _self, Paths, _time, action => action(), line => { beforeLog?.Invoke(line); AddLog(line); },
+        () => { lock (_events) _events.Add("quit"); }, () => { });
 
     // Installs log from their own threads at once (two leave the Revit wait together): List.Add is not thread-safe.
     private void AddLog(string line)
@@ -121,6 +122,63 @@ public sealed class InstallQueueTests : IDisposable
         splashHeld.Should().BeTrue("RST showed Queued while Splash-It's msiexec ran");
         _events.Should().Equal("msiexec SplashIt-1.1.0.msi 0", "quit");
         _log.Should().Contain(l => l.Contains("RST 3.1.1 waits until the other installs have finished"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DN1_a_companion_click_during_the_final_Revit_check_finishes_before_hand_off(bool beforeProgress)
+    {
+        using var registered = new ManualResetEventSlim();
+        using var proceed = new ManualResetEventSlim();
+        using var c = Make(line =>
+        {
+            if (!beforeProgress || !line.Contains("Gantt-It") || !line.Contains("asked for")) return;
+            registered.Set(); // accepted under _gate, but not yet marked Downloading
+            proceed.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("RST must notice the registered request");
+        });
+        c.Changed += (_, _) => { if (c.For("rst").Phase == InstallPhase.Queued) proceed.Set(); };
+        Task? companion = null;
+        var checks = 0;
+        _revit.OnCheck = () =>
+        {
+            // WaitForRevitAsync, then the final check with the install queue held. Before the fix,
+            // the others-busy check had already passed, so this accepted click was lost at quit.
+            if (++checks != 2) return;
+            _revit.OnCheck = null;
+            companion = beforeProgress ? Task.Run(() => c.InstallAsync(_gantt, V120)) : c.InstallAsync(_gantt, V120);
+            if (beforeProgress) registered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+        };
+        try { await c.InstallAsync(_rst, V311).WaitAsync(TimeSpan.FromSeconds(10)); }
+        finally { proceed.Set(); }
+        companion.Should().NotBeNull();
+        await companion!.WaitAsync(TimeSpan.FromSeconds(10));
+        _events.Should().Equal("msiexec GanttIt-1.2.0.msi 0", "quit");
+        c.For("gantt-it").Phase.Should().Be(InstallPhase.Installed);
+    }
+
+    [Fact]
+    public async Task DN6_a_product_that_returns_before_the_held_reinstall_clears_the_failed_upgrade()
+    {
+        _msiexec.Then(1603);
+        _msiexec.OnRun = (_, _) => _installed.ByUpgradeCode.Remove(_gantt.UpgradeCodes[0]);
+        using var c = Make();
+        await c.InstallAsync(_gantt, V120);
+        c.For("gantt-it").Previous.Should().Be(V110);
+        InstallCache.ReadState(Paths.CacheRoot, "gantt-it").FailedUpgrade.Should().NotBeNull();
+        _github.Add(_gantt.Repo, "v1.1.0", "GanttIt-1.1.0.msi", FakeMsi.Bytes(_gantt.UpgradeCodes[0], "1.1.0"));
+        _revit.OnCheck = () =>
+        {
+            _revit.OnCheck = null;
+            _installed.With(_gantt.UpgradeCodes[0], "1.1.0");
+        };
+
+        await c.ReinstallPreviousAsync(_gantt);
+
+        c.For("gantt-it").Should().Be(InstallProgress.Idle);
+        InstallCache.ReadState(Paths.CacheRoot, "gantt-it").FailedUpgrade.Should().BeNull();
+        _msiexec.Calls.Should().ContainSingle("the reinstall never runs");
+        _log.Should().Contain(l => l.Contains("is installed again (1.1.0); no reinstall needed"));
     }
 
     [Fact]

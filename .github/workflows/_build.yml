@@ -226,6 +226,11 @@ jobs:
       # build/third-party-allowlist.txt (empty).
       - name: No third-party DLLs (decision #33)
         run: build/check-shipped-dlls.sh build/${{ matrix.major }}
+      # SC-013 / decision #26: inspect the compiled references, regardless of project syntax.
+      - name: Compiled Revit API references stay at the floor
+        run: |
+          python3 build/check-revit-api-refs.py --self-test
+          python3 build/check-revit-api-refs.py build/${{ matrix.major }}
       - uses: actions/upload-artifact@v4
         with:
           name: stage-${{ matrix.major }}

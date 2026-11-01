@@ -318,6 +318,37 @@ Assert ((Get-Related).Count -eq 0) '(4) RST is uninstalled'
 Assert (-not (Test-Path $LocalRoot)) "(4) $LocalRoot (cache, updater copy, install logs) is removed"
 Assert ((Get-RstArp).Count -eq 0) '(4) no RST entry is left in Add/Remove Programs'
 
+# SC-014: Burn 6.0.2's duplicate HKCU detection and unused elevated cleanup pipe are known noise.
+# Every other e000 is a regression, even if a non-vital package lets Apply return success.
+function Assert-BundleUpgradeLog([string]$Path) {
+  $burn = @(Get-Content $Path)
+  Assert (@($burn | Where-Object { $_ -match 'i399: Apply complete, result: 0x0,' }).Count -eq 1) '(5) Burn Apply completed successfully'
+  $allowed = @(
+    '^Error 0x80070006: Failed to write send message to pipe\.$',
+    '^Error 0x80070006: Failed to send BURN_ELEVATION_MESSAGE_TYPE_CLEAN_PACKAGE message to per-machine process\.$'
+  )
+  $duplicates = @($burn | ForEach-Object {
+    if ($_ -match 'i102: Detected related bundle: (\{[0-9A-Fa-f-]{36}\}), type: Upgrade, scope: PerUser,') { $Matches[1] }
+  } | Group-Object | Where-Object { $_.Count -eq 2 })
+  foreach ($duplicate in $duplicates) {
+    $id = [regex]::Escape($duplicate.Name)
+    # Only the already successfully removed bundle's second uninstall may have a missing cache path.
+    Assert (@($burn | Where-Object { $_ -match "i319: Applied execute package: $id, result: 0x0," }).Count -ge 1) '(5) the first related-bundle uninstall succeeded'
+    $cached = [regex]::Escape((Join-Path $env:LOCALAPPDATA "Package Cache\$($duplicate.Name)\RST-Setup.exe"))
+    $allowed += "^Error 0x80070003: Failed to create embedded process at path: $cached`$"
+    $allowed += "^Error 0x80070003: Failed to run bundle as embedded from path: $cached`$"
+  }
+  if ($duplicates.Count -gt 0) {
+    $allowed += '^Error 0x80070003: CreateProcessW failed with return code: 3$'
+    $allowed += '^Error 0x80070003: Failed to configure per-user related bundle\.$'
+  }
+  foreach ($line in $burn) {
+    if ($line -notmatch 'e000: (.*)$') { continue }
+    $message = $Matches[1]
+    Assert (@($allowed | Where-Object { $message -cmatch $_ }).Count -gt 0) "(5) no unexpected Burn error: $line"
+  }
+}
+
 # ---- (5) decision #34: RST installed by RST-Setup.exe is updated with RST-Setup.exe
 function Invoke-Bundle([string]$Exe, [string[]]$BundleArgs, [string]$Name) {
   $log = Join-Path $OutDir "$Name.log"
@@ -351,6 +382,11 @@ $bundleNew = Wait-OneTray $before '(5)'
 Assert ($bundleNew.ProcessId -ne $bundleTray) '(5) it is a new process'
 Wait-Until { @((Get-TrayLog) | Select-Object -Skip $before | Where-Object { $_ -match "the updater reported RST $([regex]::Escape($NewVersion)): installed" }).Count -gt 0 } 30 '(5) the new tray shows the updater''s result'
 Assert-OneRst $NewVersion '(5) after the bundle self-update' -Bundle
+$bundleLogs = @($lines | ForEach-Object {
+  if ($_ -match 'updater: ".*RST-Setup\.exe" /quiet /norestart /log "([^"]+)"$') { $Matches[1] }
+})
+Assert ($bundleLogs.Count -eq 1) '(5) exactly one bundle upgrade log'
+Assert-BundleUpgradeLog $bundleLogs[0]
 Assert-StartTraySkipped $since5 '(5)'
 Show-State '(5) after'
 

@@ -72,7 +72,15 @@
     <!-- Bootstrap: the assembly resolver's branches (decision #27). The tests touch only
          EngineDependencyResolver, never the Revit-typed RstBootstrap. -->
     <ProjectReference Include="..\RST.Bootstrap\RST.Bootstrap.csproj" />
+    <!-- SC-013 N3: keep this out of Default's deps.json so only our Resolving handler can find it. -->
+    <ProjectReference Include="..\RST.ResolverFixture\RST.ResolverFixture.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="ResolverFixture" />
   </ItemGroup>
+
+  <Target Name="CopyResolverFixture" AfterTargets="Build">
+    <Copy SourceFiles="@(ResolverFixture);@(ResolverFixture->'%(RootDir)%(Directory)%(Filename).deps.json')"
+          DestinationFolder="$(OutDir)ResolverFixture" />
+  </Target>
 
   <!-- The RST tray (feature #17, spec #20 §1; F17 WU1): RST.Tray is built once, on net8.0-windows with the
        R25 configuration (src/RST.Tray/RST.Tray.csproj), so its tests (Tray/) build and run on the R25 leg
