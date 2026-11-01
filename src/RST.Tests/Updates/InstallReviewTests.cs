@@ -1,6 +1,6 @@
 // rst-c's own: the WU4 review fixes on Linux (F17 WU4, review of PR #147; decision #34). One install queue (B1),
-// the updater's Revit check and 1618 retries (B1, B2), RST updated the way it was installed (B3), the re-checks right
-// before an install runs (N1), a failing Revit check (N3), the updater's refusals shown (N4), the coordinator's
+// the updater's 1618 retries (B1), RST updated the way it was installed (B3), the re-checks right
+// before an install runs (N1), the updater's refusals shown (N4), the coordinator's
 // edge cases (N6), and self-update accepting only RST's per-user UpgradeCode (N8).
 
 using System;
@@ -27,7 +27,6 @@ public sealed class InstallQueueTests : IDisposable
     private readonly FakeGitHub _github = new();
     private readonly FakeInstalledProducts _installed = new();
     private readonly FakeMsiexec _msiexec = new();
-    private readonly FakeRevit _revit = new();
     private readonly FakeSelfUpdater _self = new();
     private readonly ManualTimeProvider _time = new(Start);
     private readonly List<string> _log = new();
@@ -46,10 +45,10 @@ public sealed class InstallQueueTests : IDisposable
 
     private InstallCoordinator Make(Action<string>? beforeLog = null) => new(
         ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec,
-        _revit, _self, Paths, _time, action => action(), line => { beforeLog?.Invoke(line); AddLog(line); },
+        _self, Paths, _time, action => action(), line => { beforeLog?.Invoke(line); AddLog(line); },
         () => { lock (_events) _events.Add("quit"); }, () => { });
 
-    // Installs log from their own threads at once (two leave the Revit wait together): List.Add is not thread-safe.
+    // Installs log from their own threads: List.Add is not thread-safe.
     private void AddLog(string line)
     {
         lock (_log) _log.Add(line);
@@ -76,33 +75,12 @@ public sealed class InstallQueueTests : IDisposable
     }
 
     [Fact]
-    public async Task B1_RST_and_a_companion_both_waiting_for_Revit_the_companion_installs_and_is_recorded_before_the_hand_off()
-    {
-        _revit.Open();
-        using var c = Make();
-        var rst = c.InstallAsync(_rst, V311);
-        var gantt = c.InstallAsync(_gantt, V120);
-        await WaitFor(() => c.For("rst").Phase is InstallPhase.WaitingForRevit or InstallPhase.Queued
-                            && c.For("gantt-it").Phase == InstallPhase.WaitingForRevit);
-        _revit.Close();
-        await Task.WhenAll(rst, gantt);
-
-        _events.Should().Equal("msiexec GanttIt-1.2.0.msi 0", "quit");
-        c.For("gantt-it").Phase.Should().Be(InstallPhase.Installed, "the companion's result is recorded before the tray quits");
-        InstallCache.ReadState(Paths.CacheRoot, "gantt-it").Installed!.Version.Should().Be("1.2.0");
-        _self.Started.Should().ContainSingle();
-        c.For("rst").Phase.Should().Be(InstallPhase.HandingOff);
-    }
-
-    [Fact]
     public async Task B1_RST_shows_Queued_while_another_install_is_under_way_and_goes_last()
     {
-        // SC-041: both installs wait for Revit, and Revit's close releases them together. The fake msiexec returns at
-        // once, so Splash-It could finish before RST looked at the queue; RST then had nothing to wait for and never
-        // showed Queued. Splash-It's msiexec now "runs" until RST shows Queued, as a real one would still be running.
+        // Hold the companion installer until RST has queued, preserving the serialization contract without
+        // using Revit detection as a test gate (decision #73).
         var rstQueued = new ManualResetEventSlim();
         var splashHeld = false;
-        _revit.Open();
         using var c = Make();
         c.Changed += (_, _) =>
         {
@@ -114,20 +92,20 @@ public sealed class InstallQueueTests : IDisposable
             splashHeld = rstQueued.Wait(TimeSpan.FromSeconds(30)); // a backstop: the assertion below says if it ran out
         };
         var splash = c.InstallAsync(_splash, V110);
-        await WaitFor(() => c.For("splash-it").Phase == InstallPhase.WaitingForRevit);
+        await WaitFor(() => c.For("splash-it").Phase == InstallPhase.Installing);
         var rst = c.InstallAsync(_rst, V311);
-        await WaitFor(() => c.For("rst").Phase is InstallPhase.WaitingForRevit or InstallPhase.Queued);
-        _revit.Close();
         await Task.WhenAll(splash, rst);
         splashHeld.Should().BeTrue("RST showed Queued while Splash-It's msiexec ran");
         _events.Should().Equal("msiexec SplashIt-1.1.0.msi 0", "quit");
+        c.For("splash-it").Phase.Should().Be(InstallPhase.Installed);
+        InstallCache.ReadState(Paths.CacheRoot, "splash-it").Installed!.Version.Should().Be("1.1.0");
         _log.Should().Contain(l => l.Contains("RST 3.1.1 waits until the other installs have finished"));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task DN1_a_companion_click_during_the_final_Revit_check_finishes_before_hand_off(bool beforeProgress)
+    public async Task DN1_an_admitted_companion_finishes_before_hand_off_even_before_progress_is_published(bool beforeProgress)
     {
         using var registered = new ManualResetEventSlim();
         using var proceed = new ManualResetEventSlim();
@@ -137,22 +115,21 @@ public sealed class InstallQueueTests : IDisposable
             registered.Set(); // accepted under _gate, but not yet marked Downloading
             proceed.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("RST must notice the registered request");
         });
-        c.Changed += (_, _) => { if (c.For("rst").Phase == InstallPhase.Queued) proceed.Set(); };
-        Task? companion = null;
-        var checks = 0;
-        _revit.OnCheck = () =>
+        _msiexec.BeforeRun = _ =>
         {
-            // WaitForRevitAsync, then the final check with the install queue held. Before the fix,
-            // the others-busy check had already passed, so this accepted click was lost at quit.
-            if (++checks != 2) return;
-            _revit.OnCheck = null;
-            companion = beforeProgress ? Task.Run(() => c.InstallAsync(_gantt, V120)) : c.InstallAsync(_gantt, V120);
-            if (beforeProgress) registered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            if (beforeProgress) return;
+            registered.Set();
+            proceed.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("RST must wait for the running installer");
         };
-        try { await c.InstallAsync(_rst, V311).WaitAsync(TimeSpan.FromSeconds(10)); }
+        c.Changed += (_, _) => { if (c.For("rst").Phase == InstallPhase.Queued) proceed.Set(); };
+        var companion = Task.Run(() => c.InstallAsync(_gantt, V120));
+        try
+        {
+            registered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            await c.InstallAsync(_rst, V311).WaitAsync(TimeSpan.FromSeconds(10));
+        }
         finally { proceed.Set(); }
-        companion.Should().NotBeNull();
-        await companion!.WaitAsync(TimeSpan.FromSeconds(10));
+        await companion.WaitAsync(TimeSpan.FromSeconds(10));
         _events.Should().Equal("msiexec GanttIt-1.2.0.msi 0", "quit");
         c.For("gantt-it").Phase.Should().Be(InstallPhase.Installed);
     }
@@ -167,17 +144,15 @@ public sealed class InstallQueueTests : IDisposable
         c.For("gantt-it").Previous.Should().Be(V110);
         InstallCache.ReadState(Paths.CacheRoot, "gantt-it").FailedUpgrade.Should().NotBeNull();
         _github.Add(_gantt.Repo, "v1.1.0", "GanttIt-1.1.0.msi", FakeMsi.Bytes(_gantt.UpgradeCodes[0], "1.1.0"));
-        _revit.OnCheck = () =>
-        {
-            _revit.OnCheck = null;
-            _installed.With(_gantt.UpgradeCodes[0], "1.1.0");
-        };
-
-        await c.ReinstallPreviousAsync(_gantt);
+        _msiexec.OnRun = null;
+        await WhileGanttQueued(c,
+            () => _installed.With(_gantt.UpgradeCodes[0], "1.1.0"),
+            () => c.ReinstallPreviousAsync(_gantt));
 
         c.For("gantt-it").Should().Be(InstallProgress.Idle);
         InstallCache.ReadState(Paths.CacheRoot, "gantt-it").FailedUpgrade.Should().BeNull();
-        _msiexec.Calls.Should().ContainSingle("the reinstall never runs");
+        _msiexec.Calls.Count(call => Path.GetFileName(call.Msi).StartsWith("GanttIt", StringComparison.Ordinal))
+            .Should().Be(1, "only the original failed upgrade ran; the reinstall never runs");
         _log.Should().Contain(l => l.Contains("is installed again (1.1.0); no reinstall needed"));
     }
 
@@ -264,30 +239,49 @@ public sealed class InstallQueueTests : IDisposable
     [Fact]
     public async Task N1_a_file_changed_after_verification_never_reaches_msiexec()
     {
-        _revit.Open();
         using var c = Make();
-        var install = c.InstallAsync(_gantt, V120);
-        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.WaitingForRevit);
-        File.AppendAllText(Path.Combine(Paths.CacheRoot, "gantt-it", "1.2.0", "GanttIt-1.2.0.msi"), "swapped while it waited");
-        _revit.Close();
-        await install;
+        await WhileGanttQueued(c, () => File.AppendAllText(
+            Path.Combine(Paths.CacheRoot, "gantt-it", "1.2.0", "GanttIt-1.2.0.msi"), "swapped while it waited"));
         c.For("gantt-it").Should().Match<InstallProgress>(p => p.Phase == InstallPhase.Refused && p.Problem == InstallProblem.HashMismatch);
-        _msiexec.Calls.Should().BeEmpty();
+        _msiexec.Calls.Should().NotContain(call => Path.GetFileName(call.Msi).StartsWith("GanttIt", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task N1_check_4_runs_again_right_before_msiexec()
     {
-        _revit.Open();
         using var c = Make();
-        var install = c.InstallAsync(_gantt, V120);
-        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.WaitingForRevit);
-        _installed.ByUpgradeCode.Remove(_gantt.UpgradeCodes[0]);
-        _installed.With(_gantt.UpgradeCodes[0], "1.3.0"); // installed some other way meanwhile
-        _revit.Close();
-        await install;
+        await WhileGanttQueued(c, () =>
+        {
+            _installed.ByUpgradeCode.Remove(_gantt.UpgradeCodes[0]);
+            _installed.With(_gantt.UpgradeCodes[0], "1.3.0"); // installed some other way meanwhile
+        });
         c.For("gantt-it").Problem.Should().Be(InstallProblem.NotNewer);
-        _msiexec.Calls.Should().BeEmpty();
+        _msiexec.Calls.Should().NotContain(call => Path.GetFileName(call.Msi).StartsWith("GanttIt", StringComparison.Ordinal));
+    }
+
+    private async Task WhileGanttQueued(InstallCoordinator coordinator, Action change, Func<Task>? request = null)
+    {
+        using var release = new ManualResetEventSlim();
+        _msiexec.BeforeRun = path =>
+        {
+            if (Path.GetFileName(path).StartsWith("SplashIt", StringComparison.Ordinal))
+                release.Wait(TimeSpan.FromSeconds(30)).Should().BeTrue("the test releases the first installer");
+        };
+        var splash = coordinator.InstallAsync(_splash, V110);
+        Task? gantt = null;
+        try
+        {
+            await WaitFor(() => coordinator.For("splash-it").Phase == InstallPhase.Installing);
+            gantt = request is null ? coordinator.InstallAsync(_gantt, V120) : request();
+            await WaitFor(() => coordinator.For("gantt-it").Phase == InstallPhase.Queued);
+            change();
+        }
+        finally
+        {
+            release.Set();
+            await splash;
+            if (gantt is not null) await gantt;
+        }
     }
 
     [Fact]
@@ -304,21 +298,6 @@ public sealed class InstallQueueTests : IDisposable
         // FileShare is enforced by Windows only (RuntimeTests HeldPackageTests proves it there).
         if (OperatingSystem.IsWindows()) write.Should().NotBeNull("nothing may write the MSI while it is being installed");
         c.For("gantt-it").Phase.Should().Be(InstallPhase.Installed);
-    }
-
-    [Fact]
-    public async Task N3_a_failing_Revit_check_defers_instead_of_installing()
-    {
-        _revit.Throws = true;
-        using var c = Make();
-        c.RevitRunning.Should().BeTrue("a check that fails means Revit may be running");
-        var install = c.InstallAsync(_gantt, V120);
-        await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.WaitingForRevit && _time.ArmedTimers > 0);
-        _msiexec.Calls.Should().BeEmpty();
-        _revit.Throws = false;
-        _time.Advance(InstallCoordinator.RevitCheckRetry);
-        await install;
-        _msiexec.Calls.Should().ContainSingle();
     }
 
     [Fact]
@@ -343,22 +322,16 @@ public sealed class InstallQueueTests : IDisposable
     }
 
     [Fact]
-    public async Task B2_a_self_update_handed_back_for_Revit_waits_here_and_hands_over_again_from_the_cache()
+    public void An_old_Revit_deferral_result_does_not_restart_an_install()
     {
-        using (var first = Make()) await first.InstallAsync(_rst, V311); // verified into the cache, handed over
-        _self.Started.Clear();
-        var requests = _github.Count;
         Directory.CreateDirectory(_root);
-        File.WriteAllText(Paths.SelfUpdateResultFile, new SelfUpdateResult("3.1.1", null, InstallProblem.RevitRunning, null, _time.GetUtcNow()).ToJson());
-        _revit.Open();
+        var old = new SelfUpdateResult("3.1.1", null, InstallProblem.UpdaterFailed, null, _time.GetUtcNow()).ToJson()
+            .Replace("UpdaterFailed", "RevitRunning", StringComparison.Ordinal);
+        File.WriteAllText(Paths.SelfUpdateResultFile, old);
         using var c = Make();
-        var resume = c.ResumeDeferredSelfUpdateAsync();
-        await WaitFor(() => c.For("rst").Phase == InstallPhase.WaitingForRevit);
+        c.For("rst").Phase.Should().Be(InstallPhase.Idle);
         _self.Started.Should().BeEmpty();
-        _revit.Close();
-        await resume;
-        _self.Started.Should().ContainSingle();
-        _github.Count.Should().Be(requests, "the cached, re-checked package is used");
+        File.Exists(Paths.SelfUpdateResultFile).Should().BeFalse();
     }
 
     [Fact]
@@ -395,7 +368,6 @@ public sealed class SelfUpdateApplyTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "RST-SelfUpdate-" + Guid.NewGuid().ToString("N"));
     private readonly FakeMsiexec _msiexec = new();
-    private readonly FakeRevit _revit = new();
     private readonly List<string> _log = new();
     private readonly FakeHost _host = new();
     private readonly ManualTimeProvider _time = new(new DateTimeOffset(2026, 10, 30, 9, 0, 0, TimeSpan.Zero));
@@ -551,14 +523,6 @@ public sealed class SelfUpdateApplyTests : IDisposable
         _log.Should().NotContain("updater: released the tray's single-instance mutex");
     }
 
-    [Fact]
-    public async Task The_mutex_is_handed_over_on_the_deferral_path_too()
-    {
-        _revit.Open();
-        (await Apply(Verified())).Should().Be(SelfUpdateApply.DeferredForRevit);
-        _host.Events.Should().Equal("claim", "release", "start");
-    }
-
     private InstallPaths Paths => new(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
 
     public void Dispose()
@@ -578,14 +542,14 @@ public sealed class SelfUpdateApplyTests : IDisposable
     }
 
     private Task<int> Apply(string path, int? pid = 4242, TimeProvider? time = null) =>
-        SelfUpdateApply.RunAsync(path, pid, Paths, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _revit, _host,
+        SelfUpdateApply.RunAsync(path, pid, Paths, FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, _host,
                                  time ?? TimeProvider.System, _log.Add);
 
     private SelfUpdateResult Result() => SelfUpdateResult.TryParse(File.ReadAllText(Paths.SelfUpdateResultFile))!;
 
     /// <param name="time">The tray's clock: the one the result was stamped with, as it ignores a result over a day old.</param>
     private InstallCoordinator Tray(TimeProvider? time = null) => new(ProductCatalog.Default.Products, new HttpClient(new FakeGitHub()), new FakeInstalledProducts(),
-        FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, new FakeRevit(), new FakeSelfUpdater(), Paths, time ?? TimeProvider.System,
+        FakeMsiReader.FromText(), new FakeBundleReader(), _msiexec, new FakeSelfUpdater(), Paths, time ?? TimeProvider.System,
         a => a(), _log.Add, () => { }, () => { });
 
     private async Task AdvanceThroughRetries(int runs)
@@ -618,7 +582,7 @@ public sealed class SelfUpdateApplyTests : IDisposable
         var exe = Verified(asset: "RST-Setup.exe", bytes: FakeMsi.Bundle("3.1.1.0"));
         (await Apply(exe)).Should().Be(SelfUpdateApply.Installed);
         _msiexec.Calls.Should().ContainSingle().Which.Msi.Should().Be(exe);
-        _log.Should().Contain(l => l.Contains("/quiet /norestart /log"));
+        _log.Should().Contain(l => l.Contains("/quiet /norestart RstRestartManagerControl=Disable /log"));
     }
 
     [Fact]
@@ -628,25 +592,6 @@ public sealed class SelfUpdateApplyTests : IDisposable
         (await Apply(exe)).Should().Be(SelfUpdateApply.Refused);
         _msiexec.Calls.Should().BeEmpty();
         Result().Problem.Should().Be(InstallProblem.WrongVersion);
-    }
-
-    [Fact]
-    public async Task B2_Revit_open_means_nothing_is_installed_and_the_old_tray_takes_the_wait_back()
-    {
-        _revit.Open();
-        (await Apply(Verified())).Should().Be(SelfUpdateApply.DeferredForRevit);
-        _msiexec.Calls.Should().BeEmpty();
-        _host.TraysStarted.Should().Be(1, "the old tray is started again");
-        Result().Problem.Should().Be(InstallProblem.RevitRunning);
-        _log.Should().Contain(l => l.Contains("Revit is running"));
-    }
-
-    [Fact]
-    public async Task B2_a_failing_Revit_check_also_installs_nothing()
-    {
-        _revit.Throws = true;
-        (await Apply(Verified())).Should().Be(SelfUpdateApply.DeferredForRevit);
-        _msiexec.Calls.Should().BeEmpty();
     }
 
     [Fact]

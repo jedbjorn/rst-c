@@ -1,14 +1,14 @@
 // rst-c's own (not vendored): the RST tray's installs on a real Windows runtime (spec #20 §5, §6; AC6, AC7's CI
 // analogue, AC8, AC11; F17 WU4):
 //
-//   - the Apps and Updates pages' new states in light and dark: the enabled buttons, "… when Revit closes", an
+//   - the Apps and Updates pages' new states in light and dark: the enabled buttons, close-Revit advice, an
 //     install under way, done, a failed upgrade with "Reinstall previous version", a per-machine install, and every
 //     failure message in plain words (one gallery);
 //   - every InstallProblem and NetFailure has its plain wording, and none of it is exception text;
 //   - AC6 (TrayInstallFixtureTests, run by installer/ci-tray-install.ps1): the real InstallCoordinator with the real
-//     msi.dll (MsiDatabase, MsiProducts), System32's msiexec and the real Revit.exe watch, against a fake GitHub
+//     msi.dll (MsiDatabase, MsiProducts), System32's msiexec without a Revit.exe gate, against a fake GitHub
 //     serving spec #15's fixture companion MSI: each of the eight refusals with its logged reason, the good fixture
-//     installed, a deferred install while a Revit.exe runs, a downgrade refused, a failing upgrade that leaves nothing
+//     installed, an install while a Revit.exe stand-in stays alive, a downgrade refused, a failing upgrade that leaves nothing
 //     installed, and "Reinstall previous version" from the cache;
 //   - AC8 (TraySelfUpdateFixtureTests, run by installer/ci-tray-selfupdate.ps1): RST's own verified download and the
 //     real SelfUpdater hand-off to RST.TrayUpdater.exe against the INSTALLED tray; the script asserts the rest.
@@ -60,17 +60,15 @@ internal static class InstallScenarios
         var host = new FakeUpdatesHost { Current = Updates };
         switch (scenario)
         {
-            case "revit":
-                host.RevitRunning = true;
+            case "advice":
                 break;
             case "progress":
                 host.Installs = new Dictionary<string, InstallProgress>
                 {
                     ["rst"] = new(InstallPhase.Downloading, V311),
-                    ["gantt-it"] = new(InstallPhase.WaitingForRevit, V120),
+                    ["gantt-it"] = new(InstallPhase.Queued, V120),
                     ["splash-it"] = new(InstallPhase.Installing, V110),
                 };
-                host.RevitRunning = true;
                 break;
             case "done":
                 host.Current = Snapshot(
@@ -119,7 +117,7 @@ internal static class InstallScenarios
         foreach (var problem in Enum.GetValues<InstallProblem>())
         {
             if (problem is InstallProblem.None or InstallProblem.Network or InstallProblem.PerMachine or InstallProblem.InstallFailed
-                or InstallProblem.InstallerBusy or InstallProblem.UpdaterFailed or InstallProblem.RevitRunning) continue;
+                or InstallProblem.InstallerBusy or InstallProblem.UpdaterFailed) continue;
             Add("Refused: " + problem, new InstallProgress(InstallPhase.Refused, V120, problem));
         }
         foreach (var net in Enum.GetValues<NetFailure>())
@@ -181,7 +179,7 @@ public class TrayInstallScreenshotTests
     public static TheoryData<string, UiTheme> AppsScenarios()
     {
         var data = new TheoryData<string, UiTheme>();
-        foreach (var s in new[] { "revit", "progress", "queue", "done", "permachine" })
+        foreach (var s in new[] { "advice", "progress", "queue", "done", "permachine" })
             foreach (var t in new[] { UiTheme.Light, UiTheme.Dark })
                 data.Add(s, t);
         return data;
@@ -234,21 +232,22 @@ public class TrayInstallScreenshotTests
             Capture(window, Name("apps", scenario, theme),
                     new Size(WindowSize.Width, Math.Max(WindowSize.Height, Math.Ceiling(root.DesiredSize.Height) + 40)));
             var texts = Texts(window.AppsPage);
+            Assert.Contains(TrayStrings.Install_CloseRevitAdvice, texts);
             Assert.DoesNotContain(texts, t => t.Contains("Exception", StringComparison.Ordinal) || t.Contains("Coming soon", StringComparison.Ordinal));
             switch (scenario)
             {
-                case "revit":
-                    // Spec #20 §5: while Revit runs the buttons say so, and still act (the install then waits).
-                    Assert.Equal("Update when Revit closes", Button(window, "Tray.App.rst.Action").Content);
-                    Assert.Equal("Update when Revit closes", Button(window, "Tray.App.gantt-it.Action").Content);
-                    Assert.Equal("Install when Revit closes", Button(window, "Tray.App.splash-it.Action").Content);
+                case "advice":
+                    // Decision #73: advice is visible, and the normal one-click actions stay enabled.
+                    Assert.Equal("Update", Button(window, "Tray.App.rst.Action").Content);
+                    Assert.Equal("Update", Button(window, "Tray.App.gantt-it.Action").Content);
+                    Assert.Equal("Install", Button(window, "Tray.App.splash-it.Action").Content);
                     Assert.All(new[] { "rst", "gantt-it", "splash-it" }, id => Assert.True(Button(window, $"Tray.App.{id}.Action").IsEnabled));
                     Button(window, "Tray.App.splash-it.Action").Command.Execute(window.ViewModel.Updates.Rows[2]);
                     Assert.Equal("install:splash-it", host.Calls[^1]);
                     break;
                 case "progress":
                     Assert.Contains("Downloading and checking RST 3.1.1…", texts);
-                    Assert.Contains("Waiting for Revit to close. Gantt-It 1.2.0 installs as soon as it does.", texts);
+                    Assert.Contains("Waiting its turn: Gantt-It 1.2.0 installs when the installation before it has finished.", texts);
                     Assert.Contains("Installing Splash-It 1.1.0…", texts);
                     Assert.True(Button(window, "Tray.App.gantt-it.Cancel").IsVisible);
                     Assert.True(Button(window, "Tray.App.rst.Cancel").IsVisible);
@@ -301,6 +300,7 @@ public class TrayInstallScreenshotTests
         {
             Capture(window, Name("updates", scenario, theme));
             var texts = Texts(window.UpdatesPage);
+            Assert.Contains(TrayStrings.Install_CloseRevitAdvice, texts);
             if (scenario == "handoff")
             {
                 Assert.Contains("Updating RST to 3.1.1. RST closes now and opens again when it is done.", texts);
@@ -489,12 +489,11 @@ public class TrayInstanceClaimTests
 public class TrayInstallWordingTests
 {
     [Fact]
-    public void The_reinstall_button_says_when_Revit_closes_while_Revit_runs()
+    public void The_reinstall_button_is_an_immediate_action()
     {
         var host = InstallScenarios.Host("done");
-        host.RevitRunning = true;
         var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
-        Assert.Equal("Reinstall 1.0.0 when Revit closes", vm.Rows[2].ActionText);
+        Assert.Equal("Reinstall previous version (1.0.0)", vm.Rows[2].ActionText);
     }
 
     [Fact]
@@ -518,11 +517,8 @@ public class TrayInstallWordingTests
     [Fact]
     public void The_row_offers_one_button_for_each_state()
     {
-        var host = InstallScenarios.Host("revit");
+        var host = InstallScenarios.Host("advice");
         var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
-        Assert.Equal(new[] { "Update when Revit closes", "Update when Revit closes", "Install when Revit closes" }, vm.Rows.Select(r => r.ActionText));
-        host.RevitRunning = false;
-        vm.Refresh();
         Assert.Equal(new[] { "Update", "Update", "Install" }, vm.Rows.Select(r => r.ActionText));
         Assert.True(vm.ShowRstInstallNote);
 
@@ -532,9 +528,8 @@ public class TrayInstallWordingTests
         Assert.True(machine.Rst.ShowNoteReleasePage);
 
         // A per-machine TRAY (Program Files) never installs RST, even when Windows Installer reports a per-user one.
-        var tray = InstallScenarios.Host("revit");
+        var tray = InstallScenarios.Host("advice");
         tray.PerMachineTray = true;
-        tray.RevitRunning = false;
         var fromProgramFiles = new UpdatesViewModel(tray, () => new UpdateChecksState(true, false));
         Assert.Null(fromProgramFiles.Rst.ActionText);
         Assert.Equal("Update", fromProgramFiles.Rows[1].ActionText);
@@ -668,12 +663,10 @@ public sealed class TrayInstallFixtureTests : IDisposable
         var r110 = github.Add(Repo, "v1.1.0", "RST-CompanionFixture-1.1.0.msi", FixtureBytes(V110));
         var r200 = github.Add(Repo, "v2.0.0", "RST-CompanionFixture-2.0.0.msi", FixtureBytes(V200));
         var msiexec = new CountingMsiexec(new Msiexec());
-        var revit = new RevitWatch("Revit", Log);
         var paths = new InstallPaths(Path.Combine(_root, "cache"), Path.Combine(_root, "logs"), Path.Combine(_root, "selfupdate.json"));
         using var http = TrayHttp.CreateClient(github);
-        using var installs = new InstallCoordinator(new[] { Fixture }, http, new MsiProducts(Log), new MsiDatabase(), new BundleReader(), msiexec, revit,
+        using var installs = new InstallCoordinator(new[] { Fixture }, http, new MsiProducts(Log), new MsiDatabase(), new BundleReader(), msiexec,
             new FakeSelfUpdater(), paths, TimeProvider.System, a => a(), Log, () => { }, () => { });
-        Assert.False(revit.AnyRunning(), "no Revit.exe on the runner");
 
         async Task<InstallProgress> Refused(string name, InstallProblem problem, Action arrange, ProductInfo? product = null)
         {
@@ -713,21 +706,21 @@ public sealed class TrayInstallFixtureTests : IDisposable
         Assert.Equal("1.0.0", Assert.Single(Installed()).VersionText);
         Assert.Equal(InstallContext.User, Installed()[0].Context);
 
-        // AC7's CI analogue: a Revit.exe runs in this session, so the upgrade waits, then runs when it exits.
+        // Decision #73 / #201: a background Revit.exe must neither hold the queue nor be terminated.
         using (var stub = StartRevitStub())
         {
-            Assert.True(revit.AnyRunning());
-            var upgrade = installs.InstallAsync(Fixture, V110);
-            await WaitFor(() => installs.For(Fixture.Id).Phase == InstallPhase.WaitingForRevit, TimeSpan.FromSeconds(60));
-            var runs = msiexec.Runs;
-            await Task.Delay(TimeSpan.FromSeconds(3));
-            Assert.Equal(runs, msiexec.Runs);
-            Assert.Equal("1.0.0", Assert.Single(Installed()).VersionText);
-            Step("Revit running: waits", installs.For(Fixture.Id), 0, _log.LastOrDefault(l => l.Contains("installs when it closes")));
-            stub.Kill(entireProcessTree: true);
-            await upgrade.WaitAsync(TimeSpan.FromMinutes(5));
+            try
+            {
+                await installs.InstallAsync(Fixture, V110).WaitAsync(TimeSpan.FromMinutes(5));
+                Assert.False(stub.HasExited, "the installer must not terminate the background process");
+                Step("Revit running: upgrade to 1.1.0 proceeds", installs.For(Fixture.Id), 1);
+                Assert.Contains("MSIRESTARTMANAGERCONTROL = Disable", File.ReadAllText(installs.For(Fixture.Id).LogPath!));
+            }
+            finally
+            {
+                if (!stub.HasExited) stub.Kill(entireProcessTree: true); // test-owned stand-in only
+            }
         }
-        Step("Revit closed: upgrade to 1.1.0", installs.For(Fixture.Id), 1);
         Assert.Equal(InstallPhase.Installed, installs.For(Fixture.Id).Phase);
         Assert.Equal("1.1.0", Assert.Single(Installed()).VersionText);
 

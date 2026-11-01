@@ -229,48 +229,6 @@ internal sealed class FakeBundleReader : IBundleReader
     }
 }
 
-/// <summary>Revit, scripted: Running until Close().</summary>
-internal sealed class FakeRevit : IRevitWatch
-{
-    private TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public bool Running { get; private set; }
-
-    public int Waits { get; private set; }
-
-    /// <summary>The process list cannot be read (review N3: that must count as "Revit may be running").</summary>
-    public bool Throws { get; set; }
-
-    public void Open()
-    {
-        Running = true;
-        _closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-    }
-
-    public void Close()
-    {
-        Running = false;
-        _closed.TrySetResult();
-    }
-
-    /// <summary>A click or external install during the process listing (SC-017 DN1/DN6).</summary>
-    public Action? OnCheck { get; set; }
-
-    public bool AnyRunning()
-    {
-        OnCheck?.Invoke();
-        return Throws ? throw new InvalidOperationException("access denied") : Running;
-    }
-
-    public async Task WaitUntilNoneAsync(CancellationToken cancel)
-    {
-        Waits++;
-        if (Throws) throw new InvalidOperationException("access denied");
-        if (!Running) return;
-        await _closed.Task.WaitAsync(cancel).ConfigureAwait(false);
-    }
-}
-
 /// <summary>The self-updater, scripted.</summary>
 internal sealed class FakeSelfUpdater : ISelfUpdater
 {

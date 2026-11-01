@@ -463,20 +463,9 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
   <data name="App_Update" xml:space="preserve">
     <value>Update</value>
   </data>
-  <data name="App_InstallWhenRevitCloses" xml:space="preserve">
-    <value>Install when Revit closes</value>
-    <comment>The Install button while Revit runs (spec #20 §5): a click waits for Revit to exit, then installs.</comment>
-  </data>
-  <data name="App_UpdateWhenRevitCloses" xml:space="preserve">
-    <value>Update when Revit closes</value>
-  </data>
   <data name="App_ReinstallPrevious" xml:space="preserve">
     <value>Reinstall previous version ({0})</value>
     <comment>After a failed upgrade left the app uninstalled (spec #20 §5). {0} is the previous version, e.g. 1.1.0.</comment>
-  </data>
-  <data name="App_ReinstallPreviousWhenRevitCloses" xml:space="preserve">
-    <value>Reinstall {0} when Revit closes</value>
-    <comment>The reinstall button while Revit runs (the reinstall waits for Revit too). {0} is the previous version.</comment>
   </data>
   <data name="App_Cancel" xml:space="preserve">
     <value>Cancel</value>
@@ -521,9 +510,6 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
   <!-- F17 WU4: what an install is doing, and how it ended. {0} is the app (Gantt-It), {1} the version (1.2.0). -->
   <data name="Install_Downloading" xml:space="preserve">
     <value>Downloading and checking {0} {1}…</value>
-  </data>
-  <data name="Install_WaitingForRevit" xml:space="preserve">
-    <value>Waiting for Revit to close. {0} {1} installs as soon as it does.</value>
   </data>
   <data name="Install_Installing" xml:space="preserve">
     <value>Installing {0} {1}…</value>
@@ -627,9 +613,6 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
   <data name="Problem_Cancelled" xml:space="preserve">
     <value>it was cancelled</value>
   </data>
-  <data name="Problem_RevitRunning" xml:space="preserve">
-    <value>Revit was open</value>
-  </data>
   <data name="Net_Offline" xml:space="preserve">
     <value>couldn't reach GitHub</value>
     <comment>A network failure, in plain words (WU3 review D3). Also used for "Couldn't check: {0}".</comment>
@@ -651,5 +634,8 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
   </data>
   <data name="Net_Cancelled" xml:space="preserve">
     <value>it was cancelled</value>
+  </data>
+  <data name="Install_CloseRevitAdvice" xml:space="preserve">
+    <value>Close Revit before installing or updating. If files are in use, installation may fail or require a Windows restart.</value>
   </data>
 </root>

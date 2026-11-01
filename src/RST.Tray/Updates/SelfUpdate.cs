@@ -321,7 +321,7 @@ internal static class Updater
         Log.Information("RST updater (pid {Pid}) applying {Msi}", Environment.ProcessId, args.ApplyMsi);
         var paths = new InstallPaths(TrayPaths.CacheDir, TrayPaths.InstallLogsDir, TrayPaths.SelfUpdateResultFile);
         var code = SelfUpdateApply.RunAsync(args.ApplyMsi!, args.WaitPid, paths, new MsiDatabase(), new BundleReader(), new Msiexec(),
-                                            new RevitWatch(log: m => Log.Information("{Message}", m)), new UpdaterHost(log: m => Log.Information("{Message}", m)),
+                                            new UpdaterHost(log: m => Log.Information("{Message}", m)),
                                             TimeProvider.System, m => Log.Information("{Message}", m)).GetAwaiter().GetResult();
         Log.Information("RST updater exits {Code}", code);
         return code;

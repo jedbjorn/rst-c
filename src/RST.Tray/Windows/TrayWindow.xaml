@@ -160,6 +160,8 @@
             <StackPanel MaxWidth="640" DataContext="{Binding Updates}">
                 <TextBlock Text="{x:Static res:TrayStrings.Updates_Heading}" Style="{StaticResource HeadingText}" />
                 <TextBlock Text="{x:Static res:TrayStrings.Updates_Description}" Style="{StaticResource PageDescription}" />
+                <TextBlock Text="{x:Static res:TrayStrings.Install_CloseRevitAdvice}" Style="{StaticResource Hint}"
+                           TextWrapping="Wrap" Margin="0,0,0,12" AutomationProperties.AutomationId="Tray.Updates.CloseRevitAdvice" />
 
                 <Border Style="{StaticResource Panel}" Padding="16,14" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.RstPanel">
                     <Grid>
@@ -254,6 +256,8 @@
             <StackPanel MaxWidth="640" DataContext="{Binding Updates}">
                 <TextBlock Text="{x:Static res:TrayStrings.Apps_Heading}" Style="{StaticResource HeadingText}" />
                 <TextBlock Text="{x:Static res:TrayStrings.Apps_Description}" Style="{StaticResource PageDescription}" />
+                <TextBlock Text="{x:Static res:TrayStrings.Install_CloseRevitAdvice}" Style="{StaticResource Hint}"
+                           TextWrapping="Wrap" Margin="0,0,0,12" AutomationProperties.AutomationId="Tray.Apps.CloseRevitAdvice" />
                 <TextBlock Text="{x:Static res:TrayStrings.Apps_Detecting}" Style="{StaticResource MutedText}" Margin="0,0,0,10"
                            Visibility="{Binding IsDetecting, Converter={StaticResource BoolToVisible}}"
                            AutomationProperties.AutomationId="Tray.AppsDetecting" />

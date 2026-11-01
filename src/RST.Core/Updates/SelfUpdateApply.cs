@@ -10,11 +10,9 @@
 //      SHA256 is still the verified one and which still says what it is (RST's PER-USER UpgradeCode, that version,
 //      per user; or the bundle's version resource): --apply installs nothing else, whoever starts it
 //   2. waits (up to a minute) for that pid to exit, if it is an RST tray
-//   3. never while Revit runs (review B2): if a Revit.exe runs in this session (or the check fails) it installs
-//      nothing, records "Revit was open", and starts the old tray again, which waits for Revit and hands over again
-//   4. holds the package against writes, re-hashes it (review N1), and runs it: msiexec /i … /qn /norestart /l*v
-//      (System32's), or the bundle /quiet /norestart /log (decision #34), waited on by its own handle; 1618 is tried
-//      again after 3 minutes, three runs in all, checking for Revit before each (review B1)
+//   4. holds the package against writes, re-hashes it (review N1), and runs it: msiexec /i … /qn /norestart MSIRESTARTMANAGERCONTROL=Disable /l*v
+//      (System32's), or the bundle /quiet /norestart RstRestartManagerControl=Disable /log (decision #34), waited on by its own handle; 1618 is tried
+//      again after 3 minutes, three runs in all (review B1)
 //   5. records the result in selfupdate.json (the new tray shows it once; a refusal too, review N4) and, on success,
 //      keeps the package as RST's cached "last installed"
 //   6. starts the installed tray with no switch: its window opens on the result. If Windows Installer's Restart
@@ -91,17 +89,16 @@ public static class SelfUpdateApply
     public const int ReleaseAttempts = 4;
 
     /// <summary>Exit codes of the updater process.</summary>
-    public const int Installed = 0, InstallFailed = 1, Refused = 2, DeferredForRevit = 3;
+    public const int Installed = 0, InstallFailed = 1, Refused = 2;
 
     /// <summary>Runs the update. Never throws.</summary>
     public static async Task<int> RunAsync(
         string packagePath, int? waitPid, InstallPaths paths, IMsiReader msi, IBundleReader? bundles, IMsiexec runner,
-        IRevitWatch revit, ISelfUpdateHost host, TimeProvider time, Action<string> log)
+        ISelfUpdateHost host, TimeProvider time, Action<string> log)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(msi);
         ArgumentNullException.ThrowIfNull(runner);
-        ArgumentNullException.ThrowIfNull(revit);
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(time);
         log ??= _ => { };
@@ -131,7 +128,7 @@ public static class SelfUpdateApply
             // (by Revit, the Run value, Restart Manager) exits at once instead of running from the folder being
             // replaced. It is handed over (released) right before the new tray is started, in Finish.
             // SC-022: a tray that does not let go in time (it was never asked to quit, or is slow to) is closed by
-            // msiexec's Restart Manager; the claim keeps waiting and takes the mutex at that moment, so the gap between
+            // msiexec's tray CloseApplication action; the claim keeps waiting and takes the mutex at that moment, so the gap between
             // the old tray's exit and the hand-over is never unguarded.
             instance = host.ClaimTrayInstance(ClaimTimeout);
             log(instance.Held
@@ -141,14 +138,6 @@ public static class SelfUpdateApply
             var kind = InstallChecks.KindOf(path);
             for (var run = 1; ; run++)
             {
-                // Review B2: never while Revit runs. A failing check counts as "Revit may be running" (RevitCheck).
-                if (RevitCheck.MayBeRunning(revit, log))
-                {
-                    log($"updater: Revit is running; RST {version} is not installed now. The tray starts again and installs it when Revit closes");
-                    Finish(paths, new SelfUpdateResult(version, null, InstallProblem.RevitRunning, null, time.GetUtcNow()), host, log, instance);
-                    return DeferredForRevit;
-                }
-
                 Directory.CreateDirectory(paths.LogsDir);
                 var logPath = paths.LogFor(ProductCatalog.RstId, time.GetUtcNow());
                 int code;
@@ -163,12 +152,12 @@ public static class SelfUpdateApply
                     }
                     if (kind == PackageKind.Bundle)
                     {
-                        log($"updater: \"{path}\" /quiet /norestart /log \"{logPath}\"");
+                        log($"updater: \"{path}\" /quiet /norestart RstRestartManagerControl=Disable /log \"{logPath}\"");
                         code = await runner.RunBundleAsync(path, logPath, CancellationToken.None).ConfigureAwait(false);
                     }
                     else
                     {
-                        log($"updater: msiexec /i \"{path}\" /qn /norestart /l*v \"{logPath}\"");
+                        log($"updater: msiexec /i \"{path}\" /qn /norestart MSIRESTARTMANAGERCONTROL=Disable /l*v \"{logPath}\"");
                         code = await runner.InstallAsync(path, logPath, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
