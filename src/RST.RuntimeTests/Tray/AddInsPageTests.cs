@@ -48,11 +48,12 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
 
     public List<int> Launched { get; } = [];
 
-    public void LaunchRevit(int year)
+    public int LaunchRevit(int year)
     {
         Calls.Add("Launch");
         OnLaunch?.Invoke(year);
         Launched.Add(year);
+        return 4242;
     }
 
     public bool RestoreFails { get; set; }
@@ -350,6 +351,25 @@ public class AddInsViewModelTests
         await vm.LaunchAsync(2026);
         Assert.Empty(f.Backend.Applied);
         Assert.Empty(f.Backend.Launched);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_fresh_open_clears_launch_success_but_preserves_launch_errors(bool fails)
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        if (fails) f.Backend.OnLaunch = _ => throw new IOException("executable missing");
+        await vm.LaunchAsync(2026);
+        Assert.Equal(!fails, vm.HasResult);
+        var error = vm.ErrorText;
+        vm.ClearLaunchSuccess();
+        Assert.False(vm.HasResult);
+        Assert.Equal(error, vm.ErrorText);
+        Assert.Equal(fails, vm.HasError);
     }
 
     [Fact]

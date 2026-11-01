@@ -576,6 +576,65 @@ public sealed class SelfUpdateApplyTests : IDisposable
         File.Exists(Paths.SelfUpdateResultFile).Should().BeFalse("shown once");
     }
 
+    [Theory]
+    [InlineData(InstallProblem.None, 0, InstallPhase.Installed)]
+    [InlineData(InstallProblem.None, 3010, InstallPhase.Installed)]
+    [InlineData(InstallProblem.InstallFailed, 1603, InstallPhase.Failed)]
+    [InlineData(InstallProblem.None, 1618, InstallPhase.Failed)]
+    [InlineData(InstallProblem.UpdaterFailed, null, InstallPhase.Failed)]
+    [InlineData(InstallProblem.HashMismatch, null, InstallPhase.Refused)]
+    public void Accepted_results_remain_pending_until_presented(InstallProblem problem, int? exit, InstallPhase phase)
+    {
+        Directory.CreateDirectory(_root);
+        var json = new SelfUpdateResult("3.2.2", exit, problem, null, _time.GetUtcNow()).ToJson();
+        foreach (var atStartup in new[] { true, false })
+        {
+            if (atStartup) File.WriteAllText(Paths.SelfUpdateResultFile, json);
+            using var tray = Tray(_time);
+            if (!atStartup)
+            {
+                tray.HasUnpresentedSelfUpdateResult.Should().BeFalse();
+                File.WriteAllText(Paths.SelfUpdateResultFile, json);
+                tray.RefreshSelfUpdateResult();
+            }
+            tray.HasUnpresentedSelfUpdateResult.Should().BeTrue();
+            tray.For("rst").Phase.Should().Be(phase);
+            File.Exists(Paths.SelfUpdateResultFile).Should().BeFalse();
+            tray.RefreshSelfUpdateResult(); // a second launch after the file was consumed
+            tray.HasUnpresentedSelfUpdateResult.Should().BeTrue();
+            var progress = tray.For("rst");
+            tray.MarkSelfUpdateResultPresented();
+            tray.RefreshSelfUpdateResult();
+            tray.HasUnpresentedSelfUpdateResult.Should().BeFalse();
+            tray.For("rst").Should().Be(progress, "presentation changes navigation intent only");
+        }
+    }
+
+    [Theory]
+    [InlineData("damaged")]
+    [InlineData("version")]
+    [InlineData("stale")]
+    [InlineData("future")]
+    public void Rejected_results_do_not_create_presentation_intent(string kind)
+    {
+        Directory.CreateDirectory(_root);
+        var json = kind == "damaged" ? "not json" : new SelfUpdateResult(kind == "version" ? "invalid" : "3.2.2", 0,
+            InstallProblem.None, null, _time.GetUtcNow().AddDays(kind == "stale" ? -2 : kind == "future" ? 2 : 0)).ToJson();
+        foreach (var atStartup in new[] { true, false })
+        {
+            if (atStartup) File.WriteAllText(Paths.SelfUpdateResultFile, json);
+            using var tray = Tray(_time);
+            if (!atStartup)
+            {
+                File.WriteAllText(Paths.SelfUpdateResultFile, json);
+                tray.RefreshSelfUpdateResult();
+            }
+            tray.HasUnpresentedSelfUpdateResult.Should().BeFalse();
+            tray.For("rst").Phase.Should().Be(InstallPhase.Idle);
+            File.Exists(Paths.SelfUpdateResultFile).Should().BeFalse();
+        }
+    }
+
     [Fact]
     public async Task B3_a_bundle_package_is_run_as_the_bundle()
     {
