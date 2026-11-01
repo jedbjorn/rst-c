@@ -14,9 +14,9 @@ purpose: What the RST tray app is, where it lives, its Health page, how its upda
 
 From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
-The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [Add-ins page](#add-ins-page)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages, in this order (Feature #17, decisions #76 and #77):
+The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [RST Profiles](#rst-profiles)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages, in this order (Feature #17, decisions #76 and #77):
 
-- **RST Profiles:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [Add-ins page](#add-ins-page).
+- **RST Profiles:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [RST Profiles](#rst-profiles).
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
 - **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
 - **Health:** **Device**, this PC's snapshot and junk file cleanup without Revit, and **Models**, every model you have worked on on this PC, across Revit versions, with each model's activity and health. See [Health page](#health-page).
@@ -172,9 +172,11 @@ When Revit 2025 or later starts with RST, RST checks once whether your tray is r
 
 **IT note (job objects).** When Revit runs inside a Windows job object (a deployment launcher, an app-virtualisation wrapper, a sandbox), RST starts the tray outside that job if the job allows it, with your normal environment rather than Revit's. If the job forbids that, Explorer starts it instead. So closing the job does not end the tray. Only with neither available does the tray start inside the job, and the log line says so.
 
-## Add-ins page
+## RST Profiles
 
-The **Add-ins** page switches your profile and add-ins before you start Revit, with the Profile Loader's own switching: the same plan in **Confirm Add-in Changes**, the same report, the same record of what RST switched off, and the Loader's **Adopt RSTify Presets?** question the first time a profile with presets is used. Per installed Revit year it lists what RST switched off and what it can't switch back on. **Restore All Add-ins** switches back on only what RST switched off. Every change applies the next time that Revit starts. If a Revit is open, the report says so: restart it to see the change.
+The **RST Profiles** page switches your profile and add-ins before you start Revit, with the Profile Loader's own switching: the same plan in **Confirm Add-in Changes**, the same report, the same record of what RST switched off, and the Loader's **Adopt RSTify Presets?** question the first time a profile with presets is used. Per installed Revit year it lists what RST switched off and what it can't switch back on. **Restore All Add-ins** switches back on only what RST switched off. Every change applies the next time that Revit starts. If a Revit is open, the report says so: restart it to see the change.
+
+**Launch with Profile** applies the selected profile and the **Disable unused** choice through the Loader’s confirmation and report flow, then starts a new instance of that Revit year. Cancelling or a failed apply means Revit is not launched. Errors appear inline on RST Profiles.
 
 Things to know when Revits of several years are open:
 
