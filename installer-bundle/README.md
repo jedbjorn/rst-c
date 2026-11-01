@@ -57,7 +57,7 @@ They set the Burn variable `InstallScope` to `user` or `machine`. **The user alw
      - Each product must be removable, with its cached installer present; otherwise it stops with exit 1612.
    - **After a stop or a failure:** the helper is vital, so Burn rolls `RST-Machine.msi` back. The user keeps their own RST, and the setup reports the failure. A removal that fails midway (the preview gone, then `RST.msi` fails) still leaves `RST.msi`.
    - **A leftover per-user `RST.addin` that no installer can remove** (a hand copy) stays. It is reported like any shadow: the engine logs it, and the tray tells the user once. A bare `RST-Machine.msi` refuses it instead and names the file.
-   - **Then it starts the tray** (SC-044): `C:\Program Files\RST\Tray\RST.Tray.exe --startup`, for this user, hidden, never elevated, none when one runs. It uses the same code as the MSIs' `RstStartTray` (`installer/helper/StartTray.cs`, compiled in), and its log says what it did. `RST-Machine.msi` skips its own start under setup (`RSTFROMSETUP=1`): removing the user's `RST.msi` closes every `RST.Tray.exe` on the desktop by name, so a tray it started would be closed again. Never after a stop or a failure. See [installer/README.md](../installer/README.md#when-the-tray-starts).
+   - **Then it starts the tray** (SC-044): `C:\Program Files\RST\Tray\RST.Tray.exe --startup`, for this user, hidden, never elevated through UAC, none when one runs; on an account with no split token (UAC off, or the built-in Administrator with Admin Approval Mode off, as on the CI runners), it uses the same full token the user gets at sign-in. It uses the same code as the MSIs' `RstStartTray` (`installer/helper/StartTray.cs`, compiled in), and its log says what it did. `RST-Machine.msi` skips its own start under setup (`RSTFROMSETUP=1`): removing the user's `RST.msi` closes every `RST.Tray.exe` on the desktop by name, so a tray it started would be closed again. Never after a stop or a failure. See [installer/README.md](../installer/README.md#when-the-tray-starts).
    - **Burn's own `RST` package,** whose condition is false on this path, then finds the bundled version already gone. Burn logs that and carries on.
 3. **Ticked companions install for the installing user.** Companions stay per user (contract C1). Every other user adds them from their RST tray.
 
@@ -170,6 +170,15 @@ dotnet build installer-bundle\RST.Setup.wixproj -c Release
   `Chain` and `Companions` also assert from the Burn log that the bundle registered per-user and never launched an elevated engine. The elevation check is Burn's own: it logs "Launching elevated engine process" whenever it starts its elevated engine, even on CI's already-elevated runner. Every silent run uses `/quiet /norestart`, the documented form.
 
 None of this loads anything in Revit. That a real companion works in Revit after the setup is the one-time VM check (AC6, skill `rst_c_vm`), not CI.
+
+## Known harmless log lines (SC-014)
+
+WiX 6.0.2 can log these `e000` errors even when a per-user upgrade succeeds:
+
+- `0x80070003` (`CreateProcessW`, `Failed to create embedded process`, `Failed to run bundle as embedded`, then `Failed to configure per-user related bundle`): Burn detects the same HKCU bundle in both registry views and tries its uninstall twice. The first succeeds and removes its cached `RST-Setup.exe`; the second finds that path gone. This matches [WiX issue #7675](https://github.com/wixtoolset/issues/issues/7675) and the [6.0.2 registry enumeration](https://github.com/wixtoolset/wix/blob/v6.0.2/src/libs/dutil/WixToolset.DUtil/butil.cpp#L348-L413), which searches both views for per-user bundles too.
+- `0x80070006` (`Failed to write send message to pipe`, then `Failed to send BURN_ELEVATION_MESSAGE_TYPE_CLEAN_PACKAGE message to per-machine process`): cache cleanup attempts to contact an elevated engine through an invalid pipe handle. On the per-user path, which never launches that engine, this is consistent with cleanup of the skipped machine package. [ApplyClean](https://github.com/wixtoolset/wix/blob/v6.0.2/src/burn/engine/apply.cpp#L848-L880) ignores cleanup errors; they do not change the install result.
+
+These messages alone do not establish success: check the process exit code and `Apply complete, result: 0x0`, plus the installed version/ARP entries. A failed Apply or an unexpected error needs investigation. The tray self-update CI leg checks those outcomes and allows only these exact messages (missing cache paths must name a twice-detected bundle whose first uninstall succeeded). Bundle identity, scope and authoring are unchanged.
 
 ## Bumping a companion
 

@@ -398,6 +398,52 @@ public class EngineDependencyResolverTests
     // --- the production wiring -----------------------------------------------------------------
 
     [Fact]
+    public void ForEngine_ResolvesByNameThroughARealCollectibleContext_AndHandsOverItsLoadedCopy()
+    {
+        // SC-013 N3: Default can satisfy even an unused reference from our deps.json before
+        // Resolving fires. The fixture has its own deps.json in an isolated output subdirectory.
+        const string fixture = "RST.ResolverFixture";
+        Assert.DoesNotContain(AssemblyLoadContext.Default.Assemblies, a => a.GetName().Name == fixture);
+        var context = new AssemblyLoadContext("RST resolver fresh", isCollectible: true);
+        var borrower = new AssemblyLoadContext("RST resolver hand-over", isCollectible: true);
+        try
+        {
+            var deps = new AssemblyDependencyResolver(Path.Combine(AppContext.BaseDirectory, "ResolverFixture", fixture + ".dll"));
+            var name = new AssemblyName(fixture);
+            var path = deps.ResolveAssemblyToPath(name);
+            Assert.NotNull(path);
+            var info = new List<string>();
+            var warn = new List<string>();
+            var resolver = EngineDependencyResolver.ForEngine(deps, context, info.Add, warn.Add);
+            var calls = 0;
+            Assembly? Resolve(AssemblyLoadContext _, AssemblyName requested)
+            {
+                calls++;
+                return resolver.Resolve(requested);
+            }
+            context.Resolving += Resolve;
+            var loaded = context.LoadFromAssemblyName(name);
+            Assert.Equal(1, calls);
+            Assert.Same(context, AssemblyLoadContext.GetLoadContext(loaded));
+            Assert.Equal(path, loaded.Location);
+            Assert.Equal(AssemblyName.GetAssemblyName(path).Version, loaded.GetName().Version);
+
+            // A second context requests the compatible copy owned by the resolver's context.
+            // Asking context again would bypass Resolving via the runtime's own assembly cache.
+            borrower.Resolving += Resolve;
+            Assert.Same(loaded, borrower.LoadFromAssemblyName(loaded.GetName()));
+            Assert.Equal(2, calls);
+            Assert.Contains(info, m => m.Contains("already loaded", StringComparison.Ordinal));
+            Assert.Empty(warn);
+        }
+        finally
+        {
+            borrower.Unload();
+            context.Unload();
+        }
+    }
+
+    [Fact]
     public void ForEngine_OverARealDepsJson_ReusesTheLoadedCopy_DeclinesANewerRequest_AndNeverAThirdPartyOne()
     {
         // This test assembly's own deps.json lists RST.Core (a project reference), which is already

@@ -587,6 +587,10 @@ The pins are inline in `src/RST.Engine/RST.Engine.csproj` and `src/RST.Bootstrap
 runs `build/check-revit-api-floor.py` first. It reads every tracked `.csproj`, `.props` and
 `.targets` file and fails on any `Nice3point.Revit.Api.*` version above the floor, on an item
 with no version, and on a Revit year that has no floor.
+`build/check-revit-api-refs.py` also checks the staged Engine/Bootstrap AssemblyRefs (SC-013):
+RevitAPI/UI floors are `25.0.0.0` / `26.0.4.0` / `27.0.0.0`, and AdWindows floors are
+`5.1.2.1` / `5.2.0.2` / `5.4.2.2`; re-inspect the floor packages when raising them.
+AssemblyRefs cannot distinguish updates sharing an AssemblyVersion, so the package check remains necessary.
 
 **Raising the floor on purpose.** Do it only when a feature needs API from a later update, and
 accept that users on the older updates of that year lose support.
