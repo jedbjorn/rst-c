@@ -25,7 +25,9 @@ public sealed class ScannerProbe : IExternalCommand
     {
         try
         {
-            var scanned = RibbonScanner.Enumerate().ToList();
+            var app = commandData.Application.Application;
+            int? revitYear = int.TryParse(app.VersionNumber, out var year) ? year : null;
+            var scanned = RibbonScanner.Enumerate(revitYear: revitYear).ToList();
 
             var probed = scanned
                 .Select(c => new ProbedCommand(
@@ -39,7 +41,6 @@ public sealed class ScannerProbe : IExternalCommand
             Directory.CreateDirectory(outDir);
             var outPath = Path.Combine(outDir, "scan-output.json");
 
-            var app = commandData.Application.Application;
             var lookupOk = probed.Count(p => p.LookupOk);
             var envelope = new ScanEnvelope(
                 CapturedAt: DateTime.UtcNow.ToString("O"),

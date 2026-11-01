@@ -139,7 +139,7 @@ public sealed class ProfileBuilderStackTests : IDisposable
         var backend = new ProfileBuilderBackend("2026", [], new FakeScheduler(), ["Architecture", "Enscape"],
             LoaderPaths.Under(_root), LoaderAssets.LookupPath);
         var profile = ProfileEditing.ForEditing(source);
-        profile.RequiredAddins = RequiredAddinDetector.Compute(profile, backend.Catalog, backend.GetAddinLookup());
+        profile.RequiredAddins = RequiredAddinDetector.Compute(profile, backend.Catalog, backend.GetAddinLookup(), 2026);
         var fileName = ProfileStore.Save(profile, ProfilesDir);
         return (backend, Path.Combine(ProfilesDir, fileName));
     }

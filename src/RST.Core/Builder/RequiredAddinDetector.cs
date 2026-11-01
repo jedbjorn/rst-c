@@ -25,7 +25,7 @@ namespace RST.Core.Builder;
 public static class RequiredAddinDetector
 {
     /// <summary>
-    /// The Builder's <c>BUILTIN_TABS</c>. The same 20 names as the Loader's
+    /// The Builder's <c>BUILTIN_TABS</c>. The same 19 unconditional names as the Loader's
     /// (<see cref="RequiredAddinRules.BuiltinTabs"/>), so one set serves both.
     /// </summary>
     public static IReadOnlySet<string> BuiltinTabs => RequiredAddinRules.BuiltinTabs;
@@ -48,7 +48,8 @@ public static class RequiredAddinDetector
     public static List<RequiredAddin> Compute(
         Profile profile,
         IEnumerable<CatalogCommand>? catalog,
-        IReadOnlyDictionary<string, AddinLookupEntry>? lookup)
+        IReadOnlyDictionary<string, AddinLookupEntry>? lookup,
+        int? revitYear = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         // commandId → { sourceTab, sourcePanel, origin }; a later duplicate id wins, as in the JS object.
@@ -66,12 +67,12 @@ public static class RequiredAddinDetector
             // SC-007 (spec #18): a command of unknown origin on one of Revit's own tabs is never an
             // add-in. Host tabs (Add-Ins, FormIt, eTransmit) are where add-ins live, so they are not
             // covered; an add-in's CustomCtrl_ button is classified Custom by the ribbon scan anyway.
-            if (origin == UnknownOrigin && BuiltinTabs.Contains(srcTab) && !RST.Core.Scanning.HostTabs.Contains(srcTab)) return;
+            if (origin == UnknownOrigin && RequiredAddinRules.IsNativeTab(srcTab, revitYear) && !RST.Core.Scanning.HostTabs.Contains(srcTab)) return;
             if (srcTab == "Custom" || srcTab.StartsWith("CustomCtrl_", StringComparison.Ordinal)) return;
-            if (BuiltinTabs.Contains(srcTab))
+            if (RequiredAddinRules.IsNativeTab(srcTab, revitYear))
             {
                 if (string.IsNullOrEmpty(srcPanel)) return;
-                if (BuiltinTabs.Contains(srcPanel) || BuiltinPanels.Contains(srcPanel)) return;
+                if (RequiredAddinRules.IsNativeTab(srcPanel, revitYear) || BuiltinPanels.Contains(srcPanel)) return;
                 panels.Add(srcPanel);
             }
             else
@@ -93,7 +94,7 @@ public static class RequiredAddinDetector
                     var origin = info?.Origin
                         ?? (string.IsNullOrEmpty(slot.CommandId)
                             ? null
-                            : RST.Core.Scanning.OriginClassifier.ClassifyRibbonButton(slot.SourceTab, slot.CommandId).ToString());
+                            : RST.Core.Scanning.OriginClassifier.ClassifyRibbonButton(slot.SourceTab, slot.CommandId, revitYear).ToString());
                     Classify(slot.SourceTab, slot.SourcePanel, origin);
                 }
                 else if (slot.SlotType == "stack")

@@ -10,7 +10,6 @@ public sealed class OriginClassifierTests
 
     [Theory]
     [InlineData("Architecture")]
-    [InlineData("Concrete")]
     [InlineData("Modify")]
     [InlineData("RST")]
     public void BuiltinTab_NoPublisher_IsNative(string tab)
@@ -21,10 +20,40 @@ public sealed class OriginClassifierTests
     }
 
     [Theory]
-    [InlineData("ID_NUMBERING_REINF_PARTITIONS", CommandOrigin.Native)]
-    [InlineData("CustomCtrl_%Concrete%Acme%Go", CommandOrigin.Custom)]
-    public void Concrete_ribbon_buttons_keep_native_and_custom_origins(string id, CommandOrigin expected) =>
-        OriginClassifier.ClassifyRibbonButton("Concrete", id).Should().Be(expected);
+    [InlineData(null, false)]
+    [InlineData(2025, false)]
+    [InlineData(2026, false)]
+    [InlineData(2027, true)]
+    [InlineData(2028, true)]
+    public void Concrete_is_native_only_from_2027(int? year, bool native)
+    {
+        BuiltinTabs.Contains("Concrete", year).Should().Be(native);
+        OriginClassifier.Classify("Concrete", null, programFilesAutodesk: AutodeskRoot, revitYear: year)
+            .Should().Be(native ? CommandOrigin.Native : CommandOrigin.Custom);
+        OriginClassifier.ClassifyRibbonButton("Concrete", "ID_NUMBERING_REINF_PARTITIONS", year)
+            .Should().Be(native ? CommandOrigin.Native : CommandOrigin.Unknown);
+        OriginClassifier.ClassifyRibbonButton("Concrete", "CustomCtrl_%Concrete%Acme%Go", year)
+            .Should().Be(CommandOrigin.Custom);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(2025)]
+    [InlineData(2026)]
+    [InlineData(2027)]
+    [InlineData(2028)]
+    public void Existing_builtin_tabs_remain_native_in_every_year(int? year)
+    {
+        foreach (var tab in new[] { "Steel", "Architecture" })
+        {
+            BuiltinTabs.Contains(tab, year).Should().BeTrue();
+            OriginClassifier.Classify(tab, null, revitYear: year).Should().Be(CommandOrigin.Native);
+            OriginClassifier.ClassifyRibbonButton(tab, "ID_TOOL", year).Should().Be(CommandOrigin.Native);
+            RST.Core.Loader.RequiredAddinRules.IsNativeTab(tab, year).Should().BeTrue();
+            RST.Core.Activation.RequiredAddinMatch.IsAddinRequirement(
+                new RST.Core.Profiles.RequiredAddin { TabName = tab, AddinFile = "Acme.addin" }, year).Should().BeFalse();
+        }
+    }
 
     [Fact]
     public void NonAutodeskPublisher_IsThirdParty_EvenOnBuiltinTab()

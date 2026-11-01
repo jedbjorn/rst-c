@@ -304,28 +304,44 @@ public class ActivationPlannerTests
     }
 
     [Theory]
+    [InlineData("AcmeConcrete.addin", null, false)]
+    [InlineData("missing.addin", "d4c6e3e0-0000-4000-8000-525354500001", false)]
     [InlineData(null, null, false)]
-    [InlineData("AcmeConcrete.addin", "d4c6e3e0-0000-4000-8000-525354500001", true)]
     [InlineData(" ", " ", false)]
-    public void Concrete_is_native_and_keeps_no_add_ins_on(string? file, string? id, bool native)
+    [InlineData("AcmeConcrete.addin", "d4c6e3e0-0000-4000-8000-525354500001", true)]
+    public void Concrete_requirements_use_each_inventory_year(string? file, string? id, bool native)
     {
-        foreach (var year in new[] { 2025, 2026, 2027 })
+        var items = new[] { 2025, 2026, 2027, 2028 }.SelectMany(year => new[]
         {
-            var item = Item(year, "Acme Concrete", fileName: "AcmeConcrete.addin",
-                id: "d4c6e3e0-0000-4000-8000-525354500001");
-            var decoy = Item(year, "Concrete Extras", fileName: "ConcreteExtras.addin");
-            var inventory = InventoryOf(item, decoy);
-            var required = new RequiredAddin { TabName = "Concrete", AddinFile = file, AddinId = id, Native = native };
-            var normalized = RequiredAddinRules.Normalize([required]).Single();
-            var session = new AddinSessionContext(["Concrete"], null, year, inventory.Items);
+            Item(year, "Acme Concrete", fileName: "AcmeConcrete.addin", id: "d4c6e3e0-0000-4000-8000-525354500001"),
+            Item(year, "Concrete Extras", fileName: "ConcreteExtras.addin"),
+        }).ToArray();
+        var inventory = InventoryOf(items);
+        var required = new RequiredAddin { TabName = "Concrete", AddinFile = file, AddinId = id, Native = native };
+        var normalized = RequiredAddinRules.Normalize([required]).Single();
+        var fuzzy = string.IsNullOrWhiteSpace(file) && string.IsNullOrWhiteSpace(id);
+        var expected = items.Where(i => !native && i.Year < 2027 && (fuzzy || i.FileName == "AcmeConcrete.addin")).ToList();
 
-            RequiredAddinMatch.IsAddinRequirement(required).Should().BeFalse();
-            RequiredAddinMatch.Match(required, inventory.Items).Should().BeEmpty();
-            RequiredAddinRules.Matches(normalized, session).Should().BeEmpty();
-            RequiredAddinRules.Describe(normalized, session).Status.Should().Be(AddinRowStatus.Native);
+        RequiredAddinMatch.RequiredItems([required], inventory).Should().BeEquivalentTo(expected);
+        var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.Load([required], true), new ActivationLedger());
+        foreach (var entry in plan.Entries)
+        {
+            var isRequired = expected.Any(i => i.Year == entry.Year && i.Name == entry.Name);
+            entry.Required.Should().Be(isRequired);
+            entry.Action.Should().Be(isRequired ? PlanAction.NoChange : PlanAction.Disable);
+        }
 
-            var plan = ActivationPlanner.Plan(inventory, ActivationPolicy.Load([required], true), new ActivationLedger());
-            plan.Entries.Should().OnlyContain(e => !e.Required && e.Action == PlanAction.Disable);
+        foreach (int? year in new int?[] { null, 2025, 2026, 2027, 2028 })
+        {
+            var sameYear = items.Where(i => i.Year == (year ?? 2026)).ToList();
+            var matches = sameYear.Where(i => !native && (year is null || year < 2027)
+                && (fuzzy || i.FileName == "AcmeConcrete.addin")).ToList();
+            RequiredAddinMatch.IsAddinRequirement(required, year).Should().Be(!native && (year is null || year < 2027));
+            RequiredAddinMatch.Match(required, sameYear, year).Should().Equal(matches);
+            var session = new AddinSessionContext(["Concrete"], null, year, sameYear);
+            RequiredAddinRules.Matches(normalized, session).Should().Equal(matches);
+            RequiredAddinRules.Describe(normalized, session).Status
+                .Should().Be(native || year >= 2027 ? AddinRowStatus.Native : AddinRowStatus.Loaded);
         }
     }
 

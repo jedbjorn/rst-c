@@ -307,16 +307,22 @@ public class RequiredAddinDetectorTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Concrete_tool_missing_from_catalogue_or_with_unknown_origin_is_not_an_add_in(bool inCatalog)
+    [InlineData(null, false)]
+    [InlineData(2025, false)]
+    [InlineData(2026, false)]
+    [InlineData(2027, true)]
+    [InlineData(2028, true)]
+    public void Concrete_tool_missing_from_catalogue_or_with_unknown_origin_uses_the_session_year(int? year, bool native)
     {
         // SC-052: older 2027 catalogues recorded Reinforcement Numbers as Unknown.
         const string id = "ID_NUMBERING_REINF_PARTITIONS";
         var profile = new Profile { Panels = [new Panel { Slots = [Tool(id, "Concrete", "Reinforcement")] }] };
-        CatalogCommand[] catalog = inCatalog ? [Cmd(id, "Concrete", "Reinforcement", "Unknown")] : [];
-
-        RequiredAddinDetector.Compute(profile, catalog, ShippedLookup()).Should().BeEmpty();
+        foreach (var inCatalog in new[] { false, true })
+        {
+            CatalogCommand[] catalog = inCatalog ? [Cmd(id, "Concrete", "Reinforcement", "Unknown")] : [];
+            var required = RequiredAddinDetector.Compute(profile, catalog, ShippedLookup(), year);
+            required.Select(r => r.TabName).Should().Equal(native ? [] : new[] { "Concrete" });
+        }
     }
 
     [Fact]
