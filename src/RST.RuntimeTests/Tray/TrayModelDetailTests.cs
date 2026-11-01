@@ -89,10 +89,44 @@ internal sealed class FakeActivitySource : IModelActivitySource
     }
 }
 
+/// <summary>The thumbnail worker's queue, without its thread: one queued request per model, a repeat taking the queued one's
+/// place (its paths and generation, as ModelThumbnails does); <see cref="Drain"/> answers what is queued, with each request's
+/// generation.</summary>
+internal sealed class QueuedThumbnails(Func<string, System.Windows.Media.ImageSource?> image) : RST.Tray.Thumbnails.IModelThumbnails
+{
+    private readonly List<RST.Tray.Thumbnails.ThumbnailRequest> _queue = new();
+
+    public IReadOnlyList<RST.Tray.Thumbnails.ThumbnailRequest> Queued => _queue;
+
+    public event EventHandler<RST.Tray.Thumbnails.ThumbnailReadyEventArgs>? Ready;
+
+    public void Request(RST.Tray.Thumbnails.ThumbnailRequest request)
+    {
+        var at = _queue.FindIndex(q => q.ModelId == request.ModelId);
+        if (at >= 0) _queue[at] = request;
+        else _queue.Add(request);
+    }
+
+    public void Cancel(string modelId) => _queue.RemoveAll(q => q.ModelId == modelId);
+
+    public void Drain()
+    {
+        var queued = _queue.ToList();
+        _queue.Clear();
+        foreach (var q in queued)
+            Ready?.Invoke(this, new RST.Tray.Thumbnails.ThumbnailReadyEventArgs(q.ModelId, image(q.ModelId),
+                RST.Tray.Thumbnails.ThumbnailOutcome.ShellOk, q.Generation));
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
 internal static class DetailHarness
 {
     /// <summary>A detail over <paramref name="source"/>, posts inline, today fixed; reads inline unless <paramref name="queue"/> holds them.</summary>
-    public static ModelDetailViewModel Detail(IModelActivitySource source, List<Action>? queue = null, FakeThumbnails? thumbnails = null) =>
+    public static ModelDetailViewModel Detail(IModelActivitySource source, List<Action>? queue = null, RST.Tray.Thumbnails.IModelThumbnails? thumbnails = null) =>
         new(new ModelDetailViewModelOptions
         {
             Source = source,
@@ -304,6 +338,37 @@ public class TrayModelDetailViewModelTests
         thumbnails.Complete("riverside-tower", first);
         Assert.Same(second, detail.Thumbnail);
         Assert.False(thumbnails.Disposed); // the Models list owns it
+    });
+
+    [Fact]
+    public void A_cards_thumbnail_still_loads_after_its_detail_is_opened_and_closed_while_its_request_is_queued() => Screenshots.RunSta(() =>
+    {
+        // Review F1: the card asks, the worker has not got to it, the card is opened (the detail's request takes the queued
+        // one's place, with the detail's generation) and closed again before the worker answers.
+        var picture = ModelsSamples.Picture(3);
+        var worker = new QueuedThumbnails(_ => picture);
+        var models = ModelsHarness.Shown(new FakeModelSource(ModelsSamples.Rows), thumbnails: worker);
+        var detail = DetailHarness.Detail(FakeActivitySource.Samples(), thumbnails: worker);
+        var health = new TrayHealthViewModel(NoHealthService.Instance, new FakeDialogs(), TrayHealthSamples.Options(), models, detail);
+        var card = ModelsHarness.Cards(models).Single(c => c.ModelId == "riverside-tower");
+        models.ThumbnailWanted(card); // the list realized it
+        var listGeneration = worker.Queued.Single().Generation;
+
+        models.OpenDetailCommand.Execute(card);
+        Assert.Equal(detail.ThumbnailGeneration, worker.Queued.Single().Generation); // the detail's took its place
+        detail.Back();
+
+        // Back asked again for the card, with the list's generation: the answer reaches the card.
+        Assert.Equal(listGeneration, worker.Queued.Single().Generation);
+        worker.Drain();
+        Assert.Same(picture, models.CardFor("riverside-tower")!.Thumbnail);
+        Assert.True(models.CardFor("riverside-tower")!.HasThumbnail);
+
+        // Opened again, the detail's own answer still shows in its header.
+        models.OpenDetailCommand.Execute(models.CardFor("riverside-tower")!);
+        worker.Drain();
+        Assert.Same(picture, detail.Thumbnail);
+        health.Dispose();
     });
 
     [Fact]

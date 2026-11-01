@@ -99,7 +99,17 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
         Detail.Open(e.Card, e.StartRange, Models.CardFor(e.ModelId)?.Thumbnail));
 
     /// <summary>Back: the list shows again, scrolled where it was, the opened card focused.</summary>
-    private void OnDetailBack(object? sender, EventArgs e) => UiGuard.Run("tray Health: back to the list", Models.ReturnFromDetail);
+    /// <remarks>
+    /// The opened card asks for its thumbnail again (review F1). The worker keeps one queued request per model, so the
+    /// detail's request (its own, negative generation) can replace the card's while the card's is still queued; the list
+    /// then drops that answer as another generation's, and the card would keep its placeholder until it next realizes.
+    /// Asking again carries the list's generation (cheap when the worker already answered: its disk cache).
+    /// </remarks>
+    private void OnDetailBack(object? sender, EventArgs e) => UiGuard.Run("tray Health: back to the list", () =>
+    {
+        Models.ReturnFromDetail();
+        if (Models.LastOpenedModelId is { } id && Models.CardFor(id) is { } card) Models.ThumbnailWanted(card);
+    });
 
     /// <summary>Device reads its last snapshot the first time it is shown; Models is told each time it is shown.</summary>
     private void OnSubPageShown()
