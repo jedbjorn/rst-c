@@ -3,7 +3,7 @@ title: RST tray
 tags: [rst-c, tray, startup, updates, installer]
 date: 2026-10-31
 project: rst-c
-purpose: What the RST tray app is, where it lives, how its update checks work and what they send, how to quit it, stop it starting, or preset update checks off, and what changes when RST is installed for everyone on the PC
+purpose: What the RST tray app is, where it lives, its Health page, how its update checks work and what they send, how to quit it, stop it starting, or preset update checks off, and what changes when RST is installed for everyone on the PC
 ---
 
 # RST tray
@@ -14,11 +14,12 @@ purpose: What the RST tray app is, where it lives, how its update checks work an
 
 From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
-The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [Add-ins page](#add-ins-page)). Its window has four pages:
+The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [Add-ins page](#add-ins-page)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages:
 
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
 - **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
 - **Add-ins:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [Add-ins page](#add-ins-page).
+- **Health:** **Device**, this PC's snapshot and junk file cleanup without Revit, and **Models**, every model you have worked on on this PC, across Revit versions, with each model's activity and health. See [Health page](#health-page).
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
   - **Check for updates automatically:** on by default. The tray then asks GitHub once a day whether a newer RST, Gantt-It or Splash-It is out. Turn it off to stop those checks. See [Updates](#updates).
@@ -169,6 +170,45 @@ Things to know when Revits of several years are open:
 
 - The active profile is one file for all years. An open Revit keeps the profile tab it built until it restarts, but its RSTify button reads the hidden tabs of the profile you just applied.
 - Revit writes its add-in settings file while it starts. An Apply made while a Revit of that year is starting can be overwritten by it, even though the report says it was done. Apply again once that Revit is up. The Profile Loader in another year behaves the same.
+
+## Health page
+
+The **Health** page is the zoom-out view of the Health tool in Revit. In Revit, Health shows this PC and the model you have open; the tray shows this PC and **every model you have worked on**, on this PC, in any Revit version, with Revit closed or open. It has two sub-tabs, **Device** and **Models**, and opens on Models. Everything it shows is read from files on this PC; nothing is sent anywhere. What rst-c records about your models, and how to turn it off, is in [Health: Data & privacy](health-tool.md#data--privacy).
+
+### Device
+
+The same snapshot as Health in Revit ([System snapshot](health-tool.md#system-snapshot)): the Hardware, Display & Network, Revit and Operating System sections with their coloured dots, **Scan System** and the time it was **Captured**.
+
+- **Revit:** outside Revit there is no current model, Revit user name, hardware acceleration or warning count, so the section lists each installed Revit year with its build instead (for example Revit 2026, 26.0.4.409).
+- **The snapshot** is saved to `%AppData%\RST\tray_health_scan.json`, separate from Revit's `health_scan.json`, so neither overwrites the other.
+- **Clean Junk Files** opens the same dialog, with the same targets, as in Revit ([Junk file cleanup](health-tool.md#junk-file-cleanup)): your active profile's targets, or the presets. A target that is kept per Revit year (Journals, Collaboration Cache, Recent File List) is listed once for each installed year, for example "Journals — 2026" and "Journals — 2027", so one run can clean every year. Files in use, by a running Revit for example, are skipped and counted, as in Revit. The junk sizes refresh at the next Scan System.
+
+### Models
+
+From the top: a search box, the filters, totals over the models shown, then the model cards, grouped.
+
+- **Time frame:** **Recent** (the last 14 days, the default), **3M**, **6M** or **1Y** (the last 13, 26 or 52 weeks, Monday to Sunday, this week included). A model shows when it was open at any time in that window.
+- **Revit version:** All, or one or more Revit years. A model shows when it was opened in a chosen year within the time frame.
+- **Group by:** **Major** version (2026; the default), **Minor** version (2026.4, from the version Revit reports; for tracking down a problem that came with an update) or **None** (one flat list). A model sits in the group of the newest version it was opened in within the time frame, or the newest chosen version when the Revit version filter is set. A model recorded before Revit's minor version was kept sits under "2026 — unknown minor". Click a group's header to fold it away; groups sort newest version first, and models in a group by when they were last open, newest first.
+- **Search:** type part of a model's title, file name, or local or central path (including the names and paths it had before). Search covers **every model, all time**: while the box has text, the time frame and version filter are set aside, the filter row says "Searching all time", and every number on the page is all-time. Clear the box to go back to the filters.
+- **Totals** over the models shown: **Models**, **Active time**, **Opens**, **Avg open time**, **Syncs** and **Avg sync time** ("—" with no syncs). The averages are the total time divided by the count.
+- **Model cards:** the model's thumbnail, its title (and its file name when that differs), its health colour **with its name**, the newest Revit version it was opened in within the time frame, the day it was last open, its active time in the time frame, and **Workshared** or **Cloud** where that applies. Click a card, or press Enter on it, to open its [detail](#model-detail).
+- **Health colours** are the Health chart's in Revit ([Health chart](health-tool.md#health-chart)), from the model's file size, warnings and its typical open and sync times: **Green** (healthy), **Yellow** (worth watching), **Amber** (needs attention), **Red** (poor) or **Grey** "Not enough data". There is never a number.
+- **Thumbnails** are the image Windows shows for the model's file in Explorer, for a model saved on this PC's own drives. A model on a network share, a mapped drive or in the cloud shows a placeholder. RST never reads a model file itself, and never touches a file on the network. Thumbnails are kept in `%LocalAppData%\RST\Tray\thumbnails\` and made again when the model file has been saved since. A model whose file was moved or deleted keeps its last thumbnail, its card and its history.
+- **When there is nothing to show:** "No model activity yet. Open a model in Revit and it appears here after you close Revit." (nothing recorded yet), "No models in this time frame" with a link to switch to 1Y, or "No models match" (search). With collection turned off, the page still shows what was recorded before.
+
+**How fresh it is.** The tray builds each model's history from the files Revit writes, usually within 15 minutes after Revit closes. Opening Health › Models also asks for that to run at once (unless it ran in the last minute), and the list updates when it finishes. A model open in Revit right now shows its history up to its last session; the session under way is added after Revit closes.
+
+### Model detail
+
+Opening a card shows that model's detail in place of the list. **Back**, or **Escape**, returns to the list as you left it: the same search, filters, folded groups and scroll position.
+
+- **At the top:** the thumbnail, the title (and file name), the health colour with its name, the Revit versions the model was opened in (for example "Opened in Revit 2027.1, 2026.4"), its local file and its central (or cloud) model, and Workshared or Cloud.
+- **Cards:** **Activity (Total)**, **Longest Sync** and **Longest Open Time** over the range, and **Warning Count** and **File Size**, the last ones recorded, with the day they were recorded ("As of Oct 28, 2026"). Activity (Session) is Revit's only: the tray shows no Revit session under way.
+- **Range:** **7D**, **1M**, **3M**, **6M** or **1Y**. The detail opens on the range nearest the list's time frame: Recent opens 1M, 3M, 6M and 1Y open their own, and a search opens 1Y.
+- **Charts:** the four of Revit's Activity tab, in the same order: Active time, Opening time, Sync history (workshared and cloud models) and Health ([Charts](health-tool.md#charts)). At 7D, 1M and 3M, one point per day or per open or sync; at 6M and 1Y, one per week.
+- **The same numbers as Revit:** the detail reads the model the way Revit's Activity tab does, including the sessions the tray has not folded yet, so for the same range both show the same figures, except for the session open in Revit right now. Revit's Health window has no 1Y range.
+- If a model's history is no longer on this PC (its files deleted, or unreadable), the detail says so.
 
 ## Turning update checks off for everyone (IT)
 

@@ -3,7 +3,8 @@
     and Models sub-tabs (it opens on Models). Device mirrors the add-in's Health tab (decisions #53, #59) with the same
     RST.UI parts (Health/HealthResources.xaml): the four SectionExpanders with their severity dots, Scan System with its
     spinner, the Captured time, Clean Junk Files and its Junk modal, the Cleaning overlay and the toast. The Junk modal,
-    the overlay and the toast cover this page, not the tray's header and footer. Models is ModelsView (spec #25 WU3).
+    the overlay and the toast cover this page, not the tray's header and footer. Models is ModelsView (spec #25 WU3), replaced by ModelDetailView while a
+    model's detail is open (WU4).
     The view-model is TrayHealthViewModel; TrayWindow hosts it in its HealthPage.
 -->
 <UserControl x:Class="RST.Tray.Windows.HealthPageView" x:ClassModifier="internal"
@@ -82,9 +83,13 @@
             </ScrollViewer>
         </Grid>
 
-        <!-- Models (spec #25 WU3). -->
+        <!-- Models (spec #25 WU3), and a model's detail in place of the list (WU4). The list is hidden, not unloaded, while
+             the detail shows, so Back finds it as it was. -->
         <Grid Grid.Row="1" Visibility="{Binding IsModelsPage, Converter={StaticResource BoolToVisible}}">
-            <local:ModelsView x:Name="ModelsPage" DataContext="{Binding Models}" />
+            <local:ModelsView x:Name="ModelsPage" DataContext="{Binding Models}"
+                              Visibility="{Binding DataContext.Detail.IsOpen, RelativeSource={RelativeSource AncestorType=local:HealthPageView}, Converter={StaticResource BoolToCollapsed}}" />
+            <local:ModelDetailView x:Name="DetailPage" DataContext="{Binding Detail}"
+                                   Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisible}}" />
         </Grid>
 
         <!-- The Junk modal (the add-in's, with its content shared), the Cleaning overlay and the toast, over the whole page. -->

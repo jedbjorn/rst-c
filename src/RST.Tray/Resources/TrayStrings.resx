@@ -218,6 +218,36 @@
   <data name="Models_EmptyNoMatches" xml:space="preserve">
     <value>No models match</value>
   </data>
+  <data name="Detail_Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Detail_BackHelp" xml:space="preserve">
+    <value>Back to the Models list (Escape)</value>
+  </data>
+  <data name="Detail_LocalPath" xml:space="preserve">
+    <value>Local file</value>
+  </data>
+  <data name="Detail_CentralPath" xml:space="preserve">
+    <value>Central model</value>
+  </data>
+  <data name="Detail_CloudPath" xml:space="preserve">
+    <value>Cloud model</value>
+  </data>
+  <data name="Detail_Versions" xml:space="preserve">
+    <value>Opened in Revit {0}</value>
+  </data>
+  <data name="Detail_AsOf" xml:space="preserve">
+    <value>As of {0}</value>
+  </data>
+  <data name="Detail_Loading" xml:space="preserve">
+    <value>Reading this model's activity…</value>
+  </data>
+  <data name="Detail_Gone" xml:space="preserve">
+    <value>This model's history is no longer on this PC: its activity file was deleted or could not be read.</value>
+  </data>
+  <data name="Detail_Ranges" xml:space="preserve">
+    <value>Range</value>
+  </data>
   <data name="Updates_Heading" xml:space="preserve">
     <value>Updates</value>
   </data>

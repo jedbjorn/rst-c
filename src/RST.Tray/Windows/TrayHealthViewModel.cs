@@ -3,7 +3,8 @@
 // scope: the same sections, rows, severity dots, Scan System, Captured time and Clean Junk Files, with the installed
 // Revit years in the Revit section (decision #59) and every Revit year in the cleanup (decision #56). Models is
 // ModelsViewModel (spec #25 WU3): the list of every model, its filters and thumbnails, freshened by a fold pass each
-// time it is shown. The page opens on Models.
+// time it is shown. The page opens on Models. Opening a card shows its detail in place of the list (ModelDetailViewModel,
+// spec #25 WU4); Back returns to the list as it was.
 
 using RST.Core.Health;
 using RST.Core.Profiles;
@@ -29,10 +30,15 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
     /// <param name="dialogs">"Delete selected junk?" and its kin, owned by the tray window.</param>
     /// <param name="options">The Health view-model's seams (tests); its <see cref="HealthViewModelOptions.Scope"/> is always the tray's.</param>
     /// <param name="models">The Models page (spec #25 WU3); null: one with no index ("No model activity yet").</param>
-    public TrayHealthViewModel(IHealthService device, IDialogService dialogs, HealthViewModelOptions? options = null, ModelsViewModel? models = null)
+    /// <param name="detail">A model's detail (spec #25 WU4); null: one with no read (the tray passes spec #24's read path).</param>
+    public TrayHealthViewModel(IHealthService device, IDialogService dialogs, HealthViewModelOptions? options = null, ModelsViewModel? models = null,
+                               ModelDetailViewModel? detail = null)
     {
         Device = new HealthViewModel(device ?? throw new ArgumentNullException(nameof(device)), dialogs, InTrayScope(options));
         Models = models ?? new ModelsViewModel();
+        Detail = detail ?? new ModelDetailViewModel();
+        Models.DetailRequested += OnDetailRequested;
+        Detail.BackRequested += OnDetailBack;
     }
 
     /// <summary>Health → Device: the add-in's Health tab, outside Revit.</summary>
@@ -40,6 +46,9 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
 
     /// <summary>Health → Models (spec #25 WU3).</summary>
     public ModelsViewModel Models { get; }
+
+    /// <summary>The detail of the model opened from Models (spec #25 WU4); shown in place of the list while open.</summary>
+    public ModelDetailViewModel Detail { get; }
 
     /// <summary>The selected sub-tab; Models when the page first opens (spec #25 Scope 1).</summary>
     public HealthSubPage SubPage
@@ -69,14 +78,28 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
 
     public bool IsModelsPage => _subPage == HealthSubPage.Models;
 
+    /// <summary>Models shows a model's detail in place of the list (Escape goes Back).</summary>
+    public bool IsDetailShowing => IsModelsPage && Detail.IsOpen;
+
     /// <summary>The window shows the Health page (the tray view-model calls this each time it is selected).</summary>
     public void Shown() => OnSubPageShown();
 
     public void Dispose()
     {
+        Models.DetailRequested -= OnDetailRequested;
+        Detail.BackRequested -= OnDetailBack;
         Device.Dispose();
+        Detail.Dispose();
         Models.Dispose();
     }
+
+    /// <summary>A card was opened: its detail replaces the list, on the range the list hands over, with the card's thumbnail
+    /// at once (the detail asks the worker again with its own generation).</summary>
+    private void OnDetailRequested(object? sender, ModelDetailRequestedEventArgs e) => UiGuard.Run("tray Health: open a model's detail", () =>
+        Detail.Open(e.Card, e.StartRange, Models.CardFor(e.ModelId)?.Thumbnail));
+
+    /// <summary>Back: the list shows again, scrolled where it was, the opened card focused.</summary>
+    private void OnDetailBack(object? sender, EventArgs e) => UiGuard.Run("tray Health: back to the list", Models.ReturnFromDetail);
 
     /// <summary>Device reads its last snapshot the first time it is shown; Models is told each time it is shown.</summary>
     private void OnSubPageShown()

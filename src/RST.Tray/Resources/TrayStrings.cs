@@ -154,6 +154,26 @@ public static class TrayStrings
 
     public static string Models_EmptyNoMatches => Get(nameof(Models_EmptyNoMatches));
 
+    public static string Detail_Back => Get(nameof(Detail_Back));
+
+    public static string Detail_BackHelp => Get(nameof(Detail_BackHelp));
+
+    public static string Detail_LocalPath => Get(nameof(Detail_LocalPath));
+
+    public static string Detail_CentralPath => Get(nameof(Detail_CentralPath));
+
+    public static string Detail_CloudPath => Get(nameof(Detail_CloudPath));
+
+    public static string Detail_Versions(string versions) => Format(nameof(Detail_Versions), versions);
+
+    public static string Detail_AsOf(string date) => Format(nameof(Detail_AsOf), date);
+
+    public static string Detail_Loading => Get(nameof(Detail_Loading));
+
+    public static string Detail_Gone => Get(nameof(Detail_Gone));
+
+    public static string Detail_Ranges => Get(nameof(Detail_Ranges));
+
 
     public static string Updates_Heading => Get(nameof(Updates_Heading));
 

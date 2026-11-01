@@ -70,9 +70,10 @@ public class TrayModelsScreenshotTests
     private sealed record Page(TrayWindow Window, ModelsViewModel Model, ModelsView View);
 
     /// <summary>The tray window on Health → Models over <paramref name="model"/>.</summary>
-    private static Page Open(ModelsViewModel model, double width = 720, double height = 540)
+    /// <summary>The tray window on Health → Models over <paramref name="model"/>; <paramref name="detail"/> opens a card (WU4).</summary>
+    private static Page Open(ModelsViewModel model, double width = 720, double height = 540, ModelDetailViewModel? detail = null)
     {
-        var health = new TrayHealthViewModel(NoHealthService.Instance, new FakeDialogs(), TrayHealthSamples.Options(), model);
+        var health = new TrayHealthViewModel(NoHealthService.Instance, new FakeDialogs(), TrayHealthSamples.Options(), model, detail);
         var window = new TrayWindow(new TrayViewModel(new FakeTrayHost(), TrayPage.Health, health: health)) { Width = width, Height = height };
         WindowCapture.ShowOffScreen(window);
         Settle();
@@ -321,7 +322,8 @@ public class TrayModelsScreenshotTests
     public void Tab_reaches_the_search_box_the_filters_and_the_cards_and_Enter_opens_a_cards_detail() => Sta(UiTheme.Light, () =>
     {
         var model = ModelsHarness.Model(new FakeModelSource(ModelsSamples.Rows));
-        var page = Open(model);
+        var detail = DetailHarness.Detail(FakeActivitySource.Samples());
+        var page = Open(model, detail: detail);
         try
         {
             page.Window.Activate();
@@ -349,10 +351,12 @@ public class TrayModelsScreenshotTests
             Assert.Equal(((ModelCardItem)card.DataContext).ModelId, asked.Single().ModelId);
             Assert.Equal(ModelDetailRange.OneMonth, asked.Single().StartRange);
 
-            // Back: the opened card has the keyboard again.
-            search.Focus();
-            model.ReturnFromDetail();
+            // The detail opened in place of the list (WU4); Back: the list again, and the opened card has the keyboard.
+            Assert.True(detail.IsOpen);
+            Assert.False(page.View.IsVisible);
+            detail.Back();
             Settle();
+            Assert.True(page.View.IsVisible);
             Assert.Same(card, Keyboard.FocusedElement);
         }
         finally

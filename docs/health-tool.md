@@ -117,7 +117,10 @@ For folder targets, rst-c walks the folder and deletes its files and subfolders.
 
 ## Activity tab
 
-The **Activity** tab shows how the **model that is active in Revit** has been used and how it behaves: how long you have actively worked on it, how long it takes to open and to synchronize, and whether its health is getting better or worse. Everything on the tab is about that one model; only the Collection switch and the outbox figures in the footer cover all of your models. It reads only data recorded locally on this PC; see [Data & privacy](#data--privacy). The RST tray's Health page shows every model you have worked on.
+The **Activity** tab shows how the **model that is active in Revit** has been used and how it behaves: how long you have actively worked on it, how long it takes to open and to synchronize, and whether its health is getting better or worse. Everything on the tab is about that one model; only the Collection switch and the outbox figures in the footer cover all of your models. It reads only data recorded locally on this PC; see [Data & privacy](#data--privacy).
+
+> [!class2]
+> **All your models:** the tray's [Health page](tray.md#health-page) is the all-models view. Its **Models** sub-tab lists every model you have worked on on this PC, in every Revit version, with search, totals and health colours, and opens any of them, without Revit, on these same cards and charts (with a 1Y range as well).
 
 ![The Health tool's Activity tab: six stat cards (Activity (Session), Activity (Total), Longest Sync, Longest Open Time, Warning Count, File Size), the 7D / 1M / 3M / 6M range switch, the active-time, opening-time, sync-history and health charts for the current model, and the Collection switch with its status line](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/health-activity-tab.png)
 
@@ -216,7 +219,7 @@ Beside the switch, a status line reports the raw event files: on or off, how man
 ## Notes & limits
 
 - The snapshot is point-in-time. RAM and CPU usage are the values at the moment of the scan, not live readings.
-- Activity covers only the **model active in Revit**. Open a different model and reopen Health to see its history; with no model open, the charts show "No model open". The RST tray's Health page lists every model.
+- Activity covers only the **model active in Revit**. Open a different model and reopen Health to see its history; with no model open, the charts show "No model open". The RST tray's [Health page](tray.md#health-page) lists every model and shows any one's history without Revit.
 - Activity history is per-machine and local. It does not follow a user to another workstation and is not shared between machines.
 - The same model open in two Revit sessions at once counts its active time in both, so an overlap can count twice (a day never counts more than 24 hours).
 - Journal, collaboration cache and recent-file paths are found per Revit year (folders named `Autodesk Revit <year>`). Only the years that exist on the machine are checked.
