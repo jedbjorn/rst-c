@@ -413,7 +413,7 @@ jobs:
   # v3.1.1 is the latest release, and the first whose tray files carry the
   # release's FileVersion (3.1.1.0): an untagged build's files must not be
   # older, or Windows Installer skips them and the MajorUpgrade removes the old
-  # ones, leaving no tray. -StagedTray checks every staged tray file is
+  # ones, leaving no tray. -TrayStaged checks every staged tray file is
   # installed after the upgrade, byte for byte. Move this leg to the newest
   # release after each one (installer/README.md, "Untagged builds").
   msi-migrate:
@@ -456,7 +456,7 @@ jobs:
         run: gh release download ${{ matrix.release }} -R "${{ github.repository }}" -p "${{ matrix.asset }}" -D old
       - name: Upgrade from ${{ matrix.release }} ${{ matrix.asset }}
         shell: pwsh
-        run: installer/ci-smoke.ps1 -Mode Migrate -From ${{ matrix.from }} -Msi new/RST.msi -OldMsi "old/${{ matrix.asset }}" -StagedR27 build/R27 -StagedTray build/Tray
+        run: installer/ci-smoke.ps1 -Mode Migrate -From ${{ matrix.from }} -Msi new/RST.msi -OldMsi "old/${{ matrix.asset }}" -StagedR27 build/R27 -TrayStaged build/Tray
 
   # Setup bundle (feature #13 Phase 2, spec #15, AC3). Downloads each
   # shippable companion's pinned release asset and fails on a missing asset

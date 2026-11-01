@@ -67,7 +67,7 @@
           exactly one RST product, at the new version, with all six trees.
         Every leg: the tray and its Run value are installed after the upgrade,
         and RstStartTray leaves exactly one tray running (SC-044), hidden, as
-        this user, unelevated. With -StagedTray (build/Tray), every staged
+        this user, unelevated. With -TrayStaged (build/Tray), every staged
         tray file is installed, byte for byte: an untagged build's files
         older than the release's (FileVersion) would be skipped by Windows
         Installer and then removed with the old product (the v3.1.1 leg).
@@ -81,7 +81,7 @@ param(
   [ValidateSet('Preview', 'Unified')][string]$From,
   [string]$OldMsi,
   [string]$StagedR27 = 'build/R27',
-  [string]$StagedTray,
+  [string]$TrayStaged,
   [string]$StagedRoot,
   [string]$SameVersionMsi,
   [string]$OlderMsi
@@ -808,18 +808,18 @@ Write-Host "R27 RST.Engine.dll after:  $newHash"
 Assert ($newHash -eq $stagedHash) 'installed R27 engine equals the newly staged engine'
 Assert-Probe $probe 'after upgrade'
 Assert-TrayInstalled 'after upgrade'
-if ($StagedTray) {
+if ($TrayStaged) {
   # The dev-build regression (v3.1.1's tray files are 3.1.1.0): each staged tray file is installed and is the new one.
-  $stagedFiles = @(Get-ChildItem $StagedTray -Recurse -File)
-  Assert ($stagedFiles.Count -gt 0) "[after upgrade] $StagedTray holds the staged tray"
-  $root = (Resolve-Path $StagedTray).Path
+  $stagedFiles = @(Get-ChildItem $TrayStaged -Recurse -File)
+  Assert ($stagedFiles.Count -gt 0) "[after upgrade] $TrayStaged holds the staged tray"
+  $trayRoot = (Resolve-Path $TrayStaged).Path
   foreach ($f in $stagedFiles) {
-    $rel = $f.FullName.Substring($root.Length).TrimStart('\', '/')
-    $installed = Join-Path $TrayDir $rel
-    $ver = if (Test-Path $installed -PathType Leaf) { (Get-Item $installed).VersionInfo.FileVersion } else { '(missing)' }
-    Write-Host "[after upgrade] tray $rel staged $($f.VersionInfo.FileVersion) installed $ver"
-    Assert (Test-Path $installed -PathType Leaf) "[after upgrade] tray file $rel installed"
-    Assert ((Get-FileHash $installed -Algorithm SHA256).Hash -eq (Get-FileHash $f.FullName -Algorithm SHA256).Hash) "[after upgrade] installed $rel is the newly staged one"
+    $rel = $f.FullName.Substring($trayRoot.Length).TrimStart('\', '/')
+    $trayFile = Join-Path $TrayDir $rel
+    $trayVer = if (Test-Path $trayFile -PathType Leaf) { (Get-Item $trayFile).VersionInfo.FileVersion } else { '(missing)' }
+    Write-Host "[after upgrade] tray $rel staged $($f.VersionInfo.FileVersion) installed $trayVer"
+    Assert (Test-Path $trayFile -PathType Leaf) "[after upgrade] tray file $rel installed"
+    Assert ((Get-FileHash $trayFile -Algorithm SHA256).Hash -eq (Get-FileHash $f.FullName -Algorithm SHA256).Hash) "[after upgrade] installed $rel is the newly staged one"
   }
 }
 # SC-044: the upgrade from a tray-less release started the tray: one, hidden, as this user, unelevated.
