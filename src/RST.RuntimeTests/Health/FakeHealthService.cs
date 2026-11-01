@@ -54,7 +54,27 @@ public sealed class FakeHealthService : IHealthService
         WorkFinished?.Invoke(this, EventArgs.Empty);
     }
 
-    public HealthSnapshot? LoadSnapshot() => Snapshot;
+    /// <summary>When set, LoadSnapshot blocks until it is set (at most 30 s): a slow disk, for the first-open checks (SC-011).</summary>
+    public ManualResetEventSlim? LoadGate { get; set; }
+
+    /// <summary>How many times the window read the snapshot, and on which thread the last read ran.</summary>
+    public int LoadCalls => Volatile.Read(ref _loadCalls);
+
+    public int? LoadThreadId { get; private set; }
+
+    /// <summary>Runs on the reading thread as the read starts (before <see cref="LoadGate"/>): what the test sees at that moment.</summary>
+    public Action? BeforeLoad { get; set; }
+
+    private int _loadCalls;
+
+    public HealthSnapshot? LoadSnapshot()
+    {
+        LoadThreadId = Environment.CurrentManagedThreadId;
+        Interlocked.Increment(ref _loadCalls);
+        BeforeLoad?.Invoke();
+        LoadGate?.Wait(TimeSpan.FromSeconds(30));
+        return Snapshot;
+    }
 
     public HealthSnapshot RunScan()
     {

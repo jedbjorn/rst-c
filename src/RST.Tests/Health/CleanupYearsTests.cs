@@ -1,6 +1,6 @@
 // rst-c's own (not vendored): the rules behind the tray's per-year Clean Junk Files rows (spec #25 Device; decision
 // #56; AC7's listing), and the tray snapshot's installed Revit years (decision #59; AC6), which the add-in's
-// health_scan.json never carries.
+// health_scan.json never carries. And the running Revit's year, which the add-in's junk rows describe (SC-018).
 
 using System.Text.Json;
 using RST.Core.Health;
@@ -39,6 +39,28 @@ public class CleanupYearsTests
     [InlineData(null, null)]
     public void The_year_comes_from_an_Autodesk_Revit_folder_name_only(string? name, int? expected) =>
         Assert.Equal(expected, CleanupYears.YearOfFolder(name));
+
+    // SC-018: inside Revit the Health tab's year-specific junk rows describe the running Revit's year.
+    [Theory]
+    [InlineData("2027", 2027)]
+    [InlineData(" 2026 ", 2026)]
+    [InlineData("2025", 2025)]
+    [InlineData("27", null)]
+    [InlineData("2027.1", null)]
+    [InlineData("20270", null)]
+    [InlineData("٢٠٢٧", null)] // non-ASCII digits are not a year
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void The_running_year_is_Revits_four_digit_version_number(string? version, int? expected) =>
+        Assert.Equal(expected, CleanupYears.RunningYear(version));
+
+    [Fact]
+    public void The_running_years_path_puts_that_years_folder_in_place_of_the_token_of_a_resolved_path()
+    {
+        // The add-in's rows resolve the user folders first, then name the running year's folder (no scan).
+        Assert.Equal(@"C:\Users\j\AppData\Local\Autodesk\Revit\Autodesk Revit 2027\Journals",
+            CleanupYears.DisplayPath(@"C:\Users\j\AppData\Local\Autodesk\Revit\{revit-version}\Journals", CleanupYears.RunningYear("2027")!.Value));
+    }
 
     [Fact]
     public void The_path_hint_names_that_years_folder()

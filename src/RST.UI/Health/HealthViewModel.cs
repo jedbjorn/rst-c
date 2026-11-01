@@ -6,7 +6,9 @@
 // GetActivity → ModelActivityReader.ReadCurrentModel) and renders them through a
 // ModelActivityPanel: Activity (Session) and (Total) instead of the session timer and open hours,
 // four charts, per week at 6M. It refreshes when the tab is shown, on a range change, after a
-// collection toggle and after Scan System; nothing ticks.
+// collection toggle and after Scan System; nothing ticks. Opening in Revit reads the saved snapshot off the UI
+// thread after the window's first frame (BeginLoading, LoadAsync; SC-011): until then the Health tab shows the
+// spinner and Scan and Clean wait.
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -57,6 +59,8 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     private IReadOnlyList<HealthSection> _sections = [];
     private int _selectedTab;
     private bool _isScanning;
+    private bool _isLoading;
+    private bool _disposed;
     private bool _isJunkOpen;
     private IReadOnlyList<JunkTargetItem> _junkTargets = [];
     private int _rangeDays = ActivityRanges.Default;
@@ -143,6 +147,20 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     {
         get => _sections;
         private set => SetField(ref _sections, value);
+    }
+
+    /// <summary>
+    /// The saved snapshot is being read (<see cref="BeginLoading"/> until <see cref="LoadAsync"/> has rendered it): the
+    /// Health tab shows the spinner and "Loading…" in place of the sections, and Scan and Clean wait. Close, Escape and
+    /// the tabs stay enabled.
+    /// </summary>
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set
+        {
+            if (SetField(ref _isLoading, value)) OnBusyChanged();
+        }
     }
 
     /// <summary>Scan System is running: its button shows the spinner and "Scanning…".</summary>
@@ -252,7 +270,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     public bool IsIdle => !IsBusy;
 
     /// <summary>Scan and Clean may start: this window is idle and no scan or clean runs elsewhere in the process.</summary>
-    public bool CanStartWork => IsIdle && !_service.IsWorkRunning;
+    public bool CanStartWork => IsIdle && !IsLoading && !_service.IsWorkRunning;
 
     /// <summary>The window's content takes input (no modal overlay over it), so the keyboard cannot reach what the overlay covers.</summary>
     public bool IsMainEnabled => !IsJunkOpen && !Busy.IsBusy;
@@ -272,6 +290,53 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
             Log.Warning(ex, "Health: reading the snapshot failed");
         }
         RenderOrFallback(snap);
+    }
+
+    /// <summary>
+    /// The open in Revit (SC-011): shows the loading state from before the window is built, so its first frame is the
+    /// themed chrome and the spinner, with no section to lay out. The window then calls <see cref="LoadAsync"/>.
+    /// Reads nothing. The sections are emptied, not only hidden: a collapsed ItemsControl still generates its items'
+    /// templates, which is the layout this keeps out of the first frame.
+    /// </summary>
+    public void BeginLoading()
+    {
+        Sections = [];
+        IsLoading = true;
+    }
+
+    /// <summary>
+    /// Open, off the UI thread: reads the last saved snapshot with <see cref="HealthViewModelOptions.RunInBackground"/>,
+    /// then renders it (null or unreadable renders every value as "—") and ends the loading state; after
+    /// <see cref="Dispose"/> (the window closed meanwhile) the result is dropped. Never throws. Call on
+    /// the UI thread, inside its dispatcher loop (the window does, on its first frame), so the render comes back to it.
+    /// </summary>
+    public async Task LoadAsync()
+    {
+        IsLoading = true;
+        HealthSnapshot? snap = null;
+        try
+        {
+            await _options.RunInBackground(() => snap = _service.LoadSnapshot());
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Health: reading the snapshot failed");
+            snap = null;
+        }
+        if (_disposed)
+        {
+            // The window closed while the read ran: a late result is dropped, nothing renders.
+            Log.Debug("Health: the snapshot read finished after the window closed; ignored");
+            return;
+        }
+        try
+        {
+            RenderOrFallback(snap);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     /// <summary>Scan System: scans off the UI thread, then re-renders (and refreshes the Activity tab once it has been shown), or toasts "Scan failed".</summary>
@@ -397,6 +462,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _service.WorkFinished -= OnWorkFinished;
         Toast.Dismiss();
     }

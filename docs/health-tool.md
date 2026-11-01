@@ -64,7 +64,7 @@ description: Adapter name, type, speed
 
 In addition to hardware, the snapshot includes:
 
-- **Junk:** the size and file count of each cleanup target, and a **Junk total** of what Clean Junk Files would reclaim (under Hardware).
+- **Junk:** the size and file count of each cleanup target, and a **Junk total** of them (under Hardware). Journals, Collaboration Cache and Recent File List show the folder of the Revit year you are running, for example `Autodesk Revit 2027`. Clean Junk Files empties those targets for every installed Revit year, so it can reclaim more than the total shows.
 - **Revit:** the Revit version and build, the Windows username, and whether hardware acceleration is on.
 - **Model:** the active model's name and size on disk.
 - **Warnings:** the model's warning count, with a breakdown by severity.
