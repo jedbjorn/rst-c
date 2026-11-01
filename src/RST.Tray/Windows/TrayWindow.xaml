@@ -145,9 +145,9 @@
                            VerticalAlignment="Center" Margin="0,0,24,10" />
                 <TabControl x:Name="Tabs" SelectedIndex="{Binding PageIndex, Mode=TwoWay}" Padding="0" BorderThickness="0"
                             VerticalAlignment="Bottom" AutomationProperties.AutomationId="Tray.Tabs">
+                    <TabItem Header="{x:Static res:TrayStrings.Tab_AddIns}" AutomationProperties.AutomationId="Tray.TabAddIns" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Updates}" AutomationProperties.AutomationId="Tray.TabUpdates" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Apps}" AutomationProperties.AutomationId="Tray.TabApps" />
-                    <TabItem Header="{x:Static res:TrayStrings.Tab_AddIns}" AutomationProperties.AutomationId="Tray.TabAddIns" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Health}" AutomationProperties.AutomationId="Tray.TabHealth" />
                     <TabItem Header="{x:Static res:TrayStrings.Tab_Settings}" AutomationProperties.AutomationId="Tray.TabSettings" />
                 </TabControl>
