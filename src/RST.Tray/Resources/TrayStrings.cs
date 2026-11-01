@@ -52,9 +52,107 @@ public static class TrayStrings
 
     public static string Health_DeviceDescription => Get(nameof(Health_DeviceDescription));
 
-    public static string Health_ModelsHeading => Get(nameof(Health_ModelsHeading));
+    // Health → Models (spec #25 WU3).
 
-    public static string Health_ModelsPlaceholder => Get(nameof(Health_ModelsPlaceholder));
+    public static string Models_SearchPlaceholder => Get(nameof(Models_SearchPlaceholder));
+
+    public static string Models_SearchingAllTime => Get(nameof(Models_SearchingAllTime));
+
+    public static string Models_ClearSearch => Get(nameof(Models_ClearSearch));
+
+    public static string Models_TimeFrame => Get(nameof(Models_TimeFrame));
+
+    public static string Models_ChipRecent => Get(nameof(Models_ChipRecent));
+
+    public static string Models_Chip3M => Get(nameof(Models_Chip3M));
+
+    public static string Models_Chip6M => Get(nameof(Models_Chip6M));
+
+    public static string Models_Chip1Y => Get(nameof(Models_Chip1Y));
+
+    public static string Models_ChipRecentTip => Get(nameof(Models_ChipRecentTip));
+
+    public static string Models_Chip3MTip => Get(nameof(Models_Chip3MTip));
+
+    public static string Models_Chip6MTip => Get(nameof(Models_Chip6MTip));
+
+    public static string Models_Chip1YTip => Get(nameof(Models_Chip1YTip));
+
+    public static string Models_VersionLabel => Get(nameof(Models_VersionLabel));
+
+    public static string Models_VersionAll => Get(nameof(Models_VersionAll));
+
+    public static string Models_VersionSelected(string list) => Format(nameof(Models_VersionSelected), list);
+
+    public static string Models_VersionTip => Get(nameof(Models_VersionTip));
+
+    public static string Models_GroupByLabel => Get(nameof(Models_GroupByLabel));
+
+    public static string Models_GroupByMajor => Get(nameof(Models_GroupByMajor));
+
+    public static string Models_GroupByMinor => Get(nameof(Models_GroupByMinor));
+
+    public static string Models_GroupByNone => Get(nameof(Models_GroupByNone));
+
+    public static string Models_StatModels => Get(nameof(Models_StatModels));
+
+    public static string Models_StatActive => Get(nameof(Models_StatActive));
+
+    public static string Models_StatOpens => Get(nameof(Models_StatOpens));
+
+    public static string Models_StatAvgOpen => Get(nameof(Models_StatAvgOpen));
+
+    public static string Models_StatSyncs => Get(nameof(Models_StatSyncs));
+
+    public static string Models_StatAvgSync => Get(nameof(Models_StatAvgSync));
+
+    public static string Models_GroupVersion(string version) => Format(nameof(Models_GroupVersion), version);
+
+    public static string Models_UnknownMinor(string major) => Format(nameof(Models_UnknownMinor), major);
+
+    public static string Models_UnknownVersion => Get(nameof(Models_UnknownVersion));
+
+    public static string Models_CountOne => Get(nameof(Models_CountOne));
+
+    public static string Models_CountMany(int count) => Format(nameof(Models_CountMany), count);
+
+    public static string Models_ActiveFormat(string duration) => Format(nameof(Models_ActiveFormat), duration);
+
+    public static string Models_CardVersion(string version) => Format(nameof(Models_CardVersion), version);
+
+    public static string Models_CardNoVersion => Get(nameof(Models_CardNoVersion));
+
+    public static string Models_CardLastActive(string date) => Format(nameof(Models_CardLastActive), date);
+
+    public static string Models_Workshared => Get(nameof(Models_Workshared));
+
+    public static string Models_Cloud => Get(nameof(Models_Cloud));
+
+    public static string Models_HealthGreen => Get(nameof(Models_HealthGreen));
+
+    public static string Models_HealthYellow => Get(nameof(Models_HealthYellow));
+
+    public static string Models_HealthAmber => Get(nameof(Models_HealthAmber));
+
+    public static string Models_HealthRed => Get(nameof(Models_HealthRed));
+
+    public static string Models_HealthGrey => Get(nameof(Models_HealthGrey));
+
+    public static string Models_HealthTip => Get(nameof(Models_HealthTip));
+
+    public static string Models_CardHelp => Get(nameof(Models_CardHelp));
+
+    public static string Models_NoPreview => Get(nameof(Models_NoPreview));
+
+    public static string Models_Loading => Get(nameof(Models_Loading));
+
+    public static string Models_EmptyNoModels => Get(nameof(Models_EmptyNoModels));
+
+    public static string Models_EmptyTimeFrame => Get(nameof(Models_EmptyTimeFrame));
+
+    public static string Models_SwitchToOneYear => Get(nameof(Models_SwitchToOneYear));
+
+    public static string Models_EmptyNoMatches => Get(nameof(Models_EmptyNoMatches));
 
 
     public static string Updates_Heading => Get(nameof(Updates_Heading));
