@@ -146,10 +146,17 @@ internal partial class ModelsView : UserControl
             foreach (var card in Descendants<Button>(List))
             {
                 if (card.DataContext is not ModelCardItem item || item.ModelId != modelId) continue;
-                card.Focus();
+                // Focus normally brings the whole card into view. Back has already restored the user's anchor;
+                // a partly visible card must not shift it again. Suppress only this synchronous focus request,
+                // leaving later keyboard navigation and explicit BringIntoView requests unchanged.
+                card.RequestBringIntoView += KeepRestoredPosition;
+                try { card.Focus(); }
+                finally { card.RequestBringIntoView -= KeepRestoredPosition; }
                 return;
             }
         }));
+
+    private static void KeepRestoredPosition(object sender, RequestBringIntoViewEventArgs e) => e.Handled = true;
 
     // A card asks for its thumbnail when the list realizes it, and cancels when it is recycled for another or unloaded.
     private void OnCardLoaded(object sender, RoutedEventArgs e) => UiGuard.Run("Models: a card shows", () =>
