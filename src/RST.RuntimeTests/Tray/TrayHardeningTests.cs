@@ -121,6 +121,22 @@ public class TrayHardeningTests
         Assert.Single(events, e => e.MessageTemplate == TrayFaults.RepeatingTemplate);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Launch_logs_year_profile_and_pid_once_only_after_a_process_starts(bool fails)
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        if (fails) f.Backend.OnLaunch = _ => throw new InvalidOperationException("could not start");
+        var events = CaptureLog(() => vm.LaunchAsync(2026).GetAwaiter().GetResult());
+        var launches = events.Where(e => e.MessageTemplate == "profiles: started Revit {Year} with {Profile} (pid {Pid})");
+        if (fails) Assert.Empty(launches);
+        else Assert.Equal(new object[] { 2026, "F16 Lean", 4242 }, Assert.Single(launches).PropertyValues);
+    }
+
     private sealed class ListSink(List<LogEvent> events) : ILogSink
     {
         public void Emit(LogEvent logEvent, IReadOnlyDictionary<string, object?> properties)
