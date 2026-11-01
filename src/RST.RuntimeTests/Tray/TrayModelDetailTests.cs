@@ -693,6 +693,8 @@ public class TrayModelDetailScreenshotTests
                 Assert.Equal(ModelTimeChip.SixMonths, page.Models.Chip);
                 Assert.Contains("2025", page.Models.CollapsedGroups);
                 Assert.InRange(list.Scroller.VerticalOffset, offset - 1, offset + 1);
+                var focusedCard = Assert.IsType<Button>(Keyboard.FocusedElement);
+                Assert.Equal("station-plaza", Assert.IsType<ModelCardItem>(focusedCard.DataContext).ModelId);
             }
 
             // Back, by its button: the same.
@@ -702,6 +704,12 @@ public class TrayModelDetailScreenshotTests
             Assert.True(list.IsVisible);
             Assert.InRange(list.Scroller.VerticalOffset, offset - 1, offset + 1);
             Assert.Equal(0, closes);
+
+            // Only restoring focus suppresses automatic scrolling. A later request still brings the partly
+            // visible card fully into view (the single-column layout puts its bottom below this viewport).
+            ((Button)Keyboard.FocusedElement).BringIntoView();
+            Settle();
+            Assert.True(list.Scroller.VerticalOffset > offset + 1);
 
             // With the list showing, Escape is the window's own again, exactly as before (decision #62): its Close.
             Assert.True(ById(page.Window, "Tray.Close").Single().Focus());
