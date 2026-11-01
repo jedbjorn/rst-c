@@ -459,7 +459,7 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
 `ProfileBuilderLauncher.Show(MainWindowHandle, …)`.
 
 - **Logic in RST.Core (`RST.Core.Builder`, tested on Linux in `RST.Tests/Builder`):**
-  `CatalogCommand` (get_catalog's shape and host-tab promotion), `CatalogTree` (the catalogue index
+  `CatalogCommand` (one row per ribbon placement, with host-tab promotion), `CatalogTree` (the catalogue index
   and filter: built once, a filter only computes per-node match counts), `RequiredAddinDetector`
   (computeRequiredAddins, the port of `tests/ui/required-addins.test.mjs` is
   `RequiredAddinDetectorTests`), `BuilderRules` (shortId, normalizeUrl via `UrlNormalizer`,

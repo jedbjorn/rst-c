@@ -362,6 +362,8 @@ public static class UiStrings
 
     public static string Loader_RstifyHeading => Get(nameof(Loader_RstifyHeading));
 
+    public static string Loader_RstifyLastHome(object? arg0) => Format(nameof(Loader_RstifyLastHome), arg0);
+
     public static string Loader_RstifyEmpty => Get(nameof(Loader_RstifyEmpty));
 
     public static string Loader_RequiredAddins => Get(nameof(Loader_RequiredAddins));
@@ -775,6 +777,8 @@ public static class UiStrings
 
     /// <summary>The fourth tool's refusal; the same text as RST.Core's PanelStacks.FullMessage.</summary>
     public static string Builder_StackFull => Get(nameof(Builder_StackFull));
+
+    public static string Builder_NamesRefreshed(object? arg0) => Format(nameof(Builder_NamesRefreshed), arg0);
 
     public static string Builder_StacksRepaired(object? arg0) => Format(nameof(Builder_StacksRepaired), arg0);
 

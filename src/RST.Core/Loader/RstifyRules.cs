@@ -2,7 +2,9 @@
 // CORE_TABS / getSourceTabs / renderTabToggles' filter (1061-1112), profileHasPresets and the
 // "Adopt RSTify Presets?" text (1394-1412), and failedDisableMessage (1579-1589).
 
+using RST.Core.Builder;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 
 namespace RST.Core.Loader;
 
@@ -24,42 +26,73 @@ public static class RstifyRules
         "Modify", "Manage", "View", "Annotate", "Add-Ins", "Create",
     };
 
-    /// <summary>
-    /// The tabs <paramref name="profile"/>'s commands come from (<c>getSourceTabs</c>): every slot's
-    /// <c>sourceTab</c>, and every tool's in a referenced stack, except "Custom".
-    /// </summary>
-    public static ISet<string> SourceTabs(Profile? profile)
-    {
-        var tabs = new HashSet<string>(StringComparer.Ordinal);
-        if (profile is null) return tabs;
-        foreach (var panel in profile.Panels)
-        {
-            foreach (var slot in panel.Slots)
-            {
-                if (slot is null) continue;
-                if (!string.IsNullOrEmpty(slot.SourceTab) && slot.SourceTab != "Custom") tabs.Add(slot.SourceTab);
-                if (slot.SlotType == "stack" && profile.Stacks.TryGetValue(slot.Name, out var stack) && stack is not null)
-                {
-                    foreach (var tool in stack.Tools)
-                        if (tool is not null && !string.IsNullOrEmpty(tool.SourceTab) && tool.SourceTab != "Custom")
-                            tabs.Add(tool.SourceTab);
-                }
-            }
-        }
-        return tabs;
-    }
+    /// <summary>Tabs that are a saved tool's only home; unknown commands use their saved source tab.</summary>
+    public static ISet<string> SourceTabs(Profile? profile, IReadOnlyList<ScannedCommand>? catalog = null) =>
+        ToolHomes(profile, catalog).Where(t => t.Homes.Count == 1)
+            .Select(t => t.Homes.Single()).ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>
-    /// The RSTify list for <paramref name="profile"/>: the ribbon's tabs, in ribbon order, minus the
-    /// core tabs, the profile's source tabs and the profile's own tab.
-    /// </summary>
-    public static RstifyTabList TabsToOffer(Profile? profile, IReadOnlyList<string>? allTabs)
+    /// <summary>The ribbon's tabs in order, minus core tabs, single homes and the profile's own tab.</summary>
+    public static RstifyTabList TabsToOffer(Profile? profile, IReadOnlyList<string>? allTabs,
+                                          IReadOnlyList<ScannedCommand>? catalog = null)
     {
         if (profile is null || allTabs is null || allTabs.Count == 0) return new RstifyTabList(true, []);
-        var locked = SourceTabs(profile);
+        var locked = SourceTabs(profile, catalog);
         locked.Add(profile.Tab ?? "");
         var tabs = allTabs.Where(t => !CoreTabs.Contains(t) && !locked.Contains(t)).ToList();
         return new RstifyTabList(false, tabs);
+    }
+
+    /// <summary>Whether hiding this tab would leave a tool without a visible home, and its label.</summary>
+    public static bool BlockingTool(Profile profile, IReadOnlyList<string> allTabs,
+                                    IReadOnlyList<ScannedCommand>? catalog,
+                                    IReadOnlyCollection<string> hiddenTabs, string tab, out string? label)
+    {
+        foreach (var tool in ToolHomes(profile, catalog))
+            if (tool.Homes.Contains(tab) && !tool.Homes.Any(home =>
+                    allTabs.Contains(home) && (CoreTabs.Contains(home) || (home != tab && !hiddenTabs.Contains(home)))))
+            {
+                label = tool.Name;
+                return true;
+            }
+        label = null;
+        return false;
+    }
+
+    /// <summary>Apply saved ticks in ribbon order, dropping ticks that would leave a tool homeless.</summary>
+    public static IReadOnlyList<string> ReconcileHiddenTabs(Profile profile, IReadOnlyList<string> allTabs,
+                                                          IReadOnlyList<ScannedCommand>? catalog,
+                                                          IReadOnlyCollection<string> savedTabs)
+    {
+        var hidden = new List<string>();
+        foreach (var tab in TabsToOffer(profile, allTabs, catalog).Tabs)
+            if (savedTabs.Contains(tab) && !BlockingTool(profile, allTabs, catalog, hidden, tab, out _))
+                hidden.Add(tab);
+        return hidden;
+    }
+
+    private static IEnumerable<(string? Name, HashSet<string> Homes)> ToolHomes(
+        Profile? profile, IReadOnlyList<ScannedCommand>? catalog)
+    {
+        if (profile is null) yield break;
+        var byId = new Dictionary<string, ScannedCommand>(StringComparer.Ordinal);
+        foreach (var c in catalog ?? [])
+            if (c is not null && !string.IsNullOrEmpty(c.Id)) byId.TryAdd(c.Id, c);
+        foreach (var slot in profile.Panels.SelectMany(p => p.Slots))
+        {
+            var tools = PanelStacks.IsStack(slot) ? PanelStacks.ToolsOf(profile, slot) : [slot];
+            foreach (var tool in tools)
+            {
+                if (!PanelStacks.IsTool(tool) || CustomTools.IsCustom(tool)) continue;
+                var command = tool.CommandId is { } id ? byId.GetValueOrDefault(id) : null;
+                var homes = command?.Placements is { Count: > 0 } placements
+                    ? placements.Select(p => p.Tab).ToHashSet(StringComparer.Ordinal)
+                    : new HashSet<string>(StringComparer.Ordinal) { tool.SourceTab == "Custom" ? "" : tool.SourceTab ?? "" };
+                homes.Remove("");
+                var label = !string.IsNullOrWhiteSpace(tool.Name) ? tool.Name
+                    : !string.IsNullOrWhiteSpace(command?.DisplayName) ? command.DisplayName : tool.CommandId;
+                yield return (label, homes);
+            }
+        }
     }
 
     /// <summary><c>profileHasPresets</c>: the admin set hidden tabs or the disable-unused default.</summary>

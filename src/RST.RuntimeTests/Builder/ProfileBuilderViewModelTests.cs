@@ -13,6 +13,7 @@ using RST.Core.Builder;
 using RST.Core.Colors;
 using RST.Core.Loader;
 using RST.Core.Profiles;
+using RST.Core.Scanning;
 using RST.RuntimeTests.Loader;
 using RST.UI.Builder;
 using RST.UI.Controls;
@@ -152,6 +153,60 @@ public class ProfileBuilderViewModelTests
         h.Model.Toast.Dismiss();
         h.Model.ShowBootToast();
         h.Model.Toast.IsOpen.Should().BeFalse("it shows once");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Old_labels_refresh_on_open_as_unsaved_changes_and_save_keeps_them(bool onBoot)
+    {
+        var profile = new Profile
+        {
+            Id = BuilderFixtures.ArchId, ProfileName = "Old Walls", Tab = "Studio Walls",
+            Panels = [new Panel { Name = "Build", Slots =
+            [
+                new Slot { CommandId = "ID_OBJECTS_WALL", Name = "ArchitecturalWall", SourceTab = "Architecture", SourcePanel = "Build" },
+                new Slot { SlotType = "stack", Name = "Walls" },
+            ] }],
+            Stacks = new() { ["Walls"] = new Stack { Tools =
+            [
+                new Slot { CommandId = "ID_OBJECTS_WALL", Name = "ArchitecturalWall", SourceTab = "Structure", SourcePanel = "Structure" },
+                new Slot { CommandId = "ID_OBJECTS_WALL", Name = "My Wall", SourceTab = "Architecture", SourcePanel = "Build" },
+            ] } },
+        };
+        ScannedCommand[] catalog = [new("ID_OBJECTS_WALL", "Wall: Architectural", CommandOrigin.Native,
+            null, null, "Architecture", "Build",
+            [new("Architecture", "Build", "Wall: Architectural", null), new("Structure", "Structure", "Wall", null)], "ArchitecturalWall")];
+        using var directory = new RST.RuntimeTests.Support.TempFolder();
+        var backend = new FakeBuilderBackend { Catalog = CatalogCommand.FromScanned(catalog) }.With(profile).OnDisk(directory.Path);
+        var file = directory.File(ProfileStore.CanonicalFileName(profile));
+        if (onBoot) backend.Active = ActiveProfile.FromProfile(profile, ProfileStore.CanonicalFileName(profile));
+        var h = BuilderHarness.Create(backend, startOnNew: false, catalog: catalog);
+        if (onBoot)
+        {
+            h.Model.Toast.IsOpen.Should().BeFalse();
+            h.Model.ShowBootToast();
+        }
+        else h.Model.SelectedProfileOption = h.Option("Old Walls");
+        h.Model.IsDirty.Should().BeTrue();
+        h.Model.SaveCommand.CanExecute(null).Should().BeTrue();
+        h.Model.Profile.Panels[0].Slots[0].Name.Should().Be("Wall: Architectural");
+        h.Model.Profile.Stacks["Walls"].Tools.Select(t => t.Name).Should().Equal("Wall", "My Wall");
+        ProfileSerializer.ReadString(System.IO.File.ReadAllText(file)).Panels[0].Slots[0].Name
+            .Should().Be("ArchitecturalWall", "the file stays unchanged until Save");
+        AssertToast(h, "This profile's old tool names were updated to Revit's ribbon names (2). Save to keep the names.", BannerKind.Info);
+
+        (await h.Model.SaveAsync()).Should().BeTrue();
+        backend.Saved.Should().ContainSingle();
+        var saved = ProfileSerializer.ReadString(System.IO.File.ReadAllText(file));
+        saved.Panels[0].Slots[0].Name.Should().Be("Wall: Architectural");
+        saved.Stacks["Walls"].Tools.Select(t => t.Name).Should().Equal("Wall", "My Wall");
+        h.Model.IsDirty.Should().BeFalse();
+        var again = BuilderHarness.Create(backend, startOnNew: false, catalog: catalog);
+        again.Model.SelectedProfileOption = again.Option("Old Walls");
+        again.Model.IsDirty.Should().BeFalse();
+        again.Model.ShowBootToast();
+        again.Model.Toast.IsOpen.Should().BeFalse();
     }
 
     [Fact]
