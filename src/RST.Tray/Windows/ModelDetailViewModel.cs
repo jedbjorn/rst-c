@@ -12,8 +12,8 @@
 //     read (the panel slices it per range).
 //   - A model whose history is gone (its rollup deleted or unreadable, nothing unfolded) shows a clear message on the
 //     cards and charts (the panel's RenderError), as does a failed read.
-//   - The header: the card's thumbnail (the Models list's Windows thumbnail, asked for again each time a detail opens:
-//     through the list for its card, so the list keeps the answer too),
+//   - The header: the card's thumbnail (the Models list's Windows thumbnail, asked for again each time a detail opens,
+//     with its own generation),
 //     title, file name, local and central path, the Revit versions it was opened in, Workshared or Cloud, and the
 //     health colour with its name.
 
@@ -95,6 +95,7 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
     private ModelActivity? _activity;
     private ActivityRange _range = ActivityRanges.OneMonth;
     private int _generation;
+    private int _thumbGeneration;
     private bool _isOpen;
     private bool _isLoading;
     private bool _syncingRanges;
@@ -277,9 +278,10 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ModelId));
         OnPropertyChanged(nameof(Activity));
         ShowHeader(card, null);
-        // The card's image at once; the host asks the worker again (RequestThumbnail, or the list's own ask for the card),
-        // and the answer replaces it (its last-write check: a model saved since the list showed it gets its new image).
+        // The card's image at once, and the worker asked again (its last-write check: a model saved since the list showed
+        // it gets its new image); the answer to this open replaces it.
         Thumbnail = thumbnail;
+        RequestThumbnail();
         SelectRangeQuietly(ModelDetail.RangeFor(start));
         IsLoading = true;
         IsOpen = true;
@@ -287,12 +289,17 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
         Read(card.ModelId);
     }
 
-    /// <summary>Asks the worker for the open model's thumbnail (when the list has no card to ask for it). The answer shows
-    /// in the header; a model with none keeps the placeholder.</summary>
+    /// <summary>The generation of the open's thumbnail request: one per open, counting down from -1 so it never equals the
+    /// Models list's (0 and up). Only the answer to the current one shows; an older one (a model opened before) is dropped.</summary>
+    public int ThumbnailGeneration => _thumbGeneration;
+
+    /// <summary>Asks the worker for the open model's thumbnail with a new generation (each open does). The answer to it
+    /// shows in the header; a model with none keeps the card's image or the placeholder.</summary>
     public void RequestThumbnail()
     {
         if (_disposed || _thumbnails is null || _card is not { } c) return;
-        _thumbnails.Request(new ThumbnailRequest(c.ModelId, c.LocalPath, c.CentralPath, c.IsCloud));
+        _thumbGeneration--;
+        _thumbnails.Request(new ThumbnailRequest(c.ModelId, c.LocalPath, c.CentralPath, c.IsCloud, _thumbGeneration));
     }
 
     /// <summary>Back to the list. A read still running is dropped.</summary>
@@ -438,7 +445,8 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
         if (_disposed || e.Image is null) return;
         _post(() => UiGuard.Run("Model detail: show the thumbnail", () =>
         {
-            if (!_disposed && _card is { } card && card.ModelId == e.ModelId) Thumbnail = e.Image;
+            // Only the answer to this open's request: an older open's (or the Models list's) is dropped.
+            if (!_disposed && e.Generation == _thumbGeneration && _card is { } card && card.ModelId == e.ModelId) Thumbnail = e.Image;
         }));
     }
 }

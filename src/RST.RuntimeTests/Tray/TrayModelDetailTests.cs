@@ -275,14 +275,26 @@ public class TrayModelDetailViewModelTests
         var first = ModelsSamples.Picture(1);
         var second = ModelsSamples.Picture(2);
 
+        // Each open asks the worker, with a generation of its own (below 0: never the Models list's).
         detail.Open(Tower, ModelDetailRange.OneMonth, first);
         Assert.Same(first, detail.Thumbnail);
-        detail.RequestThumbnail();
         Assert.Equal(new[] { "riverside-tower" }, thumbnails.Requested);
+        var firstOpen = thumbnails.LastRequest!.Generation;
+        Assert.Equal(detail.ThumbnailGeneration, firstOpen);
+        Assert.True(firstOpen < 0);
 
-        thumbnails.Complete("harbor-library", second); // another model's answer
+        thumbnails.Complete("harbor-library", second);    // another model's answer
         Assert.Same(first, detail.Thumbnail);
-        thumbnails.Complete("riverside-tower", null);  // no shell thumbnail: the card's image stays
+        thumbnails.Complete("riverside-tower", null);     // no shell thumbnail: the card's image stays
+        Assert.Same(first, detail.Thumbnail);
+        thumbnails.Complete("riverside-tower", second, 4); // the Models list's own answer
+        Assert.Same(first, detail.Thumbnail);
+
+        // Opened again: the first open's late answer is dropped, the new one's shows.
+        detail.Back();
+        detail.Open(Tower, ModelDetailRange.OneMonth, first);
+        Assert.True(thumbnails.LastRequest!.Generation < firstOpen);
+        thumbnails.Complete("riverside-tower", second, firstOpen);
         Assert.Same(first, detail.Thumbnail);
         thumbnails.Complete("riverside-tower", second);
         Assert.Same(second, detail.Thumbnail);
