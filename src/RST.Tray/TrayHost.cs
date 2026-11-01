@@ -22,6 +22,7 @@ using RST.Core.Updates;
 using RST.Tray.AddIns;
 using RST.Tray.Resources;
 using RST.Tray.Shell;
+using RST.Tray.Thumbnails;
 using RST.Tray.Updates;
 using RST.Tray.Windows;
 using RST.UI.Dialogs;
@@ -385,8 +386,16 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             var dialogs = new LoaderDialogs();
             var messages = new DialogService();
             // The Health page's Device sub-tab (spec #25): the add-in's snapshot and cleanup, outside Revit, in
-            // tray_health_scan.json; its "Delete selected junk?" is owned by this window too.
-            var health = new TrayHealthViewModel(new DeviceHealthService(), messages);
+            // tray_health_scan.json; its "Delete selected junk?" is owned by this window too. Its Models sub-tab
+            // (spec #25 WU3): the activity index, freshened by asking the fold worker for a pass each time it is
+            // shown, and the cards' Windows thumbnails (local files only), cached under %LocalAppData%\RST\Tray.
+            var models = new ModelsViewModel(new ModelsViewModelOptions
+            {
+                Source = new IndexModelListSource(),
+                Fold = _fold,
+                Thumbnails = ModelThumbnails.ForTray(),
+            });
+            var health = new TrayHealthViewModel(new DeviceHealthService(), messages, models: models);
             var built = new TrayWindow(new TrayViewModel(this, _page, this, new AddInsViewModel(_addins, dialogs, messages, _addinsWork), health));
             dialogs.Owner = built;
             messages.Owner = built;

@@ -2,7 +2,8 @@
 // two sub-tabs. Device is the add-in's own Health view-model (HealthViewModel) over DeviceHealthService, in the tray
 // scope: the same sections, rows, severity dots, Scan System, Captured time and Clean Junk Files, with the installed
 // Revit years in the Revit section (decision #59) and every Revit year in the cleanup (decision #56). Models is
-// spec #25 WU3's; until it lands, ModelsViewModel is a placeholder. The page opens on Models.
+// ModelsViewModel (spec #25 WU3): the list of every model, its filters and thumbnails, freshened by a fold pass each
+// time it is shown. The page opens on Models.
 
 using RST.Core.Health;
 using RST.Core.Profiles;
@@ -27,7 +28,7 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
     /// <param name="device">The Device page's snapshot, scan and cleanup (DeviceHealthService in the app, a fake in tests).</param>
     /// <param name="dialogs">"Delete selected junk?" and its kin, owned by the tray window.</param>
     /// <param name="options">The Health view-model's seams (tests); its <see cref="HealthViewModelOptions.Scope"/> is always the tray's.</param>
-    /// <param name="models">The Models page (spec #25 WU3); null: the placeholder.</param>
+    /// <param name="models">The Models page (spec #25 WU3); null: one with no index ("No model activity yet").</param>
     public TrayHealthViewModel(IHealthService device, IDialogService dialogs, HealthViewModelOptions? options = null, ModelsViewModel? models = null)
     {
         Device = new HealthViewModel(device ?? throw new ArgumentNullException(nameof(device)), dialogs, InTrayScope(options));
@@ -101,23 +102,6 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
             ToastSchedule = o.ToastSchedule,
             Scope = HealthScope.Tray,
         };
-}
-
-/// <summary>
-/// The Health page's Models sub-tab (spec #25 Models). A placeholder until spec #25 WU3 builds the list here: WU3
-/// replaces this class's body (and ModelsView's content), keeping its name, <see cref="Shown"/> and <see cref="Dispose"/>.
-/// </summary>
-internal sealed class ModelsViewModel : ObservableObject, IDisposable
-{
-    /// <summary>How many times the Models sub-tab has been shown (WU3 starts its freshness fold pass here).</summary>
-    public int TimesShown { get; private set; }
-
-    /// <summary>The Models sub-tab is shown: the Health page opened on it, or the user switched to it.</summary>
-    public void Shown() => TimesShown++;
-
-    public void Dispose()
-    {
-    }
 }
 
 /// <summary>No Device service (a tray view-model built without one, in tests): no snapshot, no targets, nothing cleaned.</summary>
