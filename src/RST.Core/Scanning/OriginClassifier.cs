@@ -26,14 +26,15 @@ public static class OriginClassifier
         string? tabName,
         string? assemblyPath,
         string? publisher = null,
-        string? programFilesAutodesk = null)
+        string? programFilesAutodesk = null,
+        int? revitYear = null)
     {
         var hasPublisher = !string.IsNullOrWhiteSpace(publisher);
 
         if (hasPublisher && !ContainsAutodesk(publisher!))
             return CommandOrigin.ThirdParty;
 
-        if (BuiltinTabs.Contains(tabName))
+        if (BuiltinTabs.Contains(tabName, revitYear))
             return CommandOrigin.Native;
 
         if (hasPublisher && ContainsAutodesk(publisher!))
@@ -58,11 +59,11 @@ public static class OriginClassifier
     ///     their panels, "Build", "Select", "Model", as required add-ins);
     ///   - anything else stays <see cref="CommandOrigin.Unknown"/>.
     /// </summary>
-    public static CommandOrigin ClassifyRibbonButton(string? tabTitle, string? commandId)
+    public static CommandOrigin ClassifyRibbonButton(string? tabTitle, string? commandId, int? revitYear = null)
     {
         if (commandId is not null && commandId.StartsWith(AddinButtonIdPrefix, StringComparison.Ordinal))
             return CommandOrigin.Custom;
-        if (BuiltinTabs.Contains(tabTitle))
+        if (BuiltinTabs.Contains(tabTitle, revitYear))
             return CommandOrigin.Native;
         return CommandOrigin.Unknown;
     }

@@ -19,6 +19,42 @@ public sealed class OriginClassifierTests
             .Should().Be(CommandOrigin.Native);
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(2025, false)]
+    [InlineData(2026, false)]
+    [InlineData(2027, true)]
+    [InlineData(2028, true)]
+    public void Concrete_is_native_only_from_2027(int? year, bool native)
+    {
+        BuiltinTabs.Contains("Concrete", year).Should().Be(native);
+        OriginClassifier.Classify("Concrete", null, programFilesAutodesk: AutodeskRoot, revitYear: year)
+            .Should().Be(native ? CommandOrigin.Native : CommandOrigin.Custom);
+        OriginClassifier.ClassifyRibbonButton("Concrete", "ID_NUMBERING_REINF_PARTITIONS", year)
+            .Should().Be(native ? CommandOrigin.Native : CommandOrigin.Unknown);
+        OriginClassifier.ClassifyRibbonButton("Concrete", "CustomCtrl_%Concrete%Acme%Go", year)
+            .Should().Be(CommandOrigin.Custom);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(2025)]
+    [InlineData(2026)]
+    [InlineData(2027)]
+    [InlineData(2028)]
+    public void Existing_builtin_tabs_remain_native_in_every_year(int? year)
+    {
+        foreach (var tab in new[] { "Steel", "Architecture" })
+        {
+            BuiltinTabs.Contains(tab, year).Should().BeTrue();
+            OriginClassifier.Classify(tab, null, revitYear: year).Should().Be(CommandOrigin.Native);
+            OriginClassifier.ClassifyRibbonButton(tab, "ID_TOOL", year).Should().Be(CommandOrigin.Native);
+            RST.Core.Loader.RequiredAddinRules.IsNativeTab(tab, year).Should().BeTrue();
+            RST.Core.Activation.RequiredAddinMatch.IsAddinRequirement(
+                new RST.Core.Profiles.RequiredAddin { TabName = tab, AddinFile = "Acme.addin" }, year).Should().BeFalse();
+        }
+    }
+
     [Fact]
     public void NonAutodeskPublisher_IsThirdParty_EvenOnBuiltinTab()
     {
