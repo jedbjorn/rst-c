@@ -129,12 +129,18 @@
                 <DataTemplate>
                     <Border Style="{StaticResource Panel}" Padding="14,10" Margin="0,0,0,8" AutomationProperties.AutomationId="{Binding AutomationId}">
                         <StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <ContentControl Style="{StaticResource InfoPill}" Content="{x:Static res:AddInsStrings.YearRunning}" Margin="10,0,0,0"
-                                                Focusable="False" IsTabStop="False"
-                                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisible}}" />
-                            </StackPanel>
+                            <DockPanel LastChildFill="True">
+                                <Button Content="{x:Static res:AddInsStrings.LaunchButton}" Command="{Binding LaunchCommand}"
+                                        DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                        ToolTip="{Binding LaunchHint}" AutomationProperties.Name="{Binding LaunchHint}"
+                                        AutomationProperties.AutomationId="{Binding LaunchAutomationId}" />
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource InfoPill}" Content="{x:Static res:AddInsStrings.YearRunning}" Margin="10,0,0,0"
+                                                    Focusable="False" IsTabStop="False"
+                                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisible}}" />
+                                </StackPanel>
+                            </DockPanel>
                             <TextBlock Text="{x:Static res:AddInsStrings.YearClear}" Style="{StaticResource MutedText}" Margin="0,4,0,0"
                                        Visibility="{Binding IsClear, Converter={StaticResource BoolToVisible}}" />
                             <StackPanel Visibility="{Binding HasSwitchedOff, Converter={StaticResource BoolToVisible}}">
