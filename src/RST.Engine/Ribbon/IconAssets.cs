@@ -34,6 +34,7 @@ using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using RST.Core.Ribbon;
+using RST.Core.Profiles;
 using RST.Core.Logging;
 
 namespace RST.Engine.Ribbon;
@@ -304,6 +305,14 @@ internal static class IconAssets
         if (commandId.Contains(RstifyToggle.RstifyButtonCookie, StringComparison.Ordinal)) return RstifyIconOff16;
         return null;
     }
+
+    private static readonly ConcurrentDictionary<string, ImageSource?> _companionCache = new();
+
+    /// <summary>The companion's own 16/32 px artwork, only for a slot with no stored icon.</summary>
+    public static ImageSource? ResolveCompanionIcon(Slot slot, int size, bool dark = false) =>
+        CompanionIcons.Resolve(slot, size, dark) is { } path
+            ? _companionCache.GetOrAdd(path, _ => LoadBundled(path))
+            : null;
 
     private static ImageSource? LoadBundled(string relativePath, int? decodePixelWidth = null)
     {

@@ -6,7 +6,11 @@
 // the SC-045 cache-key-collision regression. Windows-only (RST.Engine is
 // WPF); the platform-agnostic parse matrix stays in RST.Tests.
 
+using System.Windows.Media.Imaging;
 using FluentAssertions;
+using RST.Core.Profiles;
+using RST.Core.Ribbon;
+using RST.UI.Controls;
 using RST.Engine.Ribbon;
 using Xunit;
 
@@ -76,4 +80,58 @@ public sealed class IconAssetsResolveTests
         var b = IconAssets.ResolveSlotIcon("pack:MOVE_GREEN");
         b.Should().BeSameAs(a, "the process cache keys by normalized pack key, OrdinalIgnoreCase");
     }
+
+    [Theory]
+    [InlineData("GanttIt.Open", "gantt")]
+    [InlineData("SplashIt.OpenSettings", "splash")]
+    [InlineData("SplashIt.GroupTabs", "group")]
+    public void Companion_artwork_loads_at_both_sizes_and_themes_on_ribbon_and_builder(string command, string icon)
+    {
+        var slot = new Slot { CommandId = "CustomCtrl_%CustomCtrl_%Add-Ins%Companion%" + command };
+        var button = new PlannedButton(slot, SlotTarget.Parse(slot.CommandId, "Tool"), "Tool", "id", PlannedButtonSize.Large);
+        foreach (var size in new[] { 16, 32 })
+            foreach (var dark in new[] { false, true })
+            {
+                var expected = $"{icon}_{size}{(dark ? "_dark" : "")}.png";
+                var image = (size == 16 ? ProfileTabBuilder.Icon16(button, dark) : ProfileTabBuilder.Icon32(button, dark))
+                    .Should().BeOfType<BitmapImage>().Subject;
+                image.PixelWidth.Should().Be(size);
+                image.PixelHeight.Should().Be(size);
+                image.IsFrozen.Should().BeTrue();
+                image.UriSource.LocalPath.Should().EndWith(expected);
+                IconAssets.ResolveCompanionIcon(slot, size, dark).Should().BeSameAs(image);
+
+                var builder = PackIcons.ForSlot(slot, size: size, dark: dark).Should().BeOfType<BitmapImage>().Subject;
+                builder.PixelWidth.Should().Be(size);
+                builder.PixelHeight.Should().Be(size);
+                builder.UriSource.LocalPath.Should().EndWith(expected);
+                builder.IsFrozen.Should().BeTrue();
+            }
+    }
+
+    [Theory]
+    [InlineData("pack:move_green", true)]
+    [InlineData("pack:missing_companion_override", false)]
+    [InlineData("malformed", false)]
+    public void Explicit_icons_win_even_when_unresolvable(string stored, bool resolves)
+    {
+        var slot = new Slot { CommandId = "CustomCtrl_%Tab%Panel%GanttIt.Open", IconFile = stored };
+        var button = new PlannedButton(slot, SlotTarget.Parse(slot.CommandId, "Tool"), "Tool", "id", PlannedButtonSize.Large);
+        foreach (var dark in new[] { false, true })
+        {
+            ProfileTabBuilder.Icon32(button, dark).Should().BeSameAs(resolves ? IconAssets.ResolveSlotIcon(stored) : IconAssets.Default32);
+            ProfileTabBuilder.Icon16(button, dark).Should().BeSameAs(resolves ? IconAssets.ResolveSlotIcon16(stored) : IconAssets.Default16);
+            foreach (var size in new[] { 16, 32 })
+            {
+                IconAssets.ResolveCompanionIcon(slot, size, dark).Should().BeNull();
+                var builder = PackIcons.ForSlot(slot, size: size, dark: dark);
+                if (resolves)
+                    builder.Should().BeSameAs(PackIcons.Load(new IconPackValue("move", "green"), size: size));
+                else
+                    builder.Should().BeNull();
+            }
+        }
+        slot.IconFile.Should().Be(stored);
+    }
+
 }
