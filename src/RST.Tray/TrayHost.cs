@@ -257,7 +257,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void StartUpdateChecks()
     {
         _http = TrayHttp.CreateClient(TrayHttp.CreateHandler());
-        _updates = new TrayUpdates(
+        AttachUpdateChecks(new TrayUpdates(
             ProductCatalog.FromEmbedded(m => Log.Warning("{Message}", m)),
             _http,
             new MsiProducts(m => Log.Warning("{Message}", m)),
@@ -267,7 +267,13 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             TimeProvider.System,
             TrayPaths.UpdatesFile,
             action => _dispatcher.BeginInvoke(action),
-            m => Log.Information("{Message}", m));
+            m => Log.Information("{Message}", m)));
+    }
+
+    /// <summary>Owns the checker and wires the production UI notifications; also used by host tests.</summary>
+    internal void AttachUpdateChecks(TrayUpdates updates)
+    {
+        _updates = updates;
         _updates.NewVersionsFound += (_, found) => Announce(found);
         _updates.Changed += (_, _) =>
         {
@@ -281,7 +287,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     {
         if (_updates is null) throw new InvalidOperationException("the update checker did not start");
         _selfUpdater = new SelfUpdater(AppContext.BaseDirectory, TrayPaths.UpdaterDir, Environment.ProcessId, m => Log.Information("{Message}", m));
-        _installs = new InstallCoordinator(
+        AttachInstalls(new InstallCoordinator(
             _updates.Current.Products.Select(p => p.Product),
             _http ?? throw new InvalidOperationException("the update checker has no HTTP client"),
             new MsiProducts(m => Log.Warning("{Message}", m)),
@@ -294,10 +300,17 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             action => _dispatcher.BeginInvoke(action),
             m => Log.Information("{Message}", m),
             quitForSelfUpdate: () => Quit("self-update: the updater installs RST"),
-            installsChanged: () => _updates?.RefreshInstalledAsync().Forget("tray: read what is installed"));
-        _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+            installsChanged: () => _updates?.RefreshInstalledAsync().Forget("tray: read what is installed")));
+        if (_installs is null) throw new InvalidOperationException("the install coordinator did not start");
         if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed or InstallPhase.Refused)
             _updates.RefreshInstalledAsync().Forget("tray: read what is installed"); // the updater just ran: show what is installed now
+    }
+
+    /// <summary>Owns the coordinator and wires the production UI notifications; also used by host tests.</summary>
+    internal void AttachInstalls(InstallCoordinator installs)
+    {
+        _installs = installs;
+        _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void StartUpdateLoop()
@@ -380,8 +393,9 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     private void PresentSelfUpdateResult()
     {
-        if (_window is { IsVisible: true } window && window.ViewModel.Page == TrayPage.Updates &&
-            window.ViewModel.Updates.Rst.HasNote)
+        if (_window is { } window && TrayNavigation.CanPresentSelfUpdateResult(
+            window.IsVisible, window.WindowState == WindowState.Minimized,
+            window.ViewModel.Page, window.ViewModel.Updates.Rst.HasNote))
             _installs?.MarkSelfUpdateResultPresented();
     }
 
@@ -429,6 +443,10 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
                     _page = built.ViewModel.Page;
                     PresentSelfUpdateResult();
                 }
+            };
+            built.StateChanged += (_, _) =>
+            {
+                if (ReferenceEquals(_window, built)) PresentSelfUpdateResult();
             };
             built.Closed += (_, _) =>
             {

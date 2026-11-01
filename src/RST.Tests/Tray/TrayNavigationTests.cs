@@ -6,6 +6,19 @@ namespace RST.Tests.Tray;
 
 public sealed class TrayNavigationTests
 {
+    [Theory]
+    [InlineData(true, false, TrayPage.Updates, true, true)]
+    [InlineData(false, false, TrayPage.Updates, true, false)]
+    [InlineData(true, true, TrayPage.Updates, true, false)]
+    [InlineData(true, false, TrayPage.AddIns, true, false)]
+    [InlineData(true, false, TrayPage.Apps, true, false)]
+    [InlineData(true, false, TrayPage.Health, true, false)]
+    [InlineData(true, false, TrayPage.Settings, true, false)]
+    [InlineData(true, false, TrayPage.Updates, false, false)]
+    public void Self_update_presentation_requires_a_visible_Updates_note(
+        bool visible, bool minimized, TrayPage page, bool hasNote, bool expected) =>
+        Assert.Equal(expected, TrayNavigation.CanPresentSelfUpdateResult(visible, minimized, page, hasNote));
+
     [Fact]
     public void Pages_are_in_decision_76_tab_order() =>
         Assert.Equal(new[] { TrayPage.AddIns, TrayPage.Updates, TrayPage.Apps, TrayPage.Health, TrayPage.Settings },
