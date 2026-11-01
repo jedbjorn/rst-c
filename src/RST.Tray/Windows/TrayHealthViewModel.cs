@@ -90,9 +90,16 @@ internal sealed class TrayHealthViewModel : ObservableObject, IDisposable
         Models.Dispose();
     }
 
-    /// <summary>A card was opened: its detail replaces the list, on the range the list hands over, with the card's thumbnail.</summary>
+    /// <summary>A card was opened: its detail replaces the list, on the range the list hands over, with the card's thumbnail
+    /// at once, and the thumbnail asked for again: through the list for its card (the list's refresh generation, so the
+    /// list keeps the answer), or by the detail when the list has no card for it now.</summary>
     private void OnDetailRequested(object? sender, ModelDetailRequestedEventArgs e) => UiGuard.Run("tray Health: open a model's detail", () =>
-        Detail.Open(e.Card, e.StartRange, Models.CardFor(e.ModelId)?.Thumbnail));
+    {
+        var card = Models.CardFor(e.ModelId);
+        Detail.Open(e.Card, e.StartRange, card?.Thumbnail);
+        if (card is not null) Models.ThumbnailWanted(card);
+        else Detail.RequestThumbnail();
+    });
 
     /// <summary>Back: the list shows again, scrolled where it was, the opened card focused.</summary>
     private void OnDetailBack(object? sender, EventArgs e) => UiGuard.Run("tray Health: back to the list", Models.ReturnFromDetail);

@@ -12,7 +12,8 @@
 //     read (the panel slices it per range).
 //   - A model whose history is gone (its rollup deleted or unreadable, nothing unfolded) shows a clear message on the
 //     cards and charts (the panel's RenderError), as does a failed read.
-//   - The header: the card's thumbnail (the Models list's Windows thumbnail, asked for again each time a detail opens),
+//   - The header: the card's thumbnail (the Models list's Windows thumbnail, asked for again each time a detail opens:
+//     through the list for its card, so the list keeps the answer too),
 //     title, file name, local and central path, the Revit versions it was opened in, Workshared or Cloud, and the
 //     health colour with its name.
 
@@ -268,15 +269,22 @@ internal sealed class ModelDetailViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ModelId));
         OnPropertyChanged(nameof(Activity));
         ShowHeader(card, null);
-        // The card's image at once, and the worker asked again each time (its last-write check: a model saved since the
-        // list showed it gets its new thumbnail).
+        // The card's image at once; the host asks the worker again (RequestThumbnail, or the list's own ask for the card),
+        // and the answer replaces it (its last-write check: a model saved since the list showed it gets its new image).
         Thumbnail = thumbnail;
-        _thumbnails?.Request(new ThumbnailRequest(card.ModelId, card.LocalPath, card.CentralPath, card.IsCloud));
         SelectRangeQuietly(ModelDetail.RangeFor(start));
         IsLoading = true;
         IsOpen = true;
         Log.Information("models: detail for {Model} on {Range}", card.ModelId, _range.Label);
         Read(card.ModelId);
+    }
+
+    /// <summary>Asks the worker for the open model's thumbnail (when the list has no card to ask for it). The answer shows
+    /// in the header; a model with none keeps the placeholder.</summary>
+    public void RequestThumbnail()
+    {
+        if (_disposed || _thumbnails is null || _card is not { } c) return;
+        _thumbnails.Request(new ThumbnailRequest(c.ModelId, c.LocalPath, c.CentralPath, c.IsCloud));
     }
 
     /// <summary>Back to the list. A read still running is dropped.</summary>

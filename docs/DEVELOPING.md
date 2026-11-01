@@ -391,8 +391,9 @@ The Health window (`src/RST.UI/Health/HealthWindow.xaml`, view-model `HealthView
   per ISO week at 6M and 1Y. It knows nothing of Revit: the host passes `ModelActivityFacts` (workshared / cloud,
   warnings, file size and an optional sub-line; `ModelActivityFacts.FromRollup` uses the rollup's last
   `model_stats`). `HealthResources.xaml` draws it: `StatCardTemplate`, `ChartCardTemplate`, and
-  `ModelActivityStats` / `ModelActivityCharts` over a panel. The tray's model detail (spec #25) reuses all of it
-  with `ReadModel` and `ActivityRanges.PillsWithYear`. AutomationIds: `Health.Stat.<Card>`, `Health.Chart.<Chart>`,
+  `ModelActivityStats` / `ModelActivityCharts` over a panel. The tray's model detail (spec #25 WU4: `RST.Tray/Windows/ModelDetailViewModel`,
+  `ModelDetailView`; the tray-only rules in `RST.Core.Tray.ModelDetail`) reuses all of it with `ReadModel`, `includeSession: false` and
+  `ActivityRanges.PillsWithYear`; its own controls are `Tray.Health.Detail.*`, and its captures `tray-health-detail-*`. AutomationIds: `Health.Stat.<Card>`, `Health.Chart.<Chart>`,
   `Health.Range.<Label>`. The pre-rollup `ActivityAggregator` now lives only in `RST.Tests` as the harness for
   `SessionReplay`'s join-rule tests.
 - **Opening it:** `HealthLauncher.Show(ownerHwnd, context, telemetryToggled)`, after
