@@ -24,3 +24,6 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/_build.yml
+    # Build-only integration candidate; this branch must not be merged.
+    with:
+      product_version: '3.2.2'
