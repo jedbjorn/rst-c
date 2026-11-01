@@ -633,6 +633,8 @@ public sealed class InstallCoordinator : IDisposable
         lock (_gate)
         {
             _progress = new Dictionary<string, InstallProgress>(_progress, StringComparer.Ordinal) { [product.Id] = progress };
+            // This progress supersedes the updater's result, so its presentation intent no longer applies.
+            if (product.IsRst) _selfUpdateResultPending = false;
             changed = _changed;
             _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
