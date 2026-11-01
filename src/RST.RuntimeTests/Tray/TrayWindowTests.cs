@@ -3,6 +3,7 @@
 // hand-off on a real Windows runtime. Each screenshot test also checks what it shows (the visible page, the
 // header color, the toggle's state), so a broken template fails here as well as in review. The PNGs land in
 // TestResults/screenshots; CI uploads them as RST-screenshots (R25 leg).
+// SC-048 item 2: the notification resource has real small-size entries; the window retains rst.ico.
 
 using System.Globalization;
 using System.Reflection;
@@ -281,11 +282,20 @@ public class TrayShellTests
     [Fact]
     public void The_embedded_icon_loads_at_the_small_icon_size()
     {
-        var ico = TrayAssets.IconFile();
+        var ico = TrayAssets.NotificationIconFile();
         Assert.NotEmpty(ico);
-        var icon = TrayIcon.LoadIcon(ico, 16, 16);
-        Assert.NotEqual(IntPtr.Zero, icon);
-        DestroyIcon(icon);
+        Assert.NotEqual(TrayAssets.IconFile(), ico);
+        int[] sizes = [16, 20, 24, 32, 40, 48];
+        Assert.Equal(sizes.Length, BitConverter.ToUInt16(ico, 4));
+        for (var i = 0; i < sizes.Length; i++)
+        {
+            Assert.Equal(sizes[i], ico[6 + i * 16]);
+            Assert.Equal(sizes[i], ico[7 + i * 16]);
+            var icon = TrayIcon.LoadIcon(ico, sizes[i], sizes[i]);
+            Assert.NotEqual(IntPtr.Zero, icon);
+            DestroyIcon(icon);
+        }
+        Assert.NotEmpty(TrayAssets.IconFile());
         Assert.Equal(IntPtr.Zero, TrayIcon.LoadIcon(new byte[] { 0, 0, 2, 0, 0, 0 }, 16, 16));
     }
 

@@ -738,6 +738,10 @@
   <data name="Loader_UnloadReportSubtitle" xml:space="preserve">
     <value>RST switched back on the add-ins it had switched off.</value>
   </data>
+  <!-- SC-048 F6: the closing summary replaces an empty Add-in Check. -->
+  <data name="Loader_LoadNoAddinChanges" xml:space="preserve">
+    <value>No add-in changes.</value>
+  </data>
   <data name="Loader_UnloadNoAddinChanges" xml:space="preserve">
     <value>Unloaded. No add-in changes were needed.</value>
   </data>
@@ -1409,5 +1413,15 @@ The other profiles were changed and stay changed.</value>
   <data name="Builder_Update" xml:space="preserve">
     <value>Update</value>
     <comment>The Edit dialog's button while the edit fails its check (no count).</comment>
+  </data>
+  <!-- SC-048 item 5: shared title for in-Revit messages; Revit's automatic prefix is disabled. -->
+  <data name="Common_RstTitle" xml:space="preserve">
+    <value>RST</value>
+  </data>
+  <data name="Rstify_NoTabs" xml:space="preserve">
+    <value>No tabs configured to hide.</value>
+  </data>
+  <data name="Rstify_ConfigureTabs" xml:space="preserve">
+    <value>Set up tab visibility in the Loader (RSTify section).</value>
   </data>
 </root>

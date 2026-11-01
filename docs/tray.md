@@ -25,7 +25,7 @@ The tray shows which versions of RST, Gantt-It and Splash-It are installed, tell
   - **Check for updates automatically:** on by default. The tray then asks GitHub once a day whether a newer RST, Gantt-It or Splash-It is out. Turn it off to stop those checks. See [Updates](#updates).
   - **About:** the version and a link to the log folder.
 
-Click the icon to open the window. Right-click it for the menu: **Open RST**, **Check for updates** (checks now and opens the Updates page), **Settings** and **Quit**. Closing the window leaves the tray running.
+The notification icon is a white **R** on an RST-blue tile with a light rim, drawn at small sizes for both light and dark taskbars. The application and window keep the RST wordmark icon. Click the icon to open the window. Right-click it for the menu: **Open RST**, **Check for updates** (checks now and opens the Updates page), **Settings** and **Quit**. Closing the window leaves the tray running.
 
 ## Where it lives
 
@@ -285,3 +285,6 @@ A repair or an upgrade also closes a running tray while its files are replaced. 
 ## For developers
 
 The installer's `util:CloseApplication` finds `RST.Tray.exe` by file name in every session. `RST-Machine.msi`'s `RstEndTrays` matches the full path instead, so it never ends a per-user tray. The updater copy that runs from `%LocalAppData%\RST\Tray\updater\` is therefore `RST.TrayUpdater.exe` (the apphost renamed; it still loads `RST.Tray.dll` beside it). Otherwise the install it starts would ask it to close part-way through. `--apply` is honoured only by that copy in that folder, and only for an `RST.msi` the tray verified into its cache (`verified.json`, SHA256 and Property table checked again).
+
+<!-- SC-048 item 2: reproducible notification-area artwork. -->
+The notification icon's source is `installer/branding/rst-tray.svg`. Rebuild its 16, 20, 24, 32, 40 and 48 px entries with `bash build/generate-tray-icon.sh` (librsvg and ImageMagick). An optional directory argument writes 16 and 32 px previews on light and dark backgrounds.

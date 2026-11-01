@@ -28,6 +28,7 @@
 // or a manifest GUID), the plain message for any other (a Revit tool).
 //
 // The dialog texts live in RST.Core.Ribbon.SlotMessages (unit-tested).
+// SC-048 item 5: suppress Revit's context-dependent add-in prefix so the title is always RST.
 
 using System;
 using System.Diagnostics;
@@ -35,6 +36,7 @@ using System.Windows.Input;
 using Autodesk.Revit.UI;
 using RST.Core.Ribbon;
 using RST.Core.Logging;
+using RST.UI.Resources;
 
 namespace RST.Engine.Ribbon;
 
@@ -127,8 +129,9 @@ internal sealed class SlotInvokeCommand : ICommand
     {
         try
         {
-            var dlg = new TaskDialog("RST")
+            var dlg = new TaskDialog(UiStrings.Common_RstTitle)
             {
+                TitleAutoPrefix = false,
                 MainInstruction = message.MainInstruction,
                 MainContent = message.MainContent,
                 CommonButtons = TaskDialogCommonButtons.Close,

@@ -210,7 +210,8 @@ public sealed class ProfileLoadService
         {
             _log.Error(ex, "Loader.load_profile: add-in changes threw for {Name}", start.Request.Name);
             return new AddinPassResult(new ActivationReport(ActivationIntent.Load,
-                plan.Changes.Select(e => ActivationOutcome.For(e, OutcomeResult.NotChanged, ChangeReason.Other, ex.Message)).ToList(), []));
+                plan.Changes.Select(e => ActivationOutcome.For(e, OutcomeResult.NotChanged, ChangeReason.Other, ex.Message)).ToList(),
+                [.. plan.Notes.Select(n => n.Text), "RST could not complete the add-in changes: " + ex.Message]));
         }
     }
 

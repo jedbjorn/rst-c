@@ -7,6 +7,7 @@
 //   - hidden_tabs set, currently hidden  → show them, swap icon to "off".
 //
 // Mirrors /home/jedi/RST/RST.tab/Minify.panel/RSTify.pushbutton/script.py.
+// SC-048 item 5: the same fixed RST title as profile-button messages, without Revit's prefix.
 
 using System.Diagnostics;
 using Autodesk.Revit.Attributes;
@@ -15,6 +16,7 @@ using Autodesk.Revit.UI;
 using RST.Core.Profiles;
 using RST.Engine.Ribbon;
 using RST.Core.Logging;
+using RST.UI.Resources;
 
 namespace RST.Engine.Commands;
 
@@ -33,9 +35,13 @@ public sealed class RstifyCommand : IExternalCommand
 
             if (hiddenTabs.Length == 0)
             {
-                TaskDialog.Show(
-                    "RSTify",
-                    "No tabs configured to hide.\n\nSet up tab visibility in the Loader (RSTify section).");
+                new TaskDialog(UiStrings.Common_RstTitle)
+                {
+                    TitleAutoPrefix = false,
+                    MainInstruction = UiStrings.Rstify_NoTabs,
+                    MainContent = UiStrings.Rstify_ConfigureTabs,
+                    CommonButtons = TaskDialogCommonButtons.Close,
+                }.Show();
                 return Result.Succeeded;
             }
 

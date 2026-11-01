@@ -3,6 +3,7 @@
 // Closing it only closes the window; the tray keeps running. Escape is the window's Close (its IsCancel button), except
 // while a model's detail shows on Health › Models (spec #25 WU4): then a fresh Escape nothing else used goes Back to the
 // list, wherever the keyboard is in the window (the detail, the tabs, the footer), and never closes the window.
+// SC-048 item 2: the notification area has its own small-size icon; the window keeps the MSI icon.
 
 using System.IO;
 using System.Windows;
@@ -75,7 +76,15 @@ internal static class TrayAssets
     /// <summary>rst.ico's bytes (empty when the resource is missing).</summary>
     public static byte[] IconFile()
     {
-        using var stream = typeof(TrayAssets).Assembly.GetManifestResourceStream("RST.Tray.rst.ico");
+        return Read("RST.Tray.rst.ico");
+    }
+
+    /// <summary>The high-contrast notification icon, with 16–48 px entries.</summary>
+    public static byte[] NotificationIconFile() => Read("RST.Tray.rst-tray.ico");
+
+    private static byte[] Read(string name)
+    {
+        using var stream = typeof(TrayAssets).Assembly.GetManifestResourceStream(name);
         if (stream is null) return [];
         using var copy = new MemoryStream();
         stream.CopyTo(copy);

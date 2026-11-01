@@ -211,7 +211,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     private void StartIcon()
     {
-        _icon = new TrayIcon(TrayAssets.IconFile(), TrayStrings.Tray_Tooltip, m => Log.Warning("{Message}", m));
+        _icon = new TrayIcon(TrayAssets.NotificationIconFile(), TrayStrings.Tray_Tooltip, m => Log.Warning("{Message}", m));
         _icon.Activated += (_, _) => OpenWindow(null);
         _icon.MenuRequested += (_, point) => OpenMenu(point);
         _icon.NotificationClicked += (_, _) => OpenWindow(TrayPage.Updates);
