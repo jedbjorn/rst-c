@@ -1,7 +1,7 @@
 // rst-c's own (not vendored): the Updates and Apps pages' view-model (spec #20 §4, §5, §6; F17 WU3, WU4). It turns
 // the checker's immutable UpdateSnapshot and the installer's InstallProgress into rows and lines; it never talks to
-// the network or Windows Installer itself. Install and Update run through the host (InstallCoordinator): while
-// Revit runs they read "… when Revit closes"; a product installed for everyone on this PC gets no button, only who
+// the network or Windows Installer itself. Install and Update run through the host (InstallCoordinator), with
+// close-Revit advice on the pages; a product installed for everyone on this PC gets no button, only who
 // can update it; after a failed companion upgrade that left nothing installed, "Reinstall previous version (x.y.z)".
 // Every failure is said in plain words (TrayStrings.Problem); the detail is in the logs (WU3 review D3).
 
@@ -38,9 +38,6 @@ internal interface ITrayUpdatesHost
     /// <summary>Each product's install state (F17 WU4); absent is idle.</summary>
     IReadOnlyDictionary<string, InstallProgress> Installs => EmptyInstalls;
 
-    /// <summary>A Revit.exe runs in this session: the buttons say "… when Revit closes".</summary>
-    bool RevitRunning => false;
-
     /// <summary>This tray runs from a per-machine install: RST is never installed from it.</summary>
     bool PerMachineTray => false;
 
@@ -50,7 +47,7 @@ internal interface ITrayUpdatesHost
     /// <summary>Reinstalls the version a failed upgrade removed. Never blocks.</summary>
     void ReinstallPrevious(ProductInfo product) { }
 
-    /// <summary>Stops an install that is downloading, waiting for Revit or waiting to retry.</summary>
+    /// <summary>Stops an install that is downloading, queued or waiting to retry.</summary>
     void CancelInstall(ProductInfo product) { }
 
     /// <summary>Opens an msiexec log in Notepad.</summary>
@@ -82,22 +79,20 @@ internal sealed class ProductRowViewModel
 {
     /// <param name="detected">Detection has run. Before it has, the row claims no state: no pill, no button.</param>
     /// <param name="progress">Its install state (null: idle).</param>
-    /// <param name="revitRunning">A Revit.exe runs now.</param>
     /// <param name="perMachineTray">The tray runs from a per-machine install (RST is then never installed from it).</param>
     public ProductRowViewModel(ProductStatus status, ICommand releasePage, bool detected = true)
-        : this(status, RowCommands.ReleasePageOnly(releasePage), detected, null, false, false)
+        : this(status, RowCommands.ReleasePageOnly(releasePage), detected, null, false)
     {
     }
 
     public ProductRowViewModel(ProductStatus status, RowCommands commands, bool detected, InstallProgress? progress,
-                               bool revitRunning, bool perMachineTray)
+                               bool perMachineTray)
     {
         Status = status ?? throw new ArgumentNullException(nameof(status));
         Commands = commands ?? throw new ArgumentNullException(nameof(commands));
         State = status.State;
         IsKnown = detected;
         Progress = progress ?? InstallProgress.Idle;
-        RevitRunning = revitRunning;
         IsForEveryone = status.Installation.Kind == InstallKind.Installer
                         && (status.Installation.Installed!.Context == InstallContext.Machine || (status.Product.IsRst && perMachineTray));
     }
@@ -107,8 +102,6 @@ internal sealed class ProductRowViewModel
     public ProductState State { get; }
 
     public InstallProgress Progress { get; }
-
-    public bool RevitRunning { get; }
 
     /// <summary>Installed for everyone on this PC: this per-user tray never installs over it.</summary>
     public bool IsForEveryone { get; }
@@ -172,8 +165,7 @@ internal sealed class ProductRowViewModel
         IsKnown && State == ProductState.NotInstalled && !Progress.IsBusy && Progress.Previous is { } previous ? previous : null;
 
     /// <summary>
-    /// The one button: Update (an update is out), Install (a companion that is not installed), each "… when Revit
-    /// closes" while Revit runs, or "Reinstall previous version (x.y.z)". Null: no button (unknown state, installed
+    /// The one button: Update (an update is out), Install (a companion that is not installed), or "Reinstall previous version (x.y.z)". Null: no button (unknown state, installed
     /// manually, for everyone on this PC, not installable, or an install under way).
     /// </summary>
     public string? ActionText
@@ -182,14 +174,13 @@ internal sealed class ProductRowViewModel
         {
             if (!IsKnown || Progress.IsBusy || !Status.Product.IsInstallable) return null;
             if (ReinstallVersion is { } previous)
-                return RevitRunning ? TrayStrings.App_ReinstallPreviousWhenRevitCloses(previous.ToString())
-                                    : TrayStrings.App_ReinstallPrevious(previous.ToString());
+                return TrayStrings.App_ReinstallPrevious(previous.ToString());
             return State switch
             {
                 ProductState.UpdateAvailable when !IsForEveryone =>
-                    RevitRunning ? TrayStrings.App_UpdateWhenRevitCloses : TrayStrings.App_Update,
+                    TrayStrings.App_Update,
                 ProductState.NotInstalled when !Status.Product.IsRst && Status.Latest is not null =>
-                    RevitRunning ? TrayStrings.App_InstallWhenRevitCloses : TrayStrings.App_Install,
+                    TrayStrings.App_Install,
                 _ => null,
             };
         }
@@ -200,8 +191,8 @@ internal sealed class ProductRowViewModel
     /// <summary>The button acts (it is shown only when it can).</summary>
     public bool CanAct => HasAction;
 
-    /// <summary>Cancel: while it downloads, waits for Revit, or waits to retry (never once msiexec runs).</summary>
-    public bool CanCancel => Progress.Phase is InstallPhase.Downloading or InstallPhase.WaitingForRevit or InstallPhase.Queued
+    /// <summary>Cancel: while it downloads, waits to retry (never once msiexec runs).</summary>
+    public bool CanCancel => Progress.Phase is InstallPhase.Downloading or InstallPhase.Queued
                              or InstallPhase.RetryLater;
 
     /// <summary>The right-hand column shows a button.</summary>
@@ -220,7 +211,6 @@ internal sealed class ProductRowViewModel
             switch (Progress.Phase)
             {
                 case InstallPhase.Downloading: return TrayStrings.Install_Downloading(name, version);
-                case InstallPhase.WaitingForRevit: return TrayStrings.Install_WaitingForRevit(name, version);
                 case InstallPhase.Queued:
                     return Status.Product.IsRst ? TrayStrings.Install_QueuedRst(name, version) : TrayStrings.Install_Queued(name, version);
                 case InstallPhase.Installing: return TrayStrings.Install_Installing(name, version);
@@ -432,10 +422,9 @@ internal sealed class UpdatesViewModel : ObservableObject
     private IReadOnlyList<ProductRowViewModel> Build(UpdateSnapshot snapshot)
     {
         var installs = _host.Installs;
-        var revit = snapshot.Detected && _host.RevitRunning;
         var perMachine = _host.PerMachineTray;
         return snapshot.Products.Select(s => new ProductRowViewModel(
-            s, _commands, snapshot.Detected, installs.TryGetValue(s.Product.Id, out var p) ? p : null, revit, perMachine)).ToList();
+            s, _commands, snapshot.Detected, installs.TryGetValue(s.Product.Id, out var p) ? p : null, perMachine)).ToList();
     }
 
     private void OnChanged(object? sender, EventArgs e) => Refresh();

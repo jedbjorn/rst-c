@@ -97,8 +97,6 @@ public enum InstallProblem
     /// <summary>The tray was closing, or the user cancelled.</summary>
     Cancelled,
 
-    /// <summary>Revit was open when the updater was about to install (it hands the wait back to the tray).</summary>
-    RevitRunning,
 }
 
 /// <summary>What the tray installs a release with (decision #34).</summary>

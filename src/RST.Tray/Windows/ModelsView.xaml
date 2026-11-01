@@ -7,8 +7,8 @@
     model cards in the card look (CardListBoxItem's border, hover and focus ring).
 
     The list is ONE virtualizing column (recycling, pixel scrolling) of rows: the aggregate cards; per group a header
-    row and rows of cards, each row as many cards as fit (ModelsViewModel.Columns, set from the width here), so 500
-    models realize only the rows on screen and the cards reflow when the window is resized. A group's box is drawn by
+    row and one model card per row, so 500 models realize only the rows on screen. Cards are at most 700 DIPs wide
+    and shrink to the available width when the window is resized. A group's box is drawn by
     its rows: the header the top (the whole box when closed), each card row the sides, the last the bottom.
     The view-model is ModelsViewModel.
 -->
@@ -96,6 +96,7 @@
                 <Setter Property="Padding" Value="10" />
                 <Setter Property="Margin" Value="4" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="MaxWidth" Value="700" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
                 <Setter Property="Template">
@@ -229,7 +230,7 @@
                     <ItemsControl ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource ModelCardTemplate}" Focusable="False">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid Rows="1" Columns="{Binding Columns}" />
+                                <UniformGrid Rows="1" Columns="1" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
