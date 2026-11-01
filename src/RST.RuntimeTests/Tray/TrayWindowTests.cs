@@ -8,6 +8,7 @@
 using System.Globalization;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -144,6 +145,11 @@ public class TrayWindowScreenshotTests
             foreach (var (p, element) in pages)
                 Assert.Equal(p == page ? Visibility.Visible : Visibility.Collapsed, element.Visibility);
             Assert.Equal((int)page, window.Tabs.SelectedIndex);
+            // Decision #76: check actual XAML order, labels and stable automation IDs against the page indices.
+            Assert.Equal(new[] { "RST Profiles", "Updates", "Apps", "Health", "Settings" },
+                window.Tabs.Items.Cast<TabItem>().Select(t => (string)t.Header));
+            Assert.Equal(new[] { "Tray.TabAddIns", "Tray.TabUpdates", "Tray.TabApps", "Tray.TabHealth", "Tray.TabSettings" },
+                window.Tabs.Items.Cast<TabItem>().Select(AutomationProperties.GetAutomationId));
 
             // Header and footer in the surface color, the page in the window color (the family palette).
             AssertColor(Palette(theme, UiPalette.Surface), Screenshots.PixelAt(bitmap, 2, 2), "header");
@@ -250,8 +256,16 @@ public class TrayViewModelTests
         var host = new FakeTrayHost();
         var vm = new TrayViewModel(host, TrayPage.Updates);
         Assert.True(vm.IsUpdatesPage);
+        vm.PageIndex = 0;
+        Assert.Equal(TrayPage.AddIns, vm.Page);
+        Assert.True(vm.IsAddInsPage);
+        vm.PageIndex = 1;
+        Assert.Equal(TrayPage.Updates, vm.Page);
+        vm.PageIndex = 2;
+        Assert.Equal(TrayPage.Apps, vm.Page);
+        Assert.True(vm.IsAppsPage);
         vm.PageIndex = 3;
-        Assert.Equal(TrayPage.Health, vm.Page); // spec #25: Health sits between Add-ins and Settings
+        Assert.Equal(TrayPage.Health, vm.Page);
         Assert.True(vm.IsHealthPage);
         vm.PageIndex = 4;
         Assert.Equal(TrayPage.Settings, vm.Page);

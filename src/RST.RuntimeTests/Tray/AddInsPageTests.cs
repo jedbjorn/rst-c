@@ -353,6 +353,27 @@ public class AddInsViewModelTests
     }
 
     [Fact]
+    public async Task Each_fresh_open_on_RST_Profiles_reads_once_and_repeated_shows_do_not_duplicate_it()
+    {
+        using var f = new AddInsFixture();
+        for (var opened = 1; opened <= 2; opened++)
+        {
+            // TrayHost creates a new AddInsViewModel whenever the previous window has been closed.
+            var page = TrayNavigation.PageOnOpen(null, windowShown: false, TrayPage.Settings);
+            var tray = new TrayViewModel(new FakeTrayHost(), page, addIns: f.ViewModel());
+            Assert.True(tray.IsAddInsPage);
+            Assert.True(tray.AddIns.IsLoaded);
+            Assert.Equal(opened, f.Backend.Calls.Count);
+
+            tray.Page = TrayPage.AddIns; // binding or an activation on the same page
+            tray.Page = TrayPage.Settings;
+            tray.Page = TrayPage.AddIns;
+            await tray.AddIns.EnsureLoadedAsync();
+            Assert.Equal(Enumerable.Repeat("Status", opened), f.Backend.Calls);
+        }
+    }
+
+    [Fact]
     public void The_page_reads_the_disk_only_when_it_is_first_shown()
     {
         using var f = new AddInsFixture();

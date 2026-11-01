@@ -1,7 +1,7 @@
 ---
 title: RST tray
 tags: [rst-c, tray, startup, updates, installer]
-date: 2026-10-31
+date: 2026-11-01
 project: rst-c
 purpose: What the RST tray app is, where it lives, its Health page, how its update checks work and what they send, how to quit it, stop it starting, or preset update checks off, and what changes when RST is installed for everyone on the PC
 ---
@@ -14,11 +14,11 @@ purpose: What the RST tray app is, where it lives, its Health page, how its upda
 
 From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
-The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [Add-ins page](#add-ins-page)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages:
+The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [Add-ins page](#add-ins-page)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages, in this order (Feature #17, decision #76):
 
+- **RST Profiles:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [Add-ins page](#add-ins-page).
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
 - **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
-- **Add-ins:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [Add-ins page](#add-ins-page).
 - **Health:** **Device**, this PC's snapshot and junk file cleanup without Revit, and **Models**, every model you have worked on on this PC, across Revit versions, with each model's activity and health. See [Health page](#health-page).
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
@@ -26,6 +26,10 @@ The tray shows which versions of RST, Gantt-It and Splash-It are installed, tell
   - **About:** the version and a link to the log folder.
 
 The notification icon is a white **R** on an RST-blue tile with a light rim, drawn at small sizes for both light and dark taskbars. The application and window keep the RST wordmark icon. Click the icon to open the window. Right-click it for the menu: **Open RST**, **Check for updates** (checks now and opens the Updates page), **Settings** and **Quit**. Closing the window leaves the tray running.
+
+A non-hidden start, an icon click or menu **Open RST** opens a fresh window on **RST Profiles**, even if you last closed it on another page. If the window is already shown, an icon click or **Open RST** brings it forward and keeps its current page. Menu **Check for updates** and an update notification click always select **Updates**; menu **Settings** always selects **Settings**. Starting the app again uses the same ordinary-open rule. Changing the theme preserves the current page.
+
+RST Profiles reads its data once per fresh window when it is shown; revisiting the tab does not read it again unless you refresh. Health loads only when you show Health.
 
 ## Where it lives
 
