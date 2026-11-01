@@ -41,6 +41,8 @@ The notification icon is a white **R** on an RST-blue tile with a light rim, dra
 
 Each Windows user has their own tray, settings and log, whichever MSI installed it: a per-machine install shares only the program files. Only one tray runs per user and sign-in session: starting `RST.Tray.exe` again brings the running tray's window to the front.
 
+Restart Manager may restart the tray hidden after a third-party installer closes it; a `--startup` start elevated through UAC or running as SYSTEM logs one line and exits until the next sign-in or Revit launch (SC-047 R3, decision #40). An account with no split token (UAC off, or the built-in Administrator with Admin Approval Mode off, as on the CI runners) runs the tray with the same full token it gets at sign-in; double-clicked starts are unchanged.
+
 The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own ten files, and neither one's automatic clean-up deletes the other's. Health's **RST Logs** clean-up, which you start yourself, clears both, except the log the tray has open.
 
 ## Updates
@@ -122,7 +124,7 @@ The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file>
 
 - **Installed:** the row says so.
 - **Restart needed** (msiexec 3010): the app is installed, and Windows asks for a restart to finish. The tray never restarts the PC.
-- **Another installation is running** (1618): the tray tries again after three minutes, three times in all.
+- **Another installation is running** (1618): the tray tries again after three minutes, three times in all. During a self-update's retries (up to two 3-minute waits plus the installer runs), the updater deliberately keeps the tray's single-instance mutex, so no tray can start until it finishes (SC-017 DN3).
 - **Anything else:** the row gives the error number, and **Open log** shows the details.
 
 The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\<app>\<version>\`. Gantt-It and Splash-It remove their old version before they install the new one, so a failed upgrade can leave neither installed. The row then offers **Reinstall previous version (x.y.z)**: from the cache, or, if the tray didn't install that version itself, downloaded and checked the same four ways.

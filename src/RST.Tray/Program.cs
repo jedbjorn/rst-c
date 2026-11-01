@@ -11,7 +11,7 @@
 // Exit code 0 in every normal case, including a second launch; 2 when the tray could not start (TrayStartup), 3 when
 // it quit over a UI exception that kept coming back (TrayFaults).
 //
-// SC-022: the single-instance mutex is the first thing a tray takes, before its log, settings, theme or WPF. Two
+// SC-022: after the hidden-start token guard (SC-047 R3), the single-instance mutex comes before settings, theme or WPF. Two
 // launches that meet (Restart Manager's restart and the updater's start, Revit's start and a sign-in) decide which
 // one is the tray before either does anything else, and the other exits at once; the time a launch spends as a
 // second RST.Tray.exe process is only the runtime's own start.
@@ -35,8 +35,34 @@ internal static class Program
         // while files are replaced), shows no window and never registers with Restart Manager.
         if (args.IsApply) return RunUpdater(args);
 
-        // The single instance, before any other work (SC-022). A launch that finds a tray exits right after logging so.
         var notes = new List<string>();
+
+        // A third-party Restart Manager session may restart us elevated or as SYSTEM (SC-047 R3).
+        // Refuse before the mutex/show-event or WPF; the next sign-in or Revit launch brings us back.
+        if (args.StartHidden)
+        {
+            string? refusal = null;
+            try
+            {
+                var token = StartupToken.Read();
+                if (TrayStartupToken.ShouldExit(args, token.ElevationType, token.IsSystem))
+                    refusal = "RST tray hidden start skipped: elevated through UAC or running as SYSTEM; returns at the next sign-in or Revit launch";
+            }
+            catch (Exception)
+            {
+                // Keep the tray available when the token read fails; the mutex still prevents duplicates (SC-047 R3).
+                notes.Add("RST tray hidden start: could not read the process token; continuing startup");
+            }
+            if (refusal is not null)
+            {
+                TrayLog.Configure();
+                try { Log.Information("{Message}", refusal); }
+                finally { Log.CloseAndFlush(); }
+                return 0;
+            }
+        }
+
+        // The single instance, before any other work (SC-022). A launch that finds a tray exits right after logging so.
         SingleInstance? instance = null;
         Exception? claimFailure = null;
         try
