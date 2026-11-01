@@ -5,7 +5,7 @@
 // its timers are the update checker's (F17 WU3, TrayUpdates): 2–10 minutes after start, then daily; off sends nothing;
 // and the activity fold worker's (F19 #24 WU3, ActivityFoldWorker): folds the add-in's local session logs into rollups
 // on its own below-normal thread, 1–3 minutes after start, then every 15 minutes; it reads and writes local files only.
-// Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, never while Revit runs, msiexec for
+// Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, advice to close Revit, msiexec for
 // a companion, and for RST itself the updater copy (SelfUpdater), after which the tray quits.
 
 using System.Diagnostics;
@@ -50,18 +50,19 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private ActivityFoldWorker? _fold;
     private IReadOnlyList<ProductStatus>? _pendingAnnounce;
     private TrayWindow? _window;
-    private TrayPage _page = TrayPage.Updates;
+    private TrayPage _page = TrayPage.AddIns;
     private bool _quitting;
     private int _iconFailures;
     private DispatcherTimer? _iconRetry;
-    private readonly ITrayAddinsBackend _addins = new TrayAddinsBackend();
+    private readonly ITrayAddinsBackend _addins;
     private readonly AddinsWork _addinsWork = new();
 
-    public TrayHost(TrayArguments args, SingleInstance instance)
+    public TrayHost(TrayArguments args, SingleInstance instance, ITrayAddinsBackend? addins = null)
     {
         _args = args ?? throw new ArgumentNullException(nameof(args));
         _instance = instance ?? throw new ArgumentNullException(nameof(instance));
         _dispatcher = Dispatcher.CurrentDispatcher;
+        _addins = addins ?? new TrayAddinsBackend();
     }
 
     public TrayThemeChoice ThemeChoice => _settings.Theme;
@@ -200,7 +201,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         new("activity fold", StartActivityFold),
         new("window", () =>
         {
-            if (!_args.StartHidden) OpenWindow(TrayPage.Updates);
+            if (!_args.StartHidden) OpenLaunchWindow();
         }),
         // Decision #65: no update-check notice at first run; docs/tray.md explains the checks and how to turn them off.
         new("notices", () => _dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowShadowNoticeIfDue)),
@@ -230,8 +231,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _instance.OnShowRequested(() => _dispatcher.BeginInvoke(() =>
         {
             Log.Information("another launch asked for the window");
-            _installs?.RefreshSelfUpdateResult(); // the updater's launch, when this tray was restarted by the installer
-            OpenWindow(null);
+            OpenLaunchWindow();
         }));
 
     // Windows Installer's Restart Manager (on a repair, upgrade or uninstall that replaces the tray's files) and
@@ -257,7 +257,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     private void StartUpdateChecks()
     {
         _http = TrayHttp.CreateClient(TrayHttp.CreateHandler());
-        _updates = new TrayUpdates(
+        AttachUpdateChecks(new TrayUpdates(
             ProductCatalog.FromEmbedded(m => Log.Warning("{Message}", m)),
             _http,
             new MsiProducts(m => Log.Warning("{Message}", m)),
@@ -267,9 +267,19 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             TimeProvider.System,
             TrayPaths.UpdatesFile,
             action => _dispatcher.BeginInvoke(action),
-            m => Log.Information("{Message}", m));
+            m => Log.Information("{Message}", m)));
+    }
+
+    /// <summary>Owns the checker and wires the production UI notifications; also used by host tests.</summary>
+    internal void AttachUpdateChecks(TrayUpdates updates)
+    {
+        _updates = updates;
         _updates.NewVersionsFound += (_, found) => Announce(found);
-        _updates.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+        _updates.Changed += (_, _) =>
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+            PresentSelfUpdateResult();
+        };
     }
 
     // Installs (F17 WU4): nothing runs until the user clicks Install or Update.
@@ -277,7 +287,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     {
         if (_updates is null) throw new InvalidOperationException("the update checker did not start");
         _selfUpdater = new SelfUpdater(AppContext.BaseDirectory, TrayPaths.UpdaterDir, Environment.ProcessId, m => Log.Information("{Message}", m));
-        _installs = new InstallCoordinator(
+        AttachInstalls(new InstallCoordinator(
             _updates.Current.Products.Select(p => p.Product),
             _http ?? throw new InvalidOperationException("the update checker has no HTTP client"),
             new MsiProducts(m => Log.Warning("{Message}", m)),
@@ -290,10 +300,17 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             action => _dispatcher.BeginInvoke(action),
             m => Log.Information("{Message}", m),
             quitForSelfUpdate: () => Quit("self-update: the updater installs RST"),
-            installsChanged: () => _updates?.RefreshInstalledAsync().Forget("tray: read what is installed"));
-        _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+            installsChanged: () => _updates?.RefreshInstalledAsync().Forget("tray: read what is installed")));
+        if (_installs is null) throw new InvalidOperationException("the install coordinator did not start");
         if (_installs.For(ProductCatalog.RstId).Phase is InstallPhase.Installed or InstallPhase.Failed or InstallPhase.Refused)
             _updates.RefreshInstalledAsync().Forget("tray: read what is installed"); // the updater just ran: show what is installed now
+    }
+
+    /// <summary>Owns the coordinator and wires the production UI notifications; also used by host tests.</summary>
+    internal void AttachInstalls(InstallCoordinator installs)
+    {
+        _installs = installs;
+        _installs.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void StartUpdateLoop()
@@ -367,11 +384,28 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         }, _dispatcher);
     }
 
-    /// <summary>Shows the window (building it the first time), on <paramref name="page"/> or the last page, and brings it forward.</summary>
+    private void OpenLaunchWindow()
+    {
+        // Restart Manager may already have consumed the result while hidden, or it may have arrived since startup.
+        _installs?.RefreshSelfUpdateResult();
+        OpenWindow(_installs?.HasUnpresentedSelfUpdateResult == true ? TrayPage.Updates : null);
+    }
+
+    private void PresentSelfUpdateResult()
+    {
+        if (_window is { } window && TrayNavigation.CanPresentSelfUpdateResult(
+            window.IsVisible, window.WindowState == WindowState.Minimized,
+            window.ViewModel.Page, window.ViewModel.Updates.Rst.HasNote))
+            _installs?.MarkSelfUpdateResultPresented();
+    }
+
+    /// <summary>Opens on the target or RST Profiles; an untargeted activation keeps a shown window's page.</summary>
     public void OpenWindow(TrayPage? page)
     {
         if (_quitting) return;
-        if (page is { } p) _page = p;
+        var shown = _window?.IsVisible == true;
+        if (!shown) _window?.ViewModel.AddIns.ClearLaunchSuccess();
+        _page = TrayNavigation.PageOnOpen(page, shown, _page);
         if (_window is null)
         {
             // The Add-ins page (F17 WU2) shows the Loader's own dialogs (Confirm Add-in Changes, the reports, "Adopt
@@ -404,7 +438,15 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _updates?.RefreshInstalledAsync().Forget("tray: read what is installed"); // what is installed now (local only, no network)
             built.ViewModel.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(TrayViewModel.Page) && ReferenceEquals(_window, built)) _page = built.ViewModel.Page;
+                if (e.PropertyName == nameof(TrayViewModel.Page) && ReferenceEquals(_window, built))
+                {
+                    _page = built.ViewModel.Page;
+                    PresentSelfUpdateResult();
+                }
+            };
+            built.StateChanged += (_, _) =>
+            {
+                if (ReferenceEquals(_window, built)) PresentSelfUpdateResult();
             };
             built.Closed += (_, _) =>
             {
@@ -422,6 +464,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
             _window.ViewModel.Updates.Refresh();
         }
         _window.Activate();
+        PresentSelfUpdateResult();
     }
 
     /// <summary>
@@ -599,16 +642,18 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     {
         if (_quitting || _icon is null) return;
         // SC-043: the native menu; Open returns once the user picked an item (its action has run) or dismissed it.
-        TrayMenu.Open(new TrayMenuActions(
-            Open: () => OpenWindow(TrayPage.Updates),
+        TrayMenu.Open(MenuActions(), screenPixels, _icon.Source);
+    }
+
+    internal TrayMenuActions MenuActions() => new(
+            Open: () => OpenWindow(null),
             CheckForUpdates: () =>
             {
                 CheckNow();
                 OpenWindow(TrayPage.Updates);
             },
             Settings: () => OpenWindow(TrayPage.Settings),
-            Quit: () => Quit("menu")), screenPixels, _icon.Source);
-    }
+            Quit: () => Quit("menu"));
 
     private void OnWindowsThemeChanged()
     {
@@ -627,7 +672,7 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         var maximized = old.WindowState == WindowState.Maximized;
         _window = null;
         old.Close();
-        OpenWindow(null);
+        OpenWindow(_page); // A theme rebuild preserves the page; it is not a fresh user open.
         if (_window is { } rebuilt && !bounds.IsEmpty)
         {
             rebuilt.WindowStartupLocation = WindowStartupLocation.Manual;

@@ -221,6 +221,7 @@ public sealed class InstallCoordinator : IDisposable
     private Dictionary<string, InstallProgress> _progress = new(StringComparer.Ordinal);
     private TaskCompletionSource _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _handingOff;
+    private bool _selfUpdateResultPending;
     private volatile bool _disposed;
 
     /// <param name="products">The catalog's products: a failed upgrade recorded in the cache is offered again.</param>
@@ -265,6 +266,18 @@ public sealed class InstallCoordinator : IDisposable
                     InstallProblem.InstallFailed, ExitCode: failed.ExitCode, LogPath: failed.Log, Previous: from);
         }
         ReadSelfUpdateResult();
+    }
+
+    /// <summary>An accepted updater result has progress on RST's row, but has not been presented on Updates.</summary>
+    public bool HasUnpresentedSelfUpdateResult
+    {
+        get { lock (_gate) return _selfUpdateResultPending; }
+    }
+
+    /// <summary>The host has shown Updates with RST's result. Consuming the file alone does not present it.</summary>
+    public void MarkSelfUpdateResultPresented()
+    {
+        lock (_gate) _selfUpdateResultPending = false;
     }
 
     /// <summary>The install state changed (raised through post).</summary>
@@ -620,6 +633,8 @@ public sealed class InstallCoordinator : IDisposable
         lock (_gate)
         {
             _progress = new Dictionary<string, InstallProgress>(_progress, StringComparer.Ordinal) { [product.Id] = progress };
+            // This progress supersedes the updater's result, so its presentation intent no longer applies.
+            if (product.IsRst) _selfUpdateResultPending = false;
             changed = _changed;
             _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
@@ -674,6 +689,7 @@ public sealed class InstallCoordinator : IDisposable
         }
         var age = _time.GetUtcNow() - result.AtUtc;
         if (age > TimeSpan.FromDays(1) || age < TimeSpan.FromMinutes(-5)) return;
+        _selfUpdateResultPending = true;
         var code = result.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none";
         switch (result.Problem)
         {

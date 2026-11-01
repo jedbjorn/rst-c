@@ -88,6 +88,7 @@ internal sealed class AddInsViewModel : ObservableObject
     private string? _readError;
     private string? _actionError;
     private string? _result;
+    private bool _launchSucceeded;
     private Task? _refreshing;
     private bool _replacingProfiles;
 
@@ -226,6 +227,14 @@ internal sealed class AddInsViewModel : ObservableObject
     }
 
     public bool HasResult => _result is not null;
+
+    /// <summary>A fresh window must not say it is still starting a Revit from an earlier open. Errors stay.</summary>
+    public void ClearLaunchSuccess()
+    {
+        if (!_launchSucceeded) return;
+        ResultText = null;
+        _launchSucceeded = false;
+    }
 
     public string NextStartNote => ActivationWording.NextStart;
 
@@ -477,7 +486,9 @@ internal sealed class AddInsViewModel : ObservableObject
             {
                 // The shared profile and add-in settings are saved, and the existing report has been dismissed.
                 // Running instances are left alone; every click starts a new instance using those shared files.
-                await Run(() => { _backend.LaunchRevit(year); return true; });
+                var pid = await Run(() => _backend.LaunchRevit(year));
+                Log.Information("profiles: started Revit {Year} with {Profile} (pid {Pid})", year, option.Name, pid);
+                _launchSucceeded = true;
                 ResultText = AddInsStrings.Launched(year, option.Name);
             }
             catch (Exception ex)
@@ -544,6 +555,7 @@ internal sealed class AddInsViewModel : ObservableObject
 
     private void StartAction()
     {
+        _launchSucceeded = false;
         _actionError = null;
         ResultText = null;
         RaiseError();
