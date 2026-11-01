@@ -43,15 +43,52 @@ public sealed class FakeHealthService : IHealthService
     public List<bool> ToggleCalls { get; } = [];
 
     /// <summary>Work started by another (closed) window is running.</summary>
-    public bool IsWorkRunning { get; set; }
+    public bool IsWorkRunning
+    {
+        get => Volatile.Read(ref _workRunning);
+        set => Volatile.Write(ref _workRunning, value);
+    }
 
     public event EventHandler? WorkFinished;
 
-    /// <summary>Ends the other window's work.</summary>
+    /// <summary>Ends the other window's work, raising <see cref="WorkFinished"/> on the calling thread.</summary>
     public void FinishWork()
     {
         IsWorkRunning = false;
+        Volatile.Write(ref _finishedOnThread, Environment.CurrentManagedThreadId);
         WorkFinished?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The thread the last <see cref="WorkFinished"/> was raised on (0: never).</summary>
+    public int FinishedOnThread => Volatile.Read(ref _finishedOnThread);
+
+    /// <summary>
+    /// Scan and Clean act as HealthService's (HealthWork): <see cref="IsWorkRunning"/> while they run, and
+    /// <see cref="WorkFinished"/> raised on their own thread as they end, success or failure (SC-046 R7, R8).
+    /// </summary>
+    public bool TracksWork { get; set; }
+
+    /// <summary>When set, Scan and Clean block until it is set (at most 30 s): a scan or clean the test holds open.</summary>
+    public ManualResetEventSlim? WorkGate { get; set; }
+
+    /// <summary>How many scans and cleans have started (before <see cref="WorkGate"/>).</summary>
+    public int WorkStarted => Volatile.Read(ref _workStarted);
+
+    private bool _workRunning;
+    private int _finishedOnThread;
+    private int _workStarted;
+
+    private IDisposable? BeginWork()
+    {
+        if (TracksWork) IsWorkRunning = true;
+        Interlocked.Increment(ref _workStarted);
+        WorkGate?.Wait(TimeSpan.FromSeconds(30));
+        return TracksWork ? new EndWork(this) : null;
+    }
+
+    private sealed class EndWork(FakeHealthService service) : IDisposable
+    {
+        public void Dispose() => service.FinishWork();
     }
 
     /// <summary>When set, LoadSnapshot blocks until it is set (at most 30 s): a slow disk, for the first-open checks (SC-011).</summary>
@@ -79,6 +116,7 @@ public sealed class FakeHealthService : IHealthService
     public HealthSnapshot RunScan()
     {
         ScanCalls++;
+        using var work = BeginWork();
         if (ScanError is not null) throw ScanError;
         return ScanResult ?? HealthSamples.Snapshot();
     }
@@ -88,6 +126,7 @@ public sealed class FakeHealthService : IHealthService
     public CleanResult Clean(IReadOnlyCollection<string> targetIds)
     {
         CleanCalls.Add(targetIds);
+        using var work = BeginWork();
         if (CleanError is not null) throw CleanError;
         return CleanResult;
     }

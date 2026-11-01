@@ -31,7 +31,7 @@ The header reads "RST · Health" and holds two tabs, plus the **Device** name an
 
 The Health tab shows four sections: **Hardware**, **Display & Network**, **Revit** and **Operating System**. They start collapsed; click one to open it. The coloured dot beside the Hardware, Display & Network and Revit headings sums up that section's readings: green when they are fine, amber or red when something needs attention (low free disk space, high RAM or CPU use, a large model, many warnings).
 
-Click **Scan System** to take a new snapshot. While the scan runs, the button shows a spinner and "Scanning…", and the other buttons and the tabs are disabled. The scan runs in the background, so Revit and the window stay responsive. The last snapshot is saved to `%AppData%\RST\health_scan.json` and shown again the next time Health opens, with its Captured time. Before the first scan, every value reads "—".
+Click **Scan System** to take a new snapshot. While the scan runs, the button shows a spinner and "Scanning…", and the other buttons and the tabs are disabled. The scan runs in the background, so Revit and the window stay responsive. The last snapshot is saved to `%AppData%\RST\health_scan.json` and shown again the next time Health opens, with its Captured time. Before the first scan, every value reads "—". If Health is closed while a scan or a clean is running, that work still finishes in the background but nothing more is shown for it; a Health window opened meanwhile keeps **Scan System** and **Clean Junk Files** disabled until it ends.
 
 ### What is captured
 

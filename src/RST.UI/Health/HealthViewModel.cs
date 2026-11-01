@@ -8,11 +8,15 @@
 // four charts, per week at 6M. It refreshes when the tab is shown, on a range change, after a
 // collection toggle and after Scan System; nothing ticks. Opening in Revit reads the saved snapshot off the UI
 // thread after the window's first frame (BeginLoading, LoadAsync; SC-011): until then the Health tab shows the
-// spinner and Scan and Clean wait.
+// spinner and Scan and Clean wait. Closing the window (Dispose) while a scan or clean runs lets that work finish (its file
+// operations cannot be undone) but drops its result: nothing renders, re-reads or toasts (SC-046 R7). The end of a scan or
+// clean (HealthWork.Finished, raised on the worker) is passed to the dispatcher the model was built on, never run on the
+// worker (SC-046 R8).
 
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
+using System.Windows.Threading;
 using RST.Core.Health;
 using RST.Core.Telemetry;
 using RST.UI.Controls;
@@ -60,13 +64,13 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     private int _selectedTab;
     private bool _isScanning;
     private bool _isLoading;
-    private bool _disposed;
+    private volatile bool _disposed;
     private bool _isJunkOpen;
     private IReadOnlyList<JunkTargetItem> _junkTargets = [];
     private int _rangeDays = ActivityRanges.Default;
     private bool _telemetryEnabled;
     private string _telemetryStatusLine = HealthFormat.Missing;
-    private readonly SynchronizationContext? _context;
+    private readonly Dispatcher? _dispatcher;
     private bool _activityLoaded;
 
     public HealthViewModel(IHealthService service, IDialogService dialogs, HealthViewModelOptions? options = null)
@@ -95,8 +99,14 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         JunkCancelCommand = new RelayCommand(CancelJunk, () => IsIdle);
         JunkRunCommand = new AsyncRelayCommand(RunJunkAsync, () => CanStartWork);
 
-        // A scan or clean left running by a closed window keeps Scan and Clean disabled here until it ends.
-        _context = SynchronizationContext.Current;
+        // A scan or clean left running by a closed window keeps Scan and Clean disabled here until it ends. Its end is
+        // raised on the worker; it comes back to this thread's dispatcher (the window's), not to whatever
+        // SynchronizationContext.Current was here: Revit's external-command entry need not have a dispatcher context
+        // (SC-046 R8). An STA thread is the window's; a model built off a UI thread (tests) has no dispatcher, and the
+        // end is handled where it is raised.
+        _dispatcher = Thread.CurrentThread.GetApartmentState() == ApartmentState.STA
+            ? Dispatcher.CurrentDispatcher
+            : Dispatcher.FromThread(Thread.CurrentThread);
         _service.WorkFinished += OnWorkFinished;
 
         Render(null);
@@ -339,7 +349,11 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         }
     }
 
-    /// <summary>Scan System: scans off the UI thread, then re-renders (and refreshes the Activity tab once it has been shown), or toasts "Scan failed".</summary>
+    /// <summary>
+    /// Scan System: scans off the UI thread, then re-renders (and refreshes the Activity tab once it has been shown), or
+    /// toasts "Scan failed". After <see cref="Dispose"/> (the window closed meanwhile) the scan still ends, and is
+    /// logged, but nothing renders, re-reads or toasts (SC-046 R7).
+    /// </summary>
     public async Task ScanAsync()
     {
         if (!CanStartWork) return;
@@ -348,17 +362,21 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         {
             HealthSnapshot? snap = null;
             await _options.RunInBackground(() => snap = _service.RunScan());
+            if (EndedAfterClose("Scan System")) return;
             RenderOrFallback(snap);
             if (_activityLoaded) LoadActivity();
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Health: Scan System failed");
+            if (EndedAfterClose("Scan System")) return;
             Inform(UiStrings.Health_ScanFailedTitle, Message(ex), BannerKind.Error);
         }
         finally
         {
-            IsScanning = false;
+            // A closed window's model is not told: nothing listens to it any more.
+            if (_disposed) _isScanning = false;
+            else IsScanning = false;
         }
     }
 
@@ -390,7 +408,9 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
     /// <summary>
     /// Clean Selected: closes the modal; nothing selected toasts "Nothing selected"; otherwise asks
     /// "Delete selected junk?" (Cancel by default), then cleans off the UI thread under the Cleaning
-    /// overlay and toasts one line per target.
+    /// overlay and toasts one line per target. After <see cref="Dispose"/> (the window closed meanwhile) a clean already
+    /// started still finishes, since deleted files cannot be put back, but its result or failure is only logged: no
+    /// overlay change, no toast (SC-046 R7).
     /// </summary>
     public async Task RunJunkAsync()
     {
@@ -410,11 +430,18 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
             if (!_dialogs.Confirm(UiStrings.Health_ConfirmCleanTitle, UiStrings.Health_ConfirmClean, [],
                     UiStrings.Health_ConfirmContinue, danger: true, ConfirmCleanId))
                 return;
+            if (_disposed)
+            {
+                // The window closed while the confirm was open: nothing is cleaned.
+                Log.Debug("Health: the window closed at the clean's confirm; nothing was cleaned");
+                return;
+            }
 
             Busy.Show(UiStrings.Health_CleaningTitle, UiStrings.Health_Cleaning);
             var ids = selected.Select(t => t.Id).ToList();
             CleanResult? result = null;
             await _options.RunInBackground(() => result = _service.Clean(ids));
+            if (EndedAfterClose("Clean Junk Files")) return;
             Busy.Hide();
             var lines = selected.Select(t =>
             {
@@ -430,6 +457,7 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         catch (Exception ex)
         {
             Log.Error(ex, "Health: Clean Junk Files failed");
+            if (EndedAfterClose("Clean Junk Files")) return;
             Busy.Hide();
             Inform(UiStrings.Health_CleanupFailedTitle, Message(ex), BannerKind.Error);
         }
@@ -487,11 +515,42 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         }
     }
 
+    /// <summary>
+    /// The window closed while <paramref name="work"/> ran (<see cref="Dispose"/>): its result is dropped, and this
+    /// says so in the log. Checked after every await of the work.
+    /// </summary>
+    private bool EndedAfterClose(string work)
+    {
+        if (!_disposed) return false;
+        Log.Debug("Health: {Work} finished after the window closed; its result is not shown", work);
+        return true;
+    }
+
+    /// <summary>
+    /// HealthWork ended (<see cref="IHealthService.WorkFinished"/>), raised on the worker that ran it. The update goes
+    /// to this model's dispatcher (SC-046 R8): on the worker, CommandManager.InvalidateRequerySuggested would reach the
+    /// worker's command manager and leave Scan and Clean disabled. Never throws into the worker, which raises this
+    /// while it ends the work.
+    /// </summary>
     private void OnWorkFinished(object? sender, EventArgs e)
     {
-        if (_context is null) OnBusyChanged();
-        else _context.Post(_ => OnBusyChanged(), null);
+        if (_disposed) return;
+        try
+        {
+            if (_dispatcher is null || _dispatcher.CheckAccess()) WorkFinishedHere();
+            else _dispatcher.InvokeAsync(WorkFinishedHere);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Health: passing on the end of a scan or clean failed");
+        }
     }
+
+    // A post queued before the window closed still arrives (Dispose unsubscribes, but cannot recall it): it does nothing.
+    private void WorkFinishedHere() => UiGuard.Run("Health: a scan or clean ended", () =>
+    {
+        if (!_disposed) OnBusyChanged();
+    });
 
     private void Render(HealthSnapshot? snap)
     {
@@ -574,7 +633,11 @@ public sealed class HealthViewModel : ObservableObject, IHasToast, IDisposable
         CommandManager.InvalidateRequerySuggested();
     }
 
-    private void Inform(string title, string text, BannerKind kind) => Toast.Show(text, kind, title: title);
+    // A closed window's model starts no toast (and so no toast timer).
+    private void Inform(string title, string text, BannerKind kind)
+    {
+        if (!_disposed) Toast.Show(text, kind, title: title);
+    }
 
     private static string Message(Exception ex) => string.IsNullOrEmpty(ex.Message) ? UiStrings.Health_UnknownError : ex.Message;
 }
