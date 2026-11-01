@@ -97,7 +97,7 @@ public class ModalFocusSourceTests
         foreach (Match alias in Regex.Matches(code, @"\busing\s+(\w+)\s*=\s*(?:[\w]+\.)*(MessageBox|TaskDialog|OpenFileDialog|SaveFileDialog|NativeColorDialog|FocusReturn|WindowGuard|DialogService|LoaderDialogs)\s*;"))
             code = Regex.Replace(code, @"\b" + Regex.Escape(alias.Groups[1].Value) + @"\b", alias.Groups[2].Value);
         var around = Regex.Matches(code, @"\bFocusReturn\s*\.\s*Around\s*\(")
-            .Select(m => (Start: m.Index, End: ClosingParen(code, m.Index + m.Length - 1))).ToList();
+            .Select(m => (Start: m.Index, End: ClosingDelimiter(code, m.Index + m.Length - 1))).ToList();
         bool Wrapped(int index) => around.Any(a => index > a.Start && index < a.End);
         Site At(string kind, int index) => new(kind, code.AsSpan(0, index).Count('\n') + 1);
 
@@ -110,8 +110,13 @@ public class ModalFocusSourceTests
         }
         foreach (Match m in Regex.Matches(code, @"\b(?<kind>MessageBox|TaskDialog|NativeColorDialog)\s*\.\s*Show\s*\("))
             if (!Wrapped(m.Index)) yield return At(m.Groups["kind"].Value, m.Index);
+        // Native file dialogs count their construction and, separately, any raw ShowDialog
+        // above. This also covers inline new OpenFileDialog/SaveFileDialog { ... }.ShowDialog(...).
         foreach (Match m in Regex.Matches(code, @"\b(?:new\s+(?:Microsoft\.Win32\.)?(?<kind>OpenFileDialog|SaveFileDialog)\b|(?<kind>OpenFileDialog|SaveFileDialog)\s*\()"))
             if (!Wrapped(m.Index)) yield return At(m.Groups["kind"].Value, m.Index);
+        foreach (Match m in Regex.Matches(code, @"\bnew\s+(?:[\w]+\.)*TaskDialog\b"))
+            if (!Wrapped(m.Index) && ShowsInline(code, m.Index, m.Index + m.Length))
+                yield return At("TaskDialog", m.Index);
         // TaskDialog instance Show, including a typed variable and target-typed new.
         var taskNames = Regex.Matches(code, @"\b(?:TaskDialog\s+(?<name>\w+)\b|var\s+(?<name>\w+)\s*=\s*new\s+(?:[\w]+\.)*TaskDialog\b)")
             .Select(m => m.Groups["name"].Value).Distinct();
@@ -131,13 +136,45 @@ public class ModalFocusSourceTests
         return Regex.IsMatch(code[start..index], @"\b(?:public|private|internal|protected)\s+(?:(?:static|extern|new|virtual|override)\s+)*[\w?]+\s+$");
     }
 
-    private static int ClosingParen(string code, int open)
+    private static bool ShowsInline(string code, int start, int afterType)
     {
+        int SkipSpace(int index)
+        {
+            while (index < code.Length && char.IsWhiteSpace(code[index])) index++;
+            return index;
+        }
+        var at = SkipSpace(afterType);
+        if (at < code.Length && code[at] == '(')
+            at = SkipSpace(ClosingDelimiter(code, at) + 1);
+        if (at < code.Length && code[at] == '{')
+            at = SkipSpace(ClosingDelimiter(code, at) + 1);
+        // Only consume parentheses that enclose the construction itself.
+        var before = start - 1;
+        while (at < code.Length && code[at] == ')')
+        {
+            while (before >= 0 && char.IsWhiteSpace(code[before])) before--;
+            if (before < 0 || code[before--] != '(') return false;
+            while (before >= 0 && char.IsWhiteSpace(code[before])) before--;
+            if (before >= 0 && code[before] is '>' or ']' or ')') return false;
+            var token = Regex.Match(code[..(before + 1)], @"@?\w+$");
+            // A return expression can be grouped; an identifier starts a call's arguments.
+            if (token.Success && token.Value != "return") return false;
+            at = SkipSpace(at + 1);
+        }
+        return at < code.Length && Regex.IsMatch(code[at..], @"^\??\.\s*Show\s*\(");
+    }
+
+    // Trivia is already blanked, so nested constructor arguments, initializers and
+    // lambda bodies can be skipped without a regex trying to balance delimiters.
+    private static int ClosingDelimiter(string code, int open)
+    {
+        var opening = code[open];
+        var closing = opening == '(' ? ')' : '}';
         var depth = 0;
         for (var i = open; i < code.Length; i++)
         {
-            if (code[i] == '(') depth++;
-            if (code[i] == ')' && --depth == 0) return i;
+            if (code[i] == opening) depth++;
+            if (code[i] == closing && --depth == 0) return i;
         }
         return code.Length;
     }
@@ -295,6 +332,52 @@ public class ModalFocusSourceTests
     [InlineData("WindowGuard.ShowDialog(x, \"x\");", false)]
     public void Modal_entry_self_tests(string source, bool passes) =>
         Violations(new Dictionary<string, string> { ["fixture.cs"] = source }, []).Any().Should().Be(!passes);
+
+    [Theory]
+    [InlineData("new TaskDialog(\"x\") { A = 1, B = () => { } }.Show();", "TaskDialog")]
+    [InlineData("new Autodesk.Revit.UI.TaskDialog(\"x\").Show();", "TaskDialog")]
+    [InlineData("(new TaskDialog(\"x\")).Show();", "TaskDialog")]
+    [InlineData("x = (new TaskDialog(\"x\")).Show();", "TaskDialog")]
+    [InlineData("return (new TaskDialog(\"x\")).Show();", "TaskDialog")]
+    [InlineData("new TaskDialog(\"x\")?.Show();", "TaskDialog")]
+    [InlineData("(new TaskDialog(\"x\"))?.Show();", "TaskDialog")]
+    [InlineData("((new TaskDialog(GetTitle(\"x\")) { A = new[] { 1, 2 }, B = () => { if (ok) { Run(); } }, Text = \"} )\" })).Show();", "TaskDialog")]
+    [InlineData("new TaskDialog(\n\"x\"\n)\n{\nA = 1,\nB = () => { }\n}\n.Show();", "TaskDialog")]
+    [InlineData("var d = new TaskDialog(\"x\") { A = 1 }; d.Show();", "TaskDialog")]
+    [InlineData("TaskDialog d = new(\"x\"); d.Show();", "TaskDialog")]
+    [InlineData("TaskDialog.Show(\"x\");", "TaskDialog")]
+    [InlineData("new SaveFileDialog { Filter = \"x\", B = () => { } }.ShowDialog(owner);", "ShowDialog,SaveFileDialog")]
+    [InlineData("(new Microsoft.Win32.SaveFileDialog() { Filter = \"x\" }).ShowDialog(owner);", "ShowDialog,SaveFileDialog")]
+    [InlineData("new Microsoft.Win32.OpenFileDialog { Filter = \"x\" }.ShowDialog(owner);", "ShowDialog,OpenFileDialog")]
+    [InlineData("var d = new OpenFileDialog(); d.ShowDialog(owner);", "ShowDialog,OpenFileDialog")]
+    [InlineData("new MyWindow { Owner = o }.ShowDialog();", "ShowDialog")]
+    [InlineData("(new MyWindow(GetTitle()) { Owner = o }).ShowDialog();", "ShowDialog")]
+    [InlineData("// new TaskDialog(\"x\").Show();\n/* (new TaskDialog(\"x\")).Show(); */\nvar s = \"new TaskDialog(x) { A = 1 }.Show();\";", "")]
+    [InlineData("var d = new TaskDialog(\"x\") { A = 1 }; other.Show();", "")]
+    [InlineData("Factory(new TaskDialog(\"x\")).Show();", "")]
+    [InlineData("Factory((new TaskDialog(\"x\"))).Show();", "")]
+    [InlineData("FocusReturn.Around(o, () => new TaskDialog(\"x\")?.Show())", "")]
+    [InlineData("FocusReturn.Around(owner, () => new TaskDialog(\"x\") { A = 1 }.Show());", "")]
+    [InlineData("FocusReturn.Around(owner, () => new SaveFileDialog { Filter = \"x\" }.ShowDialog(owner));", "")]
+    public void Inline_and_named_modal_entries_have_exact_counts(string source, string kinds) =>
+        Entries(source).Select(s => s.Kind).Should().Equal(kinds.Split(',', StringSplitOptions.RemoveEmptyEntries));
+
+    [Theory]
+    [InlineData("TaskDialog.Show(\"RSTify\", \"No tabs configured to hide.\");")]
+    [InlineData("""
+        new TaskDialog(UiStrings.Common_RstTitle)
+        {
+            TitleAutoPrefix = false,
+            MainInstruction = UiStrings.Rstify_NoTabs,
+            MainContent = UiStrings.Rstify_ConfigureTabs,
+            CommonButtons = TaskDialogCommonButtons.Close,
+        }.Show();
+        """)]
+    public void Rstify_exception_accepts_both_static_and_inline_forms(string source)
+    {
+        var exception = Allowed.Single(a => a.Path == "src/RST.Engine/Commands/RstifyCommand.cs");
+        Violations(new Dictionary<string, string> { [exception.Path] = source }, [exception]).Should().BeEmpty();
+    }
 
     [Theory]
     [InlineData("x.ShowDialog();", true)]
