@@ -45,7 +45,17 @@ dotnet build installer\RST.Installer.wixproj -c Release
 # → installer\bin\Release\RST.msi  (Revit 2025 + 2026 + 2027)
 ```
 
-Local and push/PR builds without `-p:RstMsiVersion=` are stamped with the `.wixproj` fallback version (`3.1.99`), which sits between the latest release (v3.1.1) and the next (v3.2.0) so a dev build upgrades a released install in place.
+### Untagged builds
+
+Local and push/PR builds are stamped with one version, `RstDevVersion` in `Directory.Build.props` (now `3.1.99`):
+
+- RST.msi's ProductVersion, when no `-p:RstMsiVersion=` is passed (`RST.Installer.wixproj` reads the property);
+- RST-Setup.exe's bundle version, when no `-p:RstBundleVersion=` is passed (`RST.Setup.wixproj`);
+- every RST binary, the tray included: FileVersion `3.1.99.0`, informational version `3.1.99-dev+<commit>` (`build/stage.sh` reads the same line when `RST_VERSION` is unset).
+
+It must sort above the latest release (v3.1.1) and below the next (v3.2.0). Then a dev build upgrades a released install in place, and the next release still upgrades a dev build. Both halves matter. An MSI refuses to install over a newer ProductVersion. And Windows Installer does not install a file older than the one on disk, after which the MajorUpgrade removes the old file and leaves none. That is how a dev build with `0.0.0.0` files lost v3.1.1's tray (`3.1.1.0`).
+
+**After each release, bump `RstDevVersion` to `<that release's a.b>.99`, in one place: `Directory.Build.props`.** Also move the newest `msi-migrate` leg in `.github/workflows/_build.yml` to that release. Its `-StagedTray` check fails when any staged tray file is missing after the upgrade.
 
 **Generated per-year components** — `<Files Include>` harvesting cannot carry a component `Condition`, so the `.wixproj` target `RstGenerateRevitYears` runs `installer/gen-revit-years.ps1` before compiling. It writes `installer/obj/RevitYears.g.wxs` (`installer/obj/machine/RevitYears.g.wxs` for `RST-Machine.msi`): component groups `Revit2025`/`Revit2026`/`Revit2027`, with one component per staged file and each component carrying its year's condition and `Transitive="yes"`. The file is regenerated on every build and never committed. The package is **x64**, as in gantt-it and splash-it, because the Revit detection reads the 64-bit registry (ICE80).
 
