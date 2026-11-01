@@ -97,7 +97,7 @@ Profiles are read from `%AppData%\RST\profiles\`; the loaded profile and your pe
 - Profiles are per-user. Each Windows user has their own `%AppData%\RST\` folder and sees only their own profiles.
 - Only one profile tab is active at a time. Loading a profile replaces the previous one.
 - **info ↗** and **download ↗** open only `http://` and `https://` links, in your default browser. A profile shared with you is not trusted to open anything else, so other links are hidden (the Add-in Check shows "(no link)").
-- Switching add-ins off and on takes effect the next time Revit starts. It goes through Revit's own Add-Ins Manager settings, per user, so it works for add-ins installed for all users too, without admin rights. Only add-ins your administrator locks can stop a change, and the report says which. Revit 2025 is partially supported: switching there needs Revit 2025.3 or later (Autodesk's Add-Ins Manager).
+- Switching add-ins off and on takes effect the next time Revit starts. It goes through Revit's own Add-Ins Manager settings, per user, so it works for add-ins installed for all users too, without admin rights. Only add-ins your administrator locks can stop a change, and the report says which. On Revit 2025, switching needs Revit 2025.3 or later (Autodesk's Add-Ins Manager).
 - rst-c never switches off RST itself, Revit's own add-ins, or add-ins published by Autodesk.
 - Upgrading from v2.x: earlier versions kept a browser cache in `%LocalAppData%\RST\WebView2`. rst-c no longer uses it, and the installer and the add-in leave it in place; you can delete the folder.
 - Profiles shared from another machine (via the Builder's **Export ZIP**) are imported here. See [Profile Builder](profile-builder.md).
