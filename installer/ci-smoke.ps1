@@ -63,14 +63,14 @@
         Preview (AC4): RST-R27.msi v2.2.0 -> new RST.msi. The Upgrade row on
           the retired R27 code must remove "RST (Revit 2027 preview)" and the
           installed R27 engine must be the newly staged one.
-        Unified (AC5): RST.msi v2.2.0 or v3.0.0 -> new RST.msi. MajorUpgrade must leave
+        Unified (AC5): RST.msi v2.2.0, v3.0.0 or v3.2.0 -> new RST.msi. MajorUpgrade must leave
           exactly one RST product, at the new version, with all six trees.
         Every leg: the tray and its Run value are installed after the upgrade,
         and RstStartTray leaves exactly one tray running (SC-044), hidden, as
         this user, unelevated. With -TrayStaged (build/Tray), every staged
         tray file is installed, byte for byte: an untagged build's files
         older than the release's (FileVersion) would be skipped by Windows
-        Installer and then removed with the old product (the v3.1.1 leg).
+        Installer and then removed with the old product (the latest-release leg, v3.2.0).
 
   Product queries go through the WindowsInstaller.Installer COM object via
   InvokeMember (it has no type library PowerShell can bind to).
@@ -809,7 +809,7 @@ Assert ($newHash -eq $stagedHash) 'installed R27 engine equals the newly staged 
 Assert-Probe $probe 'after upgrade'
 Assert-TrayInstalled 'after upgrade'
 if ($TrayStaged) {
-  # The dev-build regression (v3.1.1's tray files are 3.1.1.0): each staged tray file is installed and is the new one.
+  # The dev-build regression (v3.1.1's tray files are 3.1.1.0, v3.2.0's 3.2.0.0): each staged tray file is installed and is the new one.
   $stagedFiles = @(Get-ChildItem $TrayStaged -Recurse -File)
   Assert ($stagedFiles.Count -gt 0) "[after upgrade] $TrayStaged holds the staged tray"
   $trayRoot = (Resolve-Path $TrayStaged).Path
