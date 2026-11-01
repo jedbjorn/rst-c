@@ -60,7 +60,7 @@ internal sealed class FakeTrayHost : ITraySettingsHost
 [Collection(WpfThemeCollection.Name)]
 public class TrayWindowScreenshotTests
 {
-    private static readonly Size WindowSize = new(720, 540);
+    private static readonly Size WindowSize = new(850, 650);
 
     public static TheoryData<UiTheme> Themes => new() { UiTheme.Light, UiTheme.Dark };
 
@@ -128,6 +128,8 @@ public class TrayWindowScreenshotTests
         var window = new TrayWindow(new TrayViewModel(new FakeTrayHost(), page));
         try
         {
+            Assert.Equal(850, window.Width);
+            Assert.Equal(650, window.Height);
             var bitmap = Capture(window, Name(PageName(page), theme));
 
             // Exactly the chosen page is visible; the tab strip agrees.

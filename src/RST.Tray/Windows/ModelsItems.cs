@@ -1,7 +1,7 @@
 // rst-c's own (not vendored): what the Health → Models list binds (spec #25 Models; F19 #25 WU3). The list is one
 // virtualizing column of rows (ModelsView): the aggregate cards, then per group a header row and its card rows, each
-// card row holding as many cards as fit the width (ModelsViewModel.Columns), so 500 models realize only the rows on
-// screen and the grid reflows when the window is resized. The text comes from TrayStrings; the numbers from RST.Core's
+// card row holding one model card, so 500 models realize only the rows on
+// screen. The text comes from TrayStrings; the numbers from RST.Core's
 // ModelList (WU1) and HealthFormat.
 
 using System.Globalization;
@@ -144,11 +144,9 @@ internal sealed class ModelsGroupHeaderRow : ModelsRow
 }
 
 /// <summary>A row of cards. In a group it draws the sides of the group's box (the last row its bottom); flat, none.</summary>
-internal sealed class ModelsCardRow(IReadOnlyList<ModelCardItem> cards, int columns, bool inGroup, bool isLast) : ModelsRow
+internal sealed class ModelsCardRow(IReadOnlyList<ModelCardItem> cards, bool inGroup, bool isLast) : ModelsRow
 {
     public IReadOnlyList<ModelCardItem> Cards { get; } = cards;
-
-    public int Columns { get; } = columns;
 
     public bool InGroup { get; } = inGroup;
 
