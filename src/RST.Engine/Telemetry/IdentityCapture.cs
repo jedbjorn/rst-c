@@ -44,6 +44,22 @@ internal static class IdentityCapture
             Get(() => doc.PathName),
             Get(() => doc.Title));
 
+    /// <summary>
+    /// This open DOCUMENT, not its model: two open copies of one model
+    /// (same CreationGUID, so the same <see cref="TrackingKey"/>) get
+    /// different ids (rc.1 VM, F2). Revit's Document.GetHashCode is the
+    /// same for every wrapper of one open document and is generated when
+    /// the file is opened; the path keeps two documents apart even if two
+    /// hash codes ever coincided (Revit never opens one path twice). A
+    /// Save As changes the id, which costs nothing: a request made before
+    /// it finds no document and is dropped, and the Save As requests its
+    /// own capture. Cheap reads only; read only while the Document is
+    /// valid (never on a closed document).
+    /// </summary>
+    public static string DocumentId(Document doc) =>
+        (Get<int?>(() => doc.GetHashCode())?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?") +
+        "|" + (Get(() => doc.PathName) ?? "");
+
     /// <summary>Join keys only — creation_guid + cloud pair +
     /// central_guid + central_path; the block every non-full-block doc
     /// event carries. The path is the file-share central's only central

@@ -74,8 +74,9 @@ A document opened once through an identity-capture gap (for example the central 
 | `opens`, `open_seconds_sum`, `open_seconds_max` | Timed opens that day: count, sum, longest |
 | `syncs`, `sync_seconds_sum`, `sync_seconds_max` | Syncs that day: count, sum, longest |
 | `revit_versions`, `revit_subversions` | The Revit versions (`2026`) and subversions (`2026.4`) the model was open in that day; subversions are empty before v3.2 |
-| `stats_ts`, `warnings_count`, `file_size_bytes` | The day's latest `model_stats`; all null when none was recorded that day. A null size is data (network, cloud or unsaved model) |
+| `stats_ts`, `warnings_count`, `file_size_bytes` | The day's latest `model_stats`: its time and size, and the day's latest **measured** warning count; all null when none was recorded that day. A null size is data (network, cloud or unsaved model). A null `warnings_count` with a `stats_ts` means only open-time records that day (see [Folding and cleanup](#folding-and-cleanup)), never zero warnings |
 | `health_file_size_bytes`, `health_warnings_count`, `health_open_median_seconds`, `health_sync_median_seconds` | The four health inputs as they stood at the end of the day; all null is a day with no inputs (grey), not a missing row |
+| `warnings_ts` | When `warnings_count` was measured: `stats_ts`, or earlier that day when the latest record was an open's; null with no count. Added in v3.2.0-rc.2 as the last column; a file without it reads as `stats_ts` |
 
 **Event window.** `opens` and `syncs` keep the last **90 days** and always at least the **last 10** of each.
 
@@ -93,7 +94,7 @@ A document opened once through an identity-capture gap (for example the central 
 | `title`, `local_path`, `central_path`, `is_workshared`, `is_cloud` | Latest identity |
 | `first_active_day`, `last_active_day` | First and last day with any open time |
 | `revit_versions`, `revit_subversions` | `{ "2026": "2026-10-30" }`: the last day the model was open in each version and subversion |
-| `last_stats` | `{ "ts", "warnings_count", "file_size_bytes" }`, the latest `model_stats` ("last known") |
+| `last_stats` | `{ "ts", "warnings_count", "file_size_bytes", "warnings_ts" }`: the latest `model_stats` ("last known"), with the last **measured** warning count and when it was measured (`warnings_ts`, absent with no count) |
 | `health` | The current health inputs (`file_size_bytes`, `warnings_count`, `open_median_seconds`, `sync_median_seconds`) |
 | `totals` | All time: `active_seconds`, `open_seconds`, `opens`, `open_seconds_sum`, `syncs`, `sync_seconds_sum` |
 | `recent_days_totals` | Table (`date` + the six totals): the last 14 days ending the day the row was written, days with data only |
@@ -131,7 +132,7 @@ Decision #55. Four inputs, 25 points each, each penalty linear between its two p
 | Median of the last 10 opens | 30 s | 5 min |
 | Median of the last 10 syncs | 30 s | 5 min |
 
-Score = 100 − the penalties (1 MB = 1,048,576 bytes). An input with no data is left out and the others are scaled to 100 (no size also means no density). Colour: green 75–100, yellow 50–74, amber 25–49, red below 25, grey with no inputs at all. The score is never shown; the stored inputs let a later formula recompute all history. Each day's inputs are the latest `model_stats` recorded by the end of that day and the medians of the last 10 opens and syncs up to then; a late-folded session recomputes them from its day forward while the event window still reaches.
+Score = 100 − the penalties (1 MB = 1,048,576 bytes). An input with no data is left out and the others are scaled to 100 (no size also means no density). Colour: green 75–100, yellow 50–74, amber 25–49, red below 25, grey with no inputs at all. The score is never shown; the stored inputs let a later formula recompute all history. Each day's inputs are the latest `model_stats` recorded by the end of that day (its size, and the last measured warning count, however old) and the medians of the last 10 opens and syncs up to then; a late-folded session recomputes them from its day forward while the event window still reaches.
 
 ## Weekly values
 
@@ -140,6 +141,8 @@ Long ranges (6M, 1Y) plot ISO weeks, Monday start, derived from the daily rows w
 ## Folding and cleanup
 
 The tray folds one closed outbox file (it has `session_end` and no Revit holds it) per step, oldest first, writing each touched rollup, then the index, then the ledger. A pass that finds the outbox unchanged ends there. A file folded in one pass is sealed on a later pass if unchanged; a seal reaches `.bak.json` when the model is next written, or on the following pass. A `model_stats` record is attributed by its keys, even when it lands after `doc_closing`.
+
+**`model_stats` after an open has no warning count.** Revit records `model_stats` after a model opens, saves or syncs (at most once per model per 5 minutes). After an open it measures the file size only and writes `warnings_count: null`, meaning **not measured**: counting warnings right after an open can stall Revit for seconds on a large model. After a save, Save As or sync the count is measured. The fold never reads that null as zero: a day, the index row and the health inputs keep the size of the latest record and the warning count of the latest record that measured one (`warnings_ts` says when). A model that has only been opened, never saved or synced, has no warning count yet, and its health is scored without warning density.
 
 A raw outbox file is deleted only when **all** hold, re-checked against the file itself while the tray holds it exclusively (nobody can write, rename or replace it, and a live Revit session's file cannot be held): its size and last write are still the folded ones; its content is still a closed session and re-folding it touches exactly the models its ledger row lists; its share is sealed for exactly that file in every one of those models, and both the rollup and its `.bak.json` (read back from disk) hold that seal; it is not one of the **3 newest** closed files; and every registered retention gate allows it. The delete then goes through the same handle, so the file deleted is the file verified. A session that touched no model (a genuinely empty contribution) has nothing to lose and cleans up the same way; a ledger row whose model list is missing or unreadable counts as unknown and re-folds — it never reads as "touched nothing". A failed index or ledger write stops the pass before cleanup. The age prune (`retentionDays`, default 180) stays as a backstop for files the tray never folds.
 

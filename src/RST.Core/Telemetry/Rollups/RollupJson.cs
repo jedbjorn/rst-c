@@ -165,6 +165,7 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
         "syncs", "sync_seconds_sum", "sync_seconds_max", "revit_versions", "revit_subversions",
         "stats_ts", "warnings_count", "file_size_bytes",
         "health_file_size_bytes", "health_warnings_count", "health_open_median_seconds", "health_sync_median_seconds",
+        "warnings_ts",
     };
 
     protected override IReadOnlyList<string> Columns => ColumnNames;
@@ -189,13 +190,17 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
         WriteNullable(w, d.Health?.WarningsCount);
         WriteNullableSeconds(w, d.Health?.OpenMedianSeconds);
         WriteNullableSeconds(w, d.Health?.SyncMedianSeconds);
+        // Added in v3.2.0-rc.2, last so the existing columns keep their places (readers map by
+        // name): when warnings_count was measured. An open-only record (null warnings,
+        // decision #71) leaves it earlier than stats_ts.
+        if (d.Stats?.WarningsTs is { } wts) RollupJson.WriteTs(w, wts); else w.WriteNullValue();
     }
 
     /// <summary>A row being read: the counters, plus the stats and health cells that become records once the row is complete.</summary>
     internal sealed class Cells
     {
         public readonly RollupDay Day = new();
-        public DateTimeOffset? StatsTs;
+        public DateTimeOffset? StatsTs, WarningsTs;
         public long? Warnings, Size, HSize, HWarnings;
         public double? HOpen, HSync;
 
@@ -221,6 +226,7 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
             case "revit_versions": d.RevitVersions = RollupJson.ReadStrings(v); break;
             case "revit_subversions": d.RevitSubversions = RollupJson.ReadStrings(v); break;
             case "stats_ts": c.StatsTs = RollupJson.ReadTs(v); break;
+            case "warnings_ts": c.WarningsTs = RollupJson.ReadTs(v); break;
             case "warnings_count": c.Warnings = NonNegative(RollupJson.ReadLong(v)); break;
             case "file_size_bytes": c.Size = NonNegative(RollupJson.ReadLong(v)); break;
             case "health_file_size_bytes": c.HealthSeen = true; c.HSize = NonNegative(RollupJson.ReadLong(v)); break;
@@ -235,7 +241,11 @@ internal sealed class DayTableConverter : ColumnTableConverter<RollupDay, DayTab
         var d = c.Day;
         if (d.Date == default) return null;
         if (c.StatsTs is { } ts)
-            d.Stats = new ModelStatsPoint(ts, ToInt(c.Warnings), c.Size);
+            d.Stats = new ModelStatsPoint(ts, ToInt(c.Warnings), c.Size)
+            {
+                // Absent (a file written before the column) or impossible: measured at stats_ts.
+                WarningsTs = c.WarningsTs is { } wts && wts <= ts ? wts : null,
+            };
         if (c.HealthSeen)
             d.Health = new HealthInputs(c.HSize, ToInt(c.HWarnings), c.HOpen, c.HSync);
         d.Clamp();
