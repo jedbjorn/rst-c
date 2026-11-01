@@ -44,6 +44,17 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
     /// <summary>Runs inside Apply, before the real one (to change the disk mid-flow).</summary>
     public Action? BeforeApply { get; set; }
 
+    public Action<int>? OnLaunch { get; set; }
+
+    public List<int> Launched { get; } = [];
+
+    public void LaunchRevit(int year)
+    {
+        Calls.Add("Launch");
+        OnLaunch?.Invoke(year);
+        Launched.Add(year);
+    }
+
     public bool RestoreFails { get; set; }
 
     public List<string> Calls { get; } = [];
@@ -60,7 +71,13 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
 
     public IReadOnlyList<ProfileEntry> Profiles() => _real.Profiles();
 
-    public UserProfilePrefs Prefs() => _real.Prefs();
+    public Action? BeforePrefs { get; set; }
+
+    public UserProfilePrefs Prefs()
+    {
+        BeforePrefs?.Invoke();
+        return _real.Prefs();
+    }
 
     public IReadOnlyList<int> RunningYears() => Running;
 
@@ -214,6 +231,127 @@ internal sealed class PickerLike
 
 public class AddInsViewModelTests
 {
+    [Fact]
+    public async Task Another_card_cannot_start_an_apply_while_launch_is_reading_preferences()
+    {
+        using var f = new AddInsFixture();
+        var vm = new AddInsViewModel(f.Backend, f.Dialogs, f.Dialogs);
+        await vm.RefreshAsync();
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Backend.BeforePrefs = () =>
+        {
+            entered.TrySetResult();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(10)), "preferences barrier was not released");
+        };
+        var first = vm.LaunchAsync(2026);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(vm.CanApply);
+            Assert.All(vm.Years, card => Assert.False(card.LaunchCommand.CanExecute(null)));
+            await vm.LaunchAsync(2027);
+            Assert.Empty(f.Backend.Applied);
+        }
+        finally { release.Set(); }
+        await first.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Single(f.Backend.Applied);
+        Assert.Equal(new[] { 2026 }, f.Backend.Launched);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Launch_applies_the_picker_profile_and_all_year_settings_before_starting_even_when_open(bool running)
+    {
+        using var f = new AddInsFixture();
+        f.Backend.Running = running ? [2026] : [];
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        vm.DisableUnused = false; // current control wins over the saved true
+        f.Dialogs.DuringAddinReport = () => Assert.Empty(f.Backend.Launched);
+        f.Backend.OnLaunch = year =>
+        {
+            Assert.Equal(2026, year);
+            Assert.Equal("F16 Lean", ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).ProfileName);
+            var prefs = UserProfilePrefs.Read(f.Root.Paths.PrefsFile).Get(AddInsFixture.LeanId)!;
+            Assert.False(prefs.DisableUnusedAddins);
+            Assert.Contains("Massing", prefs.HiddenTabs);
+            Assert.Single(f.Dialogs.AddinReports);
+            Assert.Contains(f.Switching.Executed.Single().Changes, c => c.Year == 2027);
+            Assert.False(vm.CanApply);
+            Assert.All(vm.Years, card => Assert.False(card.LaunchCommand.CanExecute(null)));
+        };
+        Assert.True(vm.Years.Single(y => y.Year.Year == 2026).LaunchCommand.CanExecute(null));
+
+        await vm.LaunchAsync(2026);
+
+        Assert.Equal(new[] { 2026 }, f.Backend.Launched);
+        Assert.Equal(new[] { "Plan", "Apply", "Launch" }, f.Backend.Calls.Where(c => c is "Plan" or "Apply" or "Launch"));
+        Assert.Equal(AddInsStrings.Launched(2026, "F16 Lean"), vm.ResultText);
+        Assert.True(vm.IsIdle);
+    }
+
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("deleted")]
+    [InlineData("exception")]
+    [InlineData("report")]
+    public async Task Launch_never_starts_after_cancel_failed_apply_or_unread_report(string failure)
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        if (failure == "cancel") f.Dialogs.ConfirmAddinChangesAnswer = false;
+        if (failure == "deleted") f.Backend.BeforeApply = () => File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, vm.SelectedProfile!.Entry.FileName));
+        if (failure == "exception") f.Backend.BeforeApply = () => throw new IOException("locked");
+        if (failure == "report") f.Dialogs.DuringAddinReport = () => throw new InvalidOperationException("report failed");
+
+        if (failure == "report") await Assert.ThrowsAsync<InvalidOperationException>(() => vm.LaunchAsync(2026));
+        else await vm.LaunchAsync(2026);
+
+        Assert.Empty(f.Backend.Launched);
+        Assert.DoesNotContain("Launch", f.Backend.Calls);
+        Assert.True(vm.IsIdle);
+    }
+
+    [Fact]
+    public async Task Launch_failure_is_inline_and_keeps_the_applied_profile()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        f.Backend.OnLaunch = _ => throw new IOException("executable missing");
+
+        await vm.LaunchAsync(2027);
+
+        Assert.Equal("F16 Lean", ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).ProfileName);
+        Assert.Equal("F16 Lean", vm.ActiveProfileText);
+        Assert.Equal(AddInsStrings.LaunchFailed(2027, "executable missing"), vm.ErrorText);
+        Assert.False(vm.HasResult);
+        Assert.Single(f.Dialogs.AddinReports);
+        Assert.Empty(f.Dialogs.Messages);
+        Assert.True(vm.IsIdle);
+    }
+
+    [Fact]
+    public async Task Launch_requires_a_selected_profile_and_a_card_for_the_year()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        await vm.LaunchAsync(2025);
+        vm.SelectedProfile = null;
+        Assert.All(vm.Years, y => Assert.False(y.LaunchCommand.CanExecute(null)));
+        await vm.LaunchAsync(2026);
+        Assert.Empty(f.Backend.Applied);
+        Assert.Empty(f.Backend.Launched);
+    }
+
     [Fact]
     public void The_page_reads_the_disk_only_when_it_is_first_shown()
     {
@@ -812,6 +950,24 @@ public class AddInsPageScreenshotTests
             Assert.Contains(AddInsStrings.YearSwitchedOff, texts);
             Assert.True(window.AddInsView.ApplyButton.IsEnabled);
             Assert.Equal(2, window.AddInsView.YearCards.Items.Count);
+            Assert.Equal("RST Profiles", AddInsStrings.Heading);
+            Assert.Equal("RST Profiles", TrayStrings.Tab_AddIns);
+            var buttons = WindowCapture.Descendants<Button>(window.AddInsView.YearCards)
+                .Where(b => Equals(b.Content, AddInsStrings.LaunchButton)).ToList();
+            Assert.Equal(2, buttons.Count);
+            foreach (var button in buttons)
+            {
+                var card = Assert.IsType<AddInsYearViewModel>(button.DataContext);
+                Assert.True(button.IsVisible);
+                Assert.True(button.IsEnabled); // includes the Open now card
+                Assert.Same(card.LaunchCommand, button.Command);
+                var row = Assert.IsType<DockPanel>(button.Parent);
+                var right = button.TranslatePoint(new Point(button.ActualWidth, 0), row).X;
+                Assert.InRange(Math.Abs(row.ActualWidth - right), 0, 1);
+                Assert.Equal(card.LaunchHint, System.Windows.Automation.AutomationProperties.GetName(button));
+            }
+            foreach (var button in buttons) button.Command.Execute(null);
+            Assert.Equal(new[] { 2026, 2027 }, f.Backend.Launched);
         });
     });
 
