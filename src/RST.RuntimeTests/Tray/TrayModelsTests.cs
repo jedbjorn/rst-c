@@ -203,6 +203,8 @@ internal sealed class FakeThumbnails : IModelThumbnails
 
     public List<string> Requested { get; } = new();
 
+    public ThumbnailRequest? LastRequest { get; private set; }
+
     public List<string> Cancelled { get; } = new();
 
     public bool Disposed { get; private set; }
@@ -212,6 +214,7 @@ internal sealed class FakeThumbnails : IModelThumbnails
     public void Request(ThumbnailRequest request)
     {
         Requested.Add(request.ModelId);
+        LastRequest = request;
         if (Images.TryGetValue(request.ModelId, out var image)) Complete(request.ModelId, image);
     }
 
@@ -227,19 +230,20 @@ internal static class ModelsHarness
 {
     /// <summary>A Models page over <paramref name="source"/>, everything inline (the read, the posts), today fixed.</summary>
     public static ModelsViewModel Model(IModelListSource source, FakeFold? fold = null, IModelThumbnails? thumbnails = null,
-                                        Func<Action, Task>? run = null) => new(new ModelsViewModelOptions
-    {
-        Source = source,
-        Fold = fold,
-        Thumbnails = thumbnails,
-        RunInBackground = run ?? (work =>
+                                        Func<Action, Task>? run = null, Action<Action>? post = null, Func<DateOnly>? today = null) =>
+        new(new ModelsViewModelOptions
         {
-            work();
-            return Task.CompletedTask;
-        }),
-        Post = a => a(),
-        Today = () => ModelsSamples.Today,
-    });
+            Source = source,
+            Fold = fold,
+            Thumbnails = thumbnails,
+            RunInBackground = run ?? (work =>
+            {
+                work();
+                return Task.CompletedTask;
+            }),
+            Post = post ?? (a => a()),
+            Today = today ?? (() => ModelsSamples.Today),
+        });
 
     public static ModelsViewModel Shown(IModelListSource source, FakeFold? fold = null, IModelThumbnails? thumbnails = null)
     {
@@ -336,6 +340,109 @@ public class TrayModelsViewModelTests
         Assert.Equal(1, source.Loads);
         Assert.False(model.IsLoading);
         Assert.True(model.HasCards);
+    }
+
+    [Fact]
+    public void A_pass_that_ends_while_the_first_read_holds_the_old_index_still_reloads()
+    {
+        // The UI thread's queue, run in order by hand.
+        var ui = new Queue<Action>();
+        var fold = new FakeFold();
+        var stored = ModelsSamples.Rows().Take(1).ToList();
+        var reads = 0;
+        var source = new FakeModelSource(() =>
+        {
+            var snapshot = stored.ToList(); // the first read has captured the index as it was …
+            if (++reads == 1)
+            {
+                // … when the worker folds Revit's last session and its pass ends, before that snapshot reaches the UI.
+                stored.Add(ModelsSamples.Rows()[1]);
+                fold.Complete(changed: true);
+            }
+            return snapshot;
+        });
+        var model = ModelsHarness.Model(source, fold, post: ui.Enqueue);
+        model.Shown();
+        Assert.Equal(2, ui.Count); // the pass's end, then the first read's result
+        while (ui.Count > 0) ui.Dequeue()();
+
+        Assert.Equal(2, source.Loads);
+        Assert.Equal(2, model.Result.IndexedModels);
+        Assert.Equal(new[] { "riverside-tower", "harbor-library" }.Order(), model.Result.Cards.Select(c => c.ModelId).Order());
+    }
+
+    [Fact]
+    public void Shown_after_midnight_re_queries_against_the_new_day_and_keeps_the_users_choices()
+    {
+        var today = ModelsSamples.Today; // Oct 31
+        var fold = new FakeFold { Answer = FoldRequestOutcome.RanRecently };
+        var source = new FakeModelSource(() =>
+        [
+            // Last open Oct 18: inside Recent (Oct 18–31) today, outside it (Oct 19 – Nov 1) tomorrow.
+            ModelsSamples.Row("expiring", "Expiring Model", @"C:\Projects\Expiring.rvt", null, false, false, 20.0, [13], ("2026.4", 13)),
+            ModelsSamples.Row("staying", "Staying Model", @"C:\Projects\Staying.rvt", null, false, false, 20.0, [0], ("2026.4", 0)),
+        ]);
+        var model = ModelsHarness.Model(source, fold, today: () => today);
+        model.Shown();
+        model.GroupBy = ModelGroupBy.MinorVersion;
+        Assert.Equal(new[] { "expiring", "staying" }, model.Result.Cards.Select(c => c.ModelId).Order());
+        Assert.Equal("2", model.StatCards[0].Value);
+
+        today = today.AddDays(1); // the user comes back to the page the next day; the fold has nothing new
+        model.Shown();
+        Assert.Equal(1, source.Loads);
+        Assert.Equal(new[] { "staying" }, model.Result.Cards.Select(c => c.ModelId));
+        Assert.Equal("1", model.StatCards[0].Value);
+        Assert.Equal(new DateOnly(2026, 11, 1), model.Result.WindowLast);
+        Assert.Equal(ModelGroupBy.MinorVersion, model.GroupBy);
+        Assert.Equal(ModelTimeChip.Recent, model.Chip);
+    }
+
+    [Fact]
+    public void A_refresh_checks_remembered_thumbnails_again_including_failures_and_moved_files()
+    {
+        var thumbnails = new FakeThumbnails();
+        var picture = ModelsSamples.Picture(2);
+        thumbnails.Images["riverside-tower"] = picture;
+        thumbnails.Images["harbor-library"] = null; // no shell thumbnail
+        var rows = ModelsSamples.Rows();
+        var fold = new FakeFold();
+        var model = ModelsHarness.Shown(new FakeModelSource(() => rows), fold, thumbnails);
+        ModelCardItem Card(string id) => ModelsHarness.Cards(model).Single(c => c.ModelId == id);
+
+        model.ThumbnailWanted(Card("riverside-tower"));
+        model.ThumbnailWanted(Card("harbor-library"));
+        model.ThumbnailWanted(Card("riverside-tower")); // realized again: remembered, already checked
+        Assert.Equal(new[] { "riverside-tower", "harbor-library" }, thumbnails.Requested);
+
+        // A pass changed the store (the model was saved): the remembered image shows at once and the worker checks
+        // the file's last-write time again; so does the remembered failure.
+        fold.Complete(changed: true);
+        thumbnails.Images.Remove("riverside-tower"); // the worker's answer is pending
+        var tower = Card("riverside-tower");
+        model.ThumbnailWanted(tower);
+        Assert.Same(picture, tower.Thumbnail);
+        model.ThumbnailWanted(Card("harbor-library"));
+        Assert.Equal(new[] { "riverside-tower", "harbor-library", "riverside-tower", "harbor-library" }, thumbnails.Requested);
+        model.ThumbnailWanted(tower); // asked already, still pending: not twice
+        Assert.Equal(4, thumbnails.Requested.Count);
+
+        // The page shown again is a refresh too.
+        thumbnails.Complete("riverside-tower", picture);
+        model.ThumbnailWanted(tower);
+        Assert.Equal(4, thumbnails.Requested.Count);
+        model.Shown();
+        model.ThumbnailWanted(Card("riverside-tower"));
+        Assert.Equal(5, thumbnails.Requested.Count);
+
+        // A model that moved (another local path) is checked with its new path at once.
+        thumbnails.Complete("riverside-tower", picture);
+        rows[0].LocalPath = @"C:\Moved\Riverside Tower_jb.rvt";
+        fold.Complete(changed: true);
+        thumbnails.Complete("riverside-tower", picture);
+        model.ThumbnailWanted(Card("riverside-tower"));
+        Assert.Equal(6, thumbnails.Requested.Count);
+        Assert.Equal(@"C:\Moved\Riverside Tower_jb.rvt", thumbnails.LastRequest!.LocalPath);
     }
 
     [Fact]

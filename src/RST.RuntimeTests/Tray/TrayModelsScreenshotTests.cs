@@ -155,7 +155,11 @@ public class TrayModelsScreenshotTests
             model.GroupBy = ModelGroupBy.MinorVersion;
             Settle();
             model.Rows.OfType<ModelsGroupHeaderRow>().Single(h => h.Title == "Revit 2026.3").IsExpanded = false;
-            Capture(page, Name("minor", theme), new Size(720, 760));
+            Settle();
+            // As tall as the content, so every group (the closed one too) is in the picture.
+            Capture(page, Name("minor", theme), new Size(720, 1200));
+            Assert.Contains(ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>(), t => t.Text == "Revit 2026.3");
+            Assert.Contains(ById(page.View, "Tray.Health.Models.GroupTitle").Cast<TextBlock>(), t => t.Text == "Revit 2025.4");
             // The rows (the list virtualizes, so not every header is realized in the capture).
             var headers = model.Rows.OfType<ModelsGroupHeaderRow>().Select(h => h.Title).ToList();
             Assert.Equal(new[] { "Revit 2027.1", "Revit 2026.4", "Revit 2026.3", "Revit 2026 — unknown minor", "Revit 2025.4" }, headers);
@@ -410,14 +414,26 @@ public class TrayModelsScreenshotTests
             Assert.True(offset > 300, $"scrolled to {offset}");
             Assert.Equal(offset, model.ScrollOffset, 0.5);
 
+            var before = page.View.TopRow();
+            Assert.NotNull(before);
+            Assert.Equal(before!.Value.Key, model.ScrollAnchorKey);
+
             fold.Complete(changed: true);
             Settle();
             Assert.Equal(2, source.Loads);
             Assert.Equal(ModelTimeChip.OneYear, model.Chip);
-            // Where the user was: the panel estimates the rows above the screen that it has not realized, so the same
-            // offset can read a few pixels apart across two builds of the list (CI: 646.8 then 638); well under a row.
-            Assert.Equal(offset, page.View.Scroller.VerticalOffset, 24.0);
-            Assert.True(page.View.Scroller.VerticalOffset > 300, "not back at the top");
+            // Where the user was: the same row at the top of the viewport, as far scrolled past as it was (the panel's
+            // offset alone can read a few pixels apart on identical data, so the anchor is what is kept).
+            var after = page.View.TopRow();
+            Assert.NotNull(after);
+            Assert.Equal(before.Value.Key, after!.Value.Key);
+            Assert.Equal(before.Value.Delta, after.Value.Delta, 2.0);
+
+            // Shown again (the page re-queries against today): still the same row.
+            model.Shown();
+            Settle();
+            Assert.Equal(before.Value.Key, page.View.TopRow()!.Value.Key);
+            Assert.Equal(before.Value.Delta, page.View.TopRow()!.Value.Delta, 2.0);
 
             // A chip change starts at the top.
             model.Chip = ModelTimeChip.SixMonths;
