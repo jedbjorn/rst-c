@@ -7,6 +7,7 @@
 // Spec #18 (feature #16): the plan the Confirm dialog shows is the plan the load runs; Load, Unload
 // and Restore All show the same add-in report; RST 3.0's renamed add-ins are moved once at boot;
 // the required add-in pills come from the add-in inventory.
+// SC-016: Load and Delete require a selection; SC-048 F6: a clean no-op load needs no modal.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -83,9 +84,9 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         };
 
         ImportCommand = new RelayCommand(Import, () => IsIdle);
-        LoadCommand = new AsyncRelayCommand(RunLoadAsync, () => IsIdle);
+        LoadCommand = new AsyncRelayCommand(RunLoadAsync, () => IsIdle && HasSelection);
         UnloadCommand = new RelayCommand(Unload, () => IsIdle);
-        DeleteCommand = new RelayCommand(Delete, () => IsIdle);
+        DeleteCommand = new RelayCommand(Delete, () => IsIdle && HasSelection);
         RestoreCommand = new RelayCommand(RestoreAll, () => IsIdle);
         CloseCommand = new RelayCommand(RequestClose, () => IsIdle);
         OpenUrlCommand = new RelayCommand<string>(url => _openUrl(url));
@@ -391,6 +392,7 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         OnPropertyChanged(nameof(DetailUpdated));
         OnPropertyChanged(nameof(OpacityOverride));
         OnPropertyChanged(nameof(PreviewOpacity));
+        RelayCommand.Refresh();
     }
 
     private void RenderTabToggles(Profile profile)
@@ -541,8 +543,8 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
             planFailure = UiStrings.Loader_PlanFailed(ex.Message);
         }
 
-        if (plan is not null && (DisableUnused || plan.HasChanges)
-            && !_loaderDialogs.ConfirmAddinChanges(ConfirmAddinChangesModel.From(plan)))
+        if (LoadDialogRules.NeedsConfirmation(plan)
+            && !_loaderDialogs.ConfirmAddinChanges(ConfirmAddinChangesModel.From(plan!)))
             return;
 
         await DoLoadAsync(card, warnings, plan, planFailure);
@@ -592,11 +594,16 @@ public sealed class ProfileLoaderViewModel : ObservableObject, IHasToast
         lines.AddRange(notFoundWarnings);
         lines.AddRange(result.Warnings);
 
-        // The Add-in Check always shows, before anything closes the window: what changed, what
-        // could not, and the required add-ins that are missing or switched off.
+        // SC-048 F6: only interrupt for changes, failures, notes or required add-ins needing attention.
         var qa = result.Qa ?? QaCheck.For(profile, _session, plan);
         Log.Information("UI: selector: load_profile QA {Payload}", new { notInstalled = qa.NotInstalled.Count, requiredOff = qa.RequiredOff.Count, allClear = qa.AllClear });
-        _loaderDialogs.ShowAddinReport(AddinReportModel.ForLoad(card.Name, report, qa, _openUrl));
+        if (LoadDialogRules.NeedsReport(report, qa))
+            _loaderDialogs.ShowAddinReport(AddinReportModel.ForLoad(card.Name, report, qa, _openUrl));
+        else
+        {
+            Log.Information("UI: selector: load_profile has no add-in changes or QA issues");
+            lines.Add(UiStrings.Loader_LoadNoAddinChanges);
+        }
 
         ShowLoadingAndClose(UiStrings.Loader_Loading(card.Name), string.Join(" ", lines));
     }

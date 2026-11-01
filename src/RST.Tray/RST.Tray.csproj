@@ -36,8 +36,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The notification-area icon and the window icon: RST.msi's own icon. -->
+    <!-- SC-048 item 2: a small-size notification icon; the window keeps RST.msi's own icon. -->
     <EmbeddedResource Include="..\..\installer\branding\rst.ico" LogicalName="RST.Tray.rst.ico" Link="Resources\rst.ico" />
+    <EmbeddedResource Include="..\..\installer\branding\rst-tray.ico" LogicalName="RST.Tray.rst-tray.ico" Link="Resources\rst-tray.ico" />
   </ItemGroup>
 
   <ItemGroup>

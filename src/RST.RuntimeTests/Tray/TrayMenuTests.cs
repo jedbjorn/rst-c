@@ -87,7 +87,7 @@ public class TrayMenuTests
     public void A_context_menu_request_is_logged_with_its_anchor() => WithLog(events => Sta(() =>
     {
         var failures = new List<string>();
-        using var icon = new TrayIcon(TrayAssets.IconFile(), "RST", failures.Add);
+        using var icon = new TrayIcon(TrayAssets.NotificationIconFile(), "RST", failures.Add);
         var requested = new List<Point>();
         var activated = 0;
         icon.Activated += (_, _) => activated++;
@@ -158,7 +158,7 @@ public class TrayMenuTests
         var calls = new List<string>();
         var order = new List<string>();
         var quits = 0;
-        var icon = new TrayIcon(TrayAssets.IconFile(), "RST", failures.Add);
+        var icon = new TrayIcon(TrayAssets.NotificationIconFile(), "RST", failures.Add);
         try
         {
             void QuitNow()
@@ -223,7 +223,7 @@ public class TrayMenuTests
     private static TrayMenuCommand OpenThroughTheIcon(TrayMenuActions actions, int[] keys, string? screenshot, out MenuWatch watch)
     {
         var failures = new List<string>();
-        using var icon = new TrayIcon(TrayAssets.IconFile(), "RST", failures.Add);
+        using var icon = new TrayIcon(TrayAssets.NotificationIconFile(), "RST", failures.Add);
         var result = (TrayMenuCommand?)null;
         icon.MenuRequested += (_, p) => result = TrayMenu.Open(actions, p, icon.Source);
 

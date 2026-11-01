@@ -279,6 +279,30 @@ public sealed class ProfileLoadServiceTests : IDisposable
         result.Ok.Should().BeTrue();
         result.AddinChanges.Should().ContainSingle().Which.Should().Match<ActivationOutcome>(o =>
             o.Result == OutcomeResult.NotChanged && o.Reason == ChangeReason.Other && o.Detail == "disk gone");
+        result.Report.Notes.Should().Equal("RST could not complete the add-in changes: disk gone");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_forget_only_plan_whose_executor_throws_still_needs_a_report(bool hasNotes)
+    {
+        _switching.ExecuteThrows = new IOException("disk gone");
+        var p = AddProfile();
+        var plan = ActivationPlan.Nothing with
+        {
+            Forget = [new(new LedgerKey(2026, LedgerKind.Setting, "probe", "Probe.addin"), false)],
+            Notes = hasNotes ? [new YearNote(2026, "Existing plan note")] : [],
+        };
+
+        var result = Service().Load(new LoadRequest("Arch", p.Id, false, [], plan));
+
+        _switching.Executed.Should().ContainSingle().Which.Should().BeSameAs(plan);
+        result.Ok.Should().BeTrue();
+        result.Report.Outcomes.Should().BeEmpty();
+        result.Report.Notes.Should().Equal(plan.Notes.Select(n => n.Text)
+            .Append("RST could not complete the add-in changes: disk gone"));
+        LoadDialogRules.NeedsReport(result.Report, QaCheck.Clear).Should().BeTrue();
     }
 
     [Fact]
