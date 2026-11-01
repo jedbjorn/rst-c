@@ -14,7 +14,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using RST.Core.Loader;
 using RST.Core.Profiles;
 using RST.Core.Ribbon;
@@ -216,7 +215,7 @@ public partial class RibbonPreview : UserControl
 
     private FrameworkElement BuildTool(Slot slot)
     {
-        var icon = RibbonPreviewRules.PackIcon(slot) is { } pack ? LoadIcon(pack) : null;
+        var icon = PackIcons.ForSlot(slot, PackDirectory, dark: _dark);
         var box = new Border
         {
             Width = 28,
@@ -278,10 +277,10 @@ public partial class RibbonPreview : UserControl
 
     private Border StackRow(string text, Slot? tool, bool dim)
     {
-        // A tool: its pack icon at 16 px, else the ribbon's default_16.png, as the stacked button
+        // A tool: its pack or companion icon at 16 px, else the ribbon's default_16.png, as the stacked button
         // draws it. The "≡" box only for an empty stack's stub row, or when the default is missing.
         var icon = tool is null ? null
-            : (RibbonPreviewRules.PackIcon(tool) is { } pack ? PackIcons.Load(pack, PackDirectory, 16) : null) ?? PackIcons.Default16;
+            : PackIcons.ForSlot(tool, PackDirectory, 16, _dark) ?? PackIcons.Default16;
         FrameworkElement glyph = icon is not null
             ? new Image
             {
@@ -332,8 +331,6 @@ public partial class RibbonPreview : UserControl
             ToolTip = text,
         };
     }
-
-    private BitmapSource? LoadIcon(IconPackValue value) => PackIcons.Load(value, PackDirectory);
 
     private static SolidColorBrush Frozen(Color color)
     {

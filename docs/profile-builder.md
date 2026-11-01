@@ -112,7 +112,7 @@ A tile drags by its icon or by any part of it outside the name box; a click on t
 
 ### Stacks
 
-A **stack** is two or three small buttons, one above the other, in the space of one large button: the same layout as Revit's own stacked buttons. Stacks hold tools only (Revit or add-in commands, and [custom tools](custom-url-slots.md)). On the ribbon each stacked button has a 16 px icon and a one-line label; a tool without a pack icon gets rst-c's default icon (a dark ≡ on a light grey tile). See [Ribbon Tools](ribbon-tools.md#stacks-on-the-ribbon) for how they are drawn.
+A **stack** is two or three small buttons, one above the other, in the space of one large button: the same layout as Revit's own stacked buttons. Stacks hold tools only (Revit or add-in commands, and [custom tools](custom-url-slots.md)). On the ribbon each stacked button has a 16 px icon and a one-line label; a tool without a chosen or companion icon gets rst-c's default icon (a dark ≡ on a light grey tile). See [Ribbon Tools](ribbon-tools.md#stacks-on-the-ribbon) for how they are drawn.
 
 On a card a stack shows as a group headed "STACK · 2/3" (or 3/3), with **✎** (edit stack) and **×** (remove stack; its tools stay on the panel), then one row per tool: a 16 px icon (click to change it), the name, edited in place, and on hover **✎** (custom tools only) and **×** (remove that tool from this panel; a stack left with one tool becomes that tool).
 
@@ -132,11 +132,11 @@ When the Builder opens a saved profile, it can make two repairs to its stacks, e
 
 Tool icons come from rst-c's built-in icon pack: 55 designs, each in seven colours. Click a tool's icon to open **Pick an icon**:
 
-- **∅ none** (first) removes the icon.
+- **∅ none** (first) clears your chosen icon.
 - Clicking a design opens a row of its seven colours just below that design's row. Click a colour to use it.
 - Arrow keys, Home and End move between the colours. **Escape** closes the colour row first and the picker on a second press. Clicking outside the picker closes it without a change.
 
-The chosen icon shows on the tile, in the Live Preview and on the ribbon. A tool with no pack icon uses rst-c's default button icon on the ribbon (rst-c's own tools keep their own icons). There is no option to take an icon from the source command.
+The chosen icon shows on the tile, in the Live Preview and on the ribbon. Gantt-It and Splash-It tools show their own icons on the ribbon, canvas and Live Preview until you choose another one; choosing **∅ none** goes back to the companion icon. Other tools with no pack icon use rst-c's default button icon on the ribbon (rst-c's own tools keep their own icons).
 
 ![The Pick an icon overlay over the Builder: the icon pack's designs in a grid with ∅ none first, and one design's row of seven colours open below it](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/builder-icon-picker.png)
 

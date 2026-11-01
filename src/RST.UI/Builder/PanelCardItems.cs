@@ -18,6 +18,7 @@ using RST.Core.Ribbon;
 using RST.UI.Controls;
 using RST.UI.Mvvm;
 using RST.UI.Resources;
+using RST.UI.Theming;
 using ProfilePanel = RST.Core.Profiles.Panel;
 
 namespace RST.UI.Builder;
@@ -241,9 +242,8 @@ public sealed class ToolTileViewModel : PanelItemViewModel
     public string ToolTip => BuilderRules.ToolTipOf(Model);
 
     /// <summary>The tool's pack icon: 32 px on a tile, 16 px on a stack row (the ribbon's default_16.png when it has none).</summary>
-    public BitmapSource? Icon => IconPack.TryParseValue(Model.IconFile, out var value)
-        ? PackIcons.Load(value, _owner.PackDirectory, InStack ? 16 : 32) ?? (InStack ? PackIcons.Default16 : null)
-        : InStack ? PackIcons.Default16 : null;
+    public BitmapSource? Icon => PackIcons.ForSlot(Model, _owner.PackDirectory, InStack ? 16 : 32, RstTheme.IsDark)
+        ?? (InStack ? PackIcons.Default16 : null);
 
     /// <summary>False: the tile shows the empty icon frame.</summary>
     public bool HasIcon => Icon is not null;

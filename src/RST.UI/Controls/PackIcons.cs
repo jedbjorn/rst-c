@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Windows.Media.Imaging;
 using RST.Core.Ribbon;
+using RST.Core.Profiles;
 using RST.UI.Loader;
 
 namespace RST.UI.Controls;
@@ -53,6 +54,15 @@ public static class PackIcons
                 return null;
             }
         });
+    }
+
+    /// <summary>A tool's explicit pack icon, then its automatic companion icon, or null.</summary>
+    public static BitmapSource? ForSlot(Slot slot, string? directory = null, int size = 32, bool dark = false)
+    {
+        if (IconPack.TryParseValue(slot.IconFile, out var value)) return Load(value, directory, size);
+        return CompanionIcons.Resolve(slot, size, dark) is { } path
+            ? LoadFile(Path.Combine(LoaderAssets.BaseDirectory, "Assets", path.Replace('/', Path.DirectorySeparatorChar)), size)
+            : null;
     }
 
     /// <summary>The image of a slot's <c>iconFile</c>, or null for a non-pack value.</summary>
