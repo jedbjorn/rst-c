@@ -19,15 +19,15 @@ namespace RST.Engine.Telemetry;
 internal static class IdentityCapture
 {
     /// <summary>
-    /// False for null, linked, and unreadable documents. Linked
+    /// False for null, linked, family, and unreadable documents. These
     /// documents are excluded from telemetry at every doc-scoped
-    /// handler (spec Edge Cases); a document whose IsLinked read throws
+    /// handler; a document whose classification read throws
     /// is not safe to touch further.
     /// </summary>
     public static bool IsTrackable(Document? doc)
     {
         if (doc is null) return false;
-        try { return !doc.IsLinked; }
+        try { return DocumentCapturePolicy.IsProject(doc.IsLinked, doc.IsFamilyDocument); }
         catch { return false; }
     }
 
