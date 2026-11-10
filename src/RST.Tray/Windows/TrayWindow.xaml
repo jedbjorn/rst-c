@@ -199,6 +199,56 @@
                     </Grid>
                 </Border>
 
+                <!-- After an RST update (decision #79): the sister apps that are not installed, each with Install, until
+                     the user dismisses the card. Nothing is installed without a click. -->
+                <Border Style="{StaticResource InfoBanner}" Padding="16,12" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                        Visibility="{Binding ShowOffer, Converter={StaticResource BoolToVisible}}"
+                        AutomationProperties.AutomationId="Tray.SisterOffer">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{x:Static res:TrayStrings.Offer_Heading}" Style="{StaticResource SectionText}" FontSize="13"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="{x:Static res:TrayStrings.Offer_Dismiss}" Command="{Binding DismissOfferCommand}"
+                                    MinWidth="80" AutomationProperties.AutomationId="Tray.SisterOffer.Dismiss" />
+                        </Grid>
+                        <TextBlock Text="{x:Static res:TrayStrings.Offer_Text}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <ItemsControl x:Name="OfferRows" ItemsSource="{Binding OfferRows}" Margin="0,4,0,0" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,8,0,0" AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                            <!-- The install's progress or outcome, as text: the Apps page's row has the banner and the log link. -->
+                                            <TextBlock Text="{Binding NoteText}" Style="{StaticResource Hint}" TextWrapping="Wrap"
+                                                       Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}"
+                                                       AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Note}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0"
+                                                    Visibility="{Binding HasButtons, Converter={StaticResource BoolToVisible}}">
+                                            <Button Content="{Binding ActionText}" Command="{Binding ActCommand}" CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding CanAct}" MinWidth="96" Style="{StaticResource PrimaryButton}"
+                                                    Visibility="{Binding HasAction, Converter={StaticResource BoolToVisible}}"
+                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Action}" />
+                                            <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding CancelCommand}" CommandParameter="{Binding}"
+                                                    MinWidth="96" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
+                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Cancel}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
                 <Border Style="{StaticResource WarningBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
                         Visibility="{Binding ShowCheckFailed, Converter={StaticResource BoolToVisible}}"
                         AutomationProperties.AutomationId="Tray.CheckFailed">

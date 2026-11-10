@@ -273,6 +273,12 @@ public static class TrayStrings
 
     public static string Updates_RstUpdateNote => Get(nameof(Updates_RstUpdateNote));
 
+    public static string Offer_Heading => Get(nameof(Offer_Heading));
+
+    public static string Offer_Text => Get(nameof(Offer_Text));
+
+    public static string Offer_Dismiss => Get(nameof(Offer_Dismiss));
+
     public static string Updates_OtherApps => Get(nameof(Updates_OtherApps));
 
     public static string Updates_OtherAppsHint => Get(nameof(Updates_OtherAppsHint));

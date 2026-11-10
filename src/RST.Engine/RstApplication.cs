@@ -256,6 +256,10 @@ public sealed class RstApplication : IExternalApplication
             // active — the four-button panel is permanent (RST-043).
             RibbonBuilder.ApplyToolsPanelStyling();
 
+            // Every add-in has loaded by now: put the sister apps' buttons (Gantt-It, Splash-It, Pick-It)
+            // on one "RST Accessories" panel beside the RST panel (decision #79).
+            AccessoriesPanel.GatherBeside(RibbonBuilder.RstPanelTitle);
+
             var active = ActiveProfile.Read();
             if (active.IsBlank)
             {

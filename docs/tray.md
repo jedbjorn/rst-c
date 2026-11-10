@@ -69,6 +69,15 @@ When a check finds a newer version of an app you have installed, the tray shows 
 
 The tray never announces an app you haven't installed, or one you installed by hand (below). It installs nothing by itself: only when you click **Update** or **Install**.
 
+### After RST is updated
+
+When the tray finds a newer RST installed than the last time it looked (however RST was updated: from the tray, with the setup, or by IT), the **Updates** page shows a card, **More add-ins from Designs/OS**, under RST's panel. It lists each sister add-in the tray can install that isn't installed for you, with an **Install** button. Nothing is installed unless you click, and there is no notification or popup: after a tray update the window opens on Updates anyway, so the card is simply there.
+
+- **Not now** hides the card until the next RST update. The add-ins stay on the **Apps** page, with the same Install button.
+- An add-in leaves the card once it is installed; the card goes when none is left.
+- An add-in whose latest release the tray hasn't looked up yet is listed without a button. With automatic checks on, the tray looks it up straight away; with them off, click **Check now**.
+- A first install of RST shows no card.
+
 Only full releases count. A release candidate such as `v3.2.0-rc.1` is never offered.
 
 ### How it knows what is installed

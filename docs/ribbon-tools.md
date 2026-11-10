@@ -12,7 +12,7 @@ purpose: Guide to RSTify tab-hiding, required add-ins and add-in switching, and 
 
 ## Overview
 
-Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are set up in the Loader. [Stacks](#stacks-on-the-ribbon) at the end of this page describes how a profile's stacked buttons are drawn on its tab.
+Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are set up in the Loader. [Stacks](#stacks-on-the-ribbon) describes how a profile's stacked buttons are drawn on its tab, and [RST Accessories](#rst-accessories) how the Designs/OS sister add-ins share one panel.
 
 ## RSTify
 
@@ -141,6 +141,15 @@ A profile panel can hold [stacks](profile-builder.md#stacks): two or three small
 - **Required add-ins and RSTify.** Commands in stacks count towards the profile's required add-ins, and the tabs they come from are never offered for hiding.
 
 Stacks are built through the same AdWindows interface as the rest of the profile tab (a row panel of small buttons), because Revit's own `AddStackedItems` only works while Revit starts, and profiles switch while Revit runs.
+
+## RST Accessories
+
+Gantt-It, Splash-It and Pick-It are separate Designs/OS add-ins, each with its own panel on the **Add-Ins** tab. When rst-c is installed too, it gathers their buttons into one panel, **RST Accessories**, right after the **RST** panel, in that order: Gantt-It, Splash-It, Pick-It. An add-in that is not installed simply has no button there, and with none of them installed there is no panel.
+
+- **The buttons are the same buttons.** rst-c moves them once Revit has loaded every add-in; it does not copy or replace them. Each still runs its own add-in's command, and a profile button made from one keeps working.
+- **In the Builder,** these tools are listed under **Add-Ins › RST Accessories** instead of under each add-in's own panel.
+- **Without rst-c,** or with rst-c switched off for a Revit year, each add-in keeps its own panel.
+- **Only these three.** A button is moved only when it is one of these add-ins' own buttons on that add-in's own panel. Nothing else on the Add-Ins tab is touched.
 
 ## Notes & limits
 

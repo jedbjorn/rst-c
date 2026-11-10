@@ -19,7 +19,7 @@ namespace RST.Engine.Ribbon;
 
 internal static class RibbonBuilder
 {
-    private const string RstPanelTitle = "RST";
+    internal const string RstPanelTitle = "RST";
 
     /// <summary>
     /// RST tools panel backdrop, themed. Paired with the #d9d9d9 chip
