@@ -354,6 +354,43 @@ public class TrayUpdatesScreenshotTests
         TrayMenu.Run(actions, TrayMenuCommand.CheckForUpdates);
         Assert.Equal(1, checks);
     }
+
+    [Theory]
+    [InlineData(UiTheme.Light)]
+    [InlineData(UiTheme.Dark)]
+    public void The_Updates_page_offers_the_sister_apps_not_installed_after_an_RST_update(UiTheme theme) => Sta(theme, () =>
+    {
+        // Decision #79. RST just updated to 3.1.1; Gantt-It is installed, Splash-It is not.
+        var updated = new UpdateSnapshot(new[]
+        {
+            Scenarios.S("rst", InstallKind.Installer, "3.1.1", "3.1.1"),
+            Scenarios.S("gantt-it", InstallKind.Installer, "1.1.0", "1.1.0"),
+            Scenarios.S("splash-it", InstallKind.NotInstalled, null, "1.1.0"),
+        }, Scenarios.Today0914, Checking: false, AutomaticChecks: true, Detected: true, SisterOffer: true);
+        var host = new FakeUpdatesHost { Current = updated };
+        var settings = new FakeTrayHost { UpdateChecks = new UpdateChecksState(true, false) };
+        var window = new TrayWindow(new TrayViewModel(settings, TrayPage.Updates, host));
+        try
+        {
+            Capture(window, Name("updates", "offer", theme));
+            Assert.True(ById(window, "Tray.SisterOffer").IsVisible);
+            Assert.Contains(TrayStrings.Offer_Heading, Texts(window.UpdatesPage));
+            Assert.Equal("Install", ((Button)ById(window, "Tray.Offer.splash-it.Action")).Content);
+            Assert.DoesNotContain(WindowCapture.Descendants<FrameworkElement>(window),
+                e => System.Windows.Automation.AutomationProperties.GetAutomationId(e) == "Tray.Offer.gantt-it");
+
+            // Not now: the host is told, and once the offer is closed the card is gone.
+            ((Button)ById(window, "Tray.SisterOffer.Dismiss")).Command.Execute(null);
+            Assert.Equal("dismiss-offer", host.Calls[^1]);
+            host.Publish(updated with { SisterOffer = false });
+            WindowCapture.DoEvents();
+            Assert.False(ById(window, "Tray.SisterOffer").IsVisible);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 }
 
 public class UpdatesViewModelTests
@@ -419,43 +456,6 @@ public class UpdatesViewModelTests
         Assert.Null(vm.Rst.ActionText); // RST is never "installed" from the tray, only updated
         Assert.Equal("Install", vm.Rows[1].ActionText);
     }
-
-    [Theory]
-    [InlineData(UiTheme.Light)]
-    [InlineData(UiTheme.Dark)]
-    public void The_Updates_page_offers_the_sister_apps_not_installed_after_an_RST_update(UiTheme theme) => Sta(theme, () =>
-    {
-        // Decision #79. RST just updated to 3.1.1; Gantt-It is installed, Splash-It is not.
-        var updated = new UpdateSnapshot(new[]
-        {
-            Scenarios.S("rst", InstallKind.Installer, "3.1.1", "3.1.1"),
-            Scenarios.S("gantt-it", InstallKind.Installer, "1.1.0", "1.1.0"),
-            Scenarios.S("splash-it", InstallKind.NotInstalled, null, "1.1.0"),
-        }, Scenarios.Today0914, Checking: false, AutomaticChecks: true, Detected: true, SisterOffer: true);
-        var host = new FakeUpdatesHost { Current = updated };
-        var settings = new FakeTrayHost { UpdateChecks = new UpdateChecksState(true, false) };
-        var window = new TrayWindow(new TrayViewModel(settings, TrayPage.Updates, host));
-        try
-        {
-            Capture(window, Name("updates", "offer", theme));
-            Assert.True(ById(window, "Tray.SisterOffer").IsVisible);
-            Assert.Contains(TrayStrings.Offer_Heading, Texts(window.UpdatesPage));
-            Assert.Equal("Install", ((Button)ById(window, "Tray.Offer.splash-it.Action")).Content);
-            Assert.DoesNotContain(WindowCapture.Descendants<FrameworkElement>(window),
-                e => System.Windows.Automation.AutomationProperties.GetAutomationId(e) == "Tray.Offer.gantt-it");
-
-            // Not now: the host is told, and once the offer is closed the card is gone.
-            ((Button)ById(window, "Tray.SisterOffer.Dismiss")).Command.Execute(null);
-            Assert.Equal("dismiss-offer", host.Calls[^1]);
-            host.Publish(updated with { SisterOffer = false });
-            WindowCapture.DoEvents();
-            Assert.False(ById(window, "Tray.SisterOffer").IsVisible);
-        }
-        finally
-        {
-            window.Close();
-        }
-    });
 
     [Fact]
     public void After_an_RST_update_the_sister_apps_not_installed_are_offered_until_dismissed()
@@ -674,13 +674,13 @@ public sealed class TrayUpdateChecksTests : IDisposable
     }
 
     [Fact]
-    public void An_RST_update_opens_the_sister_app_offer_once_and_a_dismissal_lasts_until_the_next_update()
+    public async Task An_RST_update_opens_the_sister_app_offer_once_and_a_dismissal_lasts_until_the_next_update()
     {
         // Decision #79. A fresh install: the first tray records RST 3.1.0 and offers nothing.
         WriteSettings(checks: true);
         using (var first = Make())
         {
-            first.Updates.RefreshInstalledAsync().GetAwaiter().GetResult();
+            await first.Updates.RefreshInstalledAsync();
             Assert.False(first.Updates.Current.SisterOffer);
             first.Advance(TimeSpan.FromMinutes(5)); // the start check: Gantt-It and Splash-It 1.1.0 are out
             Assert.Empty(first.Updates.Current.OfferedSisterApps);
@@ -692,7 +692,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         var updated = new FakeInstalledProducts().With(ProductCatalog.RstUpgradeCode, "3.1.1");
         using (var second = Make(installed: updated))
         {
-            second.Updates.RefreshInstalledAsync().GetAwaiter().GetResult();
+            await second.Updates.RefreshInstalledAsync();
             Assert.Equal(new[] { "gantt-it", "splash-it" }, second.Updates.Current.OfferedSisterApps.Select(s => s.Product.Id));
             Assert.DoesNotContain(second.Log, l => l.StartsWith("update check (", StringComparison.Ordinal));
 
@@ -701,15 +701,15 @@ public sealed class TrayUpdateChecksTests : IDisposable
         }
         using (var third = Make(installed: updated))
         {
-            third.Updates.RefreshInstalledAsync().GetAwaiter().GetResult();
+            await third.Updates.RefreshInstalledAsync();
             Assert.False(third.Updates.Current.SisterOffer); // the same version never offers again
         }
 
         // The next update offers again, and with checks on the tray looks for the sister apps' releases at once.
         WriteSettings(checks: true);
         using var fourth = Make(installed: new FakeInstalledProducts().With(ProductCatalog.RstUpgradeCode, "3.1.2"));
-        fourth.Updates.RefreshInstalledAsync().GetAwaiter().GetResult();
-        fourth.Updates.Loop.Running?.GetAwaiter().GetResult();
+        await fourth.Updates.RefreshInstalledAsync();
+        if (fourth.Updates.Loop.Running is { } check) await check;
         Assert.True(fourth.Updates.Current.SisterOffer);
         lock (fourth.Log) Assert.Contains(fourth.Log, l => l.StartsWith("update check (", StringComparison.Ordinal));
     }
