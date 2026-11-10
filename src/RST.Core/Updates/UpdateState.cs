@@ -2,12 +2,16 @@
 // %AppData%\RST\tray_updates.json, beside tray_settings.json (user data; it survives an uninstall):
 //
 //   { "lastCheckedUtc": "2026-10-30T09:14:02+00:00",
-//     "products": { "rst": { "latest": "v3.1.1", "notified": "v3.1.1", "noRelease": false } } }
+//     "products": { "rst": { "latest": "v3.1.1", "notified": "v3.1.1", "noRelease": false } },
+//     "rstSeen": "v3.3.0", "sisterOffer": "v3.3.0" }
 //
 //   lastCheckedUtc  the last SUCCESSFUL check (every product answered); a failed check never moves it
 //   latest          the latest full release the last good check found, so the pages show it before the next check
 //   notified        the newest version a notification was SHOWN for: each version is announced ONCE, not every day
 //   noRelease       the last good check found no full release ("No release yet", not "Not checked yet")
+//   rstSeen         the RST version the tray last found installed: a newer one means RST was updated
+//   sisterOffer     the RST update (its version) after which the Updates page offers the sister apps that are not
+//                   installed (decision #79); removed when the user dismisses the offer, so each update offers once
 //
 // A missing or damaged file is an empty state (the worst case is one repeated notification). Written atomically
 // (TrayAtomicFile). The rules that turn statuses into notifications are pure, for RST.Tests.
@@ -48,6 +52,41 @@ public sealed class UpdateState
     public void SetLatest(string productId, ReleaseVersion? latest) => Memory(productId).Latest = latest;
 
     public void SetNotified(string productId, ReleaseVersion version) => Memory(productId).Notified = version;
+
+    /// <summary>The RST version last found installed.</summary>
+    public ReleaseVersion? RstSeen { get; private set; }
+
+    /// <summary>The RST update whose sister-app offer is still open (null: none, or dismissed).</summary>
+    public ReleaseVersion? SisterOffer { get; private set; }
+
+    /// <summary>
+    /// Records the installed RST version; a newer one than last time opens the sister-app offer for that update
+    /// (decision #79), however RST was updated. The first sighting only records it, so a fresh install offers
+    /// nothing; but a tray that has checked for updates before it kept <c>rstSeen</c> is an RST that was just
+    /// updated to a version with this offer, and gets it. True when the state changed (write it).
+    /// </summary>
+    public bool ObserveRst(ReleaseVersion installed)
+    {
+        if (RstSeen is { } seen)
+        {
+            if (installed == seen) return false;
+            if (installed > seen) SisterOffer = installed;
+        }
+        else if (LastCheckedUtc is not null || _products.Count > 0)
+        {
+            SisterOffer = installed;
+        }
+        RstSeen = installed;
+        return true;
+    }
+
+    /// <summary>The user dismissed the offer: nothing more until the next RST update. True when it was open.</summary>
+    public bool DismissSisterOffer()
+    {
+        if (SisterOffer is null) return false;
+        SisterOffer = null;
+        return true;
+    }
 
     /// <summary>
     /// The products to announce now: an update is available, and no notification was shown yet for that
@@ -90,6 +129,8 @@ public sealed class UpdateState
             var dto = JsonSerializer.Deserialize<StateDto>(text);
             if (dto is null) return state;
             state.LastCheckedUtc = dto.LastCheckedUtc;
+            state.RstSeen = ReleaseVersion.TryParseTag(dto.RstSeen);
+            state.SisterOffer = ReleaseVersion.TryParseTag(dto.SisterOffer);
             foreach (var (id, product) in dto.Products ?? new Dictionary<string, ProductDto>())
             {
                 if (string.IsNullOrEmpty(id) || product is null) continue;
@@ -134,6 +175,8 @@ public sealed class UpdateState
                 NoRelease = p.Value.NoRelease ? true : null,
             },
             StringComparer.Ordinal),
+        RstSeen = RstSeen?.Tag,
+        SisterOffer = SisterOffer?.Tag,
     }, JsonOptions);
 
     private ProductMemory Memory(string productId)
@@ -165,6 +208,14 @@ public sealed class UpdateState
 
         [JsonPropertyName("products")]
         public Dictionary<string, ProductDto>? Products { get; set; }
+
+        [JsonPropertyName("rstSeen")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? RstSeen { get; set; }
+
+        [JsonPropertyName("sisterOffer")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? SisterOffer { get; set; }
     }
 
     private sealed class ProductDto
@@ -190,6 +241,7 @@ public sealed class UpdateState
 /// <param name="FailureReason">Why the last check failed (null: it did not), the raw detail for the log.</param>
 /// <param name="Failure">The kind of that failure, for the page's plain "Couldn't check: …" (WU3 review D3).</param>
 /// <param name="FailureStatus">Its HTTP status, when it is one.</param>
+/// <param name="SisterOffer">RST was updated and the offer of sister apps has not been dismissed (decision #79).</param>
 public sealed record UpdateSnapshot(
     IReadOnlyList<ProductStatus> Products,
     DateTimeOffset? LastCheckedUtc,
@@ -198,11 +250,21 @@ public sealed record UpdateSnapshot(
     bool Detected,
     string? FailureReason = null,
     NetFailure Failure = NetFailure.Unexpected,
-    int? FailureStatus = null)
+    int? FailureStatus = null,
+    bool SisterOffer = false)
 {
     public ProductStatus? Rst => Products.FirstOrDefault(p => p.Product.IsRst);
 
     public IEnumerable<ProductStatus> Companions => Products.Where(p => !p.Product.IsRst);
+
+    /// <summary>
+    /// The sister apps the Updates page offers after an RST update: those the tray can install that are not
+    /// installed. Empty when no offer is open. One whose latest release is not known yet is listed without an
+    /// Install button until a check finds it.
+    /// </summary>
+    public IReadOnlyList<ProductStatus> OfferedSisterApps => SisterOffer && Detected
+        ? Companions.Where(p => p.Product.IsInstallable && p.Installation.Kind == InstallKind.NotInstalled).ToList()
+        : Array.Empty<ProductStatus>();
 
     /// <summary>The last check failed for at least one product.</summary>
     public bool LastCheckFailed => FailureReason is not null || Products.Any(p => p.LatestFailed);

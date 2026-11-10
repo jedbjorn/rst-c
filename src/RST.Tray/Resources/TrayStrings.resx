@@ -405,6 +405,17 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
     <value>RST closes while it updates, then opens again.</value>
     <comment>Beside RST's Update button, with the Release page link (F17 WU4).</comment>
   </data>
+  <data name="Offer_Heading" xml:space="preserve">
+    <value>More add-ins from Designs/OS</value>
+    <comment>The card on the Updates page after an RST update, listing sister apps that are not installed (decision #79).</comment>
+  </data>
+  <data name="Offer_Text" xml:space="preserve">
+    <value>These work alongside RST and aren't installed for you yet. Each is a separate app with its own entry in Windows Settings.</value>
+  </data>
+  <data name="Offer_Dismiss" xml:space="preserve">
+    <value>Not now</value>
+    <comment>Hides the card until the next RST update. The apps stay on the Apps page.</comment>
+  </data>
   <data name="Updates_OtherApps" xml:space="preserve">
     <value>Gantt-It and Splash-It</value>
   </data>

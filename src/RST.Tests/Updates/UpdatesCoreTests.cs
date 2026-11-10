@@ -816,6 +816,85 @@ public sealed class UpdateStateTests : IDisposable
         state.ToNotify(day3).Select(s => s.Product.Id).Should().Equal("rst", "gantt-it");
     }
 
+    // Decision #79: after an RST update, the Updates page offers the sister apps that are not installed.
+
+    [Fact]
+    public void A_fresh_install_offers_nothing_and_each_RST_update_offers_once()
+    {
+        var state = new UpdateState();
+        state.ObserveRst(V("3.3.0")).Should().BeTrue("the first sighting is recorded");
+        state.SisterOffer.Should().BeNull("a fresh install is not an update");
+        state.ObserveRst(V("3.3.0")).Should().BeFalse();
+
+        state.ObserveRst(V("3.3.1")).Should().BeTrue();
+        state.SisterOffer.Should().Be(V("3.3.1"));
+        state.ObserveRst(V("3.3.1")).Should().BeFalse("the same version changes nothing");
+
+        state.DismissSisterOffer().Should().BeTrue();
+        state.DismissSisterOffer().Should().BeFalse();
+        state.ObserveRst(V("3.3.1")).Should().BeFalse();
+        state.SisterOffer.Should().BeNull("a dismissed offer stays away until the next update");
+
+        state.ObserveRst(V("3.3.0")).Should().BeTrue("a downgrade is recorded");
+        state.SisterOffer.Should().BeNull("and offers nothing");
+        state.ObserveRst(V("3.4.0"));
+        state.SisterOffer.Should().Be(V("3.4.0"));
+    }
+
+    [Fact]
+    public void A_tray_with_history_but_no_seen_version_was_just_updated_and_offers()
+    {
+        // tray_updates.json written by an RST from before the offer existed: it has checked, but has no rstSeen.
+        var state = new UpdateState { LastCheckedUtc = new DateTimeOffset(2026, 10, 30, 9, 14, 2, TimeSpan.Zero) };
+        state.SetLatest("rst", V("3.3.0"));
+        state.Write(PathIn).Should().BeTrue();
+
+        var read = UpdateState.Read(PathIn);
+        read.ObserveRst(V("3.3.0")).Should().BeTrue();
+        read.SisterOffer.Should().Be(V("3.3.0"));
+    }
+
+    [Fact]
+    public void The_offer_survives_a_restart_and_a_dismissal_is_remembered()
+    {
+        var state = new UpdateState();
+        state.ObserveRst(V("3.2.2"));
+        state.ObserveRst(V("3.3.0"));
+        state.Write(PathIn).Should().BeTrue();
+        File.ReadAllText(PathIn).Should().Contain("\"rstSeen\": \"v3.3.0\"").And.Contain("\"sisterOffer\": \"v3.3.0\"");
+
+        var read = UpdateState.Read(PathIn);
+        read.RstSeen.Should().Be(V("3.3.0"));
+        read.SisterOffer.Should().Be(V("3.3.0"));
+        read.DismissSisterOffer();
+        read.Write(PathIn).Should().BeTrue();
+        File.ReadAllText(PathIn).Should().NotContain("sisterOffer");
+        UpdateState.Read(PathIn).SisterOffer.Should().BeNull();
+    }
+
+    [Fact]
+    public void Only_installable_sister_apps_that_are_not_installed_are_offered()
+    {
+        var products = new[]
+        {
+            Status("rst", "3.3.0", "3.3.0"),
+            Status("gantt-it", "1.1.0", "1.2.0"),
+            Status("splash-it", null, null, InstallKind.NotInstalled), // latest not known yet: listed, no Install button until a check
+        };
+        UpdateSnapshot Snapshot(bool offer, bool detected = true, ProductStatus[]? with = null) =>
+            new(with ?? products, null, Checking: false, AutomaticChecks: true, Detected: detected, SisterOffer: offer);
+
+        Snapshot(offer: true).OfferedSisterApps.Select(s => s.Product.Id).Should().Equal("splash-it");
+        Snapshot(offer: false).OfferedSisterApps.Should().BeEmpty();
+        Snapshot(offer: true, detected: false).OfferedSisterApps.Should().BeEmpty("nothing is claimed before detection has run");
+
+        var manual = new[] { products[0], Status("gantt-it", null, "1.2.0", InstallKind.Manual), Status("splash-it", null, "1.1.0", InstallKind.Unknown) };
+        Snapshot(offer: true, with: manual).OfferedSisterApps.Should().BeEmpty("installed by hand, or unknown, is not 'not installed'");
+
+        var notInstallable = new[] { products[0], new ProductStatus(products[2].Product with { AssetPattern = null }, new ProductInstallation(InstallKind.NotInstalled), V("1.1.0"), false) };
+        Snapshot(offer: true, with: notInstallable).OfferedSisterApps.Should().BeEmpty("the tray offers only what it can install");
+    }
+
     [Fact]
     public void No_release_is_remembered_apart_from_never_checked()
     {

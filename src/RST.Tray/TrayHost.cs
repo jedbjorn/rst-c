@@ -120,6 +120,12 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
 
     public void CancelInstall(ProductInfo product) => _installs?.Cancel(product.Id);
 
+    public void DismissSisterOffer()
+    {
+        Log.Information("sister-app offer dismissed (by the user)");
+        _updates?.DismissSisterOffer();
+    }
+
     /// <summary>Opens one of the tray's msiexec logs in Notepad (only a file in the tray's install-log folder).</summary>
     public void OpenLog(string path)
     {

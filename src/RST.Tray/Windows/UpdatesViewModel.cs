@@ -53,6 +53,9 @@ internal interface ITrayUpdatesHost
     /// <summary>Opens an msiexec log in Notepad.</summary>
     void OpenLog(string path) { }
 
+    /// <summary>The user dismissed the offer of sister apps shown after an RST update (decision #79).</summary>
+    void DismissSisterOffer() { }
+
     internal static readonly IReadOnlyDictionary<string, InstallProgress> EmptyInstalls = new Dictionary<string, InstallProgress>();
 }
 
@@ -318,6 +321,7 @@ internal sealed class UpdatesViewModel : ObservableObject
         {
             if (!IsChecking) _host.CheckNow();
         }, () => !IsChecking);
+        DismissOfferCommand = new RelayCommand(() => _host.DismissSisterOffer());
         _snapshot = host.Current;
         Rows = Build(_snapshot);
         host.Changed += OnChanged;
@@ -331,6 +335,23 @@ internal sealed class UpdatesViewModel : ObservableObject
 
     /// <summary>Gantt-It and Splash-It (the Updates page's second panel).</summary>
     public IReadOnlyList<ProductRowViewModel> Companions => Rows.Where(r => !r.Status.Product.IsRst).ToList();
+
+    /// <summary>
+    /// After an RST update: the sister apps that are not installed, offered on a card under RST's panel until the
+    /// user dismisses it (decision #79). A row stays while it installs, and leaves once it is installed.
+    /// </summary>
+    public IReadOnlyList<ProductRowViewModel> OfferRows
+    {
+        get
+        {
+            var offered = _snapshot.OfferedSisterApps.Select(s => s.Product.Id).ToHashSet(StringComparer.Ordinal);
+            return Rows.Where(r => offered.Contains(r.Id)).ToList();
+        }
+    }
+
+    public bool ShowOffer => OfferRows.Count > 0;
+
+    public ICommand DismissOfferCommand { get; }
 
     public ICommand CheckNowCommand { get; }
 
