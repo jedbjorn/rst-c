@@ -728,6 +728,18 @@ h3 {
   font-weight: 600;
 }
 
+.footer-more p {
+  margin: 0;
+  padding: 0 0 24px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.footer-more a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .reveal-ready [data-reveal] {
   opacity: 0;
   transform: translate3d(0, 20px, 0);
