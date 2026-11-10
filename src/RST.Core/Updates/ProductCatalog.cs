@@ -88,7 +88,7 @@ public sealed class ProductCatalog
 
     /// <summary>
     /// The asset-name patterns, hard-coded per product id (spec #20 §5: ^RST\.msi$, ^GanttIt-\d+\.\d+\.\d+\.msi$,
-    /// ^SplashIt-\d+\.\d+\.\d+\.msi$, written with ASCII [0-9] and \z as in ReleaseVersion). A companion's asset name,
+    /// ^SplashIt-\d+\.\d+\.\d+\.msi$; Pick-It's follows the same form, written with ASCII [0-9] and \z as in ReleaseVersion). A companion's asset name,
     /// built from its pinned asset in companions.json, must match its pattern here or it is never installed.
     /// </summary>
     public static IReadOnlyDictionary<string, string> AssetPatterns { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -96,6 +96,10 @@ public sealed class ProductCatalog
         [RstId] = @"^RST\.msi\z",
         ["gantt-it"] = @"^GanttIt-[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}\.msi\z",
         ["splash-it"] = @"^SplashIt-[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}\.msi\z",
+        // Pick-It is in_development in companions.json (no pinned release yet), so it is not in the catalog. Its
+        // pattern is here ahead of the pin: once the entry is shippable with asset PickIt-<version>.msi, the tray
+        // can install it without a further change to this file.
+        ["pick-it"] = @"^PickIt-[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}\.msi\z",
     };
 
     private static readonly Regex AssetStemPattern = new(@"^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z][A-Za-z0-9]*)*\z",

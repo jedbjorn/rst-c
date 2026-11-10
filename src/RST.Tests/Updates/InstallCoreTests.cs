@@ -57,6 +57,25 @@ public class InstallNamingTests
     }
 
     [Fact]
+    public void Pick_It_is_installable_as_soon_as_its_registry_entry_is_shippable_with_a_pin()
+    {
+        // companions.json holds Pick-It as in_development (no release yet); this is the entry it becomes.
+        const string registry = """
+            { "schemaVersion": 1, "companions": [ {
+              "id": "pick-it", "name": "Pick-It", "description": "d", "repo": "jedbjorn/pick-it", "status": "shippable",
+              "revitYears": [2025, 2026, 2027], "addinClientId": "4ba74feb-9790-415b-943c-d1a5a95e4acc",
+              "vendorId": "DSOS", "defaultSelected": false,
+              "release": { "tag": "v1.0.0", "asset": "PickIt-1.0.0.msi", "sha256": "00", "version": "1.0.0",
+                           "upgradeCode": "9AED4E11-5334-46F6-971D-5344A97134B7" } } ] }
+            """;
+        var pick = ProductCatalog.Parse(registry).Find("pick-it")!;
+        pick.AssetTemplate.Should().Be("PickIt-{0}.msi");
+        pick.IsInstallable.Should().BeTrue();
+        InstallChecks.AssetName(pick, V120, out _).Should().Be("PickIt-1.2.0.msi");
+        ProductCatalog.Default.Find("pick-it").Should().BeNull("it is in_development until it has a pinned release");
+    }
+
+    [Fact]
     public void Urls_are_built_from_the_repo_tag_and_name()
     {
         InstallChecks.DownloadUri("jedbjorn/gantt-it", V120, "GanttIt-1.2.0.msi").AbsoluteUri

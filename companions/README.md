@@ -10,6 +10,9 @@ This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a run
 |---|---|---|---|
 | Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `shippable` | `v1.1.0`, `GanttIt-1.1.0.msi` |
 | Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `shippable` | `v1.1.0`, `SplashIt-1.1.0.msi` |
+| Pick-It | [`jedbjorn/pick-it`](https://github.com/jedbjorn/pick-it) | `in_development` | none yet |
+
+Pick-It is tracked but not offered: it has no tagged release to pin. Its identity is already fixed, and is recorded here because an `in_development` entry has no `release` to hold it: UpgradeCode `9AED4E11-5334-46F6-971D-5344A97134B7` (its `installer/Product.wxs`), ClientId `4ba74feb-9790-415b-943c-d1a5a95e4acc`, MSI asset name `PickIt-<version>.msi`. The tray's asset pattern for it is already in `ProductCatalog.AssetPatterns`. To ship it, follow [Bumping a pin](#bumping-a-pin) once Pick-It has a full release; the setup checkbox and the tray's row then appear without further code changes.
 
 How the bundle is built and tested: [`installer-bundle/README.md`](../installer-bundle/README.md).
 
