@@ -20,6 +20,7 @@
 // snapshot; the pages show only its kind in plain words (WU3 review D3). Installs are InstallCoordinator's (WU4).
 
 using System.Net.Http;
+using RST.Core.Logging;
 using RST.Core.Tray;
 using RST.Core.Updates;
 
@@ -119,13 +120,29 @@ internal sealed class TrayUpdates : IDisposable
     {
         if (_disposed) return;
         var installs = Detect();
+        bool offered;
         lock (_gate)
         {
             _installs = installs;
             _detected = true;
+            offered = ObserveRstLocked(installs);
         }
         Publish();
+        // A sister app added since the last check has no known latest release, so no Install button: look now
+        // (only when the tray may check by itself).
+        if (offered && _automaticChecks) _loop.CheckNowAsync().Forget("tray: look up the sister apps after an RST update");
     });
+
+    /// <summary>The user dismissed the offer of sister apps: it stays away until the next RST update.</summary>
+    public void DismissSisterOffer()
+    {
+        lock (_gate)
+        {
+            if (!_state.DismissSisterOffer()) return;
+            _state.Write(_statePath, _log);
+        }
+        Publish();
+    }
 
     /// <summary>The user changed "Check for updates automatically" (<paramref name="on"/>: the setting and preset together).</summary>
     public void AutomaticChecksChanged(bool on)
@@ -202,6 +219,7 @@ internal sealed class TrayUpdates : IDisposable
             {
                 _installs = installs;
                 _detected = true;
+                ObserveRstLocked(installs); // written with the rest of the state below
                 foreach (var product in _catalog.Products)
                     Apply(product, results[product.Id]);
                 var failures = _catalog.Products.Where(p => results[p.Id].Outcome == FeedOutcome.Failed).ToList();
@@ -263,6 +281,21 @@ internal sealed class TrayUpdates : IDisposable
         return installs;
     }
 
+    /// <summary>
+    /// Notes the installed RST version; a newer one than last time opens the sister-app offer (UpdateState.ObserveRst).
+    /// True when this opened it.
+    /// </summary>
+    private bool ObserveRstLocked(Dictionary<string, ProductInstallation> installs)
+    {
+        if (!installs.TryGetValue(ProductCatalog.RstId, out var rst) || rst.Installed?.Version is not { } version) return false;
+        var before = _state.SisterOffer;
+        if (!_state.ObserveRst(version)) return false;
+        _state.Write(_statePath, _log);
+        if (_state.SisterOffer is not { } offer || offer == before) return false;
+        _log($"RST was updated to {version}: the Updates page offers the sister apps that are not installed");
+        return true;
+    }
+
     private UpdateSnapshot BuildLocked() => new(
         _catalog.Products.Select(p => new ProductStatus(
             p,
@@ -276,7 +309,8 @@ internal sealed class TrayUpdates : IDisposable
         _detected,
         _failure is null ? null : _failure.Reason ?? "unknown error",
         _failure?.Failure ?? NetFailure.Unexpected,
-        _failure?.Status);
+        _failure?.Status,
+        _state.SisterOffer is not null);
 
     private void Publish()
     {
