@@ -39,7 +39,7 @@ It ships as a single managed add-in for Revit 2025 through 2027, installs into t
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
 - `RST.msi` — Revit 2025, 2026 and 2027, for your Windows account
-- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://jedbjorn.github.io/gantt-it/), [Splash-It](https://jedbjorn.github.io/splash-it/)) as checkboxes
+- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://jedbjorn.github.io/gantt-it/), [Splash-It](https://jedbjorn.github.io/splash-it/), [Pick-It](https://github.com/jedbjorn/pick-it)) as checkboxes
 - `RST-Machine.msi` — rst-c once for everyone on the PC, for IT (from v3.1; needs an administrator)
 
 Per-user install; no admin rights required. Run `RST.msi` or `RST-Setup.exe`, then launch Revit — the RST tools appear on the Add-Ins tab. See [Install modes](#install-modes) for the per-machine option.
@@ -99,7 +99,7 @@ Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, dis
 From v3.1, RST installs a small tray app, `RST.Tray.exe`, in the Windows notification area (the icons by the clock). It runs while you are signed in, uses the .NET that Revit already installs, and nothing in Revit depends on it. Click its icon to open its window; closing the window leaves it running. The window has five pages:
 
 - **RST Profiles:** switch your profile and Revit add-ins before you start Revit, with the Profile Loader's own switching.
-- **Updates** and **Apps:** which versions of RST, Gantt-It and Splash-It are installed and whether a newer one is out, with one-click **Update** and **Install** (an install waits for Revit to close).
+- **Updates** and **Apps:** which versions of RST, Gantt-It, Splash-It and Pick-It are installed and whether a newer one is out, with one-click **Update** and **Install** (an install waits for Revit to close).
 - **Health:** this PC's health and every model you have worked on (below).
 - **Settings:** the theme, automatic update checks, and the version and log folder.
 
@@ -138,15 +138,16 @@ rst-c writes a session log under `%AppData%\RST\logs\` for every Revit launch. T
 |---|---|---|
 | Gantt-It 1.1.0 | [Gantt-It](https://jedbjorn.github.io/gantt-it/): Gantt charts as native Revit legend views | `InstallGanttIt=1` |
 | Splash-It 1.1.0 | [Splash-It](https://jedbjorn.github.io/splash-it/): colors Revit view tabs by file | `InstallSplashIt=1` |
+| Pick-It 1.0.0 | [Pick-It](https://github.com/jedbjorn/pick-it): picks a colour from the screen and shows its RGB values | `InstallPickIt=1` |
 
 A ticked add-in is installed from its own released MSI, unchanged. It is a separate product: it gets its own entry in Settings → Apps and upgrades through its own installer. An add-in that is already installed at the same or a newer version is left as it is; an older one is upgraded.
 
 **Companions are permanent.** Uninstalling RST (the "RST" entry in Settings → Apps, or `RST-Setup.exe /uninstall /quiet /norestart`) leaves them installed; remove each one from Settings → Apps.
 
-Silent install for IT, rst-c plus both add-ins (leave a variable out for an add-in you do not want). Always pass `/norestart`; without it the setup may restart the computer by itself, with no prompt. Run it with Revit closed:
+Silent install for IT, rst-c plus all three add-ins (leave a variable out for an add-in you do not want). Always pass `/norestart`; without it the setup may restart the computer by itself, with no prompt. Run it with Revit closed:
 
 ```powershell
-RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1
+RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1 InstallPickIt=1
 ```
 
 Use either `RST.msi` or `RST-Setup.exe` on a computer, not both. If the **same version** of `RST.msi` is already installed, the setup adopts it: Settings → Apps shows two "RST" entries, and removing either one removes rst-c. An older `RST.msi` (for example v2.2.0) is upgraded in place, leaving one entry. Details: [`installer-bundle/README.md`](installer-bundle/README.md).
@@ -165,7 +166,7 @@ From v3.1 rst-c installs one of two ways. Both are the same RST, with the same t
 | Settings → Apps | "RST" | "RST (all users)" |
 | Updates | each user, from the tray | an administrator deploys the new `RST-Machine.msi` |
 
-Each user still has their own profiles, settings, tray and add-in choices. A per-machine install shares only the program files and grants nothing extra: no permission changes and no service. Gantt-It and Splash-It always install per user; on a per-machine PC, each user adds them from the RST tray.
+Each user still has their own profiles, settings, tray and add-in choices. A per-machine install shares only the program files and grants nothing extra: no permission changes and no service. Gantt-It, Splash-It and Pick-It always install per user; on a per-machine PC, each user adds them from the RST tray.
 
 ```powershell
 # IT, from a deployment tool (SCCM, Intune: runs as SYSTEM) or an elevated prompt

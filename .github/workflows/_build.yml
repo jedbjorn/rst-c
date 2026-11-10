@@ -511,7 +511,7 @@ jobs:
   #                install-order table (ticked, re-run, uninstall, unticked,
   #                older / newer / same fixture installed first).
   #   BareMsiFirst bare RST.msi, then the bundle, then its uninstall (AC5).
-  #   Companions   the real RST-Setup.exe with Gantt-It and Splash-It ticked:
+  #   Companions   the real RST-Setup.exe with every shippable companion ticked:
   #                silent install, own ARP entries, .addin files, survive the
   #                bundle's uninstall, install alone without RST. Revit is a
   #                stub here; loading in Revit is the VM's check (AC6).

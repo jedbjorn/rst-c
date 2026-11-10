@@ -36,6 +36,24 @@
         "upgradeCode": "080648F4-EEC7-4DB6-A793-683A1C008BFC",
         "version": "1.1.0"
       }
+    },
+    {
+      "id": "pick-it",
+      "name": "Pick-It",
+      "description": "Picks a colour from the screen and shows its RGB values",
+      "repo": "jedbjorn/pick-it",
+      "status": "shippable",
+      "revitYears": [2025, 2026, 2027],
+      "addinClientId": "4ba74feb-9790-415b-943c-d1a5a95e4acc",
+      "vendorId": "DSOS",
+      "defaultSelected": false,
+      "release": {
+        "tag": "v1.0.0",
+        "asset": "PickIt-1.0.0.msi",
+        "sha256": "17535068589b9db7d4545873a48cd36fdab3cfacafb7bbb857118f8877d90541",
+        "upgradeCode": "9AED4E11-5334-46F6-971D-5344A97134B7",
+        "version": "1.0.0"
+      }
     }
   ]
 }
