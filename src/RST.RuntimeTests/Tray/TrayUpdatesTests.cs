@@ -693,7 +693,9 @@ public sealed class TrayUpdateChecksTests : IDisposable
         using (var second = Make(installed: updated))
         {
             await second.Updates.RefreshInstalledAsync();
-            Assert.Equal(new[] { "gantt-it", "splash-it" }, second.Updates.Current.OfferedSisterApps.Select(s => s.Product.Id));
+            // Every companion the tray can install, whatever the registry ships.
+            Assert.Equal(ProductCatalog.Default.Companions.Where(c => c.IsInstallable).Select(c => c.Id),
+                         second.Updates.Current.OfferedSisterApps.Select(s => s.Product.Id));
             Assert.DoesNotContain(second.Log, l => l.StartsWith("update check (", StringComparison.Ordinal));
 
             second.Updates.DismissSisterOffer();
