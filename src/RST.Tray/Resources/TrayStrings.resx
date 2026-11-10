@@ -252,13 +252,13 @@
     <value>Updates</value>
   </data>
   <data name="Updates_Description" xml:space="preserve">
-    <value>Once a day, RST asks GitHub whether a newer RST, Gantt-It or Splash-It is out, and tells you when one is.</value>
+    <value>Once a day, RST asks GitHub whether a newer RST, Gantt-It, Splash-It or Pick-It is out, and tells you when one is.</value>
   </data>
   <data name="Apps_Heading" xml:space="preserve">
     <value>Apps</value>
   </data>
   <data name="Apps_Description" xml:space="preserve">
-    <value>RST, Gantt-It and Splash-It: which are installed for you on this PC, and the latest version of each.</value>
+    <value>RST, Gantt-It, Splash-It and Pick-It: which are installed for you on this PC, and the latest version of each.</value>
   </data>
   <data name="Settings_Appearance" xml:space="preserve">
     <value>Appearance</value>
@@ -285,7 +285,7 @@
     <value>Check for updates automatically</value>
   </data>
   <data name="Settings_CheckForUpdatesHint" xml:space="preserve">
-    <value>Once a day, RST asks GitHub whether a newer RST, Gantt-It or Splash-It is available. It sends nothing about you or your models, and installs nothing until you click.</value>
+    <value>Once a day, RST asks GitHub whether a newer RST, Gantt-It, Splash-It or Pick-It is available. It sends nothing about you or your models, and installs nothing until you click.</value>
   </data>
   <data name="Settings_CheckForUpdatesLocked" xml:space="preserve">
     <value>Turned off on this computer by whoever manages its software.</value>
@@ -406,7 +406,7 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
     <comment>Beside RST's Update button, with the Release page link (F17 WU4).</comment>
   </data>
   <data name="Updates_OtherApps" xml:space="preserve">
-    <value>Gantt-It and Splash-It</value>
+    <value>Gantt-It, Splash-It and Pick-It</value>
   </data>
   <data name="Updates_OtherAppsHint" xml:space="preserve">
     <value>More on the Apps page.</value>
