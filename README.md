@@ -39,7 +39,7 @@ It ships as a single managed add-in for Revit 2025 through 2027, installs into t
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
 - `RST.msi` — Revit 2025, 2026 and 2027, for your Windows account
-- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://github.com/jedbjorn/gantt-it), [Splash-It](https://github.com/jedbjorn/splash-it)) as checkboxes
+- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://jedbjorn.github.io/gantt-it/), [Splash-It](https://jedbjorn.github.io/splash-it/)) as checkboxes
 - `RST-Machine.msi` — rst-c once for everyone on the PC, for IT (from v3.1; needs an administrator)
 
 Per-user install; no admin rights required. Run `RST.msi` or `RST-Setup.exe`, then launch Revit — the RST tools appear on the Add-Ins tab. See [Install modes](#install-modes) for the per-machine option.
@@ -136,8 +136,8 @@ rst-c writes a session log under `%AppData%\RST\logs\` for every Revit launch. T
 
 | Checkbox | Add-in | Silent variable |
 |---|---|---|
-| Gantt-It 1.1.0 | [Gantt-It](https://github.com/jedbjorn/gantt-it): Gantt charts as native Revit legend views | `InstallGanttIt=1` |
-| Splash-It 1.1.0 | [Splash-It](https://github.com/jedbjorn/splash-it): colors Revit view tabs by file | `InstallSplashIt=1` |
+| Gantt-It 1.1.0 | [Gantt-It](https://jedbjorn.github.io/gantt-it/): Gantt charts as native Revit legend views | `InstallGanttIt=1` |
+| Splash-It 1.1.0 | [Splash-It](https://jedbjorn.github.io/splash-it/): colors Revit view tabs by file | `InstallSplashIt=1` |
 
 A ticked add-in is installed from its own released MSI, unchanged. It is a separate product: it gets its own entry in Settings → Apps and upgrades through its own installer. An add-in that is already installed at the same or a newer version is left as it is; an older one is upgraded.
 
