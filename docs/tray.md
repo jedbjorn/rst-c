@@ -14,15 +14,15 @@ purpose: What the RST tray app is, where it lives, its Health page, how its upda
 
 From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a small app that sits in the Windows notification area (the icons by the clock). It is the one program rst-c runs outside Revit. There is still no second runtime: it is a .NET app like the add-in, it uses the .NET runtime that Revit already installed, and it runs only while you are signed in.
 
-The tray shows which versions of RST, Gantt-It and Splash-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [RST Profiles](#rst-profiles)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages, in this order (Feature #17, decisions #76 and #77):
+The tray shows which versions of RST, Gantt-It, Splash-It and Pick-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [RST Profiles](#rst-profiles)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages, in this order (Feature #17, decisions #76 and #77):
 
 - **RST Profiles:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [RST Profiles](#rst-profiles).
-- **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It and Splash-It. See [Updates](#updates).
-- **Apps:** one row each for RST, Gantt-It and Splash-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
+- **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It, Splash-It and Pick-It. See [Updates](#updates).
+- **Apps:** one row each for RST, Gantt-It, Splash-It and Pick-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
 - **Health:** **Device**, this PC's snapshot and junk file cleanup without Revit, and **Models**, every model you have worked on on this PC, across Revit versions, with each model's activity and health. See [Health page](#health-page).
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
-  - **Check for updates automatically:** on by default. The tray then asks GitHub once a day whether a newer RST, Gantt-It or Splash-It is out. Turn it off to stop those checks. See [Updates](#updates).
+  - **Check for updates automatically:** on by default. The tray then asks GitHub once a day whether a newer RST, Gantt-It, Splash-It or Pick-It is out. Turn it off to stop those checks. See [Updates](#updates).
   - **About:** the version and a link to the log folder.
 
 The notification icon is a white **R** on an RST-blue tile with a light rim, drawn at small sizes for both light and dark taskbars. The application and window keep the RST wordmark icon. Click the icon to open the window. Right-click it for the menu: **Open RST**, **Check for updates** (checks now and opens the Updates page), **Settings** and **Quit**. Closing the window leaves the tray running.
@@ -53,7 +53,7 @@ The tray's log sits beside Revit's `rst_*.log` session logs. Each keeps its own 
 
 ## Updates
 
-In short: once a day, the tray asks GitHub's releases feed whether a newer RST, Gantt-It or Splash-It is out, and shows a Windows notification when one is. Each check sends only those requests, three small web requests with nothing about you, your PC or your models ([Privacy](#privacy-what-is-sent-and-to-whom)). It installs nothing until you click **Update** or **Install**. To stop the checks, turn off **Check for updates automatically** in the tray's Settings ([Switching checks off](#switching-checks-off)). The tray shows no message about this when it is installed or first starts: this page is where it is explained.
+In short: once a day, the tray asks GitHub's releases feed whether a newer RST, Gantt-It, Splash-It or Pick-It is out, and shows a Windows notification when one is. Each check sends only those requests, four small web requests with nothing about you, your PC or your models ([Privacy](#privacy-what-is-sent-and-to-whom)). It installs nothing until you click **Update** or **Install**. To stop the checks, turn off **Check for updates automatically** in the tray's Settings ([Switching checks off](#switching-checks-off)). The tray shows no message about this when it is installed or first starts: this page is where it is explained.
 
 ### When it checks
 
@@ -79,7 +79,7 @@ Only full releases count. A release candidate such as `v3.2.0-rc.1` is never off
 
 ### Privacy: what is sent, and to whom
 
-- **Only GitHub.** For each of RST, Gantt-It and Splash-It, the tray sends one request to `https://github.com/<owner>/<repo>/releases/latest`, which answers with the name of the latest release. That is three small requests per check.
+- **Only GitHub.** For each of RST, Gantt-It, Splash-It and Pick-It, the tray sends one request to `https://github.com/<owner>/<repo>/releases/latest`, which answers with the name of the latest release. That is four small requests per check.
 - **Nothing about you.** The requests carry no account, no ID, no version, nothing about your PC, your models or your projects: only the address above and the User-Agent `RST-Tray`. GitHub sees your network's IP address, as it does for any web request. The tray sends no telemetry: it reads and folds the add-in's local activity records on this PC into rollups ([Activity rollups](activity-rollups.md)) and sends nothing. What the add-in records, and how to turn it off, is in [Health: Data & privacy](health-tool.md#data--privacy).
 - **No sign-in.** The tray never sends credentials to GitHub and keeps no cookies. If your network uses a proxy, the tray uses the Windows proxy settings (as Edge does), and your Windows sign-in only to authenticate to that proxy.
 - **Installs:** when you click Install or Update, the tray downloads that release's `SHA256SUMS.txt` and the installer from `github.com` (redirected to GitHub's release-asset host), and makes one `api.github.com` call to read GitHub's checksum. Nothing else.
@@ -135,7 +135,7 @@ The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file>
 - **Another installation is running** (1618): the tray tries again after three minutes, three times in all. During a self-update's retries (up to two 3-minute waits plus the installer runs), the updater deliberately keeps the tray's single-instance mutex, so no tray can start until it finishes (SC-017 DN3).
 - **Anything else:** the row gives the error number, and **Open log** shows the details.
 
-The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\<app>\<version>\`. Gantt-It and Splash-It remove their old version before they install the new one, so a failed upgrade can leave neither installed. The row then offers **Reinstall previous version (x.y.z)**: from the cache, or, if the tray didn't install that version itself, downloaded and checked the same four ways.
+The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\<app>\<version>\`. Gantt-It, Splash-It and Pick-It remove their old version before they install the new one, so a failed upgrade can leave neither installed. The row then offers **Reinstall previous version (x.y.z)**: from the cache, or, if the tray didn't install that version itself, downloaded and checked the same four ways.
 
 ### RST updating itself
 
@@ -149,7 +149,7 @@ The tray hands over only when no other install is running, waiting or queued: th
 
 ### Installed for everyone on this PC
 
-If RST, or Gantt-It or Splash-It, is installed for everyone on the PC, a tray running for your account doesn't install over it. The row says, for example: "RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here," with the release page link.
+If RST, or Gantt-It, Splash-It or Pick-It, is installed for everyone on the PC, a tray running for your account doesn't install over it. The row says, for example: "RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here," with the release page link.
 
 ## Quitting it
 
@@ -236,7 +236,7 @@ New-Item -Path 'HKLM:\Software\Designs-OS\RST\Tray' -Force | Out-Null
 New-ItemProperty -Path 'HKLM:\Software\Designs-OS\RST\Tray' -Name UpdateChecks -PropertyType DWord -Value 0 -Force | Out-Null
 ```
 
-The tray reads both keys when it starts and again before every daily check, and a `0` in either one wins. Any other value, or no value, leaves the choice to each user. With checks off, the tray makes no network calls of its own. **Check now** still works, because the user asked for it: one check, three requests, then nothing again.
+The tray reads both keys when it starts and again before every daily check, and a `0` in either one wins. Any other value, or no value, leaves the choice to each user. With checks off, the tray makes no network calls of its own. **Check now** still works, because the user asked for it: one check, four requests, then nothing again.
 
 ## Silent installs and scripts (IT)
 

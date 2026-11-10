@@ -183,7 +183,7 @@ function Show-State([string]$Label, [string[]]$Codes = @($RstCode, $FixtureCode)
     $r = Get-Related $code
     Write-Host "  RelatedProducts $code -> $($r.Count): $(($r | ForEach-Object { "$($_.ProductCode) '$($_.Name)' $($_.Version)" }) -join '; ')"
   }
-  foreach ($e in (Get-Arp) | Where-Object { $_.DisplayName -match '^(RST|Gantt-It|Splash-It)' }) {
+  foreach ($e in (Get-Arp) | Where-Object { $_.DisplayName -match '^(RST|Gantt-It|Splash-It|Pick-It)' }) {
     Write-Host "  ARP $($e.Hive) $($e.Key): '$($e.DisplayName)' $($e.DisplayVersion) SystemComponent=$($e.SystemComponent)$(if ($e.BundleUpgradeCode) { " BundleUpgradeCode=$($e.BundleUpgradeCode)" })"
   }
   Write-Host '----'

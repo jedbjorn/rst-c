@@ -67,7 +67,7 @@
   <String Id="ScopeUserText" Value="Installs for your Windows account only. No administrator needed. RST can switch off any add-in for you, including ones installed for everyone." />
   <String Id="ScopeUserLockedText" Value="RST is installed for everyone on this PC. To install it just for you instead, first uninstall &quot;RST (all users)&quot; in Settings &gt; Apps." />
   <String Id="ScopeMachineRadio" Value="&amp;Everyone on this PC" />
-  <String Id="ScopeMachineText" Value="Installs once for all users. Windows will ask for an administrator. Each user still chooses their own add-ins. Gantt-It and Splash-It install for your account; other users can add them from the RST tray in one click." />
+  <String Id="ScopeMachineText" Value="Installs once for all users. Windows will ask for an administrator. Each user still chooses their own add-ins. The add-ins you tick install for your account; other users can add them from the RST tray in one click." />
   <String Id="CompanionsHeader" Value="Optional Designs/OS add-ins. Each one is a separate product with its own entry in Settings &gt; Apps, and it stays installed if you uninstall RST later." />
   <String Id="CompanionsHeaderMachine" Value="Optional Designs/OS add-ins. They install for your Windows account only; other users can add them from the RST tray in one click. Each stays installed if you uninstall RST later." />
   <String Id="SuccessCompanionsInstallText" Value="Add-ins you ticked are separate products, each with its own entry in Settings &gt; Apps. They stay installed if you uninstall RST." />

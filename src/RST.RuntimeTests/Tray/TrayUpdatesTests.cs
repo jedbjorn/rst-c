@@ -5,7 +5,7 @@
 //     installed, Installed manually, Installed with the latest unknown), checks off, and a failed check;
 //   - AC4 through the tray's own checker (TrayUpdates): a counting HttpMessageHandler over 48 simulated hours
 //     makes ZERO requests with the setting off, and zero with the real UpdateChecks registry preset (HKCU and
-//     HKLM, read by the tray's own WindowsState), until Check now; with checks on, two checks of three HEADs;
+//     HKLM, read by the tray's own WindowsState), until Check now; with checks on, two checks of one HEAD per product;
 //   - one notification per newly found version, not repeated a day later or after a restart; a failure is
 //     logged once;
 //   - the HTTP handler: no redirects, the system proxy, default credentials for the proxy only;
@@ -477,6 +477,9 @@ public class UpdatesViewModelTests
 /// </summary>
 public sealed class TrayUpdateChecksTests : IDisposable
 {
+    /// <summary>One feed request per product in the catalog: RST, Gantt-It, Splash-It, Pick-It.</summary>
+    private static readonly int Feeds = ProductCatalog.Default.Products.Count;
+
     private static readonly DateTimeOffset Start = new(2026, 10, 30, 8, 0, 0, TimeSpan.Zero);
     private static readonly ProductInfo Rst = ProductCatalog.Default.Rst;
     private readonly string _root = Path.Combine(Path.GetTempPath(), "RST-TrayUpdates-" + Guid.NewGuid().ToString("N"));
@@ -515,6 +518,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         handler ??= new CountingHandler(CountingHandler.Redirect(new Dictionary<string, string>
         {
             ["jedbjorn/rst-c"] = "v3.1.1", ["jedbjorn/gantt-it"] = "v1.1.0", ["jedbjorn/splash-it"] = "v1.1.0",
+            ["jedbjorn/pick-it"] = "v1.0.0",
         }));
         installed ??= new FakeInstalledProducts().With(ProductCatalog.RstUpgradeCode, "3.1.0");
         policy ??= TrayUpdates.SettingsAndPresetPolicy(SettingsPath, WindowsState.UpdateChecksPresets);
@@ -580,7 +584,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         Assert.True(failed.LastCheckFailed);
         Assert.Equal(ProductState.Installed, failed.Rst!.State); // never "up to date" after a failure
         Assert.Equal("3.1.0", failed.Rst.Latest.ToString());
-        Assert.Equal(new[] { ProductState.UpdateAvailable, ProductState.NotInstalled }, failed.Companions.Select(c => c.State));
+        Assert.Equal(new[] { ProductState.UpdateAvailable, ProductState.NotInstalled, ProductState.NotInstalled }, failed.Companions.Select(c => c.State));
 
         // Exactly what the screenshot fixture shows: "RST 3.1.0", "3.1.0 (couldn't check)", "Last successful check …".
         var vm = new UpdatesViewModel(new FakeUpdatesHost { Current = failed, UtcNow = Start.AddHours(24).AddMinutes(5) },
@@ -660,15 +664,15 @@ public sealed class TrayUpdateChecksTests : IDisposable
         WriteSettings(checks: false);
         using var h = Make();
         await h.Updates.CheckNowAsync();
-        Assert.Equal(3, h.Handler.Count);
+        Assert.Equal(Feeds, h.Handler.Count);
         h.Time.Advance(TimeSpan.FromSeconds(10));
         await h.Updates.CheckNowAsync();
         await h.Updates.CheckNowAsync();
-        Assert.Equal(3, h.Handler.Count);
+        Assert.Equal(Feeds, h.Handler.Count);
         Assert.Contains(h.Log, l => l.Contains("showing its result, no request made"));
         h.Time.Advance(TimeSpan.FromSeconds(25));
         await h.Updates.CheckNowAsync();
-        Assert.Equal(6, h.Handler.Count);
+        Assert.Equal(2 * Feeds, h.Handler.Count);
     }
 
     [Fact]
@@ -711,7 +715,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         Assert.Contains(h.Log, l => l.Contains("automatic checks are off"));
 
         await h.Updates.CheckNowAsync();
-        Assert.Equal(3, h.Handler.Count);
+        Assert.Equal(Feeds, h.Handler.Count);
         Assert.All(h.Handler.Requests, r => Assert.Equal(HttpMethod.Head, r.Method));
         _output.WriteLine("setting off: 0 requests in 48 h; Check now: " + string.Join(", ", h.Handler.Requests.Select(r => r.Uri)));
     }
@@ -727,7 +731,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
             Assert.Equal(0, h.Handler.Count);
             Assert.False(h.Updates.Current.AutomaticChecks);
             await h.Updates.CheckNowAsync();
-            Assert.Equal(3, h.Handler.Count);
+            Assert.Equal(Feeds, h.Handler.Count);
         });
         Assert.True(TrayUpdates.SettingsAndPresetPolicy(SettingsPath, WindowsState.UpdateChecksPresets)(), "the preset is removed again");
         _output.WriteLine("HKCU UpdateChecks=0: 0 requests in 48 h with the setting on; Check now: 3");
@@ -744,7 +748,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
             Assert.Equal(0, h.Handler.Count);
             Assert.False(h.Updates.Current.AutomaticChecks);
             await h.Updates.CheckNowAsync();
-            Assert.Equal(3, h.Handler.Count);
+            Assert.Equal(Feeds, h.Handler.Count);
         });
         Assert.True(TrayUpdates.SettingsAndPresetPolicy(SettingsPath, WindowsState.UpdateChecksPresets)(), "the preset is removed again");
         _output.WriteLine("HKLM UpdateChecks=0: 0 requests in 48 h with the setting on; Check now: 3");
@@ -760,7 +764,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
             h.Advance(TimeSpan.FromMinutes(4));
             Assert.Equal(0, h.Handler.Count); // the start delay
             h.Advance(TimeSpan.FromHours(48) - TimeSpan.FromMinutes(4));
-            Assert.Equal(6, h.Handler.Count);
+            Assert.Equal(2 * Feeds, h.Handler.Count);
             Assert.All(h.Handler.Requests, r => Assert.True(UpdateHosts.IsAllowed(r.Uri, UpdateHostUse.Feed)));
 
             var announced = Assert.Single(h.Announced);
@@ -768,7 +772,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
             Assert.Equal("3.1.1", announced[0].Latest.ToString());
             var snapshot = h.Updates.Current;
             Assert.Equal(ProductState.UpdateAvailable, snapshot.Rst!.State);
-            Assert.Equal(new[] { ProductState.NotInstalled, ProductState.NotInstalled }, snapshot.Companions.Select(c => c.State));
+            Assert.Equal(new[] { ProductState.NotInstalled, ProductState.NotInstalled, ProductState.NotInstalled }, snapshot.Companions.Select(c => c.State));
             Assert.NotNull(snapshot.LastCheckedUtc);
         }
 
@@ -786,9 +790,9 @@ public sealed class TrayUpdateChecksTests : IDisposable
         var handler = new CountingHandler(_ => throw new HttpRequestException("No such host is known. (github.com:443)"));
         using var h = Make(handler);
         h.Advance(TimeSpan.FromHours(48));
-        Assert.Equal(6, handler.Count);
+        Assert.Equal(2 * Feeds, handler.Count);
         var lines = h.Log.Where(l => l.StartsWith("update check: couldn't check", StringComparison.Ordinal)).ToList();
-        Assert.Equal(3, lines.Count); // one per product, not one per try
+        Assert.Equal(Feeds, lines.Count); // one per product, not one per try
         Assert.True(h.Updates.Current.LastCheckFailed);
         Assert.Empty(h.Announced);
         _output.WriteLine(string.Join(Environment.NewLine, lines));

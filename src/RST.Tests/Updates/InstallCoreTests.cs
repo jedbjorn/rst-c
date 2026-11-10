@@ -57,6 +57,15 @@ public class InstallNamingTests
     }
 
     [Fact]
+    public void Pick_It_is_installable_from_its_pinned_release_name()
+    {
+        var pick = ProductCatalog.Default.Find("pick-it")!;
+        pick.AssetTemplate.Should().Be("PickIt-{0}.msi");
+        pick.IsInstallable.Should().BeTrue();
+        InstallChecks.AssetName(pick, V120, out _).Should().Be("PickIt-1.2.0.msi");
+    }
+
+    [Fact]
     public void Urls_are_built_from_the_repo_tag_and_name()
     {
         InstallChecks.DownloadUri("jedbjorn/gantt-it", V120, "GanttIt-1.2.0.msi").AbsoluteUri

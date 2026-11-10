@@ -214,7 +214,7 @@ $texts = Show-Texts $w 'install page'
 # user only. The Reviewer reads the screenshots for clarity.
 $ScopeWording = [ordered]@{
   'Just for me (recommended)' = 'Installs for your Windows account only. No administrator needed. RST can switch off any add-in for you, including ones installed for everyone.'
-  'Everyone on this PC'       = 'Installs once for all users. Windows will ask for an administrator. Each user still chooses their own add-ins. Gantt-It and Splash-It install for your account; other users can add them from the RST tray in one click.'
+  'Everyone on this PC'       = 'Installs once for all users. Windows will ask for an administrator. Each user still chooses their own add-ins. The add-ins you tick install for your account; other users can add them from the RST tray in one click.'
 }
 $CompanionsUser = 'Optional Designs/OS add-ins. Each one is a separate product with its own entry in Settings > Apps, and it stays installed if you uninstall RST later.'
 $CompanionsMachine = 'Optional Designs/OS add-ins. They install for your Windows account only; other users can add them from the RST tray in one click. Each stays installed if you uninstall RST later.'

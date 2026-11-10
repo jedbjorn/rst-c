@@ -266,7 +266,7 @@ public class ProductCatalogTests
         var logged = new List<string>();
         var catalog = ProductCatalog.FromEmbedded(logged.Add);
         logged.Should().BeEmpty();
-        catalog.Products.Select(p => p.Id).Should().Equal("rst", "gantt-it", "splash-it");
+        catalog.Products.Select(p => p.Id).Should().Equal("rst", "gantt-it", "splash-it", "pick-it");
 
         catalog.Rst.Name.Should().Be("RST");
         catalog.Rst.Repo.Should().Be("jedbjorn/rst-c");
@@ -282,6 +282,11 @@ public class ProductCatalogTests
         var splash = catalog.Find("splash-it")!;
         splash.UpgradeCodes.Should().Equal("080648F4-EEC7-4DB6-A793-683A1C008BFC");
         splash.AddinClientId.Should().Be("0b1cc712-e936-4da1-9680-2d9a95f88271");
+        var pick = catalog.Find("pick-it")!;
+        pick.Name.Should().Be("Pick-It");
+        pick.Repo.Should().Be("jedbjorn/pick-it");
+        pick.UpgradeCodes.Should().Equal("9AED4E11-5334-46F6-971D-5344A97134B7");
+        pick.AddinClientId.Should().Be("4ba74feb-9790-415b-943c-d1a5a95e4acc");
         ProductCatalog.Default.Products.Select(p => p.Id).Should().Equal(catalog.Products.Select(p => p.Id));
     }
 
@@ -755,18 +760,20 @@ public sealed class UpdateCheckLoopTests
     }
 
     /// <summary>
-    /// AC4 in Core: the loop driving the real feed client over a counting handler, three repos, 48 simulated
-    /// hours. Off: zero requests until Check now (then exactly three HEADs). On: two checks of three HEADs.
+    /// AC4 in Core: the loop driving the real feed client over a counting handler, one HEAD per catalog
+    /// repo, 48 simulated hours. Off: zero requests until Check now (then one HEAD each). On: two checks.
     /// </summary>
     [Theory]
     [InlineData(false, 0)]
-    [InlineData(true, 6)]
-    public async Task Over_48_hours_the_feed_is_asked_only_when_checks_are_on(bool on, int expected)
+    [InlineData(true, 2)]
+    public async Task Over_48_hours_the_feed_is_asked_only_when_checks_are_on(bool on, int checks)
     {
         var handler = new CountingHandler(CountingHandler.Redirect(new Dictionary<string, string> { ["jedbjorn/rst-c"] = "v3.1.1" }));
         using var client = new HttpClient(handler);
         var time = new ManualTimeProvider(Start);
         var repos = ProductCatalog.Default.Products.Select(p => p.Repo).ToList();
+        repos.Should().HaveCount(4, "RST, Gantt-It, Splash-It and Pick-It");
+        var expected = checks * repos.Count;
         using var loop = new UpdateCheckLoop(time, () => on, async (_, cancel) =>
         {
             foreach (var repo in repos) await ReleaseFeed.GetLatestAsync(client, repo, cancel);
@@ -776,7 +783,7 @@ public sealed class UpdateCheckLoopTests
         handler.Count.Should().Be(expected);
 
         await loop.CheckNowAsync();
-        handler.Count.Should().Be(expected + 3);
+        handler.Count.Should().Be(expected + repos.Count);
         handler.Requests.Should().OnlyContain(r => r.Method == HttpMethod.Head && r.Uri.Host == "github.com");
     }
 }

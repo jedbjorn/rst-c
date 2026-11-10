@@ -10,6 +10,9 @@ This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a run
 |---|---|---|---|
 | Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `shippable` | `v1.1.0`, `GanttIt-1.1.0.msi` |
 | Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `shippable` | `v1.1.0`, `SplashIt-1.1.0.msi` |
+| Pick-It | [`jedbjorn/pick-it`](https://github.com/jedbjorn/pick-it) | `shippable` | `v1.0.0`, `PickIt-1.0.0.msi` |
+
+Pick-It's tray asset pattern (`PickIt-<version>.msi`) is in `ProductCatalog.AssetPatterns`; a new companion needs its own line there before the tray can install it.
 
 How the bundle is built and tested: [`installer-bundle/README.md`](../installer-bundle/README.md).
 
@@ -77,7 +80,7 @@ The test checks the file's shape. It cannot check that a pin matches the real re
 
 ## The companion contract
 
-A companion repo must meet all seven before rst-c marks it `shippable`. Gantt-It and Splash-It build their installers to this.
+A companion repo must meet all seven before rst-c marks it `shippable`. Gantt-It, Splash-It and Pick-It build their installers to this.
 
 | # | Requirement | Why |
 |---|---|---|
@@ -105,7 +108,7 @@ Do this when a companion publishes a new release, or to make an `in_development`
 
 2. **Asset.** Record the exact name of the release's single `.msi` asset (`GanttIt-1.1.0.msi`). The per-year `.zip` files are manual-install packages and are never pinned.
 
-3. **sha256.** Download the MSI and hash it yourself. It must equal both GitHub's `digest` from step 1 and the line in the release's `SHA256SUMS.txt` (both companions publish one). Record it in lowercase; the validation test rejects uppercase (PowerShell's `Get-FileHash` prints uppercase, so lower it first).
+3. **sha256.** Download the MSI and hash it yourself. It must equal both GitHub's `digest` from step 1 and the line in the release's `SHA256SUMS.txt` (every companion publishes one). Record it in lowercase; the validation test rejects uppercase (PowerShell's `Get-FileHash` prints uppercase, so lower it first).
 
    ```sh
    gh release download v1.1.0 -R jedbjorn/gantt-it -p GanttIt-1.1.0.msi -p SHA256SUMS.txt -D pin/
@@ -142,7 +145,7 @@ Each check runs against the **downloaded asset** from step 3, not a local build 
 | C3 | The `Upgrade` table holds exactly the two `MajorUpgrade` rows for the companion's UpgradeCode: `WIX_UPGRADE_DETECTED` removes older versions, and `WIX_DOWNGRADE_DETECTED` only detects newer versions, which the downgrade message then blocks (`msiinfo export <asset> Upgrade`). `inspect-msi.ps1` checks both rows. Both current companions also set `AllowSameVersionUpgrades="yes"`, so their removal row includes the same version too; C3 does not require that. |
 | C4 | On Windows with a Revit year installed (the W10C-Testing VM, skill `rst_c_vm`): `msiexec /i <asset> /qn /l*v install.log`, then `msiexec /x <asset> /qn /l*v uninstall.log`. Both exit `0` (not `3010`, which means a reboot), and neither shows a window. |
 | C5 | Step 1–3: the asset is on a full GitHub Release of `repo` under exactly the recorded name. |
-| C6 | After the C4 install: the companion's manifest (`GanttIt.addin`, `SplashIt.addin`) exists in `%AppData%\Autodesk\Revit\Addins\<year>\` for each detected year, its `<ClientId>` equals `addinClientId` and its `<VendorId>` is `DSOS`; nothing was written under `%AppData%\RST\`. The validation test separately ensures the ClientId is not rst-c's. |
+| C6 | After the C4 install: the companion's manifest (`GanttIt.addin`, `SplashIt.addin`, `PickIt.addin`) exists in `%AppData%\Autodesk\Revit\Addins\<year>\` for each detected year, its `<ClientId>` equals `addinClientId` and its `<VendorId>` is `DSOS`; nothing was written under `%AppData%\RST\`. The validation test separately ensures the ClientId is not rst-c's. |
 | C7 | The C4 install succeeds with rst-c **not** installed. Open Revit: the companion loads with no RST tab present. Then install rst-c and uninstall it through Add/Remove Programs: the companion still loads. |
 
 **These checks are the bump author's job, every time.** rst-c's CI re-checks only part of it on the real MSIs. The `bundle` job checks that the pinned asset exists and that its sha256, UpgradeCode and ProductVersion match the pin. The `bundle-smoke (Companions)` leg installs the real companions through `RST-Setup.exe` with stub Revit folders: silent install and uninstall with exit 0 (C4), the `.addin` ClientId and VendorId per year and nothing under `%AppData%\RST\` (C6), and a standalone install with no rst-c (the install half of C7). Nothing there starts Revit, so a companion that installs cleanly but fails to load is not caught. The install-order mechanics (upgrade, newer installed, re-run) are proven on a test-only fixture MSI, not on the real companions. Acceptance check AC6 (both companions installed through `RST-Setup.exe` on the VM, then loaded in Revit) runs only on the Phase 2 PR and the v3.0.0 release candidate, not on every pin bump or release. Put the C1–C7 results for the new pin in the bump PR.
