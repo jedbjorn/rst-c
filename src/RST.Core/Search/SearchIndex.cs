@@ -5,8 +5,9 @@
 // already left out what RST knows will not run: ids Revit won't let add-ins post (PostCommandRule),
 // mode-only tabs and ids (ModeRestrictedTabs, ModeRestrictedCommandIds) and the admin's BanList), and
 // both shape it through the same function, CatalogCommand.FromScanned. The Builder shows one row per
-// ribbon placement; Search-It folds those rows to one per command id. There is no second list here:
-// a tool is searchable if and only if the Builder lists it.
+// ribbon placement; Search-It folds those rows to one tool per command id that keeps every placement
+// and its label. There is no second list here: a tool is searchable if and only if the Builder lists
+// it, under every name the Builder lists it by.
 
 using RST.Core.Builder;
 using RST.Core.Scanning;
@@ -17,8 +18,8 @@ public static class SearchIndex
 {
     /// <summary>
     /// One <see cref="SearchTool"/> per command id in the Builder's catalogue
-    /// (<see cref="CatalogCommand.FromScanned(IEnumerable{ScannedCommand})"/>), in catalogue order. The
-    /// first placement gives the name and the location; the others are counted.
+    /// (<see cref="CatalogCommand.FromScanned(IEnumerable{ScannedCommand})"/>), in catalogue order, each
+    /// with all its placements.
     /// </summary>
     public static IReadOnlyList<SearchTool> Build(IEnumerable<ScannedCommand>? catalog) =>
         FromCatalog(CatalogCommand.FromScanned(catalog));
@@ -27,30 +28,19 @@ public static class SearchIndex
     public static IReadOnlyList<SearchTool> FromCatalog(IEnumerable<CatalogCommand>? rows)
     {
         var order = new List<string>();
-        var first = new Dictionary<string, CatalogCommand>(StringComparer.Ordinal);
-        var places = new Dictionary<string, int>(StringComparer.Ordinal);
+        var places = new Dictionary<string, List<SearchPlace>>(StringComparer.Ordinal);
         foreach (var row in rows ?? [])
         {
             if (row is null || string.IsNullOrEmpty(row.Id)) continue;
-            if (first.TryAdd(row.Id, row))
+            if (!places.TryGetValue(row.Id, out var list))
             {
+                places.Add(row.Id, list = []);
                 order.Add(row.Id);
-                places[row.Id] = 1;
             }
-            else
-            {
-                places[row.Id]++;
-            }
-        }
-
-        var tools = new List<SearchTool>(order.Count);
-        foreach (var id in order)
-        {
-            var row = first[id];
             // A command promoted from a host tab ("Add-Ins") is grouped by its panel in the Builder;
             // "where it lives" is the literal ribbon tab and panel.
-            tools.Add(new SearchTool(id, row.Label, row.HostTab ?? row.SourceTab, row.LiteralPanel ?? row.SourcePanel, places[id] - 1));
+            list.Add(new SearchPlace(row.Label, row.HostTab ?? row.SourceTab, row.LiteralPanel ?? row.SourcePanel));
         }
-        return tools;
+        return order.ConvertAll(id => new SearchTool(id, places[id]));
     }
 }

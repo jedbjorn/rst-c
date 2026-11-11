@@ -162,4 +162,58 @@ public class ToolSearchTests
         // A keystroke should feel instant; this bound is loose enough for a busy CI machine.
         perSearch.Should().BeLessThan(50, "one search over 5,000 tools must stay well inside a keystroke");
     }
+
+    // ── a tool the ribbon names differently in different places ─────────
+
+    private static readonly SearchTool RoomTag = new("ID_OBJECTS_ROOM_TAG",
+    [
+        new SearchPlace("Tag Room", "Architecture", "Room & Area"),
+        new SearchPlace("Room Tag", "Annotate", "Tag"),
+        new SearchPlace("Room Tag", "Annotate", "Tag Extra"), // the same name again: not a third name
+    ]);
+
+    [Fact]
+    public void Every_name_of_a_tool_is_searchable_and_the_row_shows_the_one_that_matched()
+    {
+        var search = new ToolSearch([RoomTag, Tool("Room", "Architecture", "Room & Area")]);
+
+        var byOther = search.Search(null, "room tag");
+        byOther[0].Tool.Should().BeSameAs(RoomTag);
+        byOther[0].Name.Should().Be("Room Tag");
+        byOther[0].Place.Location.Should().Be("Annotate › Tag", "the first place that carries the matched name");
+        byOther[0].Match!.Value.Kind.Should().Be(MatchKind.Exact);
+
+        var byFirst = search.Search(null, "tag room");
+        byFirst[0].Name.Should().Be("Tag Room");
+        byFirst[0].Place.Location.Should().Be("Architecture › Room & Area");
+
+        // One row per command, whichever names match.
+        search.Search(null, "tag").Where(h => h.Tool == RoomTag).Should().ContainSingle()
+            .Which.Name.Should().Be("Tag Room", "\"tag\" starts this name and only starts a word of the other");
+        search.Search(null, "room").Where(h => h.Tool == RoomTag).Should().ContainSingle()
+            .Which.Name.Should().Be("Room Tag");
+        RoomTag.OtherPlaces.Should().Be(2);
+    }
+
+    [Fact]
+    public void With_nothing_typed_a_tool_shows_under_its_first_name_once()
+    {
+        var hits = new ToolSearch([RoomTag]).Search(null, null);
+        hits.Should().ContainSingle();
+        hits[0].Name.Should().Be("Tag Room");
+        hits[0].Match.Should().BeNull();
+    }
+
+    [Fact]
+    public void Chips_and_text_must_hold_for_the_same_name()
+    {
+        var search = new ToolSearch([RoomTag]);
+        // The chip keeps the names that contain it; the first such name is shown.
+        search.Search(["room t"], null).Single().Name.Should().Be("Room Tag");
+        search.Search(["tag r"], null).Single().Name.Should().Be("Tag Room");
+        // "tag r" is only in "Tag Room"; the text is then matched against that name.
+        search.Search(["tag r"], "tag").Single().Name.Should().Be("Tag Room");
+        // No single name holds both chips.
+        search.Search(["tag r", "room t"], null).Should().BeEmpty();
+    }
 }

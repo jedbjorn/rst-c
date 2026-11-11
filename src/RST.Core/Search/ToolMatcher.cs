@@ -4,8 +4,10 @@
 // it, then fuzzy. Fuzzy tolerates skipped letters ("algn" finds Align: the typed letters appear in
 // order, starting at a word) and typos ("aling", "allign", "wsll": a small edit distance, with a swap
 // of two neighbours counted once, against the start of the name or of any word in it). Everything is
-// case-insensitive and ignores extra spaces. No allocation per name beyond two small buffers, so a
-// few thousand names take well under a millisecond per keystroke.
+// case-insensitive (invariant lower case, so accented and non-Latin letters match themselves in
+// either case) and ignores extra spaces. The names are normalized once, when the search is built;
+// a keystroke normalizes the typed text and reuses three per-thread buffers for the edit distance,
+// so matching itself allocates nothing per name.
 
 namespace RST.Core.Search;
 
@@ -168,6 +170,16 @@ public static class ToolMatcher
         return best == NoMatch ? NoMatch : best * 2;
     }
 
+    [ThreadStatic] private static int[]? _rowA;
+    [ThreadStatic] private static int[]? _rowB;
+    [ThreadStatic] private static int[]? _rowC;
+
+    private static int[] Buffer(ref int[]? buffer, int length)
+    {
+        if (buffer is null || buffer.Length < length) buffer = new int[Math.Max(length, 64)];
+        return buffer;
+    }
+
     /// <summary>
     /// The optimal-string-alignment distance between <paramref name="query"/> and the best prefix of
     /// <paramref name="name"/> from <paramref name="start"/>; <see cref="NoMatch"/> when above
@@ -180,9 +192,9 @@ public static class ToolMatcher
         if (n < m - allowed) return NoMatch;
 
         // Rows are prefixes of the name; columns are prefixes of the query.
-        var prev2 = new int[m + 1];
-        var prev = new int[m + 1];
-        var row = new int[m + 1];
+        var prev2 = Buffer(ref _rowA, m + 1);
+        var prev = Buffer(ref _rowB, m + 1);
+        var row = Buffer(ref _rowC, m + 1);
         for (var j = 0; j <= m; j++) prev[j] = j;
         var best = prev[m] <= allowed ? prev[m] : NoMatch; // the empty prefix
 

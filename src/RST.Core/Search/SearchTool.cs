@@ -2,27 +2,51 @@
 
 namespace RST.Core.Search;
 
-/// <summary>
-/// One searchable tool: a command id, the name the ribbon shows for it, and where it lives. A tool
-/// that sits in several places keeps its first (<see cref="Tab"/>, <see cref="Panel"/>) and counts
-/// the rest in <see cref="OtherPlaces"/>.
-/// </summary>
-public sealed record SearchTool(string Id, string DisplayName, string? Tab, string? Panel, int OtherPlaces = 0)
+/// <summary>One place a tool sits on the ribbon, and the name the ribbon shows for it there.</summary>
+public sealed record SearchPlace(string Label, string? Tab, string? Panel)
 {
     /// <summary>The separator between tab and panel: "Architecture › Build".</summary>
     public const string Separator = " › ";
 
-    /// <summary>Where the tool lives: "Tab › Panel", or whichever of the two is known; empty when neither is.</summary>
+    /// <summary>Where this is: "Tab › Panel", or whichever of the two is known; empty when neither is.</summary>
     public string Location =>
         string.IsNullOrWhiteSpace(Tab) ? (Panel ?? "").Trim()
         : string.IsNullOrWhiteSpace(Panel) ? Tab!.Trim()
         : Tab!.Trim() + Separator + Panel!.Trim();
+}
 
-    /// <summary>"+2 more places", "+1 more place", or empty when the tool has one home.</summary>
-    public string MoreText => OtherPlaces switch
+/// <summary>
+/// One searchable tool: a command id and every place it sits on the ribbon, in ribbon order. The
+/// ribbon can name one command differently in different places ("Tag Room" on Architecture, "Room Tag"
+/// on Annotate); every name is searchable, and a result shows the place whose name matched.
+/// </summary>
+public sealed class SearchTool
+{
+    public SearchTool(string id, IEnumerable<SearchPlace> places)
     {
-        <= 0 => "",
-        1 => "+1 more place",
-        _ => $"+{OtherPlaces} more places",
-    };
+        Id = id ?? throw new ArgumentNullException(nameof(id));
+        Places = (places ?? throw new ArgumentNullException(nameof(places))).ToArray();
+        if (Places.Count == 0) throw new ArgumentException("A tool has at least one place.", nameof(places));
+    }
+
+    /// <summary>A tool with one place.</summary>
+    public SearchTool(string id, string displayName, string? tab, string? panel)
+        : this(id, [new SearchPlace(displayName, tab, panel)])
+    {
+    }
+
+    public string Id { get; }
+
+    /// <summary>Every place the tool sits, first (primary) first.</summary>
+    public IReadOnlyList<SearchPlace> Places { get; }
+
+    /// <summary>The first place: its name is the tool's name when nothing was typed.</summary>
+    public SearchPlace Primary => Places[0];
+
+    public string DisplayName => Primary.Label;
+
+    public string Location => Primary.Location;
+
+    /// <summary>How many places the tool has beyond the one a result shows.</summary>
+    public int OtherPlaces => Places.Count - 1;
 }

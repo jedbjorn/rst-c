@@ -107,4 +107,42 @@ public class ToolMatcherTests
         Match("", "Align").Should().BeNull();
         Match("align", "").Should().BeNull();
     }
+
+    [Theory]
+    [InlineData("ALIGN", "align", MatchKind.Exact)]
+    [InlineData("aLiGn", "ALIGN", MatchKind.Exact)]
+    [InlineData("WALL", "Wall: Architectural", MatchKind.Prefix)]
+    [InlineData("tür", "Tür", MatchKind.Exact)]                    // German: door
+    [InlineData("TÜR", "Tür einfügen", MatchKind.Prefix)]
+    [InlineData("école", "École", MatchKind.Exact)]
+    [InlineData("ÉCOLE", "Plan de l'école", MatchKind.WordStart)]
+    [InlineData("ñ", "Diseño", MatchKind.Substring)]
+    [InlineData("стена", "Стена: Архитектурная", MatchKind.Prefix)]  // Cyrillic, either case
+    [InlineData("АРХ", "Стена: Архитектурная", MatchKind.WordStart)]
+    [InlineData("壁", "壁: 意匠", MatchKind.Prefix)]                  // no case at all
+    [InlineData("意匠", "壁: 意匠", MatchKind.WordStart)]
+    [InlineData("fenstr", "Fenster", MatchKind.Fuzzy)]
+    [InlineData("tüer", "Tür einfügen", MatchKind.Fuzzy)]            // a typo next to a non-ASCII letter
+    public void Case_never_matters_and_non_ASCII_names_match(string query, string name, MatchKind kind) =>
+        Match(query, name)!.Value.Kind.Should().Be(kind);
+
+    [Fact]
+    public void An_accent_is_a_different_letter()
+    {
+        // No accent folding: Revit's names are matched as written. A wrong accent inside a word is one typo;
+        // a wrong first letter is not forgiven, accented or not.
+        Match("fenêtre", "Fenetre")!.Value.Kind.Should().Be(MatchKind.Fuzzy);
+        Match("ecole", "École").Should().BeNull();
+    }
+
+    [Fact]
+    public void Repeated_matching_reuses_its_buffers_and_stays_correct()
+    {
+        // Short then long then short again: the per-thread rows grow and are reused.
+        Match("wsll", "Wall")!.Value.Kind.Should().Be(MatchKind.Fuzzy);
+        var longName = string.Join(' ', Enumerable.Repeat("structural", 12));
+        Match(string.Join(' ', Enumerable.Repeat("structural", 11)) + " strucural", longName)!.Value.Kind.Should().Be(MatchKind.Fuzzy);
+        Match("wsll", "Wall")!.Value.Kind.Should().Be(MatchKind.Fuzzy);
+        Match("aling", "Align")!.Value.Kind.Should().Be(MatchKind.Fuzzy);
+    }
 }
