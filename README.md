@@ -39,7 +39,7 @@ It ships as a single managed add-in for Revit 2025 through 2027, installs into t
 Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com/jedbjorn/rst-c/releases/latest)**
 
 - `RST.msi` — Revit 2025, 2026 and 2027, for your Windows account
-- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://jedbjorn.github.io/gantt-it/), [Splash-It](https://jedbjorn.github.io/splash-it/), [Pick-It](https://github.com/jedbjorn/pick-it)) as checkboxes
+- `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://jedbjorn.github.io/gantt-it/), [Splash-It](https://jedbjorn.github.io/splash-it/), [Pick-It](https://jedbjorn.github.io/pick-it/)) as checkboxes
 - `RST-Machine.msi` — rst-c once for everyone on the PC, for IT (from v3.1; needs an administrator)
 
 Per-user install; no admin rights required. Run `RST.msi` or `RST-Setup.exe`, then launch Revit — the RST tools appear on the Add-Ins tab. See [Install modes](#install-modes) for the per-machine option.
@@ -138,7 +138,7 @@ rst-c writes a session log under `%AppData%\RST\logs\` for every Revit launch. T
 |---|---|---|
 | Gantt-It 1.1.0 | [Gantt-It](https://jedbjorn.github.io/gantt-it/): Gantt charts as native Revit legend views | `InstallGanttIt=1` |
 | Splash-It 1.1.0 | [Splash-It](https://jedbjorn.github.io/splash-it/): colors Revit view tabs by file | `InstallSplashIt=1` |
-| Pick-It 1.0.0 | [Pick-It](https://github.com/jedbjorn/pick-it): picks a colour from the screen and shows its RGB values | `InstallPickIt=1` |
+| Pick-It 1.0.0 | [Pick-It](https://jedbjorn.github.io/pick-it/): picks a colour from the screen and shows its RGB values | `InstallPickIt=1` |
 
 A ticked add-in is installed from its own released MSI, unchanged. It is a separate product: it gets its own entry in Settings → Apps and upgrades through its own installer. An add-in that is already installed at the same or a newer version is left as it is; an older one is upgraded.
 
@@ -245,6 +245,7 @@ Other open-source projects by the same author:
 - **[Subfloor](https://subfloor.designs-os.com)** — a standing team of coding agents for your Git repository, with durable identity, memory, specs and handoffs, run through your coding harness. ([source](https://github.com/jedbjorn/subfloor))
 - **[Gantt-It](https://jedbjorn.github.io/gantt-it/)** — a Revit add-in that draws Gantt charts in your project, ready to place on sheets. ([source](https://github.com/jedbjorn/gantt-it))
 - **[Splash-It](https://jedbjorn.github.io/splash-it/)** — a Revit add-in that colors view tabs by file, so open models and families are easy to tell apart. ([source](https://github.com/jedbjorn/splash-it))
+- **[Pick-It](https://jedbjorn.github.io/pick-it/)** — a Revit add-in that picks a colour from anywhere on screen and shows its RGB values on the ribbon. ([source](https://github.com/jedbjorn/pick-it))
 - **[md-converter](https://md-converter.designs-os.com)** — a static web app that renders themed Markdown into styled, shareable HTML. ([source](https://github.com/jedbjorn/md-converter))
 - **[Storybench](https://github.com/jedbjorn/storybench)** — a local workspace for developing videos with an AI production agent.
 - **[AnJ Cloud](https://jedbjorn.github.io/anj-cloud/)** — household file sync from a gateway you host yourself, with clients for Linux, macOS, Windows and Android. ([source](https://github.com/jedbjorn/anj-cloud))
