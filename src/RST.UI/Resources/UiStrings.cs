@@ -945,4 +945,10 @@ public static class UiStrings
     public static string SearchIt_RemoveChip => Get(nameof(SearchIt_RemoveChip));
 
     public static string SearchIt_Failed => Get(nameof(SearchIt_Failed));
+
+    public static string SearchIt_OneMorePlace => Get(nameof(SearchIt_OneMorePlace));
+
+    public static string SearchIt_MorePlaces(object? arg0) => Format(nameof(SearchIt_MorePlaces), arg0);
+
+    public static string SearchIt_ToolTipMore(object? arg0, object? arg1) => Format(nameof(SearchIt_ToolTipMore), arg0, arg1);
 }

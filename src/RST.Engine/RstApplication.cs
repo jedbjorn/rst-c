@@ -370,6 +370,18 @@ public sealed class RstApplication : IExternalApplication
         }
     }
 
+    /// <summary>
+    /// True when <see cref="GetOrBuildCatalog"/> would return its cache for <paramref name="revitVersion"/>
+    /// at once. Search-It asks, to open with its results instead of its "finding tools" overlay.
+    /// </summary>
+    public static bool HasCatalog(string revitVersion)
+    {
+        lock (CatalogLock)
+        {
+            return _catalogCache is not null && _catalogVersion == revitVersion;
+        }
+    }
+
     public Result OnShutdown(UIControlledApplication application)
     {
         Log.Information("RST shutting down");

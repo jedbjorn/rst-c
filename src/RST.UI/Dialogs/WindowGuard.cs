@@ -176,61 +176,99 @@ public static class WindowGuard
 
     /// <summary>
     /// The modeless counterpart of <see cref="ShowDialog"/> (Search-It, v3.4): shows <paramref name="window"/>
-    /// with <see cref="Window.Show"/> and keeps the same safety net up until the window has closed. An RST or
+    /// with <see cref="Window.Show"/> and keeps the same safety net up until the window is gone. An RST or
     /// unattributed exception that reaches the dispatcher unhandled meanwhile is logged at Error, marked
     /// handled, and the window is closed; someone else's is left alone. Returns as soon as the window is
     /// shown. An exception thrown by Show itself closes the window and is rethrown for the caller to log.
     /// </summary>
     /// <remarks>
-    /// A modeless window stays up while the user works in Revit, so the net is up for longer than a modal
-    /// window's. Search-It closes on the first click outside it, which keeps that short.
+    /// <para>The net comes down when the window closes, and also right after the close that follows a fault,
+    /// whether that close worked or fell back to hiding the window (a hidden window raises no Closed, and
+    /// would otherwise leave the net up for the rest of the session). Exceptions that repeat until then are
+    /// handled without a line each; one line gives their count, as <see cref="ShowDialog"/> does.</para>
+    /// <para>A modeless window stays up while the user works, so another RST window can open modally in front
+    /// of it (Health, from a keyboard shortcut). While any WPF modal loop runs on the thread
+    /// (<see cref="System.Windows.Interop.ComponentDispatcher.IsThreadModal"/>) this net stands back: that
+    /// window has its own net, and its fault must close it, not the window behind. A native modal (Revit's
+    /// TaskDialog, a file dialog) does not set that flag and cannot be told apart here; a fault while one is
+    /// up is handled as the window's own, which at worst closes Search-It.</para>
     /// </remarks>
     public static void Show(Window window, string name)
     {
         ArgumentNullException.ThrowIfNull(window);
         var dispatcher = window.Dispatcher;
+        var attached = false;
         var faulted = false;
+        var repeats = 0;
+
+        void Detach()
+        {
+            if (!attached) return;
+            attached = false;
+            dispatcher.UnhandledException -= OnUnhandled;
+            window.Closed -= OnClosed;
+            if (repeats > 0) Log.Error(RepeatsTemplate, name, repeats);
+        }
+
+        void CloseAndDetach()
+        {
+            CloseAfterFault(window, name);
+            try
+            {
+                // A close that did not go through (its Closing faulted too) leaves the window up: hide it.
+                if (PresentationSource.FromVisual(window) is not null && window.IsVisible) window.Hide();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "{Window} window: hide after an error failed", name);
+            }
+            Detach();
+        }
 
         void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
-            if (e.Handled) return;
+            if (!attached || e.Handled) return;
             try
             {
+                if (System.Windows.Interop.ComponentDispatcher.IsThreadModal) return;
                 var owner = Classify(e.Exception);
                 if (owner == FaultOwner.Foreign) return;
                 e.Handled = true;
-                if (faulted) return;
+                if (faulted)
+                {
+                    repeats++;
+                    return;
+                }
                 faulted = true;
                 window.SetValue(ClosingAfterFaultProperty, true);
                 Log.Error(e.Exception, FaultTemplate, name, owner == FaultOwner.Rst ? RstFrame : FrameworkOnly);
-                dispatcher.BeginInvoke(DispatcherPriority.Send, () => CloseAfterFault(window, name));
+                // Not from inside the handler: the dispatcher is still unwinding the operation that threw.
+                dispatcher.BeginInvoke(DispatcherPriority.Send, CloseAndDetach);
             }
             catch
             {
                 // The net must not throw from the dispatcher's handler, which would take Revit down with it.
                 e.Handled = true;
-                try { dispatcher.BeginInvoke(DispatcherPriority.Send, () => CloseAfterFault(window, name)); } catch { /* best effort */ }
+                if (!faulted)
+                {
+                    faulted = true;
+                    try { dispatcher.BeginInvoke(DispatcherPriority.Send, CloseAndDetach); } catch { /* best effort */ }
+                }
             }
-        }
-
-        void Detach()
-        {
-            dispatcher.UnhandledException -= OnUnhandled;
-            window.Closed -= OnClosed;
         }
 
         void OnClosed(object? sender, EventArgs e) => Detach();
 
         dispatcher.UnhandledException += OnUnhandled;
         window.Closed += OnClosed;
+        attached = true;
         try
         {
             window.Show();
         }
         catch
         {
-            Detach();
-            CloseAfterFault(window, name);
+            CloseAndDetach();
             throw;
         }
     }

@@ -42,7 +42,7 @@
             <Style x:Key="ResultRow" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                 <Setter Property="Height" Value="{x:Static search:SearchItLayout.RowHeight}" />
                 <Setter Property="Padding" Value="0" />
-                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsTabStop" Value="False" />
                 <Setter Property="VerticalContentAlignment" Value="Stretch" />
             </Style>
         </ResourceDictionary>
@@ -96,10 +96,15 @@
         <TextBlock x:Name="Status" Grid.Row="2" Text="{Binding StatusText}" Style="{StaticResource MutedText}" FontSize="11"
                    Margin="14,8,12,4" MinHeight="15" AutomationProperties.AutomationId="SearchIt.Status" />
 
-        <!-- The result cards: eight at the default size (the code-behind frees the height once the window has sized). -->
+        <!--
+            The result cards: eight at the default size (the code-behind frees the height once the window has
+            sized). The highlighted card (Down from the box, then Up and Down) is the selected one: the theme's
+            selected row (AccentSoftBrush). Enter runs it; a click on any card runs that card.
+        -->
         <ListBox x:Name="ResultsList" Grid.Row="3" ItemsSource="{Binding Results}" Margin="6,0,6,0"
                  Height="{x:Static search:SearchItLayout.ListHeight}"
-                 BorderThickness="0" Background="Transparent" Focusable="False"
+                 BorderThickness="0" Background="Transparent" Focusable="False" IsTabStop="False"
+                 SelectionMode="Single" PreviewKeyDown="OnResultsKeyDown" PreviewTextInput="OnResultsTextInput"
                  ItemContainerStyle="{StaticResource ResultRow}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"

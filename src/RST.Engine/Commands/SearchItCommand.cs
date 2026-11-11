@@ -7,10 +7,11 @@
 //
 // The window (RST.UI.SearchIt) is modeless, so the view behind it can be panned, zoomed and orbited.
 // That shapes the threading:
-//   - The catalogue is read here, inside Execute, on Revit's UI thread: SearchItLauncher.Show shows
-//     the window with its busy overlay, draws it, and then calls back for the catalogue before it
-//     returns. A cold build (first use in a session, a few seconds) happens under a window that says
-//     so. It is never built later from the modeless window, which has no API context.
+//   - The catalogue is read here, inside Execute, on Revit's UI thread, before SearchItLauncher.Show
+//     returns. When it is already built this session (RstApplication.HasCatalog) the window opens
+//     with its results. A cold build (first use in a session, a few seconds) happens under a window
+//     that is already drawn, with its busy overlay. It is never built later from the modeless window,
+//     which has no API context.
 //   - A click on a result happens after Execute has returned, outside any API context. The tool
 //     runs through SlotInvokeCommand, the dispatch every profile button uses: it calls
 //     UIApplication.PostCommand from an AdWindows click, which is outside an API context too, and
@@ -51,7 +52,8 @@ public sealed class SearchItCommand : IExternalCommand
             var opened = SearchItLauncher.Show(
                 uiApp.MainWindowHandle,
                 catalog: () => RstApplication.GetOrBuildCatalog(revitVersion),
-                run: tool => Run(uiApp, tool));
+                run: tool => Run(uiApp, tool),
+                isReady: () => RstApplication.HasCatalog(revitVersion));
             Log.Information(opened
                     ? "Search-It window shown in {Ms}ms; it stays open until the user closes it or picks a tool"
                     : "Search-It was already open; focused it ({Ms}ms)",
@@ -67,9 +69,10 @@ public sealed class SearchItCommand : IExternalCommand
     }
 
     /// <summary>
-    /// Runs the tool the user clicked, after the window has closed: the profile buttons' dispatch
-    /// (<see cref="SlotInvokeCommand"/>: PostCommand, with its not-found and not-postable messages).
-    /// Called from the window's click, outside Execute; it never throws.
+    /// Runs the tool the user chose (a click, or Enter on the highlighted card), after the window has
+    /// closed: the profile buttons' dispatch (<see cref="SlotInvokeCommand"/>: PostCommand, with its
+    /// not-found and not-postable messages). Queued by the window on the dispatcher, outside Execute;
+    /// it never throws.
     /// </summary>
     private static void Run(UIApplication uiApp, SearchTool tool)
     {

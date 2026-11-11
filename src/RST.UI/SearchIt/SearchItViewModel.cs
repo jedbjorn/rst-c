@@ -12,15 +12,20 @@ using RST.UI.Resources;
 
 namespace RST.UI.SearchIt;
 
-/// <summary>One result card: the tool's name and, under it, where it lives.</summary>
-public sealed class SearchResultItem(SearchTool tool, ICommand runCommand)
+/// <summary>One result card: the name that matched and, under it, where that is on the ribbon.</summary>
+public sealed class SearchResultItem(SearchHit hit, ICommand runCommand)
 {
-    public SearchTool Tool { get; } = tool;
-    public string Name => Tool.DisplayName;
-    public string Location => Tool.Location;
-    public string MoreText => Tool.MoreText;
+    public SearchTool Tool { get; } = hit.Tool;
+    public string Name { get; } = hit.Place.Label;
+    public string Location { get; } = hit.Place.Location;
     public bool HasMore => Tool.OtherPlaces > 0;
-    public string ToolTip => HasMore ? $"{Location} ({MoreText})" : Location;
+    public string MoreText => Tool.OtherPlaces switch
+    {
+        <= 0 => "",
+        1 => UiStrings.SearchIt_OneMorePlace,
+        var n => UiStrings.SearchIt_MorePlaces(n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)),
+    };
+    public string ToolTip => HasMore ? UiStrings.SearchIt_ToolTipMore(Location, MoreText) : Location;
     public ICommand RunCommand { get; } = runCommand;
 }
 
@@ -34,6 +39,7 @@ public sealed class SearchChipItem(string text, ICommand removeCommand)
 public sealed class SearchItViewModel : ObservableObject
 {
     private readonly ISearchItBackend _backend;
+    private readonly Action<Action> _post;
     private readonly RelayCommand<SearchResultItem> _run;
     private readonly RelayCommand<SearchChipItem> _removeChip;
     private ToolSearch _search = new(null);
@@ -43,9 +49,11 @@ public sealed class SearchItViewModel : ObservableObject
     private string _emptyText = "";
     private bool _isLoading;
 
-    public SearchItViewModel(ISearchItBackend backend)
+    /// <param name="post">Tests only: how the chosen tool's run is queued (default: the dispatcher, at Background priority).</param>
+    public SearchItViewModel(ISearchItBackend backend, Action<Action>? post = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        _post = post ?? PostToDispatcher;
         _run = new RelayCommand<SearchResultItem>(Run);
         _removeChip = new RelayCommand<SearchChipItem>(RemoveChip);
     }
@@ -177,16 +185,26 @@ public sealed class SearchItViewModel : ObservableObject
         Refresh();
     }
 
-    /// <summary>A click on a result: the window closes first, then the tool runs.</summary>
+    /// <summary>
+    /// A click on a result card, or Enter on the highlighted one: the window closes first, and the tool's
+    /// run is queued behind that, so whatever the run shows (Revit's "couldn't run" message) is not shown
+    /// from inside the click handler of a window that has just been destroyed.
+    /// </summary>
     private void Run(SearchResultItem item)
     {
-        if (item is null || Chosen is not null) return;
-        Chosen = item.Tool;
+        if (item is null || Chosen is not null || IsLoading) return;
+        var tool = item.Tool;
+        Chosen = tool;
         Log.Information("Search-It: chose {Name} ({CommandId}) at {Location}; text={Text}, chips={Chips}",
-            item.Tool.DisplayName, item.Tool.Id, item.Tool.Location, _text, Chips.Count);
+            item.Name, tool.Id, item.Location, _text, Chips.Count);
         RequestClose?.Invoke(this, EventArgs.Empty);
-        _backend.Run(item.Tool);
+        _post(() => _backend.Run(tool));
     }
+
+    private static void PostToDispatcher(Action action) =>
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            () => UiGuard.Run("Search-It: run the chosen tool", action));
 
     private static string Number(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -201,7 +219,7 @@ public sealed class SearchItViewModel : ObservableObject
         }
         var hits = _search.Search(Chips.Select(c => c.Text), _text);
         var items = new List<SearchResultItem>(hits.Count);
-        foreach (var hit in hits) items.Add(new SearchResultItem(hit.Tool, _run));
+        foreach (var hit in hits) items.Add(new SearchResultItem(hit, _run));
         Results = items;
         StatusText = items.Count == _search.Count
             ? UiStrings.SearchIt_CountAll(Number(_search.Count))

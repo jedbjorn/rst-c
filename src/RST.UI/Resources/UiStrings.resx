@@ -1437,7 +1437,7 @@ The other profiles were changed and stay changed.</value>
     <value>Search Revit's tools…</value>
   </data>
   <data name="SearchIt_Hint" xml:space="preserve">
-    <value>Enter keeps the text as a filter  ·  Click a tool to run it  ·  Esc closes</value>
+    <value>Enter keeps the text as a filter  ·  ↓ then Enter, or a click, runs a tool  ·  Esc closes</value>
   </data>
   <data name="SearchIt_LoadingTitle" xml:space="preserve">
     <value>Finding Revit's tools…</value>
@@ -1464,5 +1464,15 @@ The other profiles were changed and stay changed.</value>
   <data name="SearchIt_Failed" xml:space="preserve">
     <value>Search-It could not open. Details are in the RST log.</value>
     <comment>Revit shows it after the command when Search-It failed to open (SC-045).</comment>
+  </data>
+  <data name="SearchIt_OneMorePlace" xml:space="preserve">
+    <value>+1 more place</value>
+  </data>
+  <data name="SearchIt_MorePlaces" xml:space="preserve">
+    <value>+{0} more places</value>
+  </data>
+  <data name="SearchIt_ToolTipMore" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>A result card's tooltip when the tool sits in several places: where it is, then "+2 more places".</comment>
   </data>
 </root>
