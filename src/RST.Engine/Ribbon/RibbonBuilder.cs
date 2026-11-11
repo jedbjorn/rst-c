@@ -7,7 +7,7 @@
 // API that wires a PushButtonData to an IExternalCommand class
 // (LoaderCommand), and that wiring has to happen during OnStartup.
 //
-// The Builder, Loader, RSTify, and Health buttons are permanent entry
+// The Builder, Loader, RSTify, Health and Search-It buttons are permanent entry
 // points and stay static across profile switches. They intentionally remain
 // visible to the catalog scanner so users can place them on profile toolbars.
 
@@ -23,7 +23,7 @@ internal static class RibbonBuilder
 
     /// <summary>
     /// RST tools panel backdrop, themed. Paired with the #d9d9d9 chip
-    /// background baked into the brand icon PNGs (RST-043) so the four
+    /// background baked into the brand icon PNGs (RST-043) so the five
     /// buttons stay visible against both Revit's light and dark themes.
     /// Selected at ApplicationInitialized via UIThemeManager.CurrentTheme;
     /// not re-applied on live theme switch (Revit restart picks up the
@@ -37,13 +37,17 @@ internal static class RibbonBuilder
     private const string BuilderClassName = "RST.Engine.Commands.BuilderCommand";
     private const string RstifyClassName = "RST.Engine.Commands.RstifyCommand";
     private const string HealthClassName = "RST.Engine.Commands.HealthCommand";
+    private const string SearchItClassName = "RST.Engine.Commands.SearchItCommand";
+
+    /// <summary>The Search-It button's PushButtonData name: the marker IconAssets matches on a profile-tab copy.</summary>
+    internal const string SearchItButtonName = "RST_SearchIt";
 
     public static void Build(UIControlledApplication app)
     {
         var assemblyPath = typeof(RibbonBuilder).Assembly.Location;
 
-        // Single panel, four side-by-side Large buttons:
-        // Builder | Loader | RSTify | Health. Lives on Revit's built-in
+        // Single panel, five side-by-side Large buttons:
+        // Builder | Loader | RSTify | Health | Search-It. Lives on Revit's built-in
         // Add-Ins tab (single-arg CreateRibbonPanel overload). No custom
         // RST tab — RST tools share the External Tools area with every
         // other add-in.
@@ -98,10 +102,22 @@ internal static class RibbonBuilder
             LargeImage = IconAssets.HealthIcon ?? IconAssets.Default32,
         };
 
+        var searchBtn = new PushButtonData(
+            name: SearchItButtonName,
+            text: "Search-It",
+            assemblyName: assemblyPath,
+            className: SearchItClassName)
+        {
+            ToolTip = "Find any Revit tool by name, see where it lives on the ribbon, and run it.",
+            Image = IconAssets.SearchIcon16 ?? IconAssets.Default16,
+            LargeImage = IconAssets.SearchIcon ?? IconAssets.Default32,
+        };
+
         rstPanel.AddItem(builderBtn);
         rstPanel.AddItem(loaderBtn);
         rstPanel.AddItem(rstifyBtn);
         rstPanel.AddItem(healthBtn);
+        rstPanel.AddItem(searchBtn);
     }
 
     /// <summary>

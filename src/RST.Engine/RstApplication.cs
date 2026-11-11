@@ -253,7 +253,7 @@ public sealed class RstApplication : IExternalApplication
 
             // Style the RST tools panel now that AwComponentManager.Ribbon
             // is populated. Applies regardless of whether a profile is
-            // active — the four-button panel is permanent (RST-043).
+            // active — the five-button panel is permanent (RST-043).
             RibbonBuilder.ApplyToolsPanelStyling();
 
             // Every add-in has loaded by now: put the sister apps' buttons (Gantt-It, Splash-It, Pick-It)

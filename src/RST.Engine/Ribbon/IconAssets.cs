@@ -22,7 +22,7 @@
 // the 32 px one, and ResolveNativeToolIcon16 maps RST's own tools to
 // their shipped *_16.png icons. Fallback: Default16.
 //
-// Slots pointing at the RST native tools (Builder/Loader/RSTify/Health,
+// Slots pointing at the RST native tools (Builder/Loader/RSTify/Health/Search-It,
 // placeable on profile toolbars since PR #112) carry no iconFile by
 // default — ResolveNativeToolIcon(commandId) maps them back to their
 // branded icons so they don't render the generic default. An explicit
@@ -65,6 +65,10 @@ internal static class IconAssets
     private static bool _healthAttempted;
     private static ImageSource? _health16;
     private static bool _health16Attempted;
+    private static ImageSource? _search;
+    private static bool _searchAttempted;
+    private static ImageSource? _search16;
+    private static bool _search16Attempted;
 
     /// <summary>
     /// 32x32 visible default icon (Assets/icons/default_32.png). Used as
@@ -220,6 +224,30 @@ internal static class IconAssets
         }
     }
 
+    /// <summary>Magnifier icon for the Search-It ribbon button (Assets/icons/icon_search.png).</summary>
+    public static ImageSource? SearchIcon
+    {
+        get
+        {
+            if (_searchAttempted) return _search;
+            _searchAttempted = true;
+            _search = LoadBundled("icons/icon_search.png");
+            return _search;
+        }
+    }
+
+    /// <summary>16x16 small variant for QAT (Assets/icons/icon_search_16.png).</summary>
+    public static ImageSource? SearchIcon16
+    {
+        get
+        {
+            if (_search16Attempted) return _search16;
+            _search16Attempted = true;
+            _search16 = LoadBundled("icons/icon_search_16.png");
+            return _search16;
+        }
+    }
+
     private static readonly ConcurrentDictionary<string, ImageSource?> _packCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -248,7 +276,7 @@ internal static class IconAssets
     }
 
     /// <summary>
-    /// Branded icon for an RST native tool (Builder/Loader/RSTify/Health)
+    /// Branded icon for an RST native tool (Builder/Loader/RSTify/Health/Search-It)
     /// placed on a profile tab through the command catalog. A catalog
     /// slot's commandId is the scanned AdWindows button Id, which embeds
     /// the PushButtonData name RibbonBuilder stamped at OnStartup (e.g.
@@ -269,6 +297,7 @@ internal static class IconAssets
         if (commandId.Contains("RST_Health",  StringComparison.Ordinal)) return HealthIcon;
         if (commandId.Contains("RST_Loader",  StringComparison.Ordinal)) return LoaderIcon;
         if (commandId.Contains("RST_Builder", StringComparison.Ordinal)) return BuilderIcon;
+        if (commandId.Contains(RibbonBuilder.SearchItButtonName, StringComparison.Ordinal)) return SearchIcon;
         if (commandId.Contains(RstifyToggle.RstifyButtonCookie, StringComparison.Ordinal)) return RstifyIconOff;
         return null;
     }
@@ -302,6 +331,7 @@ internal static class IconAssets
         if (commandId.Contains("RST_Health",  StringComparison.Ordinal)) return HealthIcon16;
         if (commandId.Contains("RST_Loader",  StringComparison.Ordinal)) return LoaderIcon16;
         if (commandId.Contains("RST_Builder", StringComparison.Ordinal)) return BuilderIcon16;
+        if (commandId.Contains(RibbonBuilder.SearchItButtonName, StringComparison.Ordinal)) return SearchIcon16;
         if (commandId.Contains(RstifyToggle.RstifyButtonCookie, StringComparison.Ordinal)) return RstifyIconOff16;
         return null;
     }
