@@ -239,7 +239,7 @@ See [docs/DEVELOPING.md](docs/DEVELOPING.md) for the WPF architecture, the vendo
 
 ## More projects
 
-Other open-source projects by the same author:
+Other open-source projects by the same author, published as [Designs/OS](https://designs-os.com):
 
 - **[FAI Browser](https://jedbjorn.github.io/fai-browser/)** — lets a coding agent work in one browser tab you approve, with permission levels, secret redaction and compact page summaries. ([source](https://github.com/jedbjorn/fai-browser))
 - **[Subfloor](https://subfloor.designs-os.com)** — a standing team of coding agents for your Git repository, with durable identity, memory, specs and handoffs, run through your coding harness. ([source](https://github.com/jedbjorn/subfloor))
