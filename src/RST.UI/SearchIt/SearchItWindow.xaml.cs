@@ -104,9 +104,19 @@ public partial class SearchItWindow : Window
     {
         SizeToContent = SizeToContent.Manual;
         ResultsList.ClearValue(HeightProperty);
-        // The list now takes what the window leaves it. A window that sized to its content and one with a
-        // set height do not always agree on the frame (the list came out 8 px taller on Windows Server),
-        // so the window's height is corrected until the list is eight cards again.
+        KeepEightCards();
+        // Once more when the window has settled: its frame can change after Loaded (the list came out 8 px
+        // taller on Windows Server once the window was up).
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => UiGuard.Run("Search-It window: default size", KeepEightCards));
+    }
+
+    /// <summary>
+    /// The list takes what the window leaves it; the window's height is corrected until that is eight cards.
+    /// Only while the window opens: afterwards the user's resize decides.
+    /// </summary>
+    private void KeepEightCards()
+    {
+        if (!IsOpen) return;
         for (var pass = 0; pass < 3; pass++)
         {
             UpdateLayout();

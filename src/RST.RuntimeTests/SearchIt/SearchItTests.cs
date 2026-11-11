@@ -368,7 +368,8 @@ public class SearchItTests
         {
             WindowCapture.DoEvents();
             var list = o.Window.ResultsList;
-            Near(SearchItLayout.VisibleRows * SearchItLayout.RowHeight, list.ActualHeight);
+            Assert.True(Math.Abs(list.ActualHeight - SearchItLayout.VisibleRows * SearchItLayout.RowHeight) <= 1,
+                $"list {list.ActualHeight}, window {o.Window.ActualHeight} (Height {o.Window.Height}), content {((FrameworkElement)o.Window.Content).ActualHeight}");
             Assert.Equal(8, FullyVisibleCards(list));
             Assert.Equal(60, o.Window.ViewModel.Results.Count); // the rest scroll
             Assert.Equal(SizeToContent.Manual, o.Window.SizeToContent);
