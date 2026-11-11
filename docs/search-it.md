@@ -64,6 +64,7 @@ What **Enter** does depends on where you are.
 | A result | Up / Down | Moves to the result above or below. Up on the first result goes back to the search box. |
 | A result | Enter | Runs that tool. |
 | A result | Any letter, number or symbol | Goes back to the search box and types it there. |
+| A result | Backspace | Goes back to the search box. |
 | Anywhere | Esc | Closes the window without running anything. |
 
 The result you are on is highlighted.

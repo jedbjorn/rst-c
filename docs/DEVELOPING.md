@@ -609,7 +609,8 @@ The fifth RST panel button (`RibbonBuilder`, `RST_SearchIt`, icons `icon_search`
 - **Ready to type on open.** After the read the launcher activates the window and puts the keyboard in the search box
   (`FocusSearch`: `Activate`, `SetForegroundWindow` as a fallback, then `Keyboard.Focus`), and once more when the
   dispatcher is idle (`FocusWhenSettled`), in case Revit takes the activation back as the ribbon click finishes; never
-  while another application is in front.
+  while another application is in front (checked after the read too: a cold read takes seconds, and the user may have
+  switched away). A hidden window (the safety net's fallback) is never focused, and its watch stops.
 - **Keys** (decision #83; `SearchItKeys.Decide`). Box: Enter makes a chip, Down goes to the first card, Backspace in the
   empty box removes one chip (never on a key repeat). Card: Up and Down move the highlight (`FocusCard`: select, scroll
   into view, focus), Up on the first card returns to the box, Enter runs the highlighted tool (never on a repeat), a
@@ -629,7 +630,9 @@ The fifth RST panel button (`RibbonBuilder`, `RST_SearchIt`, icons `icon_search`
   fresh baseline when it starts and again after a cold read (`RebaseWatch`), so the click that opened the window, or one
   made during the read, is not a click outside. A reading that throws stops the watch (logged once); Escape still closes.
 - **Size.** The window opens `SizeToContent="Height"` with the list at `SearchItLayout.ListHeight` (8 × 44 px); on
-  `Loaded` the height is handed to the window so the list follows a resize, and corrected once more at idle. Nothing is saved.
+  `Loaded` the height is handed to the window so the list follows a resize, and corrected (and the window centred on
+  its owner again) once more at idle, unless the user has already started to drag or resize it (`WM_ENTERSIZEMOVE`).
+  Nothing is saved.
 - **One window.** `SearchItLauncher` keeps the open window; a second command focuses it. A window that is no longer
   visible (the safety net's hide fallback) does not count and is replaced.
 - **Tests:** `RST.RuntimeTests/SearchIt/SearchItTests` (the view-model with a fake backend; the real window: off the
