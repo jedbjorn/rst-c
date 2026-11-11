@@ -175,6 +175,67 @@ public static class WindowGuard
     }
 
     /// <summary>
+    /// The modeless counterpart of <see cref="ShowDialog"/> (Search-It, v3.4): shows <paramref name="window"/>
+    /// with <see cref="Window.Show"/> and keeps the same safety net up until the window has closed. An RST or
+    /// unattributed exception that reaches the dispatcher unhandled meanwhile is logged at Error, marked
+    /// handled, and the window is closed; someone else's is left alone. Returns as soon as the window is
+    /// shown. An exception thrown by Show itself closes the window and is rethrown for the caller to log.
+    /// </summary>
+    /// <remarks>
+    /// A modeless window stays up while the user works in Revit, so the net is up for longer than a modal
+    /// window's. Search-It closes on the first click outside it, which keeps that short.
+    /// </remarks>
+    public static void Show(Window window, string name)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        var dispatcher = window.Dispatcher;
+        var faulted = false;
+
+        void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            if (e.Handled) return;
+            try
+            {
+                var owner = Classify(e.Exception);
+                if (owner == FaultOwner.Foreign) return;
+                e.Handled = true;
+                if (faulted) return;
+                faulted = true;
+                window.SetValue(ClosingAfterFaultProperty, true);
+                Log.Error(e.Exception, FaultTemplate, name, owner == FaultOwner.Rst ? RstFrame : FrameworkOnly);
+                dispatcher.BeginInvoke(DispatcherPriority.Send, () => CloseAfterFault(window, name));
+            }
+            catch
+            {
+                // The net must not throw from the dispatcher's handler, which would take Revit down with it.
+                e.Handled = true;
+                try { dispatcher.BeginInvoke(DispatcherPriority.Send, () => CloseAfterFault(window, name)); } catch { /* best effort */ }
+            }
+        }
+
+        void Detach()
+        {
+            dispatcher.UnhandledException -= OnUnhandled;
+            window.Closed -= OnClosed;
+        }
+
+        void OnClosed(object? sender, EventArgs e) => Detach();
+
+        dispatcher.UnhandledException += OnUnhandled;
+        window.Closed += OnClosed;
+        try
+        {
+            window.Show();
+        }
+        catch
+        {
+            Detach();
+            CloseAfterFault(window, name);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Whose <paramref name="exception"/> is, from the frames of it and its inner exceptions: an RST assembly
     /// frame wins; otherwise a frame outside the shared framework makes it foreign; otherwise framework-only.
     /// </summary>
