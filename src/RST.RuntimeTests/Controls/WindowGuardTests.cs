@@ -96,6 +96,39 @@ public class WindowGuardTests
         timer.Stop();
     }
 
+    /// <summary>
+    /// The modeless net (Search-It, v3.4): WindowGuard.Show returns with the window open, a later fault on the
+    /// UI thread is logged once at Error and closes the window, and once it has closed the net is gone.
+    /// </summary>
+    [Fact]
+    public void Modeless_AFaultWhileOpen_IsLoggedAtError_AndTheWindowCloses() => Sta(() =>
+    {
+        var boom = new InvalidOperationException("SC-045 test: a modeless window's handler threw");
+        var backstopFired = false;
+        var closed = false;
+        Exception? escaped = null;
+
+        var events = CaptureLog(() =>
+        {
+            var window = Small(() => backstopFired = true);
+            window.Closed += (_, _) => closed = true;
+            escaped = Record.Exception(() =>
+            {
+                WindowGuard.Show(window, "Test");
+                Assert.True(window.IsVisible, "Show returns with the window open");
+                window.Dispatcher.BeginInvoke(new Action(() => throw boom));
+                RST.RuntimeTests.Support.WindowCapture.DoEvents();
+            });
+        });
+
+        Assert.Null(escaped);
+        Assert.True(closed);
+        Assert.False(backstopFired, "the window went only on the test's backstop, not on the safety net");
+        var fault = Assert.Single(Faults(events));
+        Assert.Equal(LogLevel.Error, fault.Level);
+        Assert.Same(boom, fault.Exception);
+    });
+
     [Fact]
     public void LoadedThrows_IsLoggedAtError_TheWindowCloses_AndNothingEscapes() => Sta(() =>
     {
