@@ -153,6 +153,7 @@ public partial class SearchItWindow : Window
     private void KeepEightCards()
     {
         if (!IsOpen) return;
+        var before = ActualHeight;
         for (var pass = 0; pass < 3; pass++)
         {
             UpdateLayout();
@@ -162,6 +163,13 @@ public partial class SearchItWindow : Window
             if (current - extra <= MinHeight) break;
             Height = current - extra;
         }
+        UpdateLayout();
+        // WPF centred the window on Revit at the size it had before it settled: centre it again. (Unowned,
+        // in tests or an odd host: keep its middle where it was.)
+        if (WindowStartupLocation == WindowStartupLocation.Manual) return; // placed by hand (the off-screen tests)
+        if (WindowPlacement.CentreOnOwner(this)) return;
+        var change = ActualHeight - before;
+        if (Math.Abs(change) >= 0.5 && !double.IsNaN(Top)) Top -= change / 2;
     }
 
     // ── opening: first frame, ready, focus ───────────────────────────────

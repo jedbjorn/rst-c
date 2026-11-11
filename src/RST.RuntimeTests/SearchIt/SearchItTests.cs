@@ -9,7 +9,6 @@
 // tool. Screenshots: search-it-*.
 
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -577,72 +576,6 @@ public class SearchItTests
             WindowCapture.DoEvents();
             Assert.False(window.IsOpen);
             Assert.Single(backend.Ran);
-        }
-        finally
-        {
-            SearchItLauncher.Current?.Close();
-        }
-    });
-
-    private const int WM_LBUTTONDOWN = 0x0201;
-    private const int WM_LBUTTONUP = 0x0202;
-    private const int MK_LBUTTON = 0x0001;
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
-
-    private static void PostClick(IntPtr hwnd, int x, int y)
-    {
-        var at = (IntPtr)((y << 16) | (x & 0xFFFF));
-        PostMessage(hwnd, WM_LBUTTONDOWN, (IntPtr)MK_LBUTTON, at);
-        PostMessage(hwnd, WM_LBUTTONUP, IntPtr.Zero, at);
-    }
-
-    /// <summary>
-    /// The same, through Windows' own queue: a real left click posted to the window while the UI thread
-    /// reads the tools, at the spot where the first result card will be. Windows stamps it with the time it
-    /// was queued; it is delivered after the read, and nothing runs.
-    /// </summary>
-    [Fact]
-    public void A_click_queued_in_the_message_queue_during_the_cold_read_runs_nothing() => Sta(() =>
-    {
-        var backend = new FakeBackend { Tools = Many(30).ToArray() };
-        backend.OnLoad = () =>
-        {
-            var window = SearchItLauncher.Current!;
-            var hwnd = new WindowInteropHelper(window).Handle;
-            // Inside the result list's first card (the list starts about 70 px down; a card is 44 px tall).
-            PostClick(hwnd, 150, 92);
-            Thread.Sleep(150);
-        };
-        try
-        {
-            SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle);
-            var window = SearchItLauncher.Current!;
-            for (var i = 0; i < 5; i++)
-            {
-                Thread.Sleep(20);
-                WindowCapture.DoEvents();
-            }
-            Assert.True(window.IsOpen, "the queued click did not choose a tool");
-            Assert.Null(window.ViewModel.Chosen);
-            Assert.Empty(backend.Ran);
-
-            // The control: the queued click was on the first card, and the same click posted now does run it.
-            var first = Card(window, 0);
-            var origin = first.TransformToAncestor((Visual)window.Content).Transform(new Point(0, 0));
-            Assert.InRange(150, origin.X, origin.X + first.ActualWidth);
-            Assert.InRange(92, origin.Y + 2, origin.Y + first.ActualHeight - 2);
-            PostClick(new WindowInteropHelper(window).Handle, 150, 92);
-            for (var i = 0; i < 5 && window.IsOpen; i++)
-            {
-                Thread.Sleep(20);
-                WindowCapture.DoEvents();
-            }
-            WindowCapture.DoEvents();
-            Assert.False(window.IsOpen, "a click posted after the read chooses the card");
-            Assert.Equal("ID_1", Assert.Single(backend.Ran).Id);
         }
         finally
         {

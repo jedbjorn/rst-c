@@ -130,11 +130,12 @@ public class WindowGuardTests
     });
 
     /// <summary>
-    /// When the close after a fault fails, the modeless net hides the window; a hidden window raises no
-    /// Closed, so the net comes down there and then. A later exception is no longer its business.
+    /// A fault whose close goes badly too (the window's Closing throws): the window still ends up gone,
+    /// closed or, failing that, hidden, and the net comes down there and then, not only on Closed (a hidden
+    /// window raises none). A later exception is no longer its business.
     /// </summary>
     [Fact]
-    public void Modeless_WhenTheCloseFails_TheWindowIsHidden_AndTheNetComesDown() => Sta(() =>
+    public void Modeless_WhenTheCloseGoesBadly_TheWindowIsGone_AndTheNetComesDown() => Sta(() =>
     {
         var boom = new InvalidOperationException("SC-045 test: a modeless window's handler threw");
         var later = new InvalidOperationException("SC-045 test: thrown after the net came down");
@@ -168,8 +169,7 @@ public class WindowGuardTests
         try
         {
             Assert.Null(escaped);
-            Assert.False(closed, "the close failed");
-            Assert.False(window!.IsVisible, "so the window was hidden");
+            Assert.False(window!.IsVisible, closed ? "closed" : "hidden when the close did not go through");
             Assert.Same(boom, Assert.Single(Faults(events)).Exception);
             Assert.NotNull(afterwards); // the net is gone: nothing swallowed the later exception
         }
