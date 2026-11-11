@@ -1437,7 +1437,7 @@ The other profiles were changed and stay changed.</value>
     <value>Search Revit's tools…</value>
   </data>
   <data name="SearchIt_Hint" xml:space="preserve">
-    <value>Enter keeps the text as a filter  ·  ↓ then Enter, or a click, runs a tool  ·  Esc closes</value>
+    <value>Enter: keep as a filter  ·  ↓ Enter or click: run  ·  Esc: close</value>
   </data>
   <data name="SearchIt_LoadingTitle" xml:space="preserve">
     <value>Finding Revit's tools…</value>

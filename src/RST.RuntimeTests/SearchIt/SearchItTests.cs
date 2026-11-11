@@ -1228,9 +1228,10 @@ public class SearchItTests
             o.Window.SearchBox.Text = "algn";
             Capture(o.Window, theme, "search-it-fuzzy");
 
-            o.Window.SearchBox.Text = "tag";
+            o.Window.SearchBox.Text = "wall";
             WindowCapture.DoEvents();
             o.Window.FocusCard(1);
+            Assert.Equal(1, o.Window.ResultsList.SelectedIndex);
             Capture(o.Window, theme, "search-it-highlight");
 
             o.Window.SearchBox.Text = "wall";
