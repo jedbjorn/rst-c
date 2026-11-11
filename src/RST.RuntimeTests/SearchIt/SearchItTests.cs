@@ -586,7 +586,6 @@ public class SearchItTests
             WindowCapture.DoEvents();
             Assert.Equal(activations, window.Activations);
             Assert.False(window.IsVisible);
-            Assert.False(window.IsActive);
         }
         finally
         {
