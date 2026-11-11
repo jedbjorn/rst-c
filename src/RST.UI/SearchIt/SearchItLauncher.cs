@@ -58,6 +58,10 @@ public static class SearchItLauncher
             if (existing.IsOpen && existing.IsVisible)
             {
                 Log.Information("Search-It window is already open; bringing it to the front");
+                // The press that ran the command again (the second click of a double-click on the ribbon button)
+                // may not have been read yet. It is not a click outside: it asked for this window. A fresh
+                // baseline consumes it, so the watch does not close the window a moment later (VM smoke test, D1).
+                existing.RebaseWatch();
                 existing.FocusSearch();
                 return false;
             }

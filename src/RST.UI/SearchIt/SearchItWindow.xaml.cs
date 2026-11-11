@@ -73,7 +73,9 @@ public partial class SearchItWindow : Window
         DarkTitleBar.Attach(this);
         FirstFrame.Attach(this);
         DataContext = viewModel;
-        _watch = new DispatcherTimer(DispatcherPriority.Input, Dispatcher) { Interval = WatchInterval };
+        // Normal priority: at Input the first readings waited behind the window's own layout and rendering,
+        // several hundred milliseconds after it showed (VM smoke test, D1), and a click landed in the gap.
+        _watch = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = WatchInterval };
         _watch.Tick += (_, _) => UiGuard.Run("Search-It window: watch the mouse", WatchTick);
         viewModel.RequestClose += OnRequestClose;
         viewModel.Chips.CollectionChanged += OnChipsChanged;
@@ -124,6 +126,7 @@ public partial class SearchItWindow : Window
             var owner = helper.Owner;
             // A press on the title bar or the resize border is the window's own too; WPF raises no mouse event for those.
             HwndSource.FromHwnd(hwnd)?.AddHook(NonClientPress);
+            RemoveMinimizeAndMaximize(hwnd);
             if (!_injectedSampler) Sampler = () => SampleNative(hwnd, owner);
         });
     }
@@ -132,8 +135,34 @@ public partial class SearchItWindow : Window
     private const int WM_NCRBUTTONDOWN = 0x00A4;
     internal const int WM_ENTERSIZEMOVE = 0x0231;
 
+    internal const int WM_SYSCOMMAND = 0x0112;
+    internal const int SC_MINIMIZE = 0xF020;
+    internal const int SC_MAXIMIZE = 0xF030;
+    private const int GWL_STYLE = -16;
+    internal const long WS_MINIMIZEBOX = 0x00020000;
+    internal const long WS_MAXIMIZEBOX = 0x00010000;
+
+    /// <summary>
+    /// The window is resizable but has no Minimize or Maximize button: minimized, an owned modeless window
+    /// leaves a stub above Revit's status bar until the next click outside (VM smoke test, D2). Without
+    /// the maximize box a double-click on the title bar does not maximize either.
+    /// </summary>
+    private static void RemoveMinimizeAndMaximize(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        var style = GetWindowLongPtr(hwnd, GWL_STYLE).ToInt64();
+        var wanted = style & ~(WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+        if (wanted != style) SetWindowLongPtr(hwnd, GWL_STYLE, new IntPtr(wanted));
+    }
+
     private IntPtr NonClientPress(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // However it is asked for (the system menu, a keyboard shortcut, another program): never minimized or maximized.
+        if (msg == WM_SYSCOMMAND && (wParam.ToInt64() & 0xFFF0) is SC_MINIMIZE or SC_MAXIMIZE)
+        {
+            handled = true;
+            return IntPtr.Zero;
+        }
         if (msg is WM_NCLBUTTONDOWN or WM_NCRBUTTONDOWN) _ownPress = true;
         // The user has started to drag or resize the window: its size and place are theirs from here on.
         else if (msg == WM_ENTERSIZEMOVE) _userMoved = true;
@@ -578,6 +607,12 @@ public partial class SearchItWindow : Window
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetCapture();
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
