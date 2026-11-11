@@ -77,8 +77,8 @@ Search-It stays out of your way. It is a small window that floats above Revit, a
 - **Esc** closes it (while it has the keyboard).
 - **A left or right click anywhere outside it** closes it.
 - **Switching to another program** (Alt+Tab) closes it.
-- **Drag its edges** to make it bigger or smaller. The size is not remembered: it opens at its usual size next time.
-- **Only one opens at a time.** If you click the Search-It button while the window is open, that click is a click outside it: the window closes and a fresh one opens. If you start Search-It from a keyboard shortcut instead, the window that is already open comes to the front with the cursor in the search box.
+- **Drag its edges** to make it bigger or smaller. The size is not remembered: it opens at its usual size next time. It has no minimize or maximize button.
+- **Only one opens at a time.** If you click the Search-It button while the window is open, that click is a click outside it: the window closes and a fresh one opens. A double-click on the button leaves you with one window, ready to type. If you start Search-It from a keyboard shortcut instead, the window that is already open comes to the front with the cursor in the search box.
 
 It follows Revit's light or dark theme.
 

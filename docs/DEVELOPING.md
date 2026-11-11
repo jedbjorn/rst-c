@@ -616,7 +616,7 @@ The fifth RST panel button (`RibbonBuilder`, `RST_SearchIt`, icons `icon_search`
   into view, focus), Up on the first card returns to the box, Enter runs the highlighted tool (never on a repeat), a
   printable character returns to the box and is typed there. Escape closes from anywhere. The highlighted card is the
   list's selected item, drawn by the implicit `ListBoxItem` style (`AccentSoftBrush`).
-- **The mouse outside the window.** A `DispatcherTimer` (30 ms) reads the left, right and middle buttons, the pointer,
+- **The mouse outside the window.** A `DispatcherTimer` (30 ms, Normal priority) reads the left, right and middle buttons, the pointer,
   the capture and the foreground window (`SampleNative`: `GetAsyncKeyState`, `GetCursorPos`, `GetWindowRect`,
   `GetCapture`, `GetForegroundWindow`) and `SearchItCloseRules.Step` decides: another application in front, or a left or
   right press outside, closes; the middle button coming up with Revit's main window in front takes the keyboard back
@@ -633,7 +633,10 @@ The fifth RST panel button (`RibbonBuilder`, `RST_SearchIt`, icons `icon_search`
   `Loaded` the height is handed to the window so the list follows a resize, and corrected (and the window centred on
   its owner again) once more at idle, unless the user has already started to drag or resize it (`WM_ENTERSIZEMOVE`).
   Nothing is saved.
-- **One window.** `SearchItLauncher` keeps the open window; a second command focuses it. A window that is no longer
+- **One window.** `SearchItLauncher` keeps the open window; a second command takes a fresh baseline for the watch
+  (the press that re-ran the command, the second click of a double-click on the ribbon button, is not a click outside)
+  and focuses it. The window has no Minimize or Maximize box (`WS_MINIMIZEBOX` / `WS_MAXIMIZEBOX` cleared on
+  `SourceInitialized`, `SC_MINIMIZE` / `SC_MAXIMIZE` refused): minimized, an owned modeless window leaves a stub. A window that is no longer
   visible (the safety net's hide fallback) does not count and is replaced.
 - **Tests:** `RST.RuntimeTests/SearchIt/SearchItTests` (the view-model with a fake backend; the real window: off the
   taskbar, owned, modeless, centred with the keyboard in the box cold and warm, eight cards, resize not remembered,
