@@ -96,7 +96,7 @@ Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, dis
 
 ### Search-It
 
-Search-It finds a tool when you know its name but not where it is on the ribbon. Click **Search-It** on the RST panel, type part of the name (typos are fine: "algn" finds Align), and each result shows the tool with the tab and panel it lives on. Click a result to run it. Press Enter to keep what you typed as a filter chip and narrow further. The window floats above Revit, so you can still pan and zoom the view, and it closes on Esc or a click outside it.
+Search-It finds a tool when you know its name but not where it is on the ribbon. Click **Search-It** on the RST panel, type part of the name (typos are fine: "algn" finds Align), and each result shows the tool with the tab and panel it lives on. Click a result to run it, or press Down and then Enter. In the search box, Enter keeps what you typed as a filter chip and narrows further. The window opens in the middle of Revit with the cursor in the search box, floats above Revit so you can still pan and zoom the view, and closes on Esc or a click outside it.
 
 **[Search-It docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/search-it.md)**
 
