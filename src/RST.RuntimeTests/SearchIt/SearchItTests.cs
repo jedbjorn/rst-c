@@ -596,6 +596,103 @@ public class SearchItTests
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+    /// <summary>
+    /// A quick double-click on the ribbon button (VM smoke test, D1): the first click opens the window; the
+    /// second runs the command again before the watch has read its press. That press asked for the window:
+    /// it must not close it a moment later. The double-click ends with one open window, ready to type.
+    /// </summary>
+    [Fact]
+    public void A_double_click_on_the_ribbon_button_leaves_one_open_window() => Sta(() =>
+    {
+        var backend = new FakeBackend { IsReady = true };
+        // Windows' "pressed since the last call" bit: set by the press, cleared by whoever reads it first.
+        var pressPending = false;
+        PointerSample? Read()
+        {
+            var sample = Away with { LeftPressedSince = pressPending };
+            pressPending = false;
+            return sample;
+        }
+        try
+        {
+            Assert.True(SearchItLauncher.Show(IntPtr.Zero, backend, Read));
+            var window = SearchItLauncher.Current!;
+            WindowCapture.DoEvents();
+            Assert.True(window.IsOpen);
+
+            // The second click: its press is pending, unread, when the command runs again.
+            pressPending = true;
+            Assert.False(SearchItLauncher.Show(IntPtr.Zero, backend, Read), "the same window, brought to the front");
+            for (var i = 0; i < 8; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.True(window.IsOpen, "the press that re-ran the command is not a click outside");
+            Assert.Same(window, SearchItLauncher.Current);
+            Assert.True(window.IsVisible);
+            Assert.True(window.SearchBox.IsKeyboardFocused, "and it is ready to type");
+            Assert.Equal(1, backend.Loads);
+
+            // The control: the same pending press with no second command is a click outside, and closes.
+            pressPending = true;
+            for (var i = 0; i < 8 && window.IsOpen; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.False(window.IsOpen);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+        }
+    });
+
+    /// <summary>
+    /// Resizable, but with no Minimize or Maximize button (VM smoke test, D2), and it cannot be minimized
+    /// or maximized any other way: the system command a title-bar double-click or the system menu sends is refused.
+    /// </summary>
+    [Fact]
+    public void The_window_has_no_minimize_or_maximize_and_stays_resizable() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            var hwnd = new WindowInteropHelper(window).Handle;
+            var style = GetWindowLongPtr(hwnd, -16).ToInt64();
+            Assert.Equal(0, style & SearchItWindow.WS_MINIMIZEBOX);
+            Assert.Equal(0, style & SearchItWindow.WS_MAXIMIZEBOX);
+            Assert.NotEqual(0, style & 0x00040000L); // WS_THICKFRAME: the edges still resize
+            Assert.NotEqual(0, style & 0x00080000L); // WS_SYSMENU: the close button stays
+            Assert.Equal(ResizeMode.CanResize, window.ResizeMode);
+
+            var height = window.ActualHeight;
+            SendMessage(hwnd, SearchItWindow.WM_SYSCOMMAND, (IntPtr)SearchItWindow.SC_MAXIMIZE, IntPtr.Zero);
+            WindowCapture.DoEvents();
+            Assert.Equal(WindowState.Normal, window.WindowState);
+            Near(height, window.ActualHeight);
+            SendMessage(hwnd, SearchItWindow.WM_SYSCOMMAND, (IntPtr)SearchItWindow.SC_MINIMIZE, IntPtr.Zero);
+            WindowCapture.DoEvents();
+            Assert.Equal(WindowState.Normal, window.WindowState);
+            Assert.True(window.IsVisible);
+            Assert.False(o.Closed);
+
+            // Resizing still works.
+            window.Height = height + SearchItLayout.RowHeight;
+            WindowCapture.DoEvents();
+            Near(height + SearchItLayout.RowHeight, window.ActualHeight);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
     /// <summary>
     /// The late size-and-centre pass (at idle after the window opens) must not fight the user: once they
     /// have started to drag or resize the window (Windows sends WM_ENTERSIZEMOVE), it is skipped.
