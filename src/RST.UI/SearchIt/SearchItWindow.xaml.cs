@@ -102,10 +102,20 @@ public partial class SearchItWindow : Window
     /// </summary>
     private void FreeTheHeight()
     {
-        var height = ActualHeight;
         SizeToContent = SizeToContent.Manual;
-        if (height > 0) Height = height;
         ResultsList.ClearValue(HeightProperty);
+        // The list now takes what the window leaves it. A window that sized to its content and one with a
+        // set height do not always agree on the frame (the list came out 8 px taller on Windows Server),
+        // so the window's height is corrected until the list is eight cards again.
+        for (var pass = 0; pass < 3; pass++)
+        {
+            UpdateLayout();
+            var extra = ResultsList.ActualHeight - SearchItLayout.ListHeight;
+            if (Math.Abs(extra) < 0.5) break;
+            var current = double.IsNaN(Height) ? ActualHeight : Height;
+            if (current - extra <= MinHeight) break;
+            Height = current - extra;
+        }
     }
 
     /// <summary>Brings the window to the front with the cursor in the search box.</summary>

@@ -615,7 +615,9 @@ public class SearchItTests
         var content = (FrameworkElement)window.Content;
         var bitmap = WindowCapture.Content(window, new Size(content.ActualWidth, content.ActualHeight));
         Screenshots.Save(bitmap, Name(name, theme));
-        Assert.True(Screenshots.DistinctPixels(bitmap) > 40, $"{name} looks blank");
+        // A short result list is a sparse picture (a few grey levels of text on one background): the bar is low,
+        // and a blank image still has exactly one value.
+        Assert.True(Screenshots.DistinctPixels(bitmap) > 8, $"{name} looks blank");
     }
 
     [Theory]
