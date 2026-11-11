@@ -9,6 +9,7 @@
 // tool. Screenshots: search-it-*.
 
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -499,6 +500,142 @@ public class SearchItTests
         Assert.Equal(-1, window.ResultsList.SelectedIndex);
     }
 
+    /// <summary>
+    /// A cold read takes seconds. If the user has switched to another application by the time it ends, the
+    /// window does not pull itself (and Revit) forward to take the keyboard: it never asks to be activated
+    /// again, and the watch then closes it, as for any switch away.
+    /// </summary>
+    [Fact]
+    public void After_a_cold_read_the_keyboard_is_not_taken_from_another_application() => Sta(() =>
+    {
+        var backend = new FakeBackend();
+        var away = false;
+        var activationsAtLoad = -1;
+        backend.OnLoad = () =>
+        {
+            activationsAtLoad = SearchItLauncher.Current!.Activations;
+            away = true; // Alt+Tab during the read
+        };
+        try
+        {
+            SearchItLauncher.Show(IntPtr.Zero, backend, () => away ? Idle with { HostInFront = false } : Idle);
+            var window = SearchItLauncher.Current!;
+            Assert.False(window.IsHostInFront());
+            WindowCapture.DoEvents(); // the settle pass
+            Assert.Equal(activationsAtLoad, window.Activations);
+            for (var i = 0; i < 10 && window.IsOpen; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.False(window.IsOpen, "another application in front closes the window");
+            Assert.Equal(activationsAtLoad, window.Activations);
+            Assert.Empty(backend.Ran);
+
+            // The control: with Revit still in front, the launcher does take the keyboard.
+            away = false;
+            backend.OnLoad = null;
+            SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle);
+            Assert.True(SearchItLauncher.Current!.IsHostInFront());
+            Assert.True(SearchItLauncher.Current.SearchBox.IsKeyboardFocused);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+        }
+    });
+
+    /// <summary>
+    /// Hidden without closing (the safety net's fallback when a close fails): the watch stops, and nothing,
+    /// not a pan's end nor the launcher, activates or focuses the hidden window.
+    /// </summary>
+    [Fact]
+    public void A_hidden_window_stops_watching_and_is_never_refocused() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            Assert.True(window.IsWatching);
+            var readings = 0;
+            window.Sampler = () =>
+            {
+                readings++;
+                return o.Sample;
+            };
+            window.Hide();
+            WindowCapture.DoEvents();
+            Assert.False(window.IsWatching, "the timer stops when the window is hidden");
+            Assert.True(window.IsOpen, "hidden, not closed");
+
+            // A pan ends with Revit in front: the hidden window is left alone.
+            var activations = window.Activations;
+            readings = 0;
+            o.Sample = Away with { OwnerInFront = true, MiddleDown = true };
+            window.WatchTick();
+            o.Sample = Away with { OwnerInFront = true };
+            window.WatchTick();
+            for (var i = 0; i < 4; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.Equal(0, readings);
+            window.FocusSearch();
+            window.FocusWhenSettled();
+            WindowCapture.DoEvents();
+            Assert.Equal(activations, window.Activations);
+            Assert.False(window.IsVisible);
+            Assert.False(window.IsActive);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>
+    /// The late size-and-centre pass (at idle after the window opens) must not fight the user: once they
+    /// have started to drag or resize the window (Windows sends WM_ENTERSIZEMOVE), it is skipped.
+    /// </summary>
+    [Fact]
+    public void The_late_size_correction_is_skipped_once_the_user_moves_or_resizes_the_window() => Sta(() =>
+    {
+        var o = Open(new FakeBackend { Tools = Many(60).ToArray() });
+        try
+        {
+            var window = o.Window;
+            var list = window.ResultsList;
+            WindowCapture.DoEvents();
+            Near(SearchItLayout.ListHeight, list.ActualHeight);
+
+            // Untouched by the user, a late pass puts a wrong height right.
+            window.Height = window.ActualHeight + 2 * SearchItLayout.RowHeight;
+            WindowCapture.DoEvents();
+            Near(10 * SearchItLayout.RowHeight, list.ActualHeight);
+            window.LateSizeCorrection();
+            WindowCapture.DoEvents();
+            Near(SearchItLayout.ListHeight, list.ActualHeight);
+
+            // The user grabs the window's edge: from here its size and place are theirs.
+            SendMessage(new WindowInteropHelper(window).Handle, SearchItWindow.WM_ENTERSIZEMOVE, IntPtr.Zero, IntPtr.Zero);
+            window.Height = window.ActualHeight + 2 * SearchItLayout.RowHeight;
+            WindowCapture.DoEvents();
+            var top = window.Top;
+            window.LateSizeCorrection();
+            WindowCapture.DoEvents();
+            Near(10 * SearchItLayout.RowHeight, list.ActualHeight);
+            Assert.Equal(top, window.Top);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
     /// <summary>The busy overlay's frame is drawn (ContentRendered) before the tools are read: a cold catalogue build never freezes a blank window.</summary>
     [Fact]
     public void The_launcher_draws_the_busy_overlay_before_it_reads_the_tools() => Sta(() =>
@@ -804,6 +941,89 @@ public class SearchItTests
             Type(Card(window, 0), "\r");
             Assert.Equal("wall", window.SearchBox.Text);
             Assert.True(Card(window, 0).IsFocused);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void A_character_typed_on_a_card_replaces_the_selection_in_the_box() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            window.SearchBox.Text = "wall";
+            window.SearchBox.Select(1, 2); // "al"
+            WindowCapture.DoEvents();
+            Assert.True(Key2(window.SearchBox, window, Key.Down));
+            Type(Card(window, 0), "i");
+            Assert.Equal("wil", window.SearchBox.Text);
+            Assert.Equal(2, window.SearchBox.CaretIndex);
+            Assert.Equal(0, window.SearchBox.SelectionLength);
+            Assert.True(window.SearchBox.IsFocused);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void A_right_click_on_a_card_does_not_select_it() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            var card = Card(window, 0);
+            // A right press as the mouse sends it: the tunnelling event, which the list's handler takes, so the
+            // bubbling one (where a list row selects and focuses itself) arrives already handled.
+            var down = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = Mouse.PreviewMouseDownEvent };
+            card.RaiseEvent(down);
+            Assert.True(down.Handled, "the list never acts on the right press");
+            if (!down.Handled)
+                card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = Mouse.MouseDownEvent });
+            WindowCapture.DoEvents();
+            Assert.Equal(-1, window.ResultsList.SelectedIndex);
+            Assert.False(card.IsSelected);
+            Assert.True(window.SearchBox.IsFocused, "the keyboard stays in the box: Enter there makes a chip, it runs nothing");
+            Assert.False(o.Closed);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Removing_a_chip_while_a_card_has_the_keyboard_returns_it_to_the_box() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            window.SearchBox.Text = "wall";
+            window.ViewModel.CommitChip();
+            WindowCapture.DoEvents();
+            window.FocusCard(1);
+            Assert.True(Card(window, 1).IsFocused);
+
+            var chip = window.ViewModel.Chips.Single();
+            chip.RemoveCommand.Execute(chip); // the chip's ×, which never takes the focus itself
+            WindowCapture.DoEvents();
+            Assert.Empty(window.ViewModel.Chips);
+            Assert.True(window.SearchBox.IsFocused, "the keyboard is in the box, not nowhere");
+            Assert.Equal(-1, window.ResultsList.SelectedIndex);
+            Assert.Same(window.SearchBox, FocusManager.GetFocusedElement(window));
+
+            // With the keyboard already in the box, a chip change moves nothing.
+            window.SearchBox.Text = "door";
+            window.SearchBox.CaretIndex = 2;
+            window.ViewModel.CommitChip();
+            Assert.True(window.SearchBox.IsFocused);
         }
         finally
         {
