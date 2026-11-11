@@ -1,15 +1,20 @@
 // rst-c's own (not vendored). Search-It (v3.4): the view-model's flows with a fake backend, and the
-// real window: modeless and owned (no taskbar entry, owner set, Show returns with it open), eight
-// result cards at the default size, resizable but never remembered, the busy overlay drawn before the
-// tools are read, Enter makes a chip and never runs a tool, Escape closes, a left or right press
-// outside closes while the middle button and the wheel do not, another application in front closes,
-// and a click on a result closes the window first and then runs the tool. Screenshots: search-it-*.
+// real window: modeless and owned (no taskbar entry, owner set, Show returns with it open), centred on
+// its owner with the keyboard in the search box on a cold and on a warm open, eight result cards at
+// the default size, resizable but never remembered, the busy overlay drawn before a cold read and
+// input queued during it dropped, the keys (decision #83: Enter makes a chip in the box and runs the
+// highlighted tool on a card; Up, Down, typing and Escape), a left or right press outside closes while
+// the middle button and the wheel do not, the keyboard taken back after a middle-button pan, another
+// application in front closes, and a click on a result closes the window first and then runs the
+// tool. Screenshots: search-it-*.
 
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using RST.Core.Search;
 using RST.Core.Theming;
@@ -48,6 +53,7 @@ public class SearchItTests
         public IReadOnlyList<SearchTool> Tools { get; set; } = Sample;
         public List<SearchTool> Ran { get; } = [];
         public int Loads { get; private set; }
+        public bool IsReady { get; set; }
         public Action? OnLoad { get; set; }
         public Action? OnRun { get; set; }
 
@@ -68,8 +74,8 @@ public class SearchItTests
     private static readonly SearchTool[] Sample =
     [
         new("ID_ALIGN", "Align", "Modify", "Modify"),
-        new("ID_ANNOTATIONS_DIMENSION_ALIGNED", "Aligned Dimension", "Annotate", "Dimension", 1),
-        new("ID_OBJECTS_WALL", "Wall: Architectural", "Architecture", "Build", 2),
+        new("ID_ANNOTATIONS_DIMENSION_ALIGNED", [new("Aligned Dimension", "Annotate", "Dimension"), new("Aligned Dimension", "Modify", "Measure")]),
+        new("ID_OBJECTS_WALL", [new("Wall: Architectural", "Architecture", "Build"), new("Wall: Architectural", "Structure", "Structure"), new("Wall", "Massing & Site", "Model by Face")]),
         new("ID_OBJECTS_STRUCTURAL_WALL", "Wall: Structural", "Structure", "Structure"),
         new("ID_OBJECTS_CURTAIN_WALL", "Curtain Wall", "Architecture", "Build"),
         new("ID_OBJECTS_DOOR", "Door", "Architecture", "Build"),
@@ -79,12 +85,14 @@ public class SearchItTests
         new("ID_VIEW_NEW_SECTION", "Section", "View", "Create"),
         new("ID_VIEW_NEW_3DVIEW", "Default 3D View", "View", "Create"),
         new("ID_EDIT_MOVE", "Move", "Modify", "Modify"),
+        new("ID_OBJECTS_ROOM_TAG", [new("Tag Room", "Architecture", "Room & Area"), new("Room Tag", "Annotate", "Tag")]),
         new("CustomCtrl_%CustomCtrl_%Add-Ins%Kinship%Open", "Open Library", "Add-Ins", "Kinship"),
     ];
 
-    private static SearchItViewModel Loaded(FakeBackend backend)
+    /// <summary>A view-model with the tools read; the chosen tool's run is queued in <paramref name="posted"/> when given, else on the dispatcher.</summary>
+    private static SearchItViewModel Loaded(FakeBackend backend, List<Action>? posted = null)
     {
-        var vm = new SearchItViewModel(backend);
+        var vm = posted is null ? new SearchItViewModel(backend) : new SearchItViewModel(backend, posted.Add);
         vm.BeginLoading();
         vm.Load();
         return vm;
@@ -99,13 +107,13 @@ public class SearchItTests
     {
         var vm = Loaded(new FakeBackend());
         Assert.Equal(Sample.Length, vm.Results.Count);
-        Assert.Equal("13 tools", vm.StatusText);
+        Assert.Equal("14 tools", vm.StatusText);
 
         vm.Text = "algn";
         Assert.Equal("Align", Names(vm).First());
         vm.Text = "wall";
-        Assert.Equal(["Wall: Structural", "Wall: Architectural", "Curtain Wall"], Names(vm));
-        Assert.Equal("3 of 13 tools", vm.StatusText);
+        Assert.Equal(["Wall", "Wall: Structural", "Curtain Wall"], Names(vm));
+        Assert.Equal("3 of 14 tools", vm.StatusText);
         Assert.False(vm.IsEmpty);
 
         vm.Text = "zzzz";
@@ -115,7 +123,7 @@ public class SearchItTests
     });
 
     [Fact]
-    public void A_result_card_shows_the_name_and_where_the_tool_lives() => Sta(() =>
+    public void A_result_card_shows_the_name_that_matched_and_where_that_is() => Sta(() =>
     {
         var vm = Loaded(new FakeBackend());
         vm.Text = "wall: arch";
@@ -124,9 +132,24 @@ public class SearchItTests
         Assert.Equal("Architecture › Build", card.Location);
         Assert.True(card.HasMore);
         Assert.Equal("+2 more places", card.MoreText);
+        Assert.Equal("Architecture › Build (+2 more places)", card.ToolTip);
+
+        // The ribbon's other name for the same command: one card, under that name, at that place.
+        vm.Text = "room tag";
+        card = vm.Results[0];
+        Assert.Equal("ID_OBJECTS_ROOM_TAG", card.Tool.Id);
+        Assert.Equal("Room Tag", card.Name);
+        Assert.Equal("Annotate › Tag", card.Location);
+        Assert.Equal("+1 more place", card.MoreText);
+        vm.Text = "tag room";
+        Assert.Equal("Tag Room", vm.Results[0].Name);
+        Assert.Equal("Architecture › Room & Area", vm.Results[0].Location);
+        Assert.Single(vm.Results, r => r.Tool.Id == "ID_OBJECTS_ROOM_TAG");
+
         vm.Text = "align";
         Assert.False(vm.Results[0].HasMore);
-        Assert.Equal("Modify › Modify", vm.Results[0].Location);
+        Assert.Equal("", vm.Results[0].MoreText);
+        Assert.Equal("Modify › Modify", vm.Results[0].ToolTip);
     });
 
     [Fact]
@@ -140,7 +163,7 @@ public class SearchItTests
         Assert.Equal(["Wall"], vm.Chips.Select(c => c.Text));
         Assert.True(vm.HasChips);
         Assert.Equal(3, vm.Results.Count);
-        Assert.Empty(backend.Ran); // Enter never runs a tool
+        Assert.Empty(backend.Ran); // a chip never runs a tool
 
         vm.Text = "strucural"; // a typo, ranked inside the chip's set
         Assert.Equal(["Wall: Structural"], Names(vm));
@@ -191,27 +214,49 @@ public class SearchItTests
         Assert.False(vm.RemoveLastChip());
     });
 
+    /// <summary>
+    /// The window closes first; the run is queued behind the close, never made from inside the click
+    /// (whatever the run shows must not open from the click handler of a window being destroyed).
+    /// </summary>
     [Fact]
-    public void A_click_closes_first_and_then_runs_the_tool_once() => Sta(() =>
+    public void Choosing_a_tool_closes_first_and_queues_its_run_once() => Sta(() =>
     {
         var order = new List<string>();
+        var posted = new List<Action>();
         var backend = new FakeBackend { OnRun = () => order.Add("run") };
-        var vm = Loaded(backend);
+        var vm = Loaded(backend, posted);
         vm.RequestClose += (_, _) => order.Add("close");
         vm.Text = "door";
         var card = vm.Results[0];
         card.RunCommand.Execute(card);
-        card.RunCommand.Execute(card); // a double click runs it once
+        card.RunCommand.Execute(card); // a double click chooses once
+        Assert.Equal(["close"], order);
+        Assert.Empty(backend.Ran);
+        Assert.Equal("ID_OBJECTS_DOOR", vm.Chosen?.Id);
+
+        Assert.Single(posted)();
         Assert.Equal(["close", "run"], order);
         Assert.Equal("ID_OBJECTS_DOOR", Assert.Single(backend.Ran).Id);
-        Assert.Equal("ID_OBJECTS_DOOR", vm.Chosen?.Id);
+    });
+
+    [Fact]
+    public void By_default_the_run_is_queued_on_the_dispatcher_behind_the_close() => Sta(() =>
+    {
+        var backend = new FakeBackend();
+        var vm = Loaded(backend);
+        var card = vm.Results[0];
+        card.RunCommand.Execute(card);
+        Assert.Empty(backend.Ran);
+        WindowCapture.DoEvents();
+        Assert.Same(card.Tool, Assert.Single(backend.Ran));
     });
 
     [Fact]
     public void While_the_tools_load_the_window_is_busy_and_what_was_typed_is_kept() => Sta(() =>
     {
         var backend = new FakeBackend();
-        var vm = new SearchItViewModel(backend);
+        var posted = new List<Action>();
+        var vm = new SearchItViewModel(backend, posted.Add);
         vm.BeginLoading();
         Assert.True(vm.IsLoading);
         Assert.True(vm.Busy.IsBusy);
@@ -222,6 +267,12 @@ public class SearchItTests
         Assert.False(vm.IsLoading);
         Assert.False(vm.Busy.IsBusy);
         Assert.Equal(["Door"], Names(vm));
+
+        // A warm open reads without the busy state.
+        var warm = new SearchItViewModel(new FakeBackend { IsReady = true });
+        warm.Load();
+        Assert.False(warm.Busy.IsBusy);
+        Assert.Equal(Sample.Length, warm.Results.Count);
 
         // A backend that fails: the busy state still ends, and the failure reaches the caller (the command logs it).
         var failing = new SearchItViewModel(new FakeBackend { OnLoad = () => throw new InvalidOperationException("scan failed") });
@@ -236,7 +287,11 @@ public class SearchItTests
 
     // ── the window ───────────────────────────────────────────────────────
 
-    private static readonly PointerSample Idle = new(false, false, false, false, PointerInside: true, HostInFront: true);
+    /// <summary>Nothing down, the pointer over the window, Revit's process in front.</summary>
+    private static readonly PointerSample Idle = new(PointerInside: true, HostInFront: true);
+
+    /// <summary>Nothing down, the pointer outside the window, Revit's process in front.</summary>
+    private static readonly PointerSample Away = new(HostInFront: true);
 
     private sealed class Opened(SearchItWindow window, FakeBackend backend)
     {
@@ -262,13 +317,41 @@ public class SearchItTests
         if (!o.Closed) o.Window.Close();
     }
 
-    private static bool Press(UIElement source, Window w, Key key, RoutedEvent? routed = null)
+    /// <summary>Raises a key press as of now (or of <paramref name="timestamp"/>) on <paramref name="source"/>; returns whether it was handled.</summary>
+    private static bool Press(UIElement source, Window w, Key key, RoutedEvent? routed = null, int? timestamp = null)
     {
-        var args = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(w)!, 0, key) { RoutedEvent = routed ?? Keyboard.KeyDownEvent };
+        var args = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(w)!, timestamp ?? Environment.TickCount, key)
+        {
+            RoutedEvent = routed ?? Keyboard.KeyDownEvent,
+        };
         source.RaiseEvent(args);
         WindowCapture.DoEvents();
         return args.Handled;
     }
+
+    /// <summary>A key as the keyboard sends it: the tunnelling event first, then, when nothing took it, the bubbling one.</summary>
+    private static bool Key2(UIElement source, Window w, Key key) =>
+        Press(source, w, key, Keyboard.PreviewKeyDownEvent) || Press(source, w, key);
+
+    private static bool Mouse2(UIElement source, RoutedEvent routed, int timestamp)
+    {
+        var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, timestamp, MouseButton.Left) { RoutedEvent = routed };
+        source.RaiseEvent(args);
+        return args.Handled;
+    }
+
+    private static void Type(UIElement source, string text)
+    {
+        var args = new TextCompositionEventArgs(Keyboard.PrimaryDevice, new TextComposition(InputManager.Current, source, text))
+        {
+            RoutedEvent = TextCompositionManager.PreviewTextInputEvent,
+        };
+        source.RaiseEvent(args);
+        WindowCapture.DoEvents();
+    }
+
+    private static ListBoxItem Card(SearchItWindow window, int index) =>
+        Assert.IsType<ListBoxItem>(window.ResultsList.ItemContainerGenerator.ContainerFromIndex(index));
 
     private static IEnumerable<SearchTool> Many(int count) =>
         Enumerable.Range(1, count).Select(i => new SearchTool("ID_" + i, $"Tool {i:000}", "Tab " + (i % 5), "Panel " + (i % 7)));
@@ -283,15 +366,27 @@ public class SearchItTests
         window.Close();
     });
 
+    private static Window OwnerOnScreen()
+    {
+        var owner = new Window
+        {
+            Width = 760, Height = 560, Left = 120, Top = 90, Title = "Owner",
+            WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false,
+        };
+        owner.Show();
+        WindowCapture.DoEvents();
+        return owner;
+    }
+
     /// <summary>
     /// The launcher shows it modeless (Show returns with the window open and no modal loop running),
-    /// owned by the handle it was given, and a second call focuses the open window instead of opening another.
+    /// owned by the handle it was given, and a second call focuses the open window instead of opening
+    /// another. A window that was only hidden (the safety net's fallback) does not count as open.
     /// </summary>
     [Fact]
     public void The_launcher_shows_it_modeless_and_owned_and_only_once() => Sta(() =>
     {
-        var owner = new Window { Width = 300, Height = 200, Title = "Owner" };
-        WindowCapture.ShowOffScreen(owner);
+        var owner = OwnerOnScreen();
         var ownerHandle = new WindowInteropHelper(owner).Handle;
         var backend = new FakeBackend();
         try
@@ -317,7 +412,17 @@ public class SearchItTests
             WindowCapture.DoEvents();
             Assert.Null(SearchItLauncher.Current);
             Assert.True(SearchItLauncher.Show(ownerHandle, backend, () => Idle), "closed: the next click opens a new one");
-            Assert.NotSame(window, SearchItLauncher.Current);
+            var second = SearchItLauncher.Current!;
+            Assert.NotSame(window, second);
+
+            // Hidden, not closed (what WindowGuard falls back to when a close fails): not "open".
+            var closed = false;
+            second.Closed += (_, _) => closed = true;
+            second.Hide();
+            Assert.True(SearchItLauncher.Show(ownerHandle, backend, () => Idle), "a hidden window is replaced, not focused");
+            Assert.NotSame(second, SearchItLauncher.Current);
+            Assert.True(closed, "the stale window is closed for good");
+            Assert.True(SearchItLauncher.Current!.IsVisible);
         }
         finally
         {
@@ -326,24 +431,93 @@ public class SearchItTests
         }
     });
 
-    /// <summary>The busy overlay is on screen before the tools are read: a cold catalogue build never freezes a blank window.</summary>
+    /// <summary>
+    /// The hard requirement: on open the window is centred over its owner (Revit's main window), active,
+    /// with the keyboard and the caret in the search box, so the first keystroke after the ribbon click lands
+    /// in the box. On a cold open (the tools read under the overlay) and on a warm one.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void It_opens_centred_on_its_owner_with_the_keyboard_in_the_search_box(bool cold) => Sta(() =>
+    {
+        var owner = OwnerOnScreen();
+        var ownerHandle = new WindowInteropHelper(owner).Handle;
+        var backend = new FakeBackend { IsReady = !cold, Tools = Sample.Concat(Many(40)).ToArray() };
+        bool? overlayAtLoad = null;
+        var shownAtLoad = false;
+        backend.OnLoad = () =>
+        {
+            shownAtLoad = SearchItLauncher.Current is { IsVisible: true };
+            overlayAtLoad = SearchItLauncher.Current?.ViewModel.Busy.IsBusy;
+        };
+        try
+        {
+            Assert.True(SearchItLauncher.Show(ownerHandle, backend, () => Idle));
+            var window = SearchItLauncher.Current!;
+            // Straight after Show returns, as the command returns to Revit...
+            AssertReadyToType(window, "when Show returns");
+            // ...and once everything queued has run (the settle pass, the default-size pass).
+            WindowCapture.DoEvents();
+            AssertReadyToType(window, "once idle");
+
+            if (cold)
+            {
+                Assert.True(shownAtLoad, "cold: the window was up while the tools were read");
+                Assert.True(overlayAtLoad, "cold: under the busy overlay");
+            }
+            else
+            {
+                Assert.False(shownAtLoad, "warm: the tools were read before the window showed");
+                Assert.Null(overlayAtLoad);
+            }
+            Assert.False(window.ViewModel.Busy.IsBusy);
+            Assert.False(window.ViewModel.IsLoading);
+            Assert.Equal(backend.Tools.Count, window.ViewModel.Results.Count);
+
+            // Centred over the owner, both ways.
+            var ownerCentre = new Point(owner.Left + owner.ActualWidth / 2, owner.Top + owner.ActualHeight / 2);
+            var centre = new Point(window.Left + window.ActualWidth / 2, window.Top + window.ActualHeight / 2);
+            Assert.True(Math.Abs(centre.X - ownerCentre.X) <= 12 && Math.Abs(centre.Y - ownerCentre.Y) <= 12,
+                $"window centre {centre} (at {window.Left},{window.Top}, {window.ActualWidth}x{window.ActualHeight}), owner centre {ownerCentre}");
+
+            // The first keystroke lands in the box: text typed at the focused element goes there.
+            var focused = Assert.IsAssignableFrom<UIElement>(Keyboard.FocusedElement);
+            Assert.Same(window.SearchBox, focused);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+            owner.Close();
+        }
+    });
+
+    private static void AssertReadyToType(SearchItWindow window, string when)
+    {
+        Assert.True(window.IsActive, $"the window is the active one ({when})");
+        Assert.True(window.IsKeyboardFocusWithin, $"the keyboard is in the window ({when})");
+        Assert.True(window.SearchBox.IsKeyboardFocused, $"the keyboard is in the search box ({when})");
+        Assert.Equal(-1, window.ResultsList.SelectedIndex);
+    }
+
+    /// <summary>The busy overlay's frame is drawn (ContentRendered) before the tools are read: a cold catalogue build never freezes a blank window.</summary>
     [Fact]
     public void The_launcher_draws_the_busy_overlay_before_it_reads_the_tools() => Sta(() =>
     {
         var backend = new FakeBackend();
-        bool? visible = null, busy = null, loaded = null;
+        bool? visible = null, busy = null, drawn = null;
         backend.OnLoad = () =>
         {
             var window = SearchItLauncher.Current;
             visible = window?.IsVisible;
-            loaded = window?.IsLoaded;
+            drawn = window?.FirstFrameDrawn;
             busy = window?.ViewModel.Busy.IsBusy;
         };
         try
         {
             SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle);
             Assert.True(visible, "the window is shown before the tools are read");
-            Assert.True(loaded, "and laid out and drawn");
+            Assert.True(drawn, "and its first frame has been drawn (ContentRendered)");
             Assert.True(busy, "with the busy overlay up");
             Assert.False(SearchItLauncher.Current!.ViewModel.Busy.IsBusy);
 
@@ -353,6 +527,122 @@ public class SearchItTests
             Assert.Throws<InvalidOperationException>(() => SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle));
             WindowCapture.DoEvents();
             Assert.Null(SearchItLauncher.Current);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+        }
+    });
+
+    /// <summary>
+    /// A click or an Enter made while the tools were being read was aimed at the overlay. Delivered late,
+    /// with its original time, it must not land on the result card now under the pointer and run a tool
+    /// nobody chose. Input from after the read works as usual.
+    /// </summary>
+    [Fact]
+    public void Input_stamped_before_the_tools_were_ready_is_dropped() => Sta(() =>
+    {
+        var backend = new FakeBackend();
+        var during = 0;
+        backend.OnLoad = () =>
+        {
+            Thread.Sleep(60);
+            during = Environment.TickCount; // the user clicks and presses Enter here, while the UI thread is busy
+            Thread.Sleep(60);
+        };
+        try
+        {
+            SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle);
+            var window = SearchItLauncher.Current!;
+            WindowCapture.DoEvents();
+            var card = WindowCapture.Descendants<Button>(window.ResultsList).First();
+
+            Assert.True(Mouse2(card, Mouse.PreviewMouseDownEvent, during), "a queued press is swallowed");
+            Assert.True(Mouse2(card, Mouse.PreviewMouseUpEvent, during), "and its release");
+            window.FocusCard(0);
+            Assert.True(Press(Card(window, 0), window, Key.Enter, Keyboard.PreviewKeyDownEvent, during), "a queued Enter is swallowed");
+            WindowCapture.DoEvents();
+            Assert.True(window.IsOpen);
+            Assert.Null(window.ViewModel.Chosen);
+            Assert.Empty(backend.Ran);
+            // Typed text is not dropped: it was aimed at the search box.
+            Assert.False(Press(window.SearchBox, window, Key.W, Keyboard.PreviewKeyDownEvent, during));
+
+            // The same input, made now.
+            Thread.Sleep(20);
+            Assert.False(Mouse2(card, Mouse.PreviewMouseDownEvent, Environment.TickCount));
+            Assert.False(Mouse2(card, Mouse.PreviewMouseUpEvent, Environment.TickCount));
+            window.FocusCard(0);
+            Assert.True(Press(Card(window, 0), window, Key.Enter, Keyboard.PreviewKeyDownEvent), "Enter on the card is taken, to run it");
+            WindowCapture.DoEvents();
+            Assert.False(window.IsOpen);
+            Assert.Single(backend.Ran);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+        }
+    });
+
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_LBUTTONUP = 0x0202;
+    private const int MK_LBUTTON = 0x0001;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private static void PostClick(IntPtr hwnd, int x, int y)
+    {
+        var at = (IntPtr)((y << 16) | (x & 0xFFFF));
+        PostMessage(hwnd, WM_LBUTTONDOWN, (IntPtr)MK_LBUTTON, at);
+        PostMessage(hwnd, WM_LBUTTONUP, IntPtr.Zero, at);
+    }
+
+    /// <summary>
+    /// The same, through Windows' own queue: a real left click posted to the window while the UI thread
+    /// reads the tools, at the spot where the first result card will be. Windows stamps it with the time it
+    /// was queued; it is delivered after the read, and nothing runs.
+    /// </summary>
+    [Fact]
+    public void A_click_queued_in_the_message_queue_during_the_cold_read_runs_nothing() => Sta(() =>
+    {
+        var backend = new FakeBackend { Tools = Many(30).ToArray() };
+        backend.OnLoad = () =>
+        {
+            var window = SearchItLauncher.Current!;
+            var hwnd = new WindowInteropHelper(window).Handle;
+            // Inside the result list's first card (the list starts about 70 px down; a card is 44 px tall).
+            PostClick(hwnd, 150, 92);
+            Thread.Sleep(150);
+        };
+        try
+        {
+            SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle);
+            var window = SearchItLauncher.Current!;
+            for (var i = 0; i < 5; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.True(window.IsOpen, "the queued click did not choose a tool");
+            Assert.Null(window.ViewModel.Chosen);
+            Assert.Empty(backend.Ran);
+
+            // The control: the queued click was on the first card, and the same click posted now does run it.
+            var first = Card(window, 0);
+            var origin = first.TransformToAncestor((Visual)window.Content).Transform(new Point(0, 0));
+            Assert.InRange(150, origin.X, origin.X + first.ActualWidth);
+            Assert.InRange(92, origin.Y + 2, origin.Y + first.ActualHeight - 2);
+            PostClick(new WindowInteropHelper(window).Handle, 150, 92);
+            for (var i = 0; i < 5 && window.IsOpen; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            WindowCapture.DoEvents();
+            Assert.False(window.IsOpen, "a click posted after the read chooses the card");
+            Assert.Equal("ID_1", Assert.Single(backend.Ran).Id);
         }
         finally
         {
@@ -406,13 +696,15 @@ public class SearchItTests
 
     private static void Near(double expected, double actual) => Assert.InRange(actual, expected - 1, expected + 1);
 
+    private static bool FullyVisible(ListBox list, ListBoxItem item)
+    {
+        if (!item.IsVisible) return false;
+        var top = item.TransformToAncestor(list).Transform(new Point(0, 0)).Y;
+        return top >= -0.5 && top + item.ActualHeight <= list.ActualHeight + 0.5;
+    }
+
     private static int FullyVisibleCards(ListBox list) =>
-        WindowCapture.Descendants<ListBoxItem>(list).Count(item =>
-        {
-            if (!item.IsVisible) return false;
-            var top = item.TransformToAncestor(list).Transform(new Point(0, 0)).Y;
-            return top >= -0.5 && top + item.ActualHeight <= list.ActualHeight + 0.5;
-        });
+        WindowCapture.Descendants<ListBoxItem>(list).Count(item => FullyVisible(list, item));
 
     [Fact]
     public void The_cursor_starts_in_the_search_box() => Sta(() =>
@@ -428,6 +720,8 @@ public class SearchItTests
         }
     });
 
+    // ── keys (decision #83) ──────────────────────────────────────────────
+
     [Fact]
     public void Enter_in_the_box_makes_a_chip_and_runs_nothing_Backspace_removes_it() => Sta(() =>
     {
@@ -438,11 +732,13 @@ public class SearchItTests
             box.Text = "wall";
             WindowCapture.DoEvents();
             Assert.Equal(3, o.Window.ViewModel.Results.Count);
-            Assert.True(Press(box, o.Window, Key.Enter, Keyboard.PreviewKeyDownEvent));
+            Assert.True(Key2(box, o.Window, Key.Enter));
             Assert.Equal(["wall"], o.Window.ViewModel.Chips.Select(c => c.Text));
             Assert.Equal("", box.Text);
+            WindowCapture.DoEvents();
             Assert.Empty(o.Backend.Ran);
-            Assert.False(o.Closed, "Enter keeps the window open");
+            Assert.Null(o.Window.ViewModel.Chosen);
+            Assert.False(o.Closed, "Enter in the box keeps the window open");
             Assert.Equal(Visibility.Visible, o.Window.ChipList.Visibility);
             var remove = WindowCapture.Descendants<Button>(o.Window.ChipList).Single();
             Assert.NotNull(remove.Command);
@@ -452,8 +748,129 @@ public class SearchItTests
             Assert.Equal(Visibility.Collapsed, o.Window.ChipList.Visibility);
             // With text in the box Backspace is the box's own.
             box.Text = "do";
-            o.Window.ViewModel.Text = "do";
             Assert.False(Press(box, o.Window, Key.Back, Keyboard.PreviewKeyDownEvent));
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Down_from_the_box_highlights_the_first_card_and_Up_and_Down_move_and_scroll() => Sta(() =>
+    {
+        var o = Open(new FakeBackend { Tools = Many(60).ToArray() });
+        try
+        {
+            var window = o.Window;
+            var list = window.ResultsList;
+            Assert.Equal(-1, list.SelectedIndex);
+
+            Assert.True(Key2(window.SearchBox, window, Key.Down));
+            Assert.Equal(0, list.SelectedIndex);
+            Assert.True(Card(window, 0).IsFocused, "the keyboard is on the first card");
+            Assert.False(window.SearchBox.IsFocused);
+
+            // The highlighted card is drawn as the theme's selected row; the others are not.
+            Assert.True(Card(window, 0).IsSelected);
+            var selected = Assert.IsType<SolidColorBrush>(Background(Card(window, 0)));
+            Assert.Equal(((SolidColorBrush)window.FindResource("AccentSoftBrush")).Color, selected.Color);
+            Assert.NotEqual(selected.Color, (Background(Card(window, 1)) as SolidColorBrush)?.Color);
+
+            // Down past the eighth card: the list scrolls and the highlighted card stays in view.
+            for (var i = 1; i <= 11; i++)
+            {
+                Assert.True(Key2(Card(window, i - 1), window, Key.Down));
+                Assert.Equal(i, list.SelectedIndex);
+                Assert.True(Card(window, i).IsFocused);
+                Assert.True(FullyVisible(list, Card(window, i)), $"card {i} is in view");
+            }
+            Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(0) is ListBoxItem first && FullyVisible(list, first) ? first : null);
+
+            // Up again, back into view at the top.
+            for (var i = 10; i >= 0; i--)
+            {
+                Assert.True(Key2(Card(window, i + 1), window, Key.Up));
+                Assert.Equal(i, list.SelectedIndex);
+                Assert.True(FullyVisible(list, Card(window, i)), $"card {i} is in view");
+            }
+
+            // Up on the first card returns to the box; nothing is highlighted and nothing ran.
+            Assert.True(Key2(Card(window, 0), window, Key.Up));
+            Assert.True(window.SearchBox.IsFocused);
+            Assert.Equal(-1, list.SelectedIndex);
+            WindowCapture.DoEvents();
+            Assert.Empty(o.Backend.Ran);
+            Assert.False(o.Closed);
+
+            // Down on the last card stays there.
+            window.FocusCard(59);
+            Assert.True(Key2(Card(window, 59), window, Key.Down));
+            Assert.Equal(59, list.SelectedIndex);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    private static Brush? Background(ListBoxItem card) => (card.Template.FindName("Bd", card) as Border)?.Background;
+
+    [Fact]
+    public void Enter_on_a_card_runs_the_highlighted_tool_as_a_click_does() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            window.SearchBox.Text = "wall";
+            WindowCapture.DoEvents();
+            Assert.True(Key2(window.SearchBox, window, Key.Down));
+            Assert.True(Key2(Card(window, 0), window, Key.Down));
+            Assert.Equal(1, window.ResultsList.SelectedIndex);
+            var closedWhenRun = false;
+            o.Backend.OnRun = () => closedWhenRun = o.Closed;
+
+            Assert.True(Key2(Card(window, 1), window, Key.Enter));
+            WindowCapture.DoEvents();
+            Assert.True(o.Closed);
+            Assert.Equal("chosen", window.CloseReason);
+            Assert.True(closedWhenRun, "the window is gone before the tool is posted");
+            Assert.Equal("ID_OBJECTS_STRUCTURAL_WALL", Assert.Single(o.Backend.Ran).Id);
+            Assert.Empty(window.ViewModel.Chips); // Enter on a card is not a chip
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Typing_on_a_card_goes_back_to_the_box_and_adds_the_character() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            window.SearchBox.Text = "wal";
+            window.SearchBox.CaretIndex = 3;
+            WindowCapture.DoEvents();
+            Assert.True(Key2(window.SearchBox, window, Key.Down));
+            Assert.True(Card(window, 0).IsFocused);
+
+            Type(Card(window, 0), "l");
+            Assert.Equal("wall", window.SearchBox.Text);
+            Assert.Equal("wall", window.ViewModel.Text);
+            Assert.True(window.SearchBox.IsFocused, "the keyboard is back in the box");
+            Assert.Equal(4, window.SearchBox.CaretIndex);
+            Assert.Equal(-1, window.ResultsList.SelectedIndex);
+            Assert.Empty(o.Backend.Ran);
+
+            // Enter, Tab and the like are not characters: they do not type.
+            Assert.True(Key2(window.SearchBox, window, Key.Down));
+            Type(Card(window, 0), "\r");
+            Assert.Equal("wall", window.SearchBox.Text);
+            Assert.True(Card(window, 0).IsFocused);
         }
         finally
         {
@@ -468,11 +885,31 @@ public class SearchItTests
         try
         {
             o.Window.SearchBox.Text = "door";
-            Assert.True(Press(o.Window.SearchBox, o.Window, Key.Escape));
+            Assert.True(Key2(o.Window.SearchBox, o.Window, Key.Escape));
+            WindowCapture.DoEvents();
             Assert.True(o.Closed);
             Assert.Equal("escape", o.Window.CloseReason);
             Assert.Empty(o.Backend.Ran);
             Assert.Null(o.Window.ViewModel.Chosen);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void Escape_on_a_card_closes_it_too() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            Assert.True(Key2(o.Window.SearchBox, o.Window, Key.Down));
+            Assert.True(Key2(Card(o.Window, 0), o.Window, Key.Escape));
+            WindowCapture.DoEvents();
+            Assert.True(o.Closed);
+            Assert.Equal("escape", o.Window.CloseReason);
+            Assert.Empty(o.Backend.Ran);
         }
         finally
         {
@@ -493,8 +930,9 @@ public class SearchItTests
             var card = WindowCapture.Descendants<Button>(o.Window.ResultsList).First();
             Assert.Equal("Door", ((SearchResultItem)card.DataContext).Name);
             card.Command.Execute(card.CommandParameter);
-            WindowCapture.DoEvents();
             Assert.True(o.Closed);
+            Assert.Empty(o.Backend.Ran); // queued behind the close, not run from inside the click
+            WindowCapture.DoEvents();
             Assert.True(closedWhenRun, "the window is gone before the tool is posted");
             Assert.Equal("chosen", o.Window.CloseReason);
             Assert.Equal("ID_OBJECTS_DOOR", Assert.Single(o.Backend.Ran).Id);
@@ -505,6 +943,8 @@ public class SearchItTests
         }
     });
 
+    // ── the watch ────────────────────────────────────────────────────────
+
     [Theory]
     [InlineData(true, false)]   // a left press outside
     [InlineData(false, true)]   // a right press outside
@@ -513,10 +953,10 @@ public class SearchItTests
         var o = Open();
         try
         {
-            o.Sample = Idle with { PointerInside = false };
+            o.Sample = Away;
             o.Window.WatchTick();
             Assert.False(o.Closed, "moving the pointer outside does nothing");
-            o.Sample = new PointerSample(left, false, right, false, PointerInside: false, HostInFront: true);
+            o.Sample = Away with { LeftDown = left, RightDown = right };
             o.Window.WatchTick();
             Assert.True(o.Closed);
             Assert.Equal("outside", o.Window.CloseReason);
@@ -529,33 +969,196 @@ public class SearchItTests
     });
 
     /// <summary>
-    /// Panning, orbiting and zooming the view: the middle button and the wheel are not among the things the
-    /// watch reads, so to it they are idle readings with the pointer outside, however many there are, and
-    /// Revit being the active window (a pan activates it) changes nothing.
+    /// The real reading: Windows is asked for the left, right and middle buttons and nothing else (no wheel,
+    /// no other key), and a middle button that is down, or the wheel turning (which the reading cannot even
+    /// see), leaves the window open.
     /// </summary>
     [Fact]
-    public void Middle_button_and_wheel_outside_leave_it_open_and_so_does_a_press_inside() => Sta(() =>
+    public void The_real_reading_asks_only_for_three_buttons_and_the_middle_one_never_closes() => Sta(() =>
+    {
+        var asked = new List<int>();
+        var middleDown = true;
+        var o = Open();
+        try
+        {
+            var hwnd = new WindowInteropHelper(o.Window).Handle;
+            PointerSample? Read() => SearchItWindow.SampleNative(hwnd, IntPtr.Zero, key =>
+            {
+                asked.Add(key);
+                return key == SearchItWindow.VK_MBUTTON && middleDown ? unchecked((short)0x8000) : (short)0;
+            });
+
+            var sample = Assert.NotNull(Read());
+            Assert.Equal([SearchItWindow.VK_LBUTTON, SearchItWindow.VK_RBUTTON, SearchItWindow.VK_MBUTTON], asked);
+            Assert.True(sample.MiddleDown);
+            Assert.False(sample.LeftDown || sample.RightDown || sample.LeftPressedSince || sample.RightPressedSince);
+            Assert.False(sample.OwnerInFront, "no owner: nothing to take the keyboard back from");
+
+            // The window watches through that reading: a pan (middle down, held, released) with the pointer
+            // outside. Whatever is in front on the test machine is taken out of it: this is about the buttons.
+            o.Window.Sampler = () => Read() is { } read ? read with { PointerInside = false, PressOnWindow = false, HostInFront = true } : null;
+            o.Window.RebaseWatch();
+            for (var i = 0; i < 10; i++) o.Window.WatchTick();
+            middleDown = false;
+            for (var i = 0; i < 10; i++) o.Window.WatchTick();
+            Assert.False(o.Closed, "the middle button and the wheel never close the window");
+            Assert.All(asked, key => Assert.Contains(key, new[] { SearchItWindow.VK_LBUTTON, SearchItWindow.VK_RBUTTON, SearchItWindow.VK_MBUTTON }));
+
+            Assert.Null(SearchItWindow.SampleNative(IntPtr.Zero, IntPtr.Zero));
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void After_a_pan_and_a_press_inside_a_left_click_in_the_view_still_closes_it() => Sta(() =>
     {
         var o = Open();
         try
         {
-            o.Sample = Idle with { PointerInside = false };
+            o.Sample = Away with { MiddleDown = true };
             for (var i = 0; i < 20; i++) o.Window.WatchTick();
+            o.Sample = Away;
+            o.Window.WatchTick();
             Assert.False(o.Closed);
 
             // A press inside (a drag of the window's edge), held while the pointer leaves, then released.
             o.Sample = Idle with { LeftDown = true };
             o.Window.WatchTick();
-            o.Sample = Idle with { LeftDown = true, PointerInside = false };
+            o.Sample = Away with { LeftDown = true };
             o.Window.WatchTick();
-            o.Sample = Idle with { PointerInside = false };
+            o.Sample = Away;
             o.Window.WatchTick();
             Assert.False(o.Closed);
 
             // And after all that a left click in the view still closes it (the case Deactivated alone misses).
-            o.Sample = Idle with { LeftDown = true, PointerInside = false };
+            o.Sample = Away with { LeftDown = true };
             o.Window.WatchTick();
             Assert.True(o.Closed);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    /// <summary>
+    /// The reading says where the pointer is when it is taken, not where the button went down. A press the
+    /// window's own mouse-down saw is the window's, even when the pointer is already outside at the first
+    /// reading that sees the button down (a fast drag, a late timer); so is one made while it holds the capture.
+    /// </summary>
+    [Fact]
+    public void A_press_on_the_window_read_with_the_pointer_already_outside_does_not_close() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            Mouse2(o.Window.SearchBox, Mouse.PreviewMouseDownEvent, Environment.TickCount); // the window sees its own press
+            o.Sample = Away with { LeftDown = true };
+            o.Window.WatchTick();
+            o.Window.WatchTick();
+            Assert.False(o.Closed, "the press was on the window");
+            o.Sample = Away;
+            o.Window.WatchTick();
+
+            // The capture says the same (a drag of the edge or the title bar, which raises no WPF mouse event).
+            o.Sample = Away with { LeftDown = true, PressOnWindow = true };
+            o.Window.WatchTick();
+            Assert.False(o.Closed);
+            o.Sample = Away;
+            o.Window.WatchTick();
+
+            // The claim does not outlive the press: the next press outside closes.
+            o.Sample = Away with { LeftDown = true };
+            o.Window.WatchTick();
+            Assert.True(o.Closed);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    /// <summary>After the tools are read the watch starts over: a click made during the read is not a click outside.</summary>
+    [Fact]
+    public void A_fresh_baseline_forgets_what_was_pressed_before() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            o.Sample = Away with { LeftDown = true };
+            o.Window.RebaseWatch();
+            o.Window.WatchTick();
+            Assert.False(o.Closed, "held since before the baseline");
+            o.Sample = Away;
+            o.Window.WatchTick();
+            Assert.False(o.Closed);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    /// <summary>
+    /// A middle-button pan or orbit makes Revit the active window. When the button comes up with Revit's main
+    /// window in front, the window takes the keyboard back: the box is focused again, text and caret as they were.
+    /// </summary>
+    [Fact]
+    public void The_middle_button_coming_up_with_Revit_in_front_puts_the_keyboard_back_in_the_box() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            window.SearchBox.Text = "wall";
+            window.SearchBox.CaretIndex = 2;
+            WindowCapture.DoEvents();
+            window.FocusCard(1); // the keyboard was on a card when the pan started
+            Assert.False(window.SearchBox.IsFocused);
+
+            var revit = Away with { OwnerInFront = true };
+            o.Sample = revit with { MiddleDown = true };
+            window.WatchTick();
+            Assert.False(window.SearchBox.IsFocused, "nothing happens while the button is down");
+            o.Sample = revit;
+            window.WatchTick();
+            Assert.False(o.Closed);
+            Assert.True(window.SearchBox.IsFocused, "the box has the focus again");
+            Assert.Equal("wall", window.SearchBox.Text);
+            Assert.Equal(2, window.SearchBox.CaretIndex);
+            Assert.Equal(-1, window.ResultsList.SelectedIndex);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void The_keyboard_is_not_taken_back_unless_Revits_main_window_is_in_front() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            window.FocusCard(1);
+            // Another of Revit's windows in front: left alone.
+            o.Sample = Away with { MiddleDown = true };
+            window.WatchTick();
+            o.Sample = Away;
+            window.WatchTick();
+            Assert.False(window.SearchBox.IsFocused);
+            Assert.False(o.Closed);
+            // Another application in front when the button comes up: the window closes; it does not grab focus.
+            o.Sample = Away with { MiddleDown = true };
+            window.WatchTick();
+            o.Sample = Away with { HostInFront = false };
+            window.WatchTick();
+            Assert.True(o.Closed);
+            Assert.Equal("outside", window.CloseReason);
         }
         finally
         {
@@ -582,15 +1185,16 @@ public class SearchItTests
     });
 
     [Fact]
-    public void The_watch_runs_on_its_own_timer_and_stops_with_the_window() => Sta(() =>
+    public void The_watch_runs_on_its_own_timer_and_stops_when_the_window_closes() => Sta(() =>
     {
         var o = Open();
         var readings = 0;
         try
         {
-            o.Sample = Idle with { PointerInside = false };
+            Assert.True(o.Window.IsWatching, "the timer runs from Loaded");
+            o.Sample = Away;
             WindowCapture.DoEvents();
-            o.Sample = new PointerSample(true, false, false, false, PointerInside: false, HostInFront: true);
+            o.Sample = Away with { LeftDown = true };
             var until = DateTime.UtcNow.AddSeconds(5);
             while (!o.Closed && DateTime.UtcNow < until)
             {
@@ -599,6 +1203,63 @@ public class SearchItTests
                 readings++;
             }
             Assert.True(o.Closed, $"the timer saw the press outside ({readings} waits)");
+            Assert.False(o.Window.IsWatching, "the timer stops with the window");
+
+            // However it closes.
+            var other = Open();
+            Assert.True(other.Window.IsWatching);
+            other.Window.Close();
+            Assert.False(other.Window.IsWatching);
+
+            // And no reading is taken after that.
+            var taken = 0;
+            var third = Open();
+            third.Window.Sampler = () =>
+            {
+                taken++;
+                return Idle;
+            };
+            third.Window.Close();
+            taken = 0;
+            for (var i = 0; i < 5; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.Equal(0, taken);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    /// <summary>A reading that throws stops the watch after the first failure; the window stays, and Escape still closes it.</summary>
+    [Fact]
+    public void A_failing_reading_stops_the_watch_once_and_Escape_still_closes() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var calls = 0;
+            o.Window.Sampler = () =>
+            {
+                calls++;
+                throw new InvalidOperationException("the reading failed");
+            };
+            o.Window.WatchTick();
+            Assert.Equal(1, calls);
+            Assert.False(o.Window.IsWatching);
+            Assert.False(o.Closed);
+            o.Window.WatchTick();
+            for (var i = 0; i < 4; i++)
+            {
+                Thread.Sleep(20);
+                WindowCapture.DoEvents();
+            }
+            Assert.Equal(1, calls);
+            Assert.True(Key2(o.Window.SearchBox, o.Window, Key.Escape));
+            Assert.True(o.Closed);
         }
         finally
         {
@@ -633,6 +1294,11 @@ public class SearchItTests
 
             o.Window.SearchBox.Text = "algn";
             Capture(o.Window, theme, "search-it-fuzzy");
+
+            o.Window.SearchBox.Text = "tag";
+            WindowCapture.DoEvents();
+            o.Window.FocusCard(1);
+            Capture(o.Window, theme, "search-it-highlight");
 
             o.Window.SearchBox.Text = "wall";
             o.Window.ViewModel.CommitChip();

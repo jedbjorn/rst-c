@@ -129,6 +129,57 @@ public class WindowGuardTests
         Assert.Same(boom, fault.Exception);
     });
 
+    /// <summary>
+    /// When the close after a fault fails, the modeless net hides the window; a hidden window raises no
+    /// Closed, so the net comes down there and then. A later exception is no longer its business.
+    /// </summary>
+    [Fact]
+    public void Modeless_WhenTheCloseFails_TheWindowIsHidden_AndTheNetComesDown() => Sta(() =>
+    {
+        var boom = new InvalidOperationException("SC-045 test: a modeless window's handler threw");
+        var later = new InvalidOperationException("SC-045 test: thrown after the net came down");
+        var refuse = true;
+        var closed = false;
+        Window? window = null;
+        Exception? escaped = null;
+        Exception? afterwards = null;
+
+        var events = CaptureLog(() =>
+        {
+            window = Small(() => { });
+            window.Closing += (_, _) =>
+            {
+                if (refuse) throw new InvalidOperationException("SC-045 test: Closing threw");
+            };
+            window.Closed += (_, _) => closed = true;
+            escaped = Record.Exception(() =>
+            {
+                WindowGuard.Show(window, "Test");
+                window.Dispatcher.BeginInvoke(new Action(() => throw boom));
+                RST.RuntimeTests.Support.WindowCapture.DoEvents();
+            });
+            afterwards = Record.Exception(() =>
+            {
+                window.Dispatcher.BeginInvoke(new Action(() => throw later));
+                RST.RuntimeTests.Support.WindowCapture.DoEvents();
+            });
+        });
+
+        try
+        {
+            Assert.Null(escaped);
+            Assert.False(closed, "the close failed");
+            Assert.False(window!.IsVisible, "so the window was hidden");
+            Assert.Same(boom, Assert.Single(Faults(events)).Exception);
+            Assert.NotNull(afterwards); // the net is gone: nothing swallowed the later exception
+        }
+        finally
+        {
+            refuse = false;
+            window?.Close();
+        }
+    });
+
     [Fact]
     public void LoadedThrows_IsLoggedAtError_TheWindowCloses_AndNothingEscapes() => Sta(() =>
     {
