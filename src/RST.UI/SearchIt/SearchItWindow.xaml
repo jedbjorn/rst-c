@@ -105,6 +105,7 @@
                  Height="{x:Static search:SearchItLayout.ListHeight}"
                  BorderThickness="0" Background="Transparent" Focusable="False" IsTabStop="False"
                  SelectionMode="Single" PreviewKeyDown="OnResultsKeyDown" PreviewTextInput="OnResultsTextInput"
+                 PreviewMouseRightButtonDown="OnResultsRightDown"
                  ItemContainerStyle="{StaticResource ResultRow}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"

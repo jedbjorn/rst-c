@@ -59,6 +59,7 @@ public partial class SearchItWindow : Window
     private bool _watching;
     private bool _closing;
     private bool _ownPress;
+    private bool _userMoved;
     private int? _readyTick;
 
     /// <summary>Build after <c>RstTheme.Apply</c>: Theme.xaml reads the theme when the window loads it.</summary>
@@ -75,6 +76,12 @@ public partial class SearchItWindow : Window
         _watch = new DispatcherTimer(DispatcherPriority.Input, Dispatcher) { Interval = WatchInterval };
         _watch.Tick += (_, _) => UiGuard.Run("Search-It window: watch the mouse", WatchTick);
         viewModel.RequestClose += OnRequestClose;
+        viewModel.Chips.CollectionChanged += OnChipsChanged;
+        // Hidden without closing (the safety net's fallback when a close fails): no watch, nothing to refocus.
+        IsVisibleChanged += (_, _) => UiGuard.Run("Search-It window: visibility", () =>
+        {
+            if (!IsVisible && IsLoaded) StopWatch();
+        });
         ContentRendered += (_, _) => UiGuard.Run("Search-It window: first frame", () => FirstFrameDrawn = true);
         // Each on its own, the watch first: closing on a click outside must work even when sizing or focusing failed.
         Loaded += (_, _) => UiGuard.Run("Search-It window: start the watch", StartWatch);
@@ -85,6 +92,7 @@ public partial class SearchItWindow : Window
             IsOpen = false;
             StopWatch();
             viewModel.RequestClose -= OnRequestClose;
+            viewModel.Chips.CollectionChanged -= OnChipsChanged;
         });
     }
 
@@ -122,10 +130,13 @@ public partial class SearchItWindow : Window
 
     private const int WM_NCLBUTTONDOWN = 0x00A1;
     private const int WM_NCRBUTTONDOWN = 0x00A4;
+    internal const int WM_ENTERSIZEMOVE = 0x0231;
 
     private IntPtr NonClientPress(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (msg is WM_NCLBUTTONDOWN or WM_NCRBUTTONDOWN) _ownPress = true;
+        // The user has started to drag or resize the window: its size and place are theirs from here on.
+        else if (msg == WM_ENTERSIZEMOVE) _userMoved = true;
         return IntPtr.Zero;
     }
 
@@ -143,7 +154,17 @@ public partial class SearchItWindow : Window
         KeepEightCards();
         // Once more when the window has settled: its frame can change after Loaded (the list came out 8 px
         // taller on Windows Server once the window was up).
-        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => UiGuard.Run("Search-It window: default size", KeepEightCards));
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => UiGuard.Run("Search-It window: default size", LateSizeCorrection));
+    }
+
+    /// <summary>
+    /// The idle pass of the default size and centring. Skipped once the user has dragged or resized the
+    /// window (WM_ENTERSIZEMOVE): a correction then would pull it back from under their pointer.
+    /// </summary>
+    internal void LateSizeCorrection()
+    {
+        if (_userMoved) return;
+        KeepEightCards();
     }
 
     /// <summary>
@@ -241,15 +262,26 @@ public partial class SearchItWindow : Window
         });
     }
 
+    /// <summary>How many times the window has asked Windows to make it the active one (tests).</summary>
+    internal int Activations { get; private set; }
+
+    /// <summary>
+    /// False when another application is in front (the user Alt+Tabbed away): the window must not pull
+    /// itself, and Revit, forward then. True when Revit or the window is in front, or it cannot be told.
+    /// </summary>
+    internal bool IsHostInFront() => ReadSample() is not { HostInFront: false };
+
     /// <summary>
     /// Makes the window the active one with the keyboard in the search box; the text and the caret stay
-    /// as they were. <paramref name="activate"/> false only sets the focus inside the window.
+    /// as they were. <paramref name="activate"/> false only sets the focus inside the window. Nothing
+    /// happens for a window that is closed or hidden.
     /// </summary>
     internal void FocusSearch(bool activate = true)
     {
-        if (!IsOpen) return;
+        if (!IsOpen || !IsVisible) return;
         if (activate && !IsActive)
         {
+            Activations++;
             Activate();
             // Activate can be refused when the click that opened the window is still being handled.
             if (!IsActive)
@@ -271,8 +303,8 @@ public partial class SearchItWindow : Window
     internal void FocusWhenSettled() =>
         Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => UiGuard.Run("Search-It window: focus when settled", () =>
         {
-            if (!IsOpen || SearchBox.IsKeyboardFocused) return;
-            if (ReadSample() is { HostInFront: false }) return;
+            if (!IsOpen || !IsVisible || SearchBox.IsKeyboardFocused) return;
+            if (!IsHostInFront()) return;
             FocusSearch();
         }));
 
@@ -356,12 +388,35 @@ public partial class SearchItWindow : Window
         if (!SearchItKeys.IsPrintable(e.Text)) return;
         if (SearchItKeys.Decide(SearchFocus.Card, SearchKey.Character, ResultsList.SelectedIndex, ResultsList.Items.Count, SearchBox.Text.Length == 0, false)
             != SearchKeyAction.TypeInBox) return;
-        var caret = Math.Clamp(SearchBox.CaretIndex, 0, SearchBox.Text.Length);
+        // As typing in the box does: the character replaces the selection, or goes in at the caret.
+        var text = SearchBox.Text;
+        var start = Math.Clamp(SearchBox.SelectionStart, 0, text.Length);
+        var length = Math.Clamp(SearchBox.SelectionLength, 0, text.Length - start);
         FocusSearch(activate: false);
-        SearchBox.Text = SearchBox.Text.Insert(caret, e.Text);
-        SearchBox.CaretIndex = caret + e.Text.Length;
+        SearchBox.Text = text.Remove(start, length).Insert(start, e.Text);
+        SearchBox.CaretIndex = start + e.Text.Length;
         e.Handled = true;
     });
+
+    /// <summary>
+    /// A right-click on a card does nothing: the list must not select and focus it (Enter would then run a
+    /// tool the user only right-clicked).
+    /// </summary>
+    private void OnResultsRightDown(object sender, MouseButtonEventArgs e) => UiGuard.Run("Search-It window: right-click on a result card", () =>
+    {
+        e.Handled = true;
+    });
+
+    /// <summary>
+    /// The chips changed (a chip's × while a card had the keyboard): the list is rebuilt and the card is
+    /// gone, so the keyboard goes back to the search box instead of nowhere.
+    /// </summary>
+    private void OnChipsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+        UiGuard.Run("Search-It window: chips changed", () =>
+        {
+            if (ResultsList.SelectedIndex < 0 && !ResultsList.IsKeyboardFocusWithin) return;
+            FocusSearch(activate: false);
+        });
 
     /// <summary>Highlights the card at <paramref name="index"/>, scrolls it into view and gives it the keyboard.</summary>
     internal void FocusCard(int index)

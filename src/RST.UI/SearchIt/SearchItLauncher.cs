@@ -101,7 +101,10 @@ public static class SearchItLauncher
         if (window.IsOpen)
         {
             window.RebaseWatch();
-            window.FocusSearch();
+            // Not when the user has switched to another application meanwhile (a cold read takes seconds):
+            // pulling Revit and this window forward then would take their typing. The watch closes the window.
+            if (window.IsHostInFront()) window.FocusSearch();
+            else Log.Information("Search-It: another application is in front; not taking the keyboard");
             window.FocusWhenSettled();
         }
         return true;
