@@ -94,6 +94,12 @@ Health is a one-click workstation and Revit-session snapshot: CPU, RAM, GPU, dis
 
 **[Health Tool docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/health-tool.md)**
 
+### Search-It
+
+Search-It finds a tool when you know its name but not where it is on the ribbon. Click **Search-It** on the RST panel, type part of the name (typos are fine: "algn" finds Align), and each result shows the tool with the tab and panel it lives on. Click a result to run it. Press Enter to keep what you typed as a filter chip and narrow further. The window floats above Revit, so you can still pan and zoom the view, and it closes on Esc or a click outside it.
+
+**[Search-It docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/search-it.md)**
+
 ### Tray
 
 From v3.1, RST installs a small tray app, `RST.Tray.exe`, in the Windows notification area (the icons by the clock). It runs while you are signed in, uses the .NET that Revit already installs, and nothing in Revit depends on it. Click its icon to open its window; closing the window leaves it running. The window has five pages:
@@ -126,7 +132,7 @@ rst-c writes a session log under `%AppData%\RST\logs\` for every Revit launch. T
 1. Grab the latest from the [Releases](https://github.com/jedbjorn/rst-c/releases) page.
 2. Close Revit (the engine DLLs are locked while it is running).
 3. Run the MSI — double-click or `msiexec /i RST.msi`.
-4. Launch Revit. The RST tools (Builder, Loader, RSTify and Health) appear on the Add-Ins tab.
+4. Launch Revit. The RST tools (Builder, Loader, RSTify, Health and Search-It) appear on the Add-Ins tab.
 
 **Or use `RST-Setup.exe`**, the same release's setup, which installs rst-c and offers the Designs/OS companion add-ins:
 

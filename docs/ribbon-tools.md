@@ -14,6 +14,8 @@ purpose: Guide to RSTify tab-hiding, required add-ins and add-in switching, and 
 
 Two ribbon-level tools come with every rst-c install: **RSTify**, which hides tabs the active profile does not use, and **Required Add-ins**, which checks and enforces the add-in dependencies a profile declares. Both are profile-aware and both are set up in the Loader. [Stacks](#stacks-on-the-ribbon) describes how a profile's stacked buttons are drawn on its tab, and [RST Accessories](#rst-accessories) how the Designs/OS sister add-ins share one panel.
 
+The RST panel also holds **Search-It**, which finds any tool by name, shows where it lives on the ribbon and runs it: see [Search-It](search-it.md).
+
 ## RSTify
 
 ### What it does
