@@ -1430,4 +1430,49 @@ The other profiles were changed and stay changed.</value>
   <data name="Builder_NamesRefreshed" xml:space="preserve">
     <value>This profile's old tool names were updated to Revit's ribbon names ({0}). Save to keep the names.</value>
   </data>
+  <data name="SearchIt_WindowTitle" xml:space="preserve">
+    <value>Search-It</value>
+  </data>
+  <data name="SearchIt_Placeholder" xml:space="preserve">
+    <value>Search Revit's tools…</value>
+  </data>
+  <data name="SearchIt_Hint" xml:space="preserve">
+    <value>Enter: keep as a filter  ·  ↓ Enter or click: run  ·  Esc: close</value>
+  </data>
+  <data name="SearchIt_LoadingTitle" xml:space="preserve">
+    <value>Finding Revit's tools…</value>
+  </data>
+  <data name="SearchIt_LoadingMessage" xml:space="preserve">
+    <value>The first search in a session reads the whole ribbon. This can take a few seconds.</value>
+  </data>
+  <data name="SearchIt_NoMatches" xml:space="preserve">
+    <value>No tools match.</value>
+  </data>
+  <data name="SearchIt_NoTools" xml:space="preserve">
+    <value>RST found no tools to search.</value>
+  </data>
+  <data name="SearchIt_Count" xml:space="preserve">
+    <value>{0} of {1} tools</value>
+    <comment>The count under the search box: shown, then all.</comment>
+  </data>
+  <data name="SearchIt_CountAll" xml:space="preserve">
+    <value>{0} tools</value>
+  </data>
+  <data name="SearchIt_RemoveChip" xml:space="preserve">
+    <value>Remove this filter</value>
+  </data>
+  <data name="SearchIt_Failed" xml:space="preserve">
+    <value>Search-It could not open. Details are in the RST log.</value>
+    <comment>Revit shows it after the command when Search-It failed to open (SC-045).</comment>
+  </data>
+  <data name="SearchIt_OneMorePlace" xml:space="preserve">
+    <value>+1 more place</value>
+  </data>
+  <data name="SearchIt_MorePlaces" xml:space="preserve">
+    <value>+{0} more places</value>
+  </data>
+  <data name="SearchIt_ToolTipMore" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>A result card's tooltip when the tool sits in several places: where it is, then "+2 more places".</comment>
+  </data>
 </root>

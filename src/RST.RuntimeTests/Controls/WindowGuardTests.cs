@@ -96,6 +96,90 @@ public class WindowGuardTests
         timer.Stop();
     }
 
+    /// <summary>
+    /// The modeless net (Search-It, v3.4): WindowGuard.Show returns with the window open, a later fault on the
+    /// UI thread is logged once at Error and closes the window, and once it has closed the net is gone.
+    /// </summary>
+    [Fact]
+    public void Modeless_AFaultWhileOpen_IsLoggedAtError_AndTheWindowCloses() => Sta(() =>
+    {
+        var boom = new InvalidOperationException("SC-045 test: a modeless window's handler threw");
+        var backstopFired = false;
+        var closed = false;
+        Exception? escaped = null;
+
+        var events = CaptureLog(() =>
+        {
+            var window = Small(() => backstopFired = true);
+            window.Closed += (_, _) => closed = true;
+            escaped = Record.Exception(() =>
+            {
+                WindowGuard.Show(window, "Test");
+                Assert.True(window.IsVisible, "Show returns with the window open");
+                window.Dispatcher.BeginInvoke(new Action(() => throw boom));
+                RST.RuntimeTests.Support.WindowCapture.DoEvents();
+            });
+        });
+
+        Assert.Null(escaped);
+        Assert.True(closed);
+        Assert.False(backstopFired, "the window went only on the test's backstop, not on the safety net");
+        var fault = Assert.Single(Faults(events));
+        Assert.Equal(LogLevel.Error, fault.Level);
+        Assert.Same(boom, fault.Exception);
+    });
+
+    /// <summary>
+    /// A fault whose close goes badly too (the window's Closing throws): the window still ends up gone,
+    /// closed or, failing that, hidden, and the net comes down there and then, not only on Closed (a hidden
+    /// window raises none). A later exception is no longer its business.
+    /// </summary>
+    [Fact]
+    public void Modeless_WhenTheCloseGoesBadly_TheWindowIsGone_AndTheNetComesDown() => Sta(() =>
+    {
+        var boom = new InvalidOperationException("SC-045 test: a modeless window's handler threw");
+        var later = new InvalidOperationException("SC-045 test: thrown after the net came down");
+        var refuse = true;
+        var closed = false;
+        Window? window = null;
+        Exception? escaped = null;
+        Exception? afterwards = null;
+
+        var events = CaptureLog(() =>
+        {
+            window = Small(() => { });
+            window.Closing += (_, _) =>
+            {
+                if (refuse) throw new InvalidOperationException("SC-045 test: Closing threw");
+            };
+            window.Closed += (_, _) => closed = true;
+            escaped = Record.Exception(() =>
+            {
+                WindowGuard.Show(window, "Test");
+                window.Dispatcher.BeginInvoke(new Action(() => throw boom));
+                RST.RuntimeTests.Support.WindowCapture.DoEvents();
+            });
+            afterwards = Record.Exception(() =>
+            {
+                window.Dispatcher.BeginInvoke(new Action(() => throw later));
+                RST.RuntimeTests.Support.WindowCapture.DoEvents();
+            });
+        });
+
+        try
+        {
+            Assert.Null(escaped);
+            Assert.False(window!.IsVisible, closed ? "closed" : "hidden when the close did not go through");
+            Assert.Same(boom, Assert.Single(Faults(events)).Exception);
+            Assert.NotNull(afterwards); // the net is gone: nothing swallowed the later exception
+        }
+        finally
+        {
+            refuse = false;
+            window?.Close();
+        }
+    });
+
     [Fact]
     public void LoadedThrows_IsLoggedAtError_TheWindowCloses_AndNothingEscapes() => Sta(() =>
     {

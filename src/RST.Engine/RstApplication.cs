@@ -253,7 +253,7 @@ public sealed class RstApplication : IExternalApplication
 
             // Style the RST tools panel now that AwComponentManager.Ribbon
             // is populated. Applies regardless of whether a profile is
-            // active — the four-button panel is permanent (RST-043).
+            // active — the five-button panel is permanent (RST-043).
             RibbonBuilder.ApplyToolsPanelStyling();
 
             // Every add-in has loaded by now: put the sister apps' buttons (Gantt-It, Splash-It, Pick-It)
@@ -367,6 +367,18 @@ public sealed class RstApplication : IExternalApplication
                 _catalogVersion = revitVersion;
             }
             return _catalogCache;
+        }
+    }
+
+    /// <summary>
+    /// True when <see cref="GetOrBuildCatalog"/> would return its cache for <paramref name="revitVersion"/>
+    /// at once. Search-It asks, to open with its results instead of its "finding tools" overlay.
+    /// </summary>
+    public static bool HasCatalog(string revitVersion)
+    {
+        lock (CatalogLock)
+        {
+            return _catalogCache is not null && _catalogVersion == revitVersion;
         }
     }
 

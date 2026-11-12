@@ -921,4 +921,34 @@ public static class UiStrings
     public static string Builder_ToolUnchanged(object? arg0) => Format(nameof(Builder_ToolUnchanged), arg0);
 
     public static string Builder_Update => Get(nameof(Builder_Update));
+
+    // ── Search-It (v3.4) ─────────────────────────────────────────────────
+
+    public static string SearchIt_WindowTitle => Get(nameof(SearchIt_WindowTitle));
+
+    public static string SearchIt_Placeholder => Get(nameof(SearchIt_Placeholder));
+
+    public static string SearchIt_Hint => Get(nameof(SearchIt_Hint));
+
+    public static string SearchIt_LoadingTitle => Get(nameof(SearchIt_LoadingTitle));
+
+    public static string SearchIt_LoadingMessage => Get(nameof(SearchIt_LoadingMessage));
+
+    public static string SearchIt_NoMatches => Get(nameof(SearchIt_NoMatches));
+
+    public static string SearchIt_NoTools => Get(nameof(SearchIt_NoTools));
+
+    public static string SearchIt_Count(object? arg0, object? arg1) => Format(nameof(SearchIt_Count), arg0, arg1);
+
+    public static string SearchIt_CountAll(object? arg0) => Format(nameof(SearchIt_CountAll), arg0);
+
+    public static string SearchIt_RemoveChip => Get(nameof(SearchIt_RemoveChip));
+
+    public static string SearchIt_Failed => Get(nameof(SearchIt_Failed));
+
+    public static string SearchIt_OneMorePlace => Get(nameof(SearchIt_OneMorePlace));
+
+    public static string SearchIt_MorePlaces(object? arg0) => Format(nameof(SearchIt_MorePlaces), arg0);
+
+    public static string SearchIt_ToolTipMore(object? arg0, object? arg1) => Format(nameof(SearchIt_ToolTipMore), arg0, arg1);
 }

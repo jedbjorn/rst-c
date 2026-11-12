@@ -6,7 +6,7 @@ pipeline, and notes per window.
 
 ## Architecture
 
-rst-c's three windows (the Profile Loader, the Profile Builder and Health) are native WPF,
+rst-c's windows (the Profile Loader, the Profile Builder, Health and Search-It) are native WPF,
 inside Revit's process, on the theme rst-c shares with gantt-it and splash-it.
 
 ```mermaid
@@ -138,7 +138,7 @@ falls back to light.
 
 ### Behavior
 
-- **Modal**, as in v2.x: one rst-c window at a time; Revit waits.
+- **Modal**, as in v2.x: one rst-c window at a time; Revit waits. Search-It is the exception (modeless: see [Search-It](#search-it-v34)).
 - **Long work off the UI thread** (Scan System, Clean Junk Files, the load's add-in changes), with
   the busy overlay or spinner shown and the commands disabled until it finishes.
 - **Destructive confirms default to Cancel** (`IDialogService.Confirm(..., danger: true)`); so does
@@ -564,6 +564,86 @@ The Profile Builder lives in `RST.UI/Builder`. `BuilderCommand` applies Revit's 
     when the loaded profile's file changed the ribbon reloads through Save's reload (`ReloadActiveAsync`).
     A working-copy change that throws is a reported failure, not a crash.
   - **Retired:** `BuilderRules.UrlSlot` (the Properties pane's + URL Button).
+
+## Search-It (v3.4)
+
+The fifth RST panel button (`RibbonBuilder`, `RST_SearchIt`, icons `icon_search` / `icon_search_16`). The user guide is
+[search-it.md](search-it.md).
+
+- **Logic in RST.Core (`RST.Core.Search`, tested on Linux in `RST.Tests/Search`):** `SearchIndex` (what can be searched),
+  `ToolMatcher` (the tiers: exact, prefix, word start, substring, fuzzy; fuzzy is skipped letters or a small edit distance
+  with neighbour swaps), `ToolSearch` and `SearchChips` (chips are exact substrings, ANDed; the text ranks inside them),
+  `SearchItKeys` (what a key does, by where the keyboard is), `SearchItCloseRules` (what the window does about the mouse
+  outside it) and `SearchItLayout` (eight cards).
+- **Scope: the Builder's catalogue, by construction.** RST's exclusions (ids Revit won't post, `PostCommandRule`; mode-only
+  tabs and ids, `ModeRestrictedTabs` / `ModeRestrictedCommandIds`; the admin's `BanList`) are applied once, where the
+  catalogue is built (`CommandCatalog.Build`, behind `RstApplication.GetOrBuildCatalog`). The Builder shapes that
+  catalogue with `CatalogCommand.FromScanned`; `SearchIndex.Build` calls the same function and folds its rows to one
+  `SearchTool` per command id that keeps every placement (`SearchPlace`: label, tab, panel). There is no second list:
+  `SearchIndexTests` checks, on the 2026 and 2027 captures, that the id sets are equal and that every label the Builder
+  lists finds its command under that label.
+- **One row per command, every name searchable.** The ribbon can name a command differently per placement ("Tag Room" /
+  "Room Tag"). `ToolSearch` tries each distinct label, keeps the best match, and the hit carries the place whose label
+  matched (`SearchHit.Place`); chips and text must hold for the same label. A label the ribbon walk does not collect
+  (a checklist entry such as "MEP Fabrication Parts") is not in the catalogue, so neither the Builder nor Search-It has it.
+- **The window is modeless** (`SearchItLauncher` → `SearchItWindow` → `SearchItViewModel`, over `ISearchItBackend`), the
+  one exception to "Modal" under [Behavior](#behavior): the user must be able to pan, zoom and orbit behind it. It is owned
+  by Revit's main window (`WindowPlacement.Own`: centred on it), `ShowInTaskbar="False"`, and shown through
+  `WindowGuard.Show`, the modeless counterpart of `WindowGuard.ShowDialog`: the same safety net, up until the window
+  closes or, after a fault, until the close (or the hide it falls back to) has been done; it stands back while a WPF
+  modal loop runs on the thread (`ComponentDispatcher.IsThreadModal`: that window has its own net). A native modal
+  (TaskDialog) cannot be told apart.
+- **Threading.** The catalogue needs Revit's UI thread inside the command's `Execute`, and a modeless window has neither
+  once `Execute` has returned. `SearchItLauncher.Show` therefore reads it before it returns. **Warm**
+  (`ISearchItBackend.IsReady`, `RstApplication.HasCatalog`): the tools are read first and the window opens with its
+  results; no overlay, no pump. **Cold:** the window is shown with its busy overlay, `DrawFirstFrame` runs the dispatcher
+  until `ContentRendered` (at most 500 ms), the catalogue is read, and `MarkReady` stamps the moment. The spinner does not
+  turn during a cold build: the UI thread is doing the work.
+- **Input queued during a cold read is dropped.** Mouse presses and releases, and Enter, whose `Timestamp` is before
+  `MarkReady` are marked handled in the window's preview handlers: they were aimed at the overlay, and must not land on a
+  card that appeared under the pointer. Typed text is kept (it goes to the search box, where it was aimed).
+- **Running a tool.** A click or Enter on a card: the view-model closes the window, then queues the backend's run on the
+  dispatcher (Background), so nothing the run shows opens from the click handler of a destroyed window. The run is
+  `SlotInvokeCommand` (`UIApplication.PostCommand`, with `SlotMessages`' not-found and not-postable handling), the same
+  dispatch the profile buttons use from AdWindows clicks, which are outside an API context too.
+- **Ready to type on open.** After the read the launcher activates the window and puts the keyboard in the search box
+  (`FocusSearch`: `Activate`, `SetForegroundWindow` as a fallback, then `Keyboard.Focus`), and once more when the
+  dispatcher is idle (`FocusWhenSettled`), in case Revit takes the activation back as the ribbon click finishes; never
+  while another application is in front (checked after the read too: a cold read takes seconds, and the user may have
+  switched away). A hidden window (the safety net's fallback) is never focused, and its watch stops.
+- **Keys** (decision #83; `SearchItKeys.Decide`). Box: Enter makes a chip, Down goes to the first card, Backspace in the
+  empty box removes one chip (never on a key repeat). Card: Up and Down move the highlight (`FocusCard`: select, scroll
+  into view, focus), Up on the first card returns to the box, Enter runs the highlighted tool (never on a repeat), a
+  printable character returns to the box and is typed there. Escape closes from anywhere. The highlighted card is the
+  list's selected item, drawn by the implicit `ListBoxItem` style (`AccentSoftBrush`).
+- **The mouse outside the window.** A `DispatcherTimer` (30 ms, Normal priority) reads the left, right and middle buttons, the pointer,
+  the capture and the foreground window (`SampleNative`: `GetAsyncKeyState`, `GetCursorPos`, `GetWindowRect`,
+  `GetCapture`, `GetForegroundWindow`) and `SearchItCloseRules.Step` decides: another application in front, or a left or
+  right press outside, closes; the middle button coming up with Revit's main window in front takes the keyboard back
+  (`FocusSearch`); anything else does nothing. The wheel is never read. A `WH_MOUSE_LL` hook was not used: it would route
+  the whole desktop's mouse input through Revit's UI thread (system-wide pointer stutter whenever Revit is busy) and
+  Windows silently removes a hook whose callback is late, after which the window would never close on a click.
+  `Deactivated` alone misses a left click that follows a middle-button pan.
+- **Whose press it is.** A reading says where the pointer is when it is taken, not where the button went down. A press
+  is the window's own when its mouse-down saw it (`OnPreviewMouseDown`; `WM_NCLBUTTONDOWN` / `WM_NCRBUTTONDOWN` for the
+  title bar and the resize border) or when it holds the capture; `GetWindowRect` includes the frame. The watch takes a
+  fresh baseline when it starts and again after a cold read (`RebaseWatch`), so the click that opened the window, or one
+  made during the read, is not a click outside. A reading that throws stops the watch (logged once); Escape still closes.
+- **Size.** The window opens `SizeToContent="Height"` with the list at `SearchItLayout.ListHeight` (8 × 44 px); on
+  `Loaded` the height is handed to the window so the list follows a resize, and corrected (and the window centred on
+  its owner again) once more at idle, unless the user has already started to drag or resize it (`WM_ENTERSIZEMOVE`).
+  Nothing is saved.
+- **One window.** `SearchItLauncher` keeps the open window; a second command takes a fresh baseline for the watch
+  (the press that re-ran the command, the second click of a double-click on the ribbon button, is not a click outside)
+  and focuses it. The window has no Minimize or Maximize box (`WS_MINIMIZEBOX` / `WS_MAXIMIZEBOX` cleared on
+  `SourceInitialized`, `SC_MINIMIZE` / `SC_MAXIMIZE` refused): minimized, an owned modeless window leaves a stub. A window that is no longer
+  visible (the safety net's hide fallback) does not count and is replaced.
+- **Tests:** `RST.RuntimeTests/SearchIt/SearchItTests` (the view-model with a fake backend; the real window: off the
+  taskbar, owned, modeless, centred with the keyboard in the box cold and warm, eight cards, resize not remembered,
+  overlay drawn before the read, stale input dropped, every key, the watch through a scripted reading and through
+  `SampleNative` with a stand-in for `GetAsyncKeyState`, and the `search-it-*` screenshots) and `WindowGuardTests`'
+  modeless cases. The constructor's `sampler` parameter replaces the Win32 reading in tests.
+- **The icon** is drawn by `build/icons/make_search_icon.py` (Pillow; not shipped).
 
 ## Revit API floor
 

@@ -20,6 +20,8 @@ using RST.RuntimeTests.Loader;
 using RST.RuntimeTests.Support;
 using RST.UI.Builder;
 using RST.UI.Dialogs;
+using RST.RuntimeTests.SearchIt;
+using RST.UI.SearchIt;
 using RST.UI.Health;
 using RST.UI.Loader;
 using RST.UI.Swatches;
@@ -482,6 +484,7 @@ public class DialogEscapeTests
         [typeof(ProfileBuilderWindow)] = nameof(ProfileBuilderWindowFlowTests.Escape_closes_a_clean_window_without_asking),
         [typeof(ProfileLoaderWindow)] = nameof(ProfileLoaderEscapeTests.Escape_closes_the_Loader_as_Close_does),
         [typeof(HealthWindow)] = nameof(HealthEscapeTests.Escape_closes_Health_as_Close_does),
+        [typeof(SearchItWindow)] = nameof(SearchItTests.Escape_closes_Search_It_without_running_anything),
         [typeof(ProfileNameDialog)] = nameof(Escape_in_the_name_box_cancels_Rename),
         [typeof(StackDialog)] = nameof(Escape_cancels_New_Stack),
         [typeof(CustomToolDialog)] = nameof(Escape_in_the_label_box_cancels_the_custom_tool_dialog),

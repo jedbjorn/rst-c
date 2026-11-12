@@ -1,0 +1,101 @@
+---
+title: Search-It
+tags: [rst-c, search, ribbon, tools]
+date: 2026-11-11
+project: rst-c
+purpose: Guide to Search-It, the RST panel's tool finder, covering search, chips, running a tool and how the window closes
+---
+
+# Search-It
+
+[![Open in md-converter](https://img.shields.io/badge/Open%20in-md--converter-6b46c1?style=flat-square)](https://md-converter.designs-os.com/?url=https://github.com/jedbjorn/rst-c/blob/main/docs/search-it.md)
+
+## Overview
+
+You know a Revit tool exists, but not which tab it is on. **Search-It** finds it. Click **Search-It** on the **RST** panel of the Add-Ins tab, type part of the tool's name, and click the tool in the list (or press Down, then Enter) to run it. Each result also shows the tab and panel the tool lives on, so you learn where it is for next time.
+
+Search-It is the fifth button on the RST panel, after Builder, Loader, RSTify and Health. It comes with every install.
+
+## Opening it
+
+The window opens in the middle of the Revit window, ready to type: the cursor is already in the search box, so the first key you press after clicking the button goes into the search. No extra click is needed.
+
+## Searching
+
+Start typing; the list updates with every letter.
+
+- **You search tool names**, as the ribbon shows them: "Align", "Wall: Architectural", "Aligned Dimension".
+- **Typos and skipped letters are fine.** "algn", "aling" and "allign" all find Align. Upper and lower case do not matter.
+- **The best matches come first:** the exact name, then names that start with what you typed, then names with a word that starts with it, then names that contain it anywhere, then the near misses.
+- **Each result is a card** with the tool's name and, under it in smaller text, where it lives: `Tab › Panel`, for example `Modify › Modify`.
+- **A tool that sits in more than one place appears once**, with a note such as "+2 more places". Revit sometimes gives the same tool a different name in each place ("Tag Room" on Architecture, "Room Tag" on Annotate). You can search by either name; the card shows the name you matched and the place that uses it.
+- **Eight results show at a time.** Scroll for the rest. The line under the search box says how many tools match, for example "12 of 1,204 tools".
+
+With nothing typed, the list holds every tool in alphabetical order.
+
+## Chips: narrowing a search
+
+Press **Enter** in the search box to keep what you typed as a **chip**. A chip is a filter: only tools whose name contains that text stay in the list. Then type again to search inside what is left.
+
+- **Chips are exact.** A chip keeps a tool only if the tool's name contains the chip's text (upper and lower case do not matter). Chips do not forgive typos; only the text in the box does.
+- **Several chips all apply.** With the chips `wall` and `struct`, only names that contain both remain.
+- **The text in the box still searches loosely**, inside the tools the chips kept.
+- **To remove a chip**, click its **×**, or press **Backspace** while the box is empty to remove the last one. Holding Backspace down to clear the box stops at the empty box: press it again to remove a chip.
+
+## Running a tool
+
+**With the mouse:** click a result.
+
+**With the keyboard:** press **Down** to move from the search box to the first result, **Up** and **Down** to move through the results (the list scrolls to follow), and **Enter** to run the highlighted one.
+
+Either way the window closes and Revit starts the tool, as if you had clicked it on the ribbon.
+
+If Revit cannot start it, RST tells you why in a small message, the same way a profile button does: the add-in the tool belongs to is not installed or is switched off, or the tool is one Revit does not let add-ins start.
+
+## Keys
+
+What **Enter** does depends on where you are.
+
+| Where | Key | What it does |
+|---|---|---|
+| Search box | Enter | Keeps the text as a chip. It never runs a tool. |
+| Search box | Down | Moves to the first result. |
+| Search box | Backspace (box empty) | Removes the last chip. |
+| A result | Up / Down | Moves to the result above or below. Up on the first result goes back to the search box. |
+| A result | Enter | Runs that tool. |
+| A result | Any letter, number or symbol | Goes back to the search box and types it there. |
+| A result | Backspace | Goes back to the search box. |
+| Anywhere | Esc | Closes the window without running anything. |
+
+The result you are on is highlighted.
+
+## The window
+
+Search-It stays out of your way. It is a small window that floats above Revit, and you can keep working in the view behind it:
+
+- **Pan, zoom and orbit** with the middle mouse button and the wheel. The window stays open. When you let go of the middle button, Search-It takes the keyboard back, so you can go on typing your search.
+- **Esc** closes it (while it has the keyboard).
+- **A left or right click anywhere outside it** closes it.
+- **Switching to another program** (Alt+Tab) closes it.
+- **Drag its edges** to make it bigger or smaller. The size is not remembered: it opens at its usual size next time. It has no minimize or maximize button.
+- **Only one opens at a time.** If you click the Search-It button while the window is open, that click is a click outside it: the window closes and a fresh one opens. A double-click on the button leaves you with one window, ready to type. If you start Search-It from a keyboard shortcut instead, the window that is already open comes to the front with the cursor in the search box.
+
+It follows Revit's light or dark theme.
+
+## What you can search
+
+Search-It lists every tool that RST can put on a profile toolbar: exactly the tools the [Profile Builder](profile-builder.md)'s Commands list offers, under the same names. That is Revit's own ribbon and the buttons of your installed add-ins. Tools RST knows will not run from a button are left out of both: tools that only work inside the family editor or another editing mode, tools Revit does not let add-ins start, and any your administrator has blocked.
+
+The two lists come from the same place and can never disagree. A tool in the list is one RST expects to run; if Revit still cannot start it (its add-in was removed or switched off since Revit started, for example), you get the message described under [Running a tool](#running-a-tool).
+
+## The first search of a session
+
+The first time you open Search-It (or the Builder) after starting Revit, RST reads the whole ribbon. This takes a few seconds, and the window says **Finding Revit's tools…** while it happens. You can start typing straight away; clicks made during the wait are ignored, so a stray click cannot start a tool. After that, Search-It opens straight away, with its results, until you close Revit.
+
+## Notes & limits
+
+- **Names only.** Search-It does not search tooltips, keyboard shortcuts or command ids.
+- **Names as your Revit shows them.** Tools are listed under the names on your ribbon. Accents count: "ecole" does not find "École".
+- **Contextual tools.** A tool that needs something selected, or a particular kind of view, starts the same way it would from the ribbon: Revit may tell you what it needs first.
+- **Custom tools** (the web and email links a profile can hold) are not tools Revit runs, so Search-It does not list them.
+- **You can put Search-It on a profile toolbar** like the other RST tools: it is in the Builder's Commands list under RST.

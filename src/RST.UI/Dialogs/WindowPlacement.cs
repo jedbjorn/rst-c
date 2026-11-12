@@ -58,6 +58,28 @@ public static class WindowPlacement
         window.ContentRendered += (_, _) => KeepInside(window, area);
     }
 
+    /// <summary>
+    /// Puts a shown <paramref name="window"/> back in the middle of its Win32 owner (and inside the work
+    /// area), for a window whose size changed after WPF centred it (Search-It settles its height once it
+    /// is up). Returns false, changing nothing, for an unowned window or before it has a handle.
+    /// </summary>
+    public static bool CentreOnOwner(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        var owner = new WindowInteropHelper(window).Owner;
+        if (owner == IntPtr.Zero || !GetWindowRect(owner, out var o)) return false;
+        if (Bounds(window) is not { } b) return false;
+        if (PresentationSource.FromVisual(window) is not { CompositionTarget: { } target }) return false;
+        var fromDevice = target.TransformFromDevice;
+        var topLeft = fromDevice.Transform(new Point(o.Left, o.Top));
+        var bottomRight = fromDevice.Transform(new Point(o.Right, o.Bottom));
+        window.Left = (topLeft.X + bottomRight.X) / 2 - b.Width / 2;
+        window.Top = (topLeft.Y + bottomRight.Y) / 2 - b.Height / 2;
+        var area = MonitorWorkArea.Of(window);
+        if (area.Width > 0 && area.Height > 0) KeepInside(window, area);
+        return true;
+    }
+
     private static void KeepInside(Window window, Rect area)
     {
         // A centred window's Left/Top can still be NaN here, so the bounds come from Win32.

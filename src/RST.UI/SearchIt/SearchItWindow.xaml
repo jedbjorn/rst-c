@@ -1,0 +1,150 @@
+<!--
+    rst-c's own (not vendored). The Search-It window (v3.4), native WPF on the family theme: a search
+    box, the chips (exact filters made with Enter), a count, and the result cards (the tool's name
+    and, under it, the Tab › Panel it lives on). Eight cards show at the default size; the rest
+    scroll. Modeless and owned by Revit: see SearchItLauncher and the code-behind for how it closes.
+    The view-model is SearchItViewModel.
+-->
+<Window x:Class="RST.UI.SearchIt.SearchItWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:RST.UI.Resources"
+        xmlns:search="clr-namespace:RST.Core.Search;assembly=RST.Core"
+        Title="{x:Static res:UiStrings.SearchIt_WindowTitle}"
+        Width="{x:Static search:SearchItLayout.DefaultWidth}" SizeToContent="Height" MinWidth="320" MinHeight="220"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize" ShowInTaskbar="False"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/RST.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- A result card's click target: the whole row, drawn by the ListBoxItem around it (hover). -->
+            <Style x:Key="ResultButton" TargetType="Button">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent" Padding="10,0">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="ResultRow" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                <Setter Property="Height" Value="{x:Static search:SearchItLayout.RowHeight}" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- The root carries the window color itself: the screenshot tests render it unclipped by the window. -->
+    <Grid x:Name="Root" Background="{StaticResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- The search box. Enter makes a chip; Backspace in the empty box removes the last chip. -->
+        <Grid Grid.Row="0" Margin="12,12,12,0">
+            <TextBox x:Name="SearchBox" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                     Padding="6,5" ContextMenu="{x:Null}" PreviewKeyDown="OnSearchKeyDown"
+                     AutomationProperties.AutomationId="SearchIt.Box"
+                     AutomationProperties.Name="{x:Static res:UiStrings.SearchIt_Placeholder}" />
+            <TextBlock Text="{x:Static res:UiStrings.SearchIt_Placeholder}" Style="{StaticResource MutedText}"
+                       Margin="10,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                       Visibility="{Binding IsTextEmpty, Converter={StaticResource BoolToVisible}}" />
+        </Grid>
+
+        <!-- The chips: exact filters, ANDed. -->
+        <ItemsControl x:Name="ChipList" Grid.Row="1" ItemsSource="{Binding Chips}" Margin="12,8,12,0" Focusable="False"
+                      Visibility="{Binding HasChips, Converter={StaticResource BoolToVisible}}"
+                      AutomationProperties.AutomationId="SearchIt.Chips">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <ContentControl Style="{StaticResource Pill}" Margin="0,0,6,4" Padding="8,0,2,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Text}" VerticalAlignment="Center" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                            <Button Style="{StaticResource IconButton}" Content="×" Command="{Binding RemoveCommand}" CommandParameter="{Binding}"
+                                    Padding="5,0" Margin="2,0,0,0" MinWidth="0" MinHeight="0" Focusable="False"
+                                    ToolTip="{x:Static res:UiStrings.SearchIt_RemoveChip}"
+                                    AutomationProperties.Name="{x:Static res:UiStrings.SearchIt_RemoveChip}" />
+                        </StackPanel>
+                    </ContentControl>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock x:Name="Status" Grid.Row="2" Text="{Binding StatusText}" Style="{StaticResource MutedText}" FontSize="11"
+                   Margin="14,8,12,4" MinHeight="15" AutomationProperties.AutomationId="SearchIt.Status" />
+
+        <!--
+            The result cards: eight at the default size (the code-behind frees the height once the window has
+            sized). The highlighted card (Down from the box, then Up and Down) is the selected one: the theme's
+            selected row (AccentSoftBrush). Enter runs it; a click on any card runs that card.
+        -->
+        <ListBox x:Name="ResultsList" Grid.Row="3" ItemsSource="{Binding Results}" Margin="6,0,6,0"
+                 Height="{x:Static search:SearchItLayout.ListHeight}"
+                 BorderThickness="0" Background="Transparent" Focusable="False" IsTabStop="False"
+                 SelectionMode="Single" PreviewKeyDown="OnResultsKeyDown" PreviewTextInput="OnResultsTextInput"
+                 PreviewMouseRightButtonDown="OnResultsRightDown"
+                 ItemContainerStyle="{StaticResource ResultRow}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
+                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                 AutomationProperties.AutomationId="SearchIt.Results">
+            <!-- No chrome: the Windows template pads the list by 1 px, which would cut the eighth card. -->
+            <ListBox.Template>
+                <ControlTemplate TargetType="ListBox">
+                    <ScrollViewer Focusable="False" CanContentScroll="True" HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ListBox.Template>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Button Style="{StaticResource ResultButton}" Command="{Binding RunCommand}" CommandParameter="{Binding}"
+                            ToolTip="{Binding ToolTip}" AutomationProperties.Name="{Binding Name}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis" />
+                            <DockPanel Margin="0,2,0,0">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding MoreText}" Style="{StaticResource MutedText}" FontSize="11"
+                                           Margin="8,0,0,0" Visibility="{Binding HasMore, Converter={StaticResource BoolToVisible}}" />
+                                <TextBlock Text="{Binding Location}" Style="{StaticResource MutedText}" FontSize="11" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Button>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Grid.Row="3" Text="{Binding EmptyText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                   HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" IsHitTestVisible="False"
+                   Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisible}}"
+                   AutomationProperties.AutomationId="SearchIt.Empty" />
+
+        <Border Grid.Row="4" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="14,6">
+            <TextBlock Text="{x:Static res:UiStrings.SearchIt_Hint}" Style="{StaticResource MutedText}" FontSize="11" />
+        </Border>
+
+        <!-- The first open of a session may build the catalogue: the overlay says so. Last, over everything. -->
+        <ContentControl Grid.RowSpan="5" Style="{StaticResource BusyOverlay}" Content="{Binding Busy}" />
+    </Grid>
+</Window>
