@@ -597,6 +597,81 @@ h3 {
   content: "✓";
 }
 
+.highlight-section {
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(111, 157, 255, 0.12), transparent 45%),
+    var(--surface);
+}
+
+.highlight-grid {
+  display: grid;
+  gap: 48px;
+}
+
+.highlight-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: end;
+  gap: 64px;
+}
+
+.highlight-copy h2 {
+  max-width: 560px;
+}
+
+.highlight-copy .check-list {
+  margin-top: 0;
+}
+
+.highlight-intro > p:not(.eyebrow) {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 1.04rem;
+}
+
+.highlight-copy code {
+  color: var(--ink);
+  font-size: 0.86em;
+}
+
+.new-badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: white;
+  background: var(--brand);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  vertical-align: 1px;
+}
+
+.highlight-shot {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #d6dce6;
+  border-radius: var(--radius);
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.highlight-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: #1c2940;
+}
+
+.highlight-shot figcaption {
+  padding: 13px 18px;
+  color: var(--muted);
+  background: white;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 .docs-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
@@ -770,6 +845,11 @@ h3 {
     gap: 48px;
   }
 
+  .highlight-copy {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
   .download-card {
     grid-template-columns: 1fr;
   }
@@ -857,6 +937,10 @@ h3 {
 
   .tray-shot {
     max-width: 620px;
+  }
+
+  .highlight-shot {
+    border-radius: 12px;
   }
 
   .download-card {
