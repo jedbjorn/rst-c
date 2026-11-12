@@ -546,6 +546,32 @@ public class SearchItTests
     });
 
     /// <summary>
+    /// Hidden and shown again while still open (Windows hides owned windows while Revit is minimized, and
+    /// shows them on restore): the watch restarts, so a click outside still closes the window.
+    /// </summary>
+    [Fact]
+    public void A_window_shown_again_after_hiding_watches_again() => Sta(() =>
+    {
+        var o = Open();
+        try
+        {
+            var window = o.Window;
+            Assert.True(window.IsWatching);
+            window.Hide();
+            WindowCapture.DoEvents();
+            Assert.False(window.IsWatching, "the timer stops while the window is hidden");
+            window.Show();
+            WindowCapture.DoEvents();
+            Assert.True(window.IsOpen);
+            Assert.True(window.IsWatching, "the timer runs again once the window is shown");
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    /// <summary>
     /// Hidden without closing (the safety net's fallback when a close fails): the watch stops, and nothing,
     /// not a pan's end nor the launcher, activates or focuses the hidden window.
     /// </summary>

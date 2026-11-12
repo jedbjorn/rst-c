@@ -79,10 +79,14 @@ public partial class SearchItWindow : Window
         _watch.Tick += (_, _) => UiGuard.Run("Search-It window: watch the mouse", WatchTick);
         viewModel.RequestClose += OnRequestClose;
         viewModel.Chips.CollectionChanged += OnChipsChanged;
-        // Hidden without closing (the safety net's fallback when a close fails): no watch, nothing to refocus.
+        // Hidden without closing (the safety net's fallback when a close fails, or Windows hiding owned windows
+        // while Revit is minimized): no watch, nothing to refocus. Shown again while still open (Revit restored):
+        // the watch restarts from a fresh baseline, so a click outside closes the window again.
         IsVisibleChanged += (_, _) => UiGuard.Run("Search-It window: visibility", () =>
         {
-            if (!IsVisible && IsLoaded) StopWatch();
+            if (!IsLoaded) return;
+            if (!IsVisible) StopWatch();
+            else StartWatch();
         });
         ContentRendered += (_, _) => UiGuard.Run("Search-It window: first frame", () => FirstFrameDrawn = true);
         // Each on its own, the watch first: closing on a click outside must work even when sizing or focusing failed.
