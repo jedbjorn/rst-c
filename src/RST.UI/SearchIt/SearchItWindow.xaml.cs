@@ -528,6 +528,10 @@ public partial class SearchItWindow : Window
     internal void WatchTick()
     {
         if (!_watching || !IsOpen) return;
+        // Not while a cold open still reads the tools: a reading then can carry the press that opened the
+        // window (v3.4.0 closed the first open of each session ~45 ms in). The launcher takes a fresh baseline
+        // once the tools are read (RebaseWatch), and the watch starts counting from there.
+        if (ViewModel.IsLoading) return;
         if (ReadSample() is not { } read) return;
         var sample = read with { PressOnWindow = read.PressOnWindow || _ownPress };
         if (!sample.LeftDown && !sample.RightDown) _ownPress = false;

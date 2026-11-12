@@ -501,6 +501,47 @@ public class SearchItTests
     }
 
     /// <summary>
+    /// v3.4.0 regression: on a cold open the watch ticked while the tools were still being read, took the
+    /// press that opened the window for a click outside and closed it ~45 ms in. A reading during the read
+    /// counts for nothing; the window is still open, active and ready to type when Show returns.
+    /// </summary>
+    [Fact]
+    public void A_cold_open_is_not_closed_by_a_press_read_while_the_tools_load() => Sta(() =>
+    {
+        var owner = OwnerOnScreen();
+        var ownerHandle = new WindowInteropHelper(owner).Handle;
+        var backend = new FakeBackend { IsReady = false, Tools = Sample.Concat(Many(40)).ToArray() };
+        var loaded = false;
+        // Until the tools are read, every reading shows a press outside (the click that opened the window).
+        var stale = Away with { LeftPressedSince = true };
+        backend.OnLoad = () =>
+        {
+            // A watch tick while the tools load, as the first-frame wait let happen in v3.4.0.
+            SearchItLauncher.Current!.WatchTick();
+            loaded = true;
+        };
+        try
+        {
+            Assert.True(SearchItLauncher.Show(ownerHandle, backend, () => loaded ? Idle : stale));
+            var window = SearchItLauncher.Current!;
+            Assert.True(window.IsOpen, "the cold open is still open when Show returns");
+            AssertReadyToType(window, "when Show returns");
+            for (var i = 0; i < 5; i++)
+            {
+                Thread.Sleep(40);
+                WindowCapture.DoEvents();
+            }
+            Assert.True(window.IsOpen, "and stays open once the watch runs");
+            Assert.Empty(backend.Ran);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+            owner.Close();
+        }
+    });
+
+    /// <summary>
     /// A cold read takes seconds. If the user has switched to another application by the time it ends, the
     /// window does not pull itself (and Revit) forward to take the keyboard: it never asks to be activated
     /// again, and the watch then closes it, as for any switch away.
