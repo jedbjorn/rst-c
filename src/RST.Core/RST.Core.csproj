@@ -26,6 +26,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Ribbon Tool Census exceptions (feature #22, spec #34; Census/CensusIndex.cs): each Revit year's
+         census/<year>/exceptions.tsv is embedded from the repo file itself, with no second copy (decision #97).
+         A new year directory is picked up by the wildcard. Resource name: RST.Core.Census.<year>.exceptions.tsv. -->
+    <EmbeddedResource Include="..\..\census\*\exceptions.tsv"
+                      LogicalName="RST.Core.Census.$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('%(FullPath)')))).exceptions.tsv"
+                      Link="Census\$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('%(FullPath)'))))\exceptions.tsv" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Tests use internal seams (for example PackageContents.Series). -->
     <InternalsVisibleTo Include="RST.Tests" />
     <!-- The Windows-only handle delete of the activity cleanup (Telemetry/Rollups/OutboxFileTaker). -->
