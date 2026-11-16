@@ -321,18 +321,32 @@ public sealed class SearchShowingFallbackTests
         warning.Exception.Should().BeSameAs(boom);
         warning.MessageTemplate.Should().StartWith("Search-It: the ribbon's state could not be read");
 
-        // The fallback: every tool with a place outside the family-editor tabs, with all of those places.
+        // Neither fallback is named a family's: the family one mixes project and family tools.
         list!.IsFamily.Should().BeFalse("the fallback is not a family's list");
         var fallback = list.Tools;
-        fallback.Should().NotBeEmpty();
-        var expected = catalog.Select(t => (t.Id, Places: t.Places.Where(p => !p.OnFamilyEditorTab).Select(p => p.ToSearchPlace()).ToArray()))
+        // In a project: every tool with a place outside the family-editor tabs, with all of those places.
+        // In a family: the whole search catalogue, family-editor tabs included (Sprint 1 message #22).
+        var expected = catalog.Select(t => (t.Id, Places: t.Places.Where(p => isFamily || !p.OnFamilyEditorTab).Select(p => p.ToSearchPlace()).ToArray()))
             .Where(t => t.Places.Length > 0).ToArray();
         fallback.Select(t => t.Id).Should().Equal(expected.Select(t => t.Id));
         for (var i = 0; i < expected.Length; i++) fallback[i].Places.Should().Equal(expected[i].Places);
-        // It is the list Search-It showed before this delivery, plus the one mode-only id with a project place.
+
+        var ids = fallback.Select(t => t.Id).ToList();
         var before = SearchIndex.Build(capture.BuilderCatalog());
-        fallback.Where(t => t.Id != "ID_LOAD_INTO_PROJECTS").Select(t => t.Id).Should().Equal(before.Select(t => t.Id));
-        fallback.Select(t => t.Id).Should().NotContain("ID_OBJECTS_EXTRUSION");
+        if (isFamily)
+        {
+            // Every catalogue tool with every place: the family's tools are there, and so are the project's.
+            ids.Should().Equal(catalog.Select(t => t.Id));
+            fallback.Sum(t => t.Places.Count).Should().Be(catalog.Sum(t => t.Places.Count));
+            ids.Should().Contain(["ID_OBJECTS_EXTRUSION", "ID_FAMILY_TYPE", "ID_OBJECTS_WALL"]);
+            ids.Should().Contain(before.Select(t => t.Id));
+        }
+        else
+        {
+            // The list Search-It showed before this delivery, plus the one mode-only id with a project place.
+            ids.Where(id => id != "ID_LOAD_INTO_PROJECTS").Should().Equal(before.Select(t => t.Id));
+            ids.Should().NotContain("ID_OBJECTS_EXTRUSION");
+        }
     }
 
     [Fact]

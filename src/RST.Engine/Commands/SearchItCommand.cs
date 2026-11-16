@@ -8,8 +8,9 @@
 // scan, with the family-editor tabs kept), cut down when the window opens to the places Revit is
 // showing now: a family lists family tools, a project lists project tools. The rule is
 // RST.Core.Search.SearchShowing; the state it needs is read from the ribbon objects the scan kept
-// (SearchItCatalog), never by walking the ribbon again. If that state cannot be read, the unfiltered
-// list is shown and a Warning logged: Search-It still opens.
+// (SearchItCatalog), never by walking the ribbon again. If that state cannot be read, an unfiltered
+// list is shown (SearchShowing.Unfiltered: in a family the whole search catalogue, in a project the
+// tools Search-It listed before spec #33) and a Warning logged: Search-It still opens.
 //
 // The window (RST.UI.SearchIt) is modeless, so the view behind it can be panned, zoomed and orbited.
 // That shapes the threading:
@@ -84,9 +85,11 @@ public sealed class SearchItCommand : IExternalCommand
     {
         var catalog = RstApplication.GetOrBuildSearchCatalog(revitVersion);
         var sw = Stopwatch.StartNew();
-        var list = catalog.ListShowing(IsFamilyOpen(uiApp));
+        var isFamily = IsFamilyOpen(uiApp);
+        var list = catalog.ListShowing(isFamily);
+        // list= is the kind of the open file; hidden= counts catalogue tools not listed (not places).
         Log.Information("Search-It opened: revit={Version}, list={List}, tools={Tools}, hidden={Hidden}, rule={Ms}ms",
-            revitVersion, list.IsFamily ? "family" : "project", list.Tools.Count, catalog.Tools.Count - list.Tools.Count,
+            revitVersion, isFamily ? "family" : "project", list.Tools.Count, catalog.Tools.Count - list.Tools.Count,
             sw.ElapsedMilliseconds);
         return list;
     }

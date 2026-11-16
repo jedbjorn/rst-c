@@ -32,7 +32,8 @@ internal sealed record SearchItCatalog(IReadOnlyList<SearchCatalogTool> Tools, I
 
     /// <summary>
     /// The tools the ribbon is showing now, for a family or a project. When the ribbon's state cannot
-    /// be read the unfiltered list comes back instead, with one Warning (<see cref="SearchShowing.ListOrFallBack"/>).
+    /// be read the unfiltered list for that kind comes back instead, with one Warning
+    /// (<see cref="SearchShowing.ListOrFallBack"/>, <see cref="SearchShowing.Unfiltered"/>).
     /// </summary>
     public SearchList ListShowing(bool isFamily)
     {

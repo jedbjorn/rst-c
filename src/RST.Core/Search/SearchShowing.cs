@@ -73,21 +73,26 @@ public static class SearchShowing
         {
             Log.Warning(ex, "Search-It: the ribbon's state could not be read (list={List}); listing the unfiltered tools",
                 isFamily ? "family" : "project");
-            return Unfiltered(catalog);
+            return Unfiltered(catalog, isFamily);
         }
     }
 
     /// <summary>
-    /// The list when the ribbon's state is unknown: every tool with a place outside the family-editor
-    /// tabs, with all of those places. That is the list Search-It showed before it followed the open
-    /// file, so it is not named a family's.
+    /// The list when the ribbon's state is unknown (Planner's ruling on spec #33, Sprint 1 message #22):
+    ///   - in a project: every tool with a place outside the family-editor tabs, with all of those
+    ///     places. That is the list Search-It showed before it followed the open file;
+    ///   - in a family: the whole search catalogue, family-editor tabs included. The family's tools
+    ///     must be there, and telling which project tools to leave out is the reading that just
+    ///     failed, so they stay (decision #90: list a tool when we cannot tell whether it runs).
+    /// Neither is named a family's: the family one mixes project and family tools, so "Project tools
+    /// are not listed while a family is open" would be false.
     /// </summary>
-    public static SearchList Unfiltered(IReadOnlyList<SearchCatalogTool> catalog)
+    public static SearchList Unfiltered(IReadOnlyList<SearchCatalogTool> catalog, bool isFamily)
     {
         var tools = new List<SearchTool>(catalog.Count);
         foreach (var tool in catalog)
         {
-            var places = tool.Places.Where(p => !p.OnFamilyEditorTab).Select(p => p.ToSearchPlace()).ToList();
+            var places = tool.Places.Where(p => isFamily || !p.OnFamilyEditorTab).Select(p => p.ToSearchPlace()).ToList();
             if (places.Count > 0) tools.Add(new SearchTool(tool.Id, places));
         }
         return new SearchList(tools);

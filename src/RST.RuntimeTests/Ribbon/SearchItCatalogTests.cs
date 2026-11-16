@@ -298,13 +298,23 @@ public sealed class SearchItCatalogTests
         // Handles that do not match the catalogue (a scan that lost its objects): every read fails.
         var broken = session.Catalog with { Handles = [] };
 
-        SearchList? list = null;
-        var events = CaptureLog(() => list = broken.ListShowing(isFamily: true));
+        // In a family: the whole catalogue, family-editor tabs included, not named a family's list.
+        SearchList? family = null;
+        var events = CaptureLog(() => family = broken.ListShowing(isFamily: true));
 
-        list!.IsFamily.Should().BeFalse("the unfiltered list is not a family's, so the window does not name it one");
-        Ids(list).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_CLINE", "ID_JOIN", AddinId);
-        Places(list, "ID_OBJECTS_CLINE").Should().Equal("Architecture › Model", "Modify › Draw");
+        family!.IsFamily.Should().BeFalse("the list mixes project and family tools, so the window does not name it a family's");
+        Ids(family).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_CLINE", "ID_JOIN", AddinId, "ID_OBJECTS_EXTRUSION", "ID_LOAD_INTO_PROJECTS");
+        Places(family, "ID_OBJECTS_CLINE").Should().Equal("Architecture › Model", "Modify › Draw", "Create › Model");
         events.Where(e => e.Level >= LogLevel.Warning).Should().ContainSingle()
             .Which.Level.Should().Be(LogLevel.Warning);
+
+        // In a project: the tools outside the family-editor tabs.
+        SearchList? project = null;
+        events = CaptureLog(() => project = broken.ListShowing(isFamily: false));
+
+        project!.IsFamily.Should().BeFalse();
+        Ids(project).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_CLINE", "ID_JOIN", AddinId);
+        Places(project, "ID_OBJECTS_CLINE").Should().Equal("Architecture › Model", "Modify › Draw");
+        events.Where(e => e.Level >= LogLevel.Warning).Should().ContainSingle();
     });
 }
