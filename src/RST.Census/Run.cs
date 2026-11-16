@@ -129,6 +129,12 @@ public sealed partial class CensusApp
 
             Progress($"START {ctx} doc {docStart} elements={elems0} modified={mod0} places={places.Count} placeKeys={places.Select(p => (p.Item.Id, p.TabId, p.PanelTitle, p.Path)).Distinct().Count()} ids={ids.Count} alreadyDone={done.Count} skipList={_skip.Count} ownerSkipped={ownerSkip.Count} ownerUnknown={unknown.Count} build={_build} census={_censusBuild}");
 
+            if (ids.All(i => done.Contains(i) || ownerSkip.ContainsKey(i)))
+            {
+                Progress($"END {ctx} tools=0 0s elements {elems0}->{elems0} modified {mod0}->{mod0} (nothing left to run)");
+                return;
+            }
+
             // not-drawn sweep
             var dlog = new StringBuilder();
             var drawn = await DrawnSweep(places, dlog);

@@ -410,6 +410,13 @@ def run_context(year, job, deadline=None):
             if any(f"END {ctx} " in l for l in prog) and end_count(year, ctx) > ends_before:
                 log(f"done {ctx}: {prog[-1] if prog else ''}")
                 return ctx
+            acts = [l for l in st.splitlines() if l.startswith("A ")]
+            if acts and f"FAIL run|{ctx}" in acts[-1]:
+                # the add-in refused the run (an earlier run still active): try again once it is idle
+                log(f"run|{ctx} refused; retrying in 30 s")
+                time.sleep(30)
+                go(year, f"run|{ctx}")
+                continue
             if any(f"CONTEXT MISMATCH" in l for l in prog[-2:]):
                 log(f"mismatch for {ctx}: {prog[-1]}")
                 return "mismatch"
