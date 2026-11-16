@@ -79,7 +79,7 @@ public sealed class CensusIndexTests
         index.Mark("project/FloorPlan", "ID_INPLACE_WALL", new CensusPlace("Architecture", "Build", "/RibbonSplitButton(ID_OBJECTS_WALL_RibbonListButton)"))
             .Kind.Should().Be(CensusMarkKind.NotDrawn);
         index.Mark("project/FloorPlan", "ID_INPLACE_WALL", new CensusPlace("Architecture", "Build"))
-            .Kind.Should().Be(CensusMarkKind.NotDrawn, "a null path matches any path on that tab and panel");
+            .Kind.Should().Be(CensusMarkKind.None, "not-drawn needs the exact place: a hidden copy can share the tab and panel with a drawn one");
         index.Mark("project/FloorPlan", "ID_INPLACE_WALL", new CensusPlace("Architecture", "Build", "/elsewhere"))
             .Kind.Should().Be(CensusMarkKind.None);
         index.Mark("project/FloorPlan", "ID_INPLACE_WALL", new CensusPlace("Massing", "Build"))

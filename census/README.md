@@ -50,7 +50,10 @@ places and results. They hold no icons and no screenshots.
 | `census_build` | The census add-in build (version, commit and a hash of the DLL) |
 
 The result belongs to the id in that context; a place gets `not-drawn` instead when that place is not drawn.
-Where an id has several places, it was started once, from a drawn place.
+Where an id has several places, it was started once, from a drawn place. Revit keeps hidden copies of some
+containers (a second Paint or Dimension split button, the other size of a fold panel); copies with the same tab,
+panel and path are one row, drawn if any copy is drawn. A copy with its own path (`Dimension_Split_Button_1`) keeps
+its own row, so a `not-drawn` row applies to its exact path only.
 
 ### `exceptions.tsv` columns
 

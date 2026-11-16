@@ -39,8 +39,9 @@ public readonly record struct CensusMark(CensusMarkKind Kind, string Reason)
 
 /// <summary>
 /// A ribbon place as the census records it: the tab's id, the panel's title and the container path inside the panel
-/// (empty for an item straight on the panel). <see cref="Path"/> null means "any path": runnability is a property
-/// of the id in a context, while not-drawn is a property of the exact place.
+/// (empty for an item straight on the panel). Runnability is a property of the id in a context, so it needs no place;
+/// not-drawn is a property of the exact place, so it needs all three: Revit keeps hidden copies of some containers in
+/// the same panel (a second Dimension split button), and only the path tells the drawn copy from the hidden one.
 /// </summary>
 public readonly record struct CensusPlace(string? TabId, string? Panel, string? Path = null);
 
@@ -162,7 +163,7 @@ public sealed class CensusIndex
     /// <summary>
     /// What the index says about <paramref name="id"/> at <paramref name="place"/> in <paramref name="context"/>.
     /// <list type="bullet">
-    /// <item>NotDrawn when a not-drawn row has the same tab and panel and, if the caller gives one, the same path.</item>
+    /// <item>NotDrawn when a not-drawn row has the same tab, panel and path (a null path never matches a not-drawn row).</item>
     /// <item>Else NotRunnable when any not-runnable row has the id in this context: whether a tool starts does not depend
     /// on which of its places is clicked.</item>
     /// <item>Else None (also for an unknown context, an unknown id, or empty arguments).</item>
@@ -177,7 +178,7 @@ public sealed class CensusIndex
             if (r.Mark != CensusMarkKind.NotDrawn) continue;
             if (!string.Equals(r.TabId, place.TabId, StringComparison.Ordinal)) continue;
             if (!string.Equals(r.Panel, place.Panel ?? "", StringComparison.Ordinal)) continue;
-            if (place.Path is not null && !string.Equals(r.Path, place.Path, StringComparison.Ordinal)) continue;
+            if (place.Path is null || !string.Equals(r.Path, place.Path, StringComparison.Ordinal)) continue;
             return new CensusMark(CensusMarkKind.NotDrawn, r.Reason);
         }
         foreach (var r in rows)
