@@ -176,7 +176,7 @@ internal sealed class RibbonCapture
     private static IEnumerable<string[]> Read(string file) => File.ReadLines(Path.Combine(AppContext.BaseDirectory,
         "Fixtures", "Ribbon", file)).Where(l => !l.StartsWith('#')).Skip(1).Select(l => l.Split('\t'));
 
-    private static RibbonHit? ToHit(Row row)
+    internal static RibbonHit? ToHit(Row row)
     {
         var leaf = row.Type switch
         {

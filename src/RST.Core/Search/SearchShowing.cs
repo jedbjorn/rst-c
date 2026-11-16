@@ -1,0 +1,95 @@
+// rst-c's own (not vendored): which search-catalogue places are listed when Search-It opens
+// (spec #33, "Showing Rule"; decision #88).
+//
+// Search-It lists a tool when one of its ribbon places is on a panel Revit is showing now. The rule
+// is pure: the host reads the live ribbon (a tab's and a panel's IsVisible, an add-in button's
+// CanExecute) and the active document's kind, and hands them over as plain values.
+//
+//   A place shows when its panel is visible, and
+//     - on a family-editor tab: that tab is visible;
+//     - on any other tab, in a project: nothing more. A project tab the user has hidden in Revit's
+//       options (Structure, Systems …) still counts: its tools run, and Search-It exists for the tool
+//       the user cannot find;
+//     - on any other tab, in a family: that tab is visible.
+//   An add-in button that says it cannot run now (CanExecute false) does not show.
+//
+// Revit's own buttons do not report whether they are greyed, so a Revit tool on a showing panel is
+// listed even when the current view greys it (spec #33, Out of Scope).
+
+using RST.Core.Logging;
+
+namespace RST.Core.Search;
+
+/// <summary>What the ribbon says about one place when Search-It opens.</summary>
+/// <param name="TabVisible">RibbonTab.IsVisible.</param>
+/// <param name="PanelVisible">RibbonPanel.IsVisible.</param>
+/// <param name="CanExecute">An add-in button's CommandHandler.CanExecute; null when the place has no handler to ask.</param>
+public readonly record struct PlaceState(bool TabVisible, bool PanelVisible, bool? CanExecute = null)
+{
+    /// <summary>True when a place in this state is showing (the table in the file header).</summary>
+    /// <param name="onFamilyEditorTab">The place is on a family-editor tab (<see cref="SearchCatalogPlace.OnFamilyEditorTab"/>).</param>
+    /// <param name="isFamily">The active document is a family; a project template is a project.</param>
+    public bool Shows(bool onFamilyEditorTab, bool isFamily) =>
+        PanelVisible
+        && (TabVisible || (!onFamilyEditorTab && !isFamily))
+        && CanExecute != false;
+}
+
+/// <summary>The tools Search-It lists for the open file.</summary>
+/// <param name="IsFamily">The list is a family's: the window names it ("12 of 240 family tools").</param>
+public sealed record SearchList(IReadOnlyList<SearchTool> Tools, bool IsFamily = false);
+
+public static class SearchShowing
+{
+    /// <summary>
+    /// The tools with at least one showing place, in catalogue order, each with its showing places only:
+    /// the first is the tool's name and place, the rest are its "+N more places".
+    /// </summary>
+    /// <param name="stateOf">Reads one place's state from the live ribbon (by <see cref="SearchCatalogPlace.Handle"/>).</param>
+    public static SearchList List(IReadOnlyList<SearchCatalogTool> catalog, bool isFamily, Func<SearchCatalogPlace, PlaceState> stateOf)
+    {
+        var tools = new List<SearchTool>(catalog.Count);
+        foreach (var tool in catalog)
+        {
+            var showing = new List<SearchPlace>(tool.Places.Count);
+            foreach (var place in tool.Places)
+                if (stateOf(place).Shows(place.OnFamilyEditorTab, isFamily)) showing.Add(place.ToSearchPlace());
+            if (showing.Count > 0) tools.Add(new SearchTool(tool.Id, showing));
+        }
+        return new SearchList(tools, isFamily);
+    }
+
+    /// <summary>
+    /// <see cref="List"/>, and when the ribbon's state cannot be read, <see cref="Unfiltered"/> with one
+    /// Warning: a failure there never stops Search-It from opening.
+    /// </summary>
+    public static SearchList ListOrFallBack(IReadOnlyList<SearchCatalogTool> catalog, bool isFamily, Func<SearchCatalogPlace, PlaceState> stateOf)
+    {
+        try
+        {
+            return List(catalog, isFamily, stateOf);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Search-It: the ribbon's state could not be read (list={List}); listing the unfiltered tools",
+                isFamily ? "family" : "project");
+            return Unfiltered(catalog);
+        }
+    }
+
+    /// <summary>
+    /// The list when the ribbon's state is unknown: every tool with a place outside the family-editor
+    /// tabs, with all of those places. That is the list Search-It showed before it followed the open
+    /// file, so it is not named a family's.
+    /// </summary>
+    public static SearchList Unfiltered(IReadOnlyList<SearchCatalogTool> catalog)
+    {
+        var tools = new List<SearchTool>(catalog.Count);
+        foreach (var tool in catalog)
+        {
+            var places = tool.Places.Where(p => !p.OnFamilyEditorTab).Select(p => p.ToSearchPlace()).ToList();
+            if (places.Count > 0) tools.Add(new SearchTool(tool.Id, places));
+        }
+        return new SearchList(tools);
+    }
+}
