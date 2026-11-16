@@ -135,26 +135,65 @@ public sealed partial class CensusApp
 
     static string Dump(IntPtr dlg) => string.Join(" | ", Children(dlg).Select(c => $"{Cls(c)}#{GetDlgCtrlID(c)}'{Text(c)}'"));
 
-    /// <summary>Sets the file name box of a common file dialog and presses Open (control id 1).</summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, StringBuilder l);
+    const uint WM_GETTEXT = 0x000D;
+    static string GetText(IntPtr h) { var sb = new StringBuilder(1024); SendMessage(h, WM_GETTEXT, (IntPtr)1024, sb); return sb.ToString(); }
+
+    /// <summary>
+    /// Sets the file name box of a common file dialog and presses Open (control id 1). The dialog fills the box with
+    /// its own default while it initialises, so wait, set, read back, and only then press Open.
+    /// </summary>
     static bool FillFileDialog(IntPtr dlg, string path, Action<string> L)
     {
-        var kids = Children(dlg);
-        // Vista-style and classic dialogs both keep the file name edit inside ComboBoxEx32 (cmb13, id 0x47C)
-        var edit = kids.FirstOrDefault(c => Cls(c) == "Edit" && GetDlgCtrlID(c) == 0x47C);
-        if (edit == IntPtr.Zero) edit = kids.FirstOrDefault(c => Cls(c) == "Edit" && GetDlgCtrlID(c) == 0x480);
-        if (edit == IntPtr.Zero) edit = kids.FirstOrDefault(c => Cls(c) == "Edit");
-        if (edit == IntPtr.Zero) { L("file dialog: no Edit; children: " + Dump(dlg)); return false; }
-        SendMessage(edit, WM_SETTEXT, IntPtr.Zero, path);
-        L($"file dialog: set '{path}' into edit #{GetDlgCtrlID(edit)}");
-        Thread.Sleep(300);
-        var open = kids.FirstOrDefault(c => Cls(c) == "Button" && GetDlgCtrlID(c) == 1);
-        if (open != IntPtr.Zero) PostMessage(open, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-        else PostMessage(dlg, WM_COMMAND, (IntPtr)1, IntPtr.Zero);
-        L("file dialog: Open pressed");
-        return true;
+        Thread.Sleep(1500);
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            var kids = Children(dlg);
+            // the file name box: the Edit inside Autodesk's file dialog's name combo (id 13006), or inside the common
+            // dialog's ComboBoxEx32 (cmb13, id 0x47C); the Edit's own id is 1001
+            var combo = kids.FirstOrDefault(c => Cls(c) == "ComboBox" && GetDlgCtrlID(c) == 13006);
+            if (combo == IntPtr.Zero) combo = kids.FirstOrDefault(c => Cls(c) == "ComboBoxEx32" && GetDlgCtrlID(c) == 0x47C);
+            var edit = combo != IntPtr.Zero ? Children(combo).FirstOrDefault(c => Cls(c) == "Edit") : IntPtr.Zero;
+            if (edit == IntPtr.Zero) edit = kids.FirstOrDefault(c => Cls(c) == "Edit" && GetDlgCtrlID(c) == 0x480);
+            if (edit == IntPtr.Zero) { L("file dialog: no file name box; children: " + Dump(dlg)); return false; }
+            // typed, not set: Autodesk's dialog only takes the name from user edits (CBN_EDITCHANGE), so clear the box
+            // and send one WM_CHAR per character, as the keyboard would
+            SendMessage(edit, WM_SETTEXT, IntPtr.Zero, "");
+            SendMessage(edit, 0x00B1 /* EM_SETSEL */, IntPtr.Zero, (IntPtr)(-1));
+            foreach (var ch in path) SendMessage(edit, 0x0102 /* WM_CHAR */, (IntPtr)ch, (IntPtr)1);
+            Thread.Sleep(400);
+            var back = GetText(edit);
+            L($"file dialog: set file name (attempt {attempt + 1}), reads back '{back}'");
+            if (!string.Equals(back, path, StringComparison.OrdinalIgnoreCase)) { Thread.Sleep(800); continue; }
+            var open = kids.FirstOrDefault(c => Cls(c) == "Button" && GetDlgCtrlID(c) == 1);
+            if (open != IntPtr.Zero) PostMessage(open, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+            else PostMessage(dlg, WM_COMMAND, (IntPtr)1, IntPtr.Zero);
+            L("file dialog: Open pressed");
+            return true;
+        }
+        return false;
     }
 
     bool DriveNewDocDialogs(string kind, string template, HashSet<IntPtr> old, int pid, Action<string> L)
+    {
+        var ok = DriveNewDocDialogsOnce(kind, template, old, pid, L);
+        if (!ok)
+        {
+            // leave nothing open: cancel every new dialog of ours, newest first
+            for (int i = 0; i < 3; i++)
+                foreach (var w in AllWins().Where(w => w.pid == pid && w.cls == "#32770" && !old.Contains(w.h)))
+                {
+                    var cancel = Children(w.h).FirstOrDefault(c => Cls(c) == "Button" && GetDlgCtrlID(c) == 2);
+                    if (cancel != IntPtr.Zero) PostMessage(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero); else PostMessage(w.h, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                    L($"cancelled '{w.title}'");
+                    Thread.Sleep(700);
+                }
+        }
+        return ok;
+    }
+
+    bool DriveNewDocDialogsOnce(string kind, string template, HashSet<IntPtr> old, int pid, Action<string> L)
     {
         try
         {
@@ -179,6 +218,16 @@ public sealed partial class CensusApp
             if (!WaitFor(() => !IsWindowVisible(fd2.h), 15000)) { L("template file dialog still open"); return false; }
             Thread.Sleep(800);
             var kids = Children(np.h);
+            var tplCombo = kids.FirstOrDefault(c => Cls(c) == "ComboBox");
+            var chosen = tplCombo == IntPtr.Zero ? "" : Text(tplCombo);
+            if (string.IsNullOrEmpty(chosen) && tplCombo != IntPtr.Zero) chosen = GetText(tplCombo);
+            if (!string.Equals(chosen, Path.GetFileName(template), StringComparison.OrdinalIgnoreCase))
+            {
+                L($"template combo shows '{chosen}', not '{Path.GetFileName(template)}': cancelling");
+                var cancel = kids.FirstOrDefault(c => Cls(c) == "Button" && GetDlgCtrlID(c) == 2);
+                if (cancel != IntPtr.Zero) PostMessage(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+                return false;
+            }
             // the "Create new: Project" radio must stay selected (it is the default)
             var radio = kids.FirstOrDefault(c => Cls(c) == "Button" && Text(c).Replace("&", "").Trim().Equals("Project", StringComparison.OrdinalIgnoreCase));
             if (radio != IntPtr.Zero && SendMessage(radio, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero) == IntPtr.Zero) { PostMessage(radio, BM_CLICK, IntPtr.Zero, IntPtr.Zero); L("selected the Project radio"); Thread.Sleep(300); }

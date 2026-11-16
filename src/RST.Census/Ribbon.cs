@@ -22,7 +22,7 @@ public sealed partial class CensusApp
     sealed class Place
     {
         public RibbonTab Tab; public RibbonPanel Panel; public RibbonItem Item; public string Path; public bool Slide;
-        public bool ParentsVisible = true; public bool Launcher;
+        public bool ParentsVisible = true; public bool Launcher; public RibbonItem Parent;
         public string TabId => Tab?.Id ?? "";
         public string PanelTitle => S(Panel?.Source?.Title ?? Panel?.Source?.Id ?? "");
         public string Label => S(Item?.Text ?? Item?.Name ?? Item?.Id ?? "").Replace("  ", " ");
@@ -42,7 +42,7 @@ public sealed partial class CensusApp
                 foreach (var it in src.Items.Cast<object>().ToList())
                 {
                     if (it is RibbonPanelBreak) { slide = true; continue; }
-                    Rec(o, tab, panel, it, slide ? "/SlideOut" : "", slide, true);
+                    Rec(o, tab, panel, it, slide ? "/SlideOut" : "", slide, true, null);
                 }
                 try { if (src.DialogLauncher is RibbonItem dl) o.Add(new Place { Tab = tab, Panel = panel, Item = dl, Path = "DialogLauncher", Launcher = true }); } catch { }
             }
@@ -50,15 +50,15 @@ public sealed partial class CensusApp
         return o;
     }
 
-    static void Rec(List<Place> o, RibbonTab tab, RibbonPanel panel, object it, string path, bool slide, bool pv)
+    static void Rec(List<Place> o, RibbonTab tab, RibbonPanel panel, object it, string path, bool slide, bool pv, RibbonItem parent)
     {
         if (it == null) return;
         var ri = it as RibbonItem;
-        if (ri != null) o.Add(new Place { Tab = tab, Panel = panel, Item = ri, Path = path, Slide = slide, ParentsVisible = pv });
+        if (ri != null) o.Add(new Place { Tab = tab, Panel = panel, Item = ri, Path = path, Slide = slide, ParentsVisible = pv, Parent = parent });
         var kids = Kids(it); if (kids == null) return;
         var seg = "/" + it.GetType().Name + "(" + S(ri != null && !string.IsNullOrEmpty(ri.Id) ? ri.Id : Txt(it)) + ")";
         bool v = pv && (ri == null || ri.IsVisible);
-        foreach (var k in kids) Rec(o, tab, panel, k, path + seg, slide, v);
+        foreach (var k in kids) Rec(o, tab, panel, k, path + seg, slide, v, ri ?? parent);
     }
 
     static List<object> Kids(object it)

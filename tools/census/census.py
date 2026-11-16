@@ -183,6 +183,8 @@ def cmd_begin():
 
 
 def cmd_prepare(year):
+    # Revit locks the add-in DLL: stop it before installing a new build
+    log(ps("rv.ps1", "-Action", "stop", "-Year", year))
     for f in sorted((HERE / "guest").glob("*.ps1")):
         push(f, f"{G}\\census-tools\\{f.name}")
     push(stage_dir(year) / "RST.Census.dll", f"{G}\\stage\\{year}\\RST.Census.dll")
@@ -203,20 +205,21 @@ def revit_status(year):
     return ps("status.ps1", "-Year", year, timeout=90)
 
 
+def started_count(year):
+    out = gx("cmd", "/c", f"findstr /c:\"started in Revit\" {GC}\\{year}\\actions.log 2>nul")
+    return sum(1 for l in out.splitlines() if "started in Revit" in l)
+
+
 def cmd_start(year, tries=2):
     for attempt in range(tries):
         log(ps("rv.ps1", "-Action", "stop", "-Year", year))
+        before = started_count(year)
         log(ps("rv.ps1", "-Action", "launch", "-Year", year))
-        ans = mcp_ps(f"& {G}\\census-tools\\answer.ps1 -Seconds 140 -Year {year}", timeout=170)
+        ans = mcp_ps(f"& {G}\\census-tools\\answer.ps1 -Seconds 150 -Year {year}", timeout=175)
         log("answer: " + ans.strip()[-500:])
         for _ in range(12):
-            st = revit_status(year)
-            if "RST.Census" in st and "started in Revit" in st:
+            if started_count(year) > before and "REVIT running" in revit_status(year):
                 log("Revit up with the census add-in")
-                return True
-            acts = gx("cmd", "/c", f"type {GC}\\{year}\\actions.log 2>nul | findstr /c:\"started in Revit\"")
-            if "started in Revit" in acts and "REVIT running" in st:
-                # the add-in may have logged before this check; confirm the newest start is this process's
                 return True
             time.sleep(10)
         log(f"Revit start attempt {attempt + 1} did not show the census add-in")

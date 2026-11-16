@@ -29,6 +29,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
+using Autodesk.Windows;
 
 namespace RST.Census;
 
@@ -114,6 +115,9 @@ public sealed partial class CensusApp : IExternalApplication, IExternalEventHand
                     case "closedoc": _ = CloseDoc(f); Act($"OK {line}"); continue;
                     case "view": _ = SetView(f); Act($"OK {line}"); continue;
                     case "drawn": _ = DrawnVerb(f); Act($"OK {line}"); continue;
+                    case "vtx": VtxVerb(f); Act($"OK {line}"); continue;
+                    case "vtxopen": _ = VtxOpen(f); Act($"OK {line}"); continue;
+                    case "tabact": ComponentManager.Ribbon.Tabs.First(t => t.Id == f[2]).IsActive = true; Act($"OK {line}"); continue;
                 }
             }
             catch (Exception ex) { Act($"FAIL {line}: {ex.GetType().Name}: {S(ex.Message)}"); Err(line, ex); continue; }

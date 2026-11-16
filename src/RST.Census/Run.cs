@@ -101,13 +101,13 @@ public sealed partial class CensusApp
                 else if (!o.Known) unknown[id] = o;
             }
 
-            Progress($"START {ctx} doc {docStart} elements={elems0} modified={mod0} places={places.Count} ids={ids.Count} alreadyDone={done.Count} skipList={_skip.Count} ownerSkipped={ownerSkip.Count} ownerUnknown={unknown.Count} build={_build} census={_censusBuild}");
+            Progress($"START {ctx} doc {docStart} elements={elems0} modified={mod0} places={places.Count} placeKeys={places.Select(p => (p.Item.Id, p.TabId, p.PanelTitle, p.Path)).Distinct().Count()} ids={ids.Count} alreadyDone={done.Count} skipList={_skip.Count} ownerSkipped={ownerSkip.Count} ownerUnknown={unknown.Count} build={_build} census={_censusBuild}");
 
             // not-drawn sweep
             var dlog = new StringBuilder();
             var drawn = await DrawnSweep(places, dlog);
-            var dsb = new StringBuilder("tab\tpanel\tpath\tid\tlabel\titemVisible\tparentsVisible\tdrawn\r\n");
-            foreach (var p in places) dsb.Append(p.TabId).Append('\t').Append(p.PanelTitle).Append('\t').Append(p.Path).Append('\t').Append(p.Item.Id).Append('\t').Append(p.Label).Append('\t').Append(p.Item.IsVisible).Append('\t').Append(p.ParentsVisible).Append('\t').Append(drawn.Contains(p.Item)).Append("\r\n");
+            var dsb = new StringBuilder("tab\tpanel\tpath\tid\tlabel\titemVisible\tparentsVisible\tpanelVisible\tdrawn\r\n");
+            foreach (var p in places) dsb.Append(p.TabId).Append('\t').Append(p.PanelTitle).Append('\t').Append(p.Path).Append('\t').Append(p.Item.Id).Append('\t').Append(p.Label).Append('\t').Append(p.Item.IsVisible).Append('\t').Append(p.ParentsVisible).Append('\t').Append(p.Panel.IsVisible).Append('\t').Append(drawn.Contains(p.Item)).Append("\r\n");
             WriteFile(Path.Combine("drawn", Safe(ctx) + ".tsv"), dsb.ToString());
             WriteFile(Path.Combine("drawn", Safe(ctx) + ".log"), dlog.ToString());
             Progress($"DRAWN {ctx} drawn={places.Count(p => drawn.Contains(p.Item))} notDrawn={places.Count(p => !drawn.Contains(p.Item))}");
@@ -135,14 +135,17 @@ public sealed partial class CensusApp
                     if (idle != "") { r.Left = (r.Left + " " + idle).Trim(); r.IdleOk = false; }
                 }
                 var sb = new StringBuilder();
-                foreach (var p in pl)
+                // Revit keeps hidden copies of some containers (a second Paint or Dimension split button, fold-panel
+                // variants): copies with the same tab, panel and path are one place, drawn if any copy is drawn
+                foreach (var g in pl.GroupBy(p => (p.TabId, p.PanelTitle, p.Path)))
                 {
+                    var p = g.OrderByDescending(x => drawn.Contains(x.Item)).ThenByDescending(x => x.Panel.IsVisible).First();
                     string result = r.Result, note = r.Note;
-                    if (result is not ("skipped" or "not-a-command" or "error") && (!drawn.Contains(p.Item) || !p.Item.IsVisible || !p.ParentsVisible))
+                    if (result is not ("skipped" or "not-a-command" or "error") && !drawn.Contains(p.Item))
                     {
                         result = "not-drawn";
-                        note = (!p.Item.IsVisible || !p.ParentsVisible ? "not drawn: the ribbon model hides it here" : "not drawn: no visible control at this place")
-                               + $" (the id itself: {r.Result})";
+                        note = (!p.Panel.IsVisible ? "not drawn: its panel is hidden here" : !p.Item.IsVisible || !p.ParentsVisible ? "not drawn: hidden in the ribbon model at this place" : "not drawn: no visible control at this place")
+                               + $" (the id: {r.Result})";
                     }
                     var teardown = r.Result == "skipped" ? "skip: " + r.Note : r.Teardown;
                     sb.Append(string.Join("\t", _year, _build, ctx, S(id), S(p.TabId), p.PanelTitle, S(p.Path), p.Label, result, r.Tested,
@@ -151,7 +154,8 @@ public sealed partial class CensusApp
                 Append("rows.tsv", sb.ToString());
                 Append("detail.log", log.Length > 0 ? log.ToString() : $"{DateTime.Now:HH:mm:ss.fff} {id} -> {r.Result} note={r.Note}\r\n");
                 n++;
-                Progress($"{ctx} {id} {r.Result}{(pl.Any(p => !drawn.Contains(p.Item)) ? " (not-drawn places " + pl.Count(p => !drawn.Contains(p.Item)) + "/" + pl.Count + ")" : "")} {r.Tested} {r.Ms}ms idle={(r.IdleOk ? "ok" : "FAIL " + S(Trunc(r.Left, 150)))}");
+                var keys = pl.GroupBy(p => (p.TabId, p.PanelTitle, p.Path)).ToList(); int nd = keys.Count(g => !g.Any(x => drawn.Contains(x.Item)));
+                Progress($"{ctx} {id} {r.Result}{(nd > 0 ? " (not-drawn places " + nd + "/" + keys.Count + ")" : "")} {r.Tested} {r.Ms}ms idle={(r.IdleOk ? "ok" : "FAIL " + S(Trunc(r.Left, 150)))}");
                 if (!r.IdleOk && (r.Left.Contains("not idle") || r.Left.Contains("blocked") || r.Left.Contains("mode[") || r.Left.Contains("windows[")))
                 {
                     Progress($"STUCK after {id}: waiting up to 90 s for idle");
