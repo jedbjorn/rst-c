@@ -26,12 +26,15 @@ while ($sw.Elapsed.TotalSeconds -lt $Seconds) {
   $acted = $false
   foreach ($e in [CW]::Wins($revit.Id)) {
     $h, $title = $e -split '\|', 2
-    if ($title -notmatch 'Unsigned|Security|Hardware|Graphics|Acceleration') { continue }
+    # Revit's main window and its hidden helper windows are left alone; every other window of Revit is inspected
+    if ($title -match '^Autodesk Revit 20\d\d' -or $title -match 'Monitor$' -or $title -eq '') { continue }
     try { $w = [Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$h) } catch { continue }
+    $text = ($w.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition) | % { $_.Current.Name }) -join ' '
+    if ($title -notmatch 'Unsigned|Security' -and $text -notmatch 'Hardware Acceleration|hardware acceleration|graphics') { continue }
     $want = $null
     foreach ($b in $w.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)) {
       if ($b.Current.Name -eq 'Always Load') { $want = $b }
-      elseif (-not $want -and $title -match 'Hardware|Graphics|Acceleration' -and $b.Current.Name -match '^(Close|OK|Continue)$') { $want = $b }
+      elseif (-not $want -and $title -notmatch 'Unsigned' -and $b.Current.Name -match '^(Close|OK|Continue)$') { $want = $b }
     }
     if ($want) {
       $how = ''
