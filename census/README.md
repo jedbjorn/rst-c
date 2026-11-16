@@ -96,6 +96,23 @@ Every context runs with nothing selected, in a new scratch document that is neve
 `error` (an exception, a crash, a hang) is never committed: each one is re-run, skipped with a reason, or reclassified
 before a table is committed.
 
+A place that is not drawn and whose id also does not run is recorded as `accepted-nothing` (shipped as
+`not-runnable`); its reason says the place is not drawn either.
+
+## Counts
+
+Places per result, per context, as committed (written by `tools/census/assemble.py`).
+
+### 2026
+
+<!-- counts:2026 -->
+<!-- /counts:2026 -->
+
+### 2027
+
+<!-- counts:2027 -->
+<!-- /counts:2027 -->
+
 ## Method
 
 The census is a Revit add-in (`src/RST.Census`, never shipped) driven by a host script (`tools/census`) on a Windows

@@ -382,6 +382,11 @@ def recover(year, why):
     return cmd_start(year)
 
 
+def end_count(year, ctx):
+    out = gx("cmd", "/c", f"findstr /c:\" END {ctx} \" {GC}\\{year}\\progress.txt 2>nul")
+    return sum(1 for l in out.splitlines() if f" END {ctx} " in l)
+
+
 def run_context(year, job, deadline=None):
     """One planned job: open it, run it, watch it; restart and resume after a crash or a hang."""
     restarts = 0
@@ -393,6 +398,7 @@ def run_context(year, job, deadline=None):
         if not ctx:
             log(f"could not open {job['job']}")
             return "noctx"
+        ends_before = end_count(year, ctx)
         go(year, f"run|{ctx}")
         started = time.time()
         last_age_ok = time.time()
@@ -401,7 +407,7 @@ def run_context(year, job, deadline=None):
             time.sleep(20)
             st = revit_status(year)
             prog = [l[2:] for l in st.splitlines() if l.startswith("P ")]
-            if any(f"END {ctx}" in l for l in prog):
+            if any(f"END {ctx} " in l for l in prog) and end_count(year, ctx) > ends_before:
                 log(f"done {ctx}: {prog[-1] if prog else ''}")
                 return ctx
             if any(f"CONTEXT MISMATCH" in l for l in prog[-2:]):

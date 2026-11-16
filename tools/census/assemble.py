@@ -141,6 +141,28 @@ def main(argv):
             elif kind == "project":
                 tpls = "English-Imperial/default.rte"
             fo.write("\t".join((c, kind, cat, place, vt, clean(view), tpls)) + "\n")
+    # counts per context, into census/README.md between <!-- counts:<year> --> markers
+    results = ["executes", "greyed", "accepted-nothing", "not-drawn", "refused", "skipped", "not-a-command"]
+    table = [f"| Context | ids | places | " + " | ".join(results) + " |", "|---" * (len(results) + 3) + "|"]
+    for c in ctx_order:
+        rows = [latest[k] for k in order if k[0] == c]
+        cells = [f"`{c}`", str(len({r['id'] for r in rows})), str(len(rows))]
+        cells += [str(sum(1 for r in rows if r["result"] == res)) for res in results]
+        table.append("| " + " | ".join(cells) + " |")
+    summ = []
+    for c in ctx_order:
+        d = summaries.get(c, {})
+        if d:
+            summ.append(f"`{c}`: elements {d.get('elements_start', '?')} -> {d.get('elements_end', '?')}, modified {d.get('modified_start', '?')} -> {d.get('modified_end', '?')}, third-party skipped {d.get('owner_skipped', '?')}")
+    readme = REPO / "census" / "README.md"
+    text = readme.read_text(encoding="utf-8")
+    start, end = f"<!-- counts:{year} -->", f"<!-- /counts:{year} -->"
+    block = start + "\n\n" + "\n".join(table) + "\n\n" + end
+    if start in text and end in text:
+        text = text[:text.index(start)] + block + text[text.index(end) + len(end):]
+        readme.write_text(text, encoding="utf-8")
+    print("\n".join(table))
+    print("\n".join(summ))
     n_exc = sum(1 for _ in open(out / "exceptions.tsv", encoding="utf-8")) - 1
     print(f"{year}: {len(order)} places, {len(ctx_order)} contexts, {n_exc} exceptions, {len(errors)} errors -> {out}")
 
