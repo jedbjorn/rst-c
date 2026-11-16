@@ -288,6 +288,16 @@ public sealed partial class CensusApp
                 var item = Walk().FirstOrDefault(p => p.Item.Id == "ID_VIEW_NEW_LEGEND")?.Item;
                 if (item != null && Autodesk.Windows.ComponentManager.CommandHandler.CanExecute(item))
                 {
+                    // if the New Legend View dialog does not come through DialogBoxShowing, press its OK (defaults) by Win32
+                    var me = Environment.ProcessId; var oldWins = new HashSet<IntPtr>(AllWins().Select(w => w.h));
+                    _ = Task.Run(() =>
+                    {
+                        (IntPtr h, string t) dlg = default;
+                        if (!WaitFor(() => (dlg = NewDialog(oldWins, me, t => true)).h != IntPtr.Zero, 8000)) return;
+                        var ok = Children(dlg.h).FirstOrDefault(c => Cls(c) == "Button" && GetDlgCtrlID(c) == 1);
+                        if (ok != IntPtr.Zero) PostMessage(ok, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+                        Act($"legend: pressed OK in '{dlg.t}'");
+                    });
                     var h = Autodesk.Windows.ComponentManager.CommandHandler;
                     System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => { try { h.Execute(item); } catch (Exception ex) { Err("legend", ex); } }));
                     await Task.Delay(4000);
