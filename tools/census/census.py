@@ -85,6 +85,12 @@ def push(local, remote):
 
 
 def go(year, *lines):
+    """Writes the add-in's trigger file. The add-in reads and deletes it every 2 s; a second write before that would
+    replace the first, so wait until the previous trigger is consumed."""
+    for _ in range(15):
+        if "pending" not in gx("cmd", "/c", f"if exist {GC}\\go echo pending"):
+            break
+        time.sleep(2)
     STATE.mkdir(parents=True, exist_ok=True)
     tmp = STATE / "go.txt"
     tmp.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
