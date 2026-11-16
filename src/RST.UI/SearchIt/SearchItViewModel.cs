@@ -48,6 +48,7 @@ public sealed class SearchItViewModel : ObservableObject
     private string _status = "";
     private string _emptyText = "";
     private bool _isLoading;
+    private bool _isFamily;
 
     /// <param name="post">Tests only: how the chosen tool's run is queued (default: the dispatcher, at Background priority).</param>
     public SearchItViewModel(ISearchItBackend backend, Action<Action>? post = null)
@@ -136,7 +137,8 @@ public sealed class SearchItViewModel : ObservableObject
     {
         try
         {
-            SetTools(_backend.LoadTools().Tools);
+            var list = _backend.LoadTools();
+            SetTools(list.Tools, list.IsFamily);
         }
         finally
         {
@@ -147,9 +149,11 @@ public sealed class SearchItViewModel : ObservableObject
     }
 
     /// <summary>Replaces the searchable tools and re-runs the search.</summary>
-    public void SetTools(IEnumerable<SearchTool>? tools)
+    /// <param name="isFamily">The tools are a family's: the count line and the empty text say so (spec #33).</param>
+    public void SetTools(IEnumerable<SearchTool>? tools, bool isFamily = false)
     {
         _search = new ToolSearch(tools);
+        _isFamily = isFamily;
         OnPropertyChanged(nameof(ToolCount));
         Refresh();
     }
@@ -221,11 +225,13 @@ public sealed class SearchItViewModel : ObservableObject
         var items = new List<SearchResultItem>(hits.Count);
         foreach (var hit in hits) items.Add(new SearchResultItem(hit, _run));
         Results = items;
+        var (shown, all) = (Number(items.Count), Number(_search.Count));
         StatusText = items.Count == _search.Count
-            ? UiStrings.SearchIt_CountAll(Number(_search.Count))
-            : UiStrings.SearchIt_Count(Number(items.Count), Number(_search.Count));
+            ? (_isFamily ? UiStrings.SearchIt_FamilyCountAll(all) : UiStrings.SearchIt_CountAll(all))
+            : (_isFamily ? UiStrings.SearchIt_FamilyCount(shown, all) : UiStrings.SearchIt_Count(shown, all));
         EmptyText = items.Count > 0 ? ""
             : _search.Count == 0 ? UiStrings.SearchIt_NoTools
+            : _isFamily ? UiStrings.SearchIt_FamilyNoMatches
             : UiStrings.SearchIt_NoMatches;
     }
 }

@@ -942,6 +942,12 @@ public static class UiStrings
 
     public static string SearchIt_CountAll(object? arg0) => Format(nameof(SearchIt_CountAll), arg0);
 
+    public static string SearchIt_FamilyNoMatches => Get(nameof(SearchIt_FamilyNoMatches));
+
+    public static string SearchIt_FamilyCount(object? arg0, object? arg1) => Format(nameof(SearchIt_FamilyCount), arg0, arg1);
+
+    public static string SearchIt_FamilyCountAll(object? arg0) => Format(nameof(SearchIt_FamilyCountAll), arg0);
+
     public static string SearchIt_RemoveChip => Get(nameof(SearchIt_RemoveChip));
 
     public static string SearchIt_Failed => Get(nameof(SearchIt_Failed));
