@@ -47,10 +47,18 @@
 // tab, panel or item, logs a Warning naming the tab and panel, and the scan
 // goes on. Hits of a skipped tab or panel are not counted as collected.
 //
-// Excluded tabs:
-//   - ModeRestrictedTabs — contextual editing modes (family editor, in-place
-//                          model/mass, MEP zone); commands aren't usable
-//                          from the main app context, so we drop them.
+// Mode tabs (ModeRestrictedTabs):
+//   - by title (Family Editor, In-Place Model/Mass, Zone): not walked.
+//   - by id (the family-editor tabs: Create, Insert … of a family, the Family
+//     Editor panel's tab, Second_Modify): walked since spec #33, for Search-It's
+//     catalogue only. Their hits are in RibbonScan.Hits and never in
+//     BuilderHits, so the Builder's catalogue gets the hits it always got. They
+//     are counted apart (their own Information line), so the main summary line
+//     still compares with earlier releases.
+//
+// Handles (spec #33): the scan keeps, beside each hit, the live tab, panel and
+// item it came from. Revit keeps those objects for the whole session, so
+// Search-It reads their state when it opens without walking the ribbon again.
 //
 // NOT excluded any more: BuiltinTabs (Architecture, Structure, …). Walking
 // them was previously skipped to avoid duplicates of BuiltinCommandScanner
@@ -68,6 +76,20 @@ using RST.Core.Logging;
 
 namespace RST.Engine.Scanning;
 
+/// <summary>The live ribbon objects behind one hit of a scan.</summary>
+internal sealed record RibbonPlaceHandle(RibbonTab Tab, RibbonPanel Panel, RibbonItem Item);
+
+/// <summary>One scan of the ribbon.</summary>
+/// <param name="Hits">Every hit, the family-editor tabs' included: all tabs' panel items in ribbon order, then every dialog launcher.</param>
+/// <param name="Handles">The live objects behind each hit, index for index.</param>
+internal sealed record RibbonScan(IReadOnlyList<RibbonHit> Hits, IReadOnlyList<RibbonPlaceHandle> Handles)
+{
+    public static readonly RibbonScan Empty = new(Array.Empty<RibbonHit>(), Array.Empty<RibbonPlaceHandle>());
+
+    /// <summary>The hits outside the family-editor tabs, in order: what the Builder's catalogue is merged from.</summary>
+    public IReadOnlyList<RibbonHit> BuilderHits => Hits.Where(h => !ModeRestrictedTabs.ContainsId(h.TabId)).ToList();
+}
+
 internal static class RibbonScanner
 {
     /// <param name="postableCommandIds">
@@ -75,7 +97,11 @@ internal static class RibbonScanner
     /// every id Revit would not let an add-in post (SC-051). Null or empty turns that check off
     /// (an empty seed would otherwise drop every Revit tool, so it is logged and ignored).
     /// </param>
-    public static IEnumerable<RibbonHit> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null, int? revitYear = null)
+    public static IEnumerable<RibbonHit> Enumerate(IReadOnlyCollection<string>? postableCommandIds = null, int? revitYear = null) =>
+        Scan(postableCommandIds, revitYear).BuilderHits;
+
+    /// <summary>The live ribbon's scan, with the family-editor tabs and the handles (spec #33). Parameters as <see cref="Enumerate"/>.</summary>
+    public static RibbonScan Scan(IReadOnlyCollection<string>? postableCommandIds = null, int? revitYear = null)
     {
         RibbonControl? ribbon;
         IEnumerable<RibbonTab?>? tabs;
@@ -87,12 +113,12 @@ internal static class RibbonScanner
         catch (Exception ex)
         {
             Log.Warning(ex, "RibbonScanner: ComponentManager.Ribbon could not be read — no add-in commands will be enumerated");
-            return Array.Empty<RibbonHit>();
+            return RibbonScan.Empty;
         }
         if (ribbon is null)
         {
             Log.Warning("RibbonScanner: ComponentManager.Ribbon is null — no add-in commands will be enumerated");
-            return Array.Empty<RibbonHit>();
+            return RibbonScan.Empty;
         }
         Func<string, bool>? isPostableCommand = null;
         if (postableCommandIds is { Count: > 0 })
@@ -104,8 +130,16 @@ internal static class RibbonScanner
         {
             Log.Warning("RibbonScanner: no PostableCommand ids were read, so tools Revit won't let add-ins run are not left out of this scan");
         }
-        return EnumerateTabs(tabs, IsPostable, isPostableCommand: isPostableCommand, revitYear: revitYear);
+        return ScanTabs(tabs, IsPostable, isPostableCommand: isPostableCommand, revitYear: revitYear);
     }
+
+    /// <summary>
+    /// <see cref="ScanTabs"/> without the family-editor tabs' hits: the Builder's view of the given tabs.
+    /// </summary>
+    internal static IReadOnlyList<RibbonHit> EnumerateTabs(
+        IEnumerable<RibbonTab?>? tabs, Func<string, bool> resolves, RibbonScanCounts? counts = null,
+        Func<string, bool>? isPostableCommand = null, int? revitYear = null) =>
+        ScanTabs(tabs, resolves, counts, isPostableCommand, revitYear).BuilderHits;
 
     /// <summary>
     /// The walk over the given tabs (the live ribbon's, or a test's): every tab's panel items in
@@ -113,15 +147,20 @@ internal static class RibbonScanner
     /// kinds the walk reaches since SC-027; <paramref name="isPostableCommand"/>, when given, holds
     /// the PostableCommand ids every id is checked against (SC-051, see RibbonWalker). Logs one
     /// Information line with the scan's counts, and one per reason listing the ids left out.
+    /// <paramref name="counts"/> gets the tabs outside the family editor; the family-editor tabs
+    /// are counted in <paramref name="familyCounts"/> and logged on a line of their own.
     /// </summary>
-    internal static IReadOnlyList<RibbonHit> EnumerateTabs(
+    internal static RibbonScan ScanTabs(
         IEnumerable<RibbonTab?>? tabs, Func<string, bool> resolves, RibbonScanCounts? counts = null,
-        Func<string, bool>? isPostableCommand = null, int? revitYear = null)
+        Func<string, bool>? isPostableCommand = null, int? revitYear = null, RibbonScanCounts? familyCounts = null)
     {
         counts ??= new RibbonScanCounts();
+        familyCounts ??= new RibbonScanCounts();
         var walker = new RibbonWalker<RibbonItem>(Describe, resolves, counts, isPostableCommand);
-        var items = new List<RibbonHit>();
-        var launchers = new List<RibbonHit>();
+        var familyWalker = new RibbonWalker<RibbonItem>(Describe, resolves, familyCounts, isPostableCommand);
+        var items = new List<(RibbonHit Hit, RibbonPlaceHandle Handle)>();
+        var launchers = new List<(RibbonHit Hit, RibbonPlaceHandle Handle)>();
+        var sources = new List<RibbonItem>();
 
         var tabsSkippedRestricted = 0;
         var tabsSkippedRst = 0;
@@ -133,17 +172,19 @@ internal static class RibbonScanner
 
             string? tabTitle;
             string? tabId;
+            bool familyTab;
             List<RibbonPanel?> panels;
             try
             {
                 tabTitle = tab.Title;
                 tabId = tab.Id;
-                if (ModeRestrictedTabs.Contains(tabTitle) || ModeRestrictedTabs.ContainsId(tabId)) { tabsSkippedRestricted++; continue; }
+                familyTab = ModeRestrictedTabs.ContainsId(tabId);
+                if (!familyTab && ModeRestrictedTabs.Contains(tabTitle)) { tabsSkippedRestricted++; continue; }
                 // The active profile's tab, if any. RST built those buttons this
                 // session, so reading them back would surface circular entries.
                 // The permanent RST tools panel is intentionally not excluded:
                 // users may place Builder, Loader, RSTify, or Health on a profile.
-                if (RstManagedTabs.Contains(tabTitle))     { tabsSkippedRst++; continue; }
+                if (!familyTab && RstManagedTabs.Contains(tabTitle)) { tabsSkippedRst++; continue; }
                 panels = tab.Panels is { } tabPanels ? new List<RibbonPanel?>(tabPanels) : new List<RibbonPanel?>();
             }
             catch (Exception ex)
@@ -152,7 +193,8 @@ internal static class RibbonScanner
                 Log.Warning(ex, "RibbonScanner: skipped tab {Tab}", SafeTitle(tab));
                 continue;
             }
-            counts.TabsWalked++;
+            var tabWalker = familyTab ? familyWalker : walker;
+            tabWalker.Counts.TabsWalked++;
 
             var perTab = 0;
             foreach (var panel in panels)
@@ -170,7 +212,7 @@ internal static class RibbonScanner
                 }
                 catch (Exception ex)
                 {
-                    counts.PanelsSkipped++;
+                    tabWalker.Counts.PanelsSkipped++;
                     Log.Warning(ex, "RibbonScanner: skipped a panel on {Tab}", tabTitle);
                     continue;
                 }
@@ -178,17 +220,17 @@ internal static class RibbonScanner
                 Action<Exception, string> onSkip = (ex, what) =>
                     Log.Warning(ex, "RibbonScanner: skipped {Item} on {Tab} / {Panel}", what, tabTitle, panelTitle);
 
-                foreach (var hit in walker.WalkItems(panelItems, onSkip))
-                {
-                    items.Add(WithPlacement(hit, tabTitle, panelTitle, tabId));
-                    perTab++;
-                }
+                sources.Clear();
+                var found = tabWalker.WalkItems(panelItems, onSkip, sources);
+                for (var i = 0; i < found.Count; i++)
+                    items.Add((WithPlacement(found[i], tabTitle, panelTitle, tabId), new RibbonPlaceHandle(tab, panel!, sources[i])));
+                perTab += found.Count;
                 // Held back: see "Order (B1)" in the file header.
-                foreach (var hit in walker.WalkDialogLauncher(launcher, onSkip))
-                {
-                    launchers.Add(WithPlacement(hit, tabTitle, panelTitle, tabId));
-                    perTab++;
-                }
+                sources.Clear();
+                found = tabWalker.WalkDialogLauncher(launcher, onSkip, sources);
+                for (var i = 0; i < found.Count; i++)
+                    launchers.Add((WithPlacement(found[i], tabTitle, panelTitle, tabId), new RibbonPlaceHandle(tab, panel!, sources[i])));
+                perTab += found.Count;
             }
             Log.Debug("RibbonScanner: tab={Tab} → {Count} buttons", tabTitle, perTab);
         }
@@ -197,16 +239,24 @@ internal static class RibbonScanner
                   revitYear, tabsSkippedRestricted, tabsSkippedRst);
         // SC-027: one line per scan, so a VM run or a new Revit year can be checked from the log.
         Log.Information("RibbonScanner: {Summary}", counts.Summary());
-        // SC-051: one line per reason, so each list can be checked on its own.
-        if (counts.OutsidePostableCommandIds.Count > 0)
-            Log.Information("RibbonScanner: left out {Count} ids Revit won't let add-ins run (outside PostableCommand): {Ids}",
-                            counts.OutsidePostableCommandIds.Count, string.Join(", ", counts.OutsidePostableCommandIds));
-        if (counts.UnresolvedIds.Count > 0)
-            Log.Information("RibbonScanner: left out {Count} ids Revit couldn't find (unresolved): {Ids}",
-                            counts.UnresolvedIds.Count, string.Join(", ", counts.UnresolvedIds));
+        LogLeftOut(counts, "RibbonScanner");
+        // Spec #33: the family-editor tabs, for Search-It's catalogue only.
+        Log.Information("RibbonScanner: family-editor tabs (Search-It only): {Summary}", familyCounts.Summary());
+        LogLeftOut(familyCounts, "RibbonScanner, family-editor tabs");
 
         items.AddRange(launchers);
-        return items;
+        return new RibbonScan(items.Select(i => i.Hit).ToList(), items.Select(i => i.Handle).ToList());
+    }
+
+    // SC-051: one line per reason, so each list can be checked on its own.
+    private static void LogLeftOut(RibbonScanCounts counts, string scan)
+    {
+        if (counts.OutsidePostableCommandIds.Count > 0)
+            Log.Information(scan + ": left out {Count} ids Revit won't let add-ins run (outside PostableCommand): {Ids}",
+                            counts.OutsidePostableCommandIds.Count, string.Join(", ", counts.OutsidePostableCommandIds));
+        if (counts.UnresolvedIds.Count > 0)
+            Log.Information(scan + ": left out {Count} ids Revit couldn't find (unresolved): {Ids}",
+                            counts.UnresolvedIds.Count, string.Join(", ", counts.UnresolvedIds));
     }
 
     private static RibbonHit WithPlacement(RibbonHit hit, string? tabTitle, string? panelTitle, string? tabId) =>

@@ -1,13 +1,12 @@
-// rst-c's own (not vendored): what Search-It searches (v3.4).
+// rst-c's own (not vendored): the Builder's catalogue folded to one tool per command (v3.4).
 //
-// Scope rule: Search-It offers exactly the tools the Profile Builder's catalogue offers. Both start
-// from the same scanned catalogue (RstApplication.GetOrBuildCatalog → CommandCatalog.Build, which has
-// already left out what RST knows will not run: ids Revit won't let add-ins post (PostCommandRule),
-// mode-only tabs and ids (ModeRestrictedTabs, ModeRestrictedCommandIds) and the admin's BanList), and
-// both shape it through the same function, CatalogCommand.FromScanned. The Builder shows one row per
-// ribbon placement; Search-It folds those rows to one tool per command id that keeps every placement
-// and its label. There is no second list here: a tool is searchable if and only if the Builder lists
-// it, under every name the Builder lists it by.
+// Until spec #33 this was the list Search-It showed: exactly the tools the Profile Builder's catalogue
+// offers (RstApplication.GetOrBuildCatalog → CommandCatalog.Build, shaped through
+// CatalogCommand.FromScanned), one tool per command id with every placement and its label.
+//
+// Search-It now lists from its own catalogue (SearchCatalog), cut down to what the ribbon is showing
+// (SearchShowing). This fold stays as the reference those are checked against: in a project the new
+// list must be this one, apart from the exceptions the spec names (SearchCatalogTests, AC3).
 
 using RST.Core.Builder;
 using RST.Core.Scanning;

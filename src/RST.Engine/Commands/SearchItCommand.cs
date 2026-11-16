@@ -1,15 +1,21 @@
 // SearchItCommand.cs — IExternalCommand wired to the "Search-It" ribbon button (v3.4).
 //
-// The user knows a tool exists but not where it is on the ribbon. Search-It lists every tool the
-// Profile Builder's catalogue offers (the same RstApplication.GetOrBuildCatalog, so the two can never
-// disagree: what RST knows won't run is already left out by CommandCatalog.Build), searched by name;
-// a click on a result closes the window and runs the tool.
+// The user knows a tool exists but not where it is on the ribbon. Search-It lists the tools whose
+// ribbon place is showing for the file that is open (spec #33), searched by name; a click on a result
+// closes the window and runs the tool.
+//
+// The list comes from Search-It's own catalogue (RstApplication.GetOrBuildSearchCatalog: the Builder's
+// scan, with the family-editor tabs kept), cut down when the window opens to the places Revit is
+// showing now: a family lists family tools, a project lists project tools. The rule is
+// RST.Core.Search.SearchShowing; the state it needs is read from the ribbon objects the scan kept
+// (SearchItCatalog), never by walking the ribbon again. If that state cannot be read, the unfiltered
+// list is shown and a Warning logged: Search-It still opens.
 //
 // The window (RST.UI.SearchIt) is modeless, so the view behind it can be panned, zoomed and orbited.
 // That shapes the threading:
-//   - The catalogue is read here, inside Execute, on Revit's UI thread, before SearchItLauncher.Show
-//     returns. When it is already built this session (RstApplication.HasCatalog) the window opens
-//     with its results. A cold build (first use in a session, a few seconds) happens under a window
+//   - The catalogue and the ribbon's state are read here, inside Execute, on Revit's UI thread, before
+//     SearchItLauncher.Show returns. When the catalogue is already built this session
+//     (RstApplication.HasCatalog) the window opens with its results. A cold build (first use in a session, a few seconds) happens under a window
 //     that is already drawn, with its busy overlay. It is never built later from the modeless window,
 //     which has no API context.
 //   - A click on a result happens after Execute has returned, outside any API context. The tool
@@ -30,6 +36,7 @@ using RST.Core.Logging;
 using RST.Core.Ribbon;
 using RST.Core.Search;
 using RST.Engine.Ribbon;
+using RST.Engine.Scanning;
 using RST.Engine.Theming;
 using RST.UI.Resources;
 using RST.UI.SearchIt;
@@ -51,7 +58,7 @@ public sealed class SearchItCommand : IExternalCommand
             RevitThemeDetector.ApplyToWindows();
             var opened = SearchItLauncher.Show(
                 uiApp.MainWindowHandle,
-                catalog: () => RstApplication.GetOrBuildCatalog(revitVersion),
+                tools: () => ListForOpenFile(uiApp, revitVersion),
                 run: tool => Run(uiApp, tool),
                 isReady: () => RstApplication.HasCatalog(revitVersion));
             Log.Information(opened
@@ -66,6 +73,40 @@ public sealed class SearchItCommand : IExternalCommand
             message = UiStrings.SearchIt_Failed;
             return Result.Failed;
         }
+    }
+
+    /// <summary>
+    /// The tools to list now (spec #33, "Showing Rule"), and the log line that says which list it is, how
+    /// many tools it has, how many catalogue tools it leaves out, and what the rule cost. The time is
+    /// the rule's alone: a cold catalogue build is logged by RstApplication.
+    /// </summary>
+    private static SearchList ListForOpenFile(UIApplication uiApp, string revitVersion)
+    {
+        var catalog = RstApplication.GetOrBuildSearchCatalog(revitVersion);
+        var sw = Stopwatch.StartNew();
+        var list = catalog.ListShowing(IsFamilyOpen(uiApp));
+        Log.Information("Search-It opened: revit={Version}, list={List}, tools={Tools}, hidden={Hidden}, rule={Ms}ms",
+            revitVersion, list.IsFamily ? "family" : "project", list.Tools.Count, catalog.Tools.Count - list.Tools.Count,
+            sw.ElapsedMilliseconds);
+        return list;
+    }
+
+    /// <summary>
+    /// True when the active document is a family. A project template is a project. With no active
+    /// document, or when its kind cannot be read, Search-It lists project tools and says so in the log.
+    /// </summary>
+    private static bool IsFamilyOpen(UIApplication uiApp)
+    {
+        try
+        {
+            if (uiApp.ActiveUIDocument?.Document is { } document) return document.IsFamilyDocument;
+            Log.Warning("Search-It: no active document; listing project tools");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Search-It: the open file's kind could not be read; listing project tools");
+        }
+        return false;
     }
 
     /// <summary>

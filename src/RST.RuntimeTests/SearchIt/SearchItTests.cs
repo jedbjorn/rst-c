@@ -57,11 +57,11 @@ public class SearchItTests
         public Action? OnLoad { get; set; }
         public Action? OnRun { get; set; }
 
-        public IReadOnlyList<SearchTool> LoadTools()
+        public SearchList LoadTools()
         {
             Loads++;
             OnLoad?.Invoke();
-            return Tools;
+            return new SearchList(Tools);
         }
 
         public void Run(SearchTool tool)

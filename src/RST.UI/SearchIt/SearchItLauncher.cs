@@ -18,7 +18,6 @@
 // the ribbon click lands there.
 
 using RST.Core.Logging;
-using RST.Core.Scanning;
 using RST.Core.Search;
 using RST.UI.Dialogs;
 using RST.UI.Mvvm;
@@ -40,13 +39,13 @@ public static class SearchItLauncher
     /// inside the command's Execute; call <c>RstTheme.Apply</c> (the Engine's
     /// <c>RevitThemeDetector.ApplyToWindows</c>) first.
     /// </summary>
-    /// <param name="catalog">The command catalogue (RstApplication.GetOrBuildCatalog); called once.</param>
+    /// <param name="tools">The tools to list for the open file (may build the catalogue); called once.</param>
     /// <param name="run">Runs the tool the user chose; called after the window has closed.</param>
-    /// <param name="isReady">True when <paramref name="catalog"/> will return at once (already built): no busy overlay.</param>
-    public static bool Show(IntPtr owner, Func<IReadOnlyList<ScannedCommand>?> catalog, Action<SearchTool> run, Func<bool>? isReady = null) =>
-        Show(owner, new SearchItBackend(catalog, run, isReady));
+    /// <param name="isReady">True when <paramref name="tools"/> will return at once (catalogue already built): no busy overlay.</param>
+    public static bool Show(IntPtr owner, Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null) =>
+        Show(owner, new SearchItBackend(tools, run, isReady));
 
-    /// <inheritdoc cref="Show(IntPtr, Func{IReadOnlyList{ScannedCommand}?}, Action{SearchTool}, Func{bool}?)"/>
+    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?)"/>
     public static bool Show(IntPtr owner, ISearchItBackend backend) => Show(owner, backend, sampler: null);
 
     /// <param name="sampler">Tests only: the mouse reading the window's watch uses instead of Windows'.</param>

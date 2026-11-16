@@ -136,7 +136,7 @@ public sealed class SearchItViewModel : ObservableObject
     {
         try
         {
-            SetTools(_backend.LoadTools());
+            SetTools(_backend.LoadTools().Tools);
         }
         finally
         {
