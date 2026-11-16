@@ -39,6 +39,10 @@ def clean(s):
 def main(argv):
     year = argv[0]
     allow = "--allow-errors" in argv
+    # A place that is not drawn AND whose id does not run (accepted-nothing / refused) fits two classes; the spec names
+    # no precedence. Default: not-runnable first (AC3 expects HVAC Zone not-runnable in the 2026 floor plan, and its only
+    # place there is not drawn in 2026.4). --not-drawn-first gives the other reading. Open question for the Planner.
+    nd_first = "--not-drawn-first" in argv
     src = EVIDENCE / year / "census"
     rows_path = src / "rows.tsv"
     lines = rows_path.read_text(encoding="utf-8-sig").splitlines()
@@ -50,6 +54,14 @@ def main(argv):
             continue
         f = line.split("\t")
         r = dict(zip(head, f + [""] * (len(head) - len(f))))
+        if r["result"] == "error" and r.get("note") == "re-run requested":
+            continue
+        if r["result"] == "not-drawn" and not nd_first:
+            m = re.search(r"\(the id: ([a-z-]+)\)", r.get("note", ""))
+            if m and m.group(1) in ("accepted-nothing", "refused"):
+                r = dict(r)
+                r["result"] = m.group(1)
+                r["note"] = r["note"].split(" (the id:")[0].replace("not drawn:", "the place is not drawn either:") + "; id " + m.group(1)
         k = (r["context"], r["id"], r["tab"], r["panel"], r["path"])
         if k not in latest:
             order.append(k)

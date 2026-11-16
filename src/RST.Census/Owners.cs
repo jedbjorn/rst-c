@@ -112,27 +112,35 @@ public sealed partial class CensusApp
         return map;
     }
 
-    /// <summary>Native ids an add-in has bound, by application name, from the journal.</summary>
-    Dictionary<string, string> JournalBindings()
+    /// <summary>
+    /// The applications that registered command bindings, from the journal ("API registering command &lt;name&gt; …
+    /// event by application &lt;name&gt; (&lt;AddInId&gt;)"). The journal names the command by its display name (often empty),
+    /// not its id, so a binding cannot be traced to an id: if every binding application is stock, every bound native id
+    /// is stock-bound; a non-stock binding application is reported in the summary.
+    /// </summary>
+    List<(string app, string guid, Owner owner)> JournalBinders()
     {
-        var o = new Dictionary<string, string>(StringComparer.Ordinal);
+        var o = new List<(string, string, Owner)>();
         try
         {
             if (string.IsNullOrEmpty(_journal) || !File.Exists(_journal)) return o;
             using var fs = new FileStream(_journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var sr = new StreamReader(fs, System.Text.Encoding.Default);
-            var rx = new Regex(@"registering command (?<id>[^\s,]+).*?by application (?<app>[^""\r\n]+)", RegexOptions.IgnoreCase);
+            var rx = new Regex(@"registering command .*? event by application (?<app>.+?) \((?<guid>[0-9A-Fa-f-]{36})\)");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string line;
             while ((line = sr.ReadLine()) != null)
             {
                 if (!line.Contains("registering command", StringComparison.OrdinalIgnoreCase)) continue;
-                var m = rx.Match(line); if (!m.Success) continue;
-                var app = m.Groups["app"].Value.Trim().TrimEnd('.');
+                var m = rx.Match(line); if (!m.Success || !seen.Add(m.Groups["guid"].Value)) continue;
+                var guid = m.Groups["guid"].Value; var app = m.Groups["app"].Value.Trim();
                 if (app.StartsWith("RST.Census", StringComparison.Ordinal)) continue;
-                o[m.Groups["id"].Value] = app;
+                var man = Manifests().FirstOrDefault(x => x.AddInId.Contains(guid, StringComparison.OrdinalIgnoreCase));
+                var owner = man == null ? OwnerOfApp(app) : new Owner { Who = man.Name, Vendor = man.Vendor, Stock = man.Stock, Known = true, How = "AddInId -> " + Path.GetFileName(man.File) };
+                o.Add((app, guid, owner));
             }
         }
-        catch (Exception ex) { Err("journal bindings", ex); }
+        catch (Exception ex) { Err("journal binders", ex); }
         return o;
     }
 

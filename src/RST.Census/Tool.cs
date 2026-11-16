@@ -155,7 +155,7 @@ public sealed partial class CensusApp
 
     Snap _sess;
 
-    async Task<ToolRes> RunTool(RibbonItem it, string gate, StringBuilder log)
+    async Task<ToolRes> RunTool(RibbonItem it, string gate, StringBuilder log, bool forceReal = false)
     {
         var r = new ToolRes { Id = it.Id, Gate = gate };
         var sw = Stopwatch.StartNew();
@@ -169,7 +169,7 @@ public sealed partial class CensusApp
             await Api(app => { bindable = cid.CanHaveBinding && !cid.HasBinding; postable = app.CanPostCommand(cid); }, 5000);
             if (_sess != null) { var pre = await Teardown(_sess, () => true, false, null); if (pre != "none") r.Note += " pre-sweep (late leftovers of an earlier tool): " + pre; }
             r.Bindable = bindable.ToString(); r.Postable = postable.ToString();
-            bool cancel = bindable;
+            bool cancel = bindable && !forceReal;
             if (!cancel && RealStartDeny.TryGetValue(r.Id, out var dw)) { r.Result = "skipped"; r.Note = dw; return r; }
             r.Tested = cancel ? "bind+cancel" : "real";
             r.How = postable ? "PostCommand" : "routeA";
@@ -262,6 +262,14 @@ public sealed partial class CensusApp
                     foreach (var k in pending) waited.Add(k.exe);
                     if (lw.ElapsedMilliseconds >= 1500 && pending.Count == 0) break;
                     if (lw.ElapsedMilliseconds >= 15000) { r.Left += " windowless child process still running: " + string.Join(",", pending.Select(k => k.exe + ":" + k.pid)); break; }
+                }
+                // a WebView2 child whose window is gone should exit on its own; one that hangs is killed (spec #34 "Teardown")
+                for (int i = 0; i < 20 && NewKids(b).Any(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase) && Alive(k.pid)) && NewWins(b).Count == 0; i++) await Task.Delay(300);
+                var hung = NewKids(b).Where(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase) && Alive(k.pid)).ToList();
+                if (hung.Count > 0 && NewWins(b).Count == 0)
+                {
+                    foreach (var k in hung) { try { Process.GetProcessById(k.pid).Kill(); } catch { } }
+                    late.Add($"killed {hung.Count} hung msedgewebview2 child(ren) after its window closed");
                 }
                 if (late.Count > 0) r.Teardown += " | late: " + string.Join("; ", late);
                 if (waited.Count > 0) r.Note += " late watch waited for " + string.Join(",", waited);

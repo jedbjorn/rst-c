@@ -40,6 +40,28 @@ public sealed partial class CensusApp
         }
     }
 
+    /// <summary>tool|tag|id|real|cancel: one tool on its own (evidence runs, e.g. a real start of a bindable WebView2 tool).</summary>
+    async Task ToolVerb(string[] f)
+    {
+        _running = true; var log = new StringBuilder();
+        try
+        {
+            await InitRun(); LoadSkip();
+            var p = Walk().Where(x => x.Item.Id == f[2] && x.Tab.IsVisible && !x.Tab.IsContextualTab).OrderByDescending(x => x.Panel.IsVisible).FirstOrDefault();
+            if (p == null) { log.AppendLine("no place on a visible tab for " + f[2]); }
+            else
+            {
+                _sess = Baseline();
+                var r = await RunTool(p.Item, Gate(p.Item), log, f.Length > 3 && f[3] == "real");
+                log.AppendLine($"RESULT {f[2]} {r.Result} tested={r.Tested} opened={string.Join(",", r.Opened)} teardown={r.Teardown} left={r.Left} idle={(r.IdleOk ? "ok" : "FAIL")}");
+            }
+        }
+        catch (Exception ex) { log.AppendLine("EXC " + ex); }
+        finally { _running = false; _sess = null; }
+        WriteFile(Path.Combine("tool", f[1] + ".txt"), log.ToString());
+        Act($"tool done {f[1]}");
+    }
+
     static string Safe(string ctx) => ctx.Replace('/', '_');
 
     void Progress(string line) => Append("progress.txt", $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {line}\r\n");
@@ -61,10 +83,12 @@ public sealed partial class CensusApp
             }, 10000);
             if (key != ctx) { Progress($"CONTEXT MISMATCH want {ctx} have {key}: run not started"); return; }
 
-            var done = new HashSet<string>(StringComparer.Ordinal);
+            // resume: an id is done when its latest row in this context is not an error (rerun|ctx|id appends one)
+            var latest = new Dictionary<string, string>(StringComparer.Ordinal);
             if (File.Exists(rowsPath))
-                foreach (var l in File.ReadLines(rowsPath).Skip(1)) { var c = l.Split('\t'); if (c.Length > 8 && c[2] == ctx && c[8] != "error") done.Add(c[3]); }
+                foreach (var l in File.ReadLines(rowsPath).Skip(1)) { var c = l.Split('\t'); if (c.Length > 8 && c[2] == ctx) latest[c[3]] = c[8]; }
             else File.WriteAllText(rowsPath, RowsHeader + "\r\n", new UTF8Encoding(false));
+            var done = new HashSet<string>(latest.Where(kv => kv.Value != "error").Select(kv => kv.Key), StringComparer.Ordinal);
 
             // the walk: visible, non-contextual tabs only (never a hidden tab in a family: WU1c)
             var places = Walk().Where(p => !string.IsNullOrEmpty(p.Item.Id) && p.Tab.IsVisible && !p.Tab.IsContextualTab).ToList();
@@ -77,7 +101,8 @@ public sealed partial class CensusApp
                 apiAsm = ApiButtonAssemblies(app, places.Select(p => p.Tab.Title).Where(t => !string.IsNullOrEmpty(t)));
                 foreach (var id in ids) { try { var c = RevitCommandId.LookupCommandId(id); if (c != null) hasBinding[id] = c.HasBinding; } catch { } }
             }, 30000);
-            var bindings = JournalBindings();
+            var binders = JournalBinders();
+            bool allBindersStock = binders.All(b => b.owner.Known && b.owner.Stock);
             var ownerSkip = new Dictionary<string, Owner>(StringComparer.Ordinal); var unknown = new Dictionary<string, Owner>(StringComparer.Ordinal); var stockBound = new Dictionary<string, Owner>(StringComparer.Ordinal);
             foreach (var id in ids)
             {
@@ -93,7 +118,8 @@ public sealed partial class CensusApp
                 }
                 else if (hasBinding.TryGetValue(id, out var hb) && hb)
                 {
-                    o = bindings.TryGetValue(id, out var appName) ? OwnerOfApp(appName) : new Owner { How = "HasBinding; binder not in the journal" };
+                    o = allBindersStock ? new Owner { Who = "(a stock application)", Vendor = "ADSK", Stock = true, Known = true, How = $"bound; all {binders.Count} binding applications in the journal are stock" }
+                                        : new Owner { How = "bound; a non-stock application registered bindings: see binders" };
                     if (o.Known && o.Stock) stockBound[id] = o;
                 }
                 if (o == null) continue;
@@ -180,6 +206,8 @@ public sealed partial class CensusApp
             foreach (var kv in ownerSkip) sum.AppendLine($"  skipped(owner)\t{kv.Key}\t{kv.Value.Who}\t{kv.Value.Vendor}\t{kv.Value.How}");
             sum.AppendLine($"owner_unknown\t{unknown.Count} (treated as stock)");
             foreach (var kv in unknown) sum.AppendLine($"  unknown\t{kv.Key}\t{kv.Value.Who}\t{kv.Value.How}");
+            sum.AppendLine($"binding_applications\t{binders.Count} ({binders.Count(b => !(b.owner.Known && b.owner.Stock))} not stock)");
+            foreach (var b in binders) sum.AppendLine($"  binder\t{b.app}\t{b.guid}\t{b.owner.Vendor}\t{(b.owner.Known && b.owner.Stock ? "stock" : b.owner.Known ? "NOT STOCK" : "unknown")}\t{b.owner.How}");
             sum.AppendLine($"bound_by_stock_addin\t{stockBound.Count} (started for real)");
             foreach (var kv in stockBound) sum.AppendLine($"  bound\t{kv.Key}\t{kv.Value.Who}\t{kv.Value.Vendor}");
             WriteFile(Path.Combine("summary", Safe(ctx) + ".txt"), sum.ToString());

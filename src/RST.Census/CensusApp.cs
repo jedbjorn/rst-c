@@ -111,6 +111,8 @@ public sealed partial class CensusApp : IExternalApplication, IExternalEventHand
                     // UI thread, outside any API context
                     case "run": if (_running) throw new InvalidOperationException("a run is active"); _ = RunContext(f); Act($"OK {line}"); continue;
                     case "stop": _stop = true; Act($"OK {line}"); continue;
+                    case "rerun": Append("rows.tsv", string.Join("\t", _year, _build, f[1], f[2], "", "", "", "", "error", "", "", "", "", "", "0", DateTime.Now.ToString("yyyy-MM-dd"), _censusBuild, "re-run requested", "") + "\r\n"); Act($"OK {line}"); continue;
+                    case "tool": if (_running) throw new InvalidOperationException("a run is active"); _ = ToolVerb(f); Act($"OK {line}"); continue;
                     case "newdoc": _ = NewDoc(f); Act($"OK {line}"); continue;
                     case "closedoc": _ = CloseDoc(f); Act($"OK {line}"); continue;
                     case "view": _ = SetView(f); Act($"OK {line}"); continue;
