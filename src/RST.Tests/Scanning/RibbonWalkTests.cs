@@ -117,6 +117,30 @@ public sealed class RibbonWalkTests
         ModeRestrictedTabs.ContainsId(id).Should().Be(expected);
 
     [Fact]
+    public void Sources_receive_the_item_behind_each_hit_in_hit_order()
+    {
+        // Spec #33: the scanner keeps the live ribbon item of every hit (Search-It asks add-in buttons
+        // whether they can run). A container that is also a command is its own source.
+        var skippedToggle = CheckBox("ID_SELECT_LINKS");
+        var first = Button("ID_FIRST");
+        var inStack = Button("ID_IN_STACK");
+        var menu = Box(RibbonContainerKind.MenuButton, "ID_MENU", "Menu").With(MenuItem("ID_MENU_ENTRY"));
+        var launcher = Button("ID_LAUNCHER");
+        N[] items = [skippedToggle, first, Box(RibbonContainerKind.Stack).With(inStack), menu];
+        var walker = Walker(id => id != "ID_MENU_ENTRY");
+
+        var sources = new List<N>();
+        var hits = walker.WalkItems(items, sources: sources);
+        hits.Select(h => h.Id).Should().Equal("ID_FIRST", "ID_IN_STACK", "ID_MENU");
+        sources.Should().Equal(first, inStack, menu);
+
+        hits = walker.WalkDialogLauncher(launcher, sources: sources);
+        hits.Select(h => h.Id).Should().Equal("ID_LAUNCHER");
+        sources.Should().Equal(first, inStack, menu, launcher);
+        walker.WalkItems(items).Should().HaveCount(3, "a walk without sources is unchanged");
+    }
+
+    [Fact]
     public void Walker_keeps_both_raw_name_sources_until_merge()
     {
         var walker = new RibbonWalker<N>(_ => RibbonNode<N>.Leaf(RibbonLeafKind.Button, "ID_BEAM",

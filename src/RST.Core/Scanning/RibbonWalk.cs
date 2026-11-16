@@ -338,6 +338,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
     private readonly Func<string, bool> _resolves;
     private readonly Func<string, bool>? _isPostableCommand;
     private readonly HashSet<TNode> _onPath = new(ReferenceEqualityComparer.Instance);
+    private List<TNode>? _sources;
 
     public RibbonScanCounts Counts { get; }
 
@@ -359,16 +360,18 @@ public sealed class RibbonWalker<TNode> where TNode : class
 
     /// <summary>The collected leaves of a panel's items (slide-out included).</summary>
     /// <param name="onSkip">Told about each item skipped because it threw, with a short description of it.</param>
-    public List<RibbonHit> WalkItems(IEnumerable<TNode?>? items, Action<Exception, string>? onSkip = null) =>
-        Run(onSkip, (tally, hits) =>
+    /// <param name="sources">When given, receives the item behind each returned hit, in the same order.</param>
+    public List<RibbonHit> WalkItems(IEnumerable<TNode?>? items, Action<Exception, string>? onSkip = null, List<TNode>? sources = null) =>
+        Run(sources, (tally, hits) =>
         {
             foreach (var item in Materialize(items, "the panel's items", tally, onSkip))
                 Visit(item, RibbonContainerKind.Panel, 0, hits, tally, onSkip);
         });
 
     /// <summary>The collected leaves of a panel's dialog launcher.</summary>
-    public List<RibbonHit> WalkDialogLauncher(TNode? dialogLauncher, Action<Exception, string>? onSkip = null) =>
-        Run(onSkip, (tally, hits) => Visit(dialogLauncher, RibbonContainerKind.DialogLauncher, 0, hits, tally, onSkip));
+    /// <param name="sources">When given, receives the item behind each returned hit, in the same order.</param>
+    public List<RibbonHit> WalkDialogLauncher(TNode? dialogLauncher, Action<Exception, string>? onSkip = null, List<TNode>? sources = null) =>
+        Run(sources, (tally, hits) => Visit(dialogLauncher, RibbonContainerKind.DialogLauncher, 0, hits, tally, onSkip));
 
     /// <summary>Items, then dialog launcher: the order a single panel lists them in.</summary>
     public List<RibbonHit> WalkPanel(IEnumerable<TNode?>? items, TNode? dialogLauncher, Action<Exception, string>? onSkip = null)
@@ -378,12 +381,14 @@ public sealed class RibbonWalker<TNode> where TNode : class
         return hits;
     }
 
-    private List<RibbonHit> Run(Action<Exception, string>? onSkip, Action<RibbonScanCounts, List<RibbonHit>> walk)
+    private List<RibbonHit> Run(List<TNode>? sources, Action<RibbonScanCounts, List<RibbonHit>> walk)
     {
         // A call's counts reach the scan's only together with its hits.
         var tally = new RibbonScanCounts();
         var hits = new List<RibbonHit>();
-        walk(tally, hits);
+        _sources = sources;
+        try { walk(tally, hits); }
+        finally { _sources = null; }
         Counts.AddWalk(tally);
         return hits;
     }
@@ -406,13 +411,13 @@ public sealed class RibbonWalker<TNode> where TNode : class
         switch (node.Role)
         {
             case RibbonNodeRole.Leaf:
-                Emit(node.LeafKind, node.Id, node.Text, node.Name, node.IsCheckable, container, hits, tally);
+                Emit(item, node.LeafKind, node.Id, node.Text, node.Name, node.IsCheckable, container, hits, tally);
                 return;
 
             case RibbonNodeRole.Container:
                 if (node.Children is null)
                 {
-                    EmitContainer(node, container, hits, tally);
+                    EmitContainer(item, node, container, hits, tally);
                     return;
                 }
                 if (depth >= RibbonWalkRules.MaxDepth) { tally.AddDepthCapped(); return; }
@@ -423,7 +428,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
                     // skipped whole (its header included).
                     var children = Materialize(node.Children, $"{node.ContainerKind} {node.Id}", tally, onSkip, out var ok);
                     if (!ok) return;
-                    EmitContainer(node, container, hits, tally);
+                    EmitContainer(item, node, container, hits, tally);
                     foreach (var child in children)
                         Visit(child, node.ContainerKind, depth + 1, hits, tally, onSkip);
                 }
@@ -438,10 +443,10 @@ public sealed class RibbonWalker<TNode> where TNode : class
         }
     }
 
-    private void EmitContainer(RibbonNode<TNode> node, RibbonContainerKind container, List<RibbonHit> hits, RibbonScanCounts tally)
+    private void EmitContainer(TNode item, RibbonNode<TNode> node, RibbonContainerKind container, List<RibbonHit> hits, RibbonScanCounts tally)
     {
         if (RibbonWalkRules.ContainerIsAlsoACommand(node.ContainerKind))
-            Emit(RibbonLeafKind.Button, node.Id, node.Text, node.Name, isCheckable: false, container, hits, tally);
+            Emit(item, RibbonLeafKind.Button, node.Id, node.Text, node.Name, isCheckable: false, container, hits, tally);
     }
 
     private static List<TNode?> Materialize(IEnumerable<TNode?>? items, string what, RibbonScanCounts tally, Action<Exception, string>? onSkip) =>
@@ -471,7 +476,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
         catch { /* reporting must not stop the walk */ }
     }
 
-    private void Emit(RibbonLeafKind leaf, string? id, string? text, string? name, bool isCheckable, RibbonContainerKind container,
+    private void Emit(TNode item, RibbonLeafKind leaf, string? id, string? text, string? name, bool isCheckable, RibbonContainerKind container,
                       List<RibbonHit> hits, RibbonScanCounts tally)
     {
         if (string.IsNullOrEmpty(id)) return;
@@ -493,6 +498,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
         }
         tally.AddCollected(container, leaf);
         hits.Add(new RibbonHit(id!, text, container, leaf, name));
+        _sources?.Add(item);
     }
 
     private bool SafeResolves(string id)

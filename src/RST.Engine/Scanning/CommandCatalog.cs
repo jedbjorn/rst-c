@@ -2,12 +2,18 @@
 //
 // Core's CatalogMerge joins the PostableCommand seed with every ribbon placement, names each
 // placement and drops headless ids. This layer supplies Revit, manifests, bans and logging.
+//
+// Spec #33: the same scan also makes Search-It's catalogue (Core's SearchCatalog), which keeps the
+// family-editor tabs and the mode-only ids Revit lets add-ins post. The Builder's catalogue is merged
+// from the scan's hits outside the family-editor tabs (RibbonScan.BuilderHits): the input it always
+// had, so the list it always was.
 
 using System.Collections.Generic;
 using System.Linq;
 using RST.Core.Configuration;
 using RST.Core.Scanning;
 using RST.Core.Logging;
+using RST.Core.Search;
 
 namespace RST.Engine.Scanning;
 
@@ -15,11 +21,14 @@ public sealed class CommandCatalog
 {
     public IReadOnlyList<ScannedCommand> Commands { get; }
     public IReadOnlyList<AddinManifest> Manifests { get; }
+    /// <summary>Search-It's catalogue, from the same scan as <see cref="Commands"/> (spec #33).</summary>
+    internal SearchItCatalog Search { get; }
 
-    private CommandCatalog(IReadOnlyList<ScannedCommand> cmds, IReadOnlyList<AddinManifest> manifests)
+    private CommandCatalog(IReadOnlyList<ScannedCommand> cmds, IReadOnlyList<AddinManifest> manifests, SearchItCatalog search)
     {
         Commands = cmds;
         Manifests = manifests;
+        Search = search;
     }
 
     /// <summary>
@@ -64,7 +73,8 @@ public sealed class CommandCatalog
         Log.Information("BuiltinCommandScanner: {Count} commands", seed.Count);
 
         int? revitYear = int.TryParse(revitVersion, out var year) ? year : null;
-        var hits = RibbonScanner.Enumerate(postableIds, revitYear).ToList();
+        var scan = RibbonScanner.Scan(postableIds, revitYear);
+        var hits = scan.BuilderHits;
         var merged = CatalogMerge.Merge(seed, hits, revitYear);
         var headlessDropped = postableIds.Count - merged.Count(c => postableIds.Contains(c.Id));
         Log.Information("RibbonScanner: {Hits} hits → {Commands} commands, {Placements} placements (headless={Headless})",
@@ -83,7 +93,12 @@ public sealed class CommandCatalog
         Log.Information("Filter pipeline: {Pre} → {Post} (mode-restricted={Mode}, banned={Banned})",
                         preFilter, filtered.Count, modeDropped, bansDropped);
 
-        return new CommandCatalog(filtered, manifests);
+        var searchTools = SearchCatalog.Build(seed, scan.Hits, bans.IsBanned, revitYear);
+        Log.Information("Search catalogue: {Hits} hits → {Tools} tools, {Places} places ({FamilyPlaces} on family-editor tabs)",
+                        scan.Hits.Count, searchTools.Count, searchTools.Sum(t => t.Places.Count),
+                        searchTools.Sum(t => t.Places.Count(p => p.OnFamilyEditorTab)));
+
+        return new CommandCatalog(filtered, manifests, new SearchItCatalog(searchTools, scan.Handles));
     }
 
     private static List<AddinManifest> ScanManifests(string revitVersion)

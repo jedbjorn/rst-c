@@ -51,17 +51,18 @@ public class SearchItTests
     private sealed class FakeBackend : ISearchItBackend
     {
         public IReadOnlyList<SearchTool> Tools { get; set; } = Sample;
+        public bool IsFamily { get; set; }
         public List<SearchTool> Ran { get; } = [];
         public int Loads { get; private set; }
         public bool IsReady { get; set; }
         public Action? OnLoad { get; set; }
         public Action? OnRun { get; set; }
 
-        public IReadOnlyList<SearchTool> LoadTools()
+        public SearchList LoadTools()
         {
             Loads++;
             OnLoad?.Invoke();
-            return Tools;
+            return new SearchList(Tools, IsFamily);
         }
 
         public void Run(SearchTool tool)
@@ -120,6 +121,40 @@ public class SearchItTests
         Assert.Empty(vm.Results);
         Assert.True(vm.IsEmpty);
         Assert.Equal("No tools match.", vm.EmptyText);
+    });
+
+    // Spec #33 AC8: the window names its list in a family; a project reads as before (the test above).
+    [Fact]
+    public void In_a_family_the_count_line_and_the_empty_text_name_the_list() => Sta(() =>
+    {
+        var vm = Loaded(new FakeBackend { IsFamily = true });
+        Assert.Equal("14 family tools", vm.StatusText);
+
+        vm.Text = "wall";
+        Assert.Equal("3 of 14 family tools", vm.StatusText);
+        Assert.False(vm.IsEmpty);
+
+        vm.Text = "zzzz";
+        Assert.True(vm.IsEmpty);
+        Assert.Equal("No family tools match. Project tools are not listed while a family is open.", vm.EmptyText);
+
+        // A chip that matches nothing reads the same way as text that matches nothing.
+        vm.Text = "";
+        Assert.Equal("14 family tools", vm.StatusText);
+        vm.Text = "zzzz";
+        Assert.True(vm.CommitChip());
+        Assert.Equal("0 of 14 family tools", vm.StatusText);
+        Assert.Equal("No family tools match. Project tools are not listed while a family is open.", vm.EmptyText);
+
+        // The next open in a project is a new view-model with the project's list: nothing carries over.
+        var project = Loaded(new FakeBackend());
+        project.Text = "zzzz";
+        Assert.Equal("0 of 14 tools", project.StatusText);
+        Assert.Equal("No tools match.", project.EmptyText);
+
+        // An empty list is not "no match": the text for it does not change with the file.
+        var none = Loaded(new FakeBackend { Tools = [], IsFamily = true });
+        Assert.Equal("RST found no tools to search.", none.EmptyText);
     });
 
     [Fact]

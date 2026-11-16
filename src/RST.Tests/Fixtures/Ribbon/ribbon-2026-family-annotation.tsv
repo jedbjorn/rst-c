@@ -1,0 +1,1399 @@
+# Origin: shared/evidence/search-it-family/wu1/2026/F-13-family-annotation/ribbon.tsv (main checkout, read-only source)
+# Revit 2026.4, English; capture search-it-family/wu1 (spec #33 Work Unit 1), session F: a new Generic Annotation family active (Generic Annotation.rft), nothing selected; captured 2026-11-16.
+# Trimmed: id-bearing rows only, every tab (family-editor tabs and add-in tabs included) except RST's own profile tab; no empty-id layout rows or unused columns. Capture order retained; path identifies launchers and containers; tabVisible and panelVisible are RibbonTab.IsVisible and RibbonPanel.IsVisible in that context.
+tabId	tab	panel	path	type	id	text	name	tabVisible	panelVisible
+Architecture	Architecture	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Architecture	Architecture	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Architecture	Architecture	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Architecture	Architecture	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Architecture	Architecture	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Architecture	Architecture	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Architecture	Architecture	Build		Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_WALL_RibbonListButton	Wall		False	True
+Architecture	Architecture	Build	/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_WALL	Wall: Architectural		False	True
+Architecture	Architecture	Build	/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_STRUCTURAL_WALL	Wall: Structural		False	True
+Architecture	Architecture	Build	/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_INPLACE_WALL	In-Place Wall		False	True
+Architecture	Architecture	Build	/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_WALL_PICK_FACES	Wall by Face		False	True
+Architecture	Architecture	Build	/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_CORNICE	Wall: Sweep		False	True
+Architecture	Architecture	Build	/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_REVEAL	Wall: Reveal		False	True
+Architecture	Architecture	Build		Autodesk.Windows.RibbonButton	ID_OBJECTS_DOOR	Door		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_WINDOW	Window		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_FAMSYM_RibbonListButton	Component	Place a Component	False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Component)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMSYM	Place a Component		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Component)	Autodesk.Windows.RibbonButton	ID_INPLACE_COMPONENT	Model In-Place		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMSYM	Component		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_STRUCTURAL_COLUMN_RibbonListButton	Column	Structural Column	False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Column)	Autodesk.Windows.RibbonButton	ID_OBJECTS_STRUCTURAL_COLUMN	Structural Column		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Column)	Autodesk.Windows.RibbonButton	ID_OBJECTS_COLUMN	Column: Architectural		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_ROOF_FOOTPRINT_RibbonListButton	Roof	Roof by Footprint	False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Roof)	Autodesk.Windows.RibbonButton	ID_ROOF_FOOTPRINT	Roof by Footprint		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Roof)	Autodesk.Windows.RibbonButton	ID_ROOF_EXTRUSION	Roof by Extrusion		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Roof)	Autodesk.Windows.RibbonButton	ID_ROOF_PICK_FACES	Roof by Face		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Roof)	Autodesk.Windows.RibbonButton	ID_CREATE_SOFFIT_TB	Roof: Soffit		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Roof)	Autodesk.Windows.RibbonButton	ID_CREATE_FASCIA_TB	Roof: Fascia		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Roof)	Autodesk.Windows.RibbonButton	ID_CREATE_GUTTER_TB	Roof: Gutter		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CEILING	Ceiling		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_FLOOR_RibbonListButton	Floor		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FLOOR	Floor: Architectural		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_OBJECTS_SLAB	Floor: Structural		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_FLOOR_PICK_FACES	Floor by Face		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_CREATE_SLAB_EDGE_TB	Floor: Slab Edge		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CURTA_SYSTEM_PICK_FACES	Curtain  System	Curtain System by Face	False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CW_GRID	Curtain  Grid		False	True
+Architecture	Architecture	Build	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MULLION	Mullion	Curtain Wall Mullion	False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_RAILING_RibbonListButton	Railing		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()/RibbonSplitButton(Railing)	Autodesk.Windows.RibbonButton	ID_OBJECTS_RAILING	Sketch Path		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()/RibbonSplitButton(Railing)	Autodesk.Windows.RibbonButton	ID_OBJECTS_RAILING_ON_HOST	Place on Stair/Ramp		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_RAMP	Ramp		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_STAIRS	Stair		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_STAIRS_RibbonListButton	Stair		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()/RibbonSplitButton(Stair)	Autodesk.Windows.RibbonButton	ID_OBJECTS_STAIRS	Stair by Component		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()/RibbonSplitButton(Stair)	Autodesk.Windows.RibbonButton	ID_OBJECTS_STAIRS_LEGACY	Stair by Sketch		False	True
+Architecture	Architecture	Circulation	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_STAIRS	Stair		False	True
+Architecture	Architecture	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MODELTEXT	Model  Text		False	True
+Architecture	Architecture	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_PROJECT_CURVE	Model  Line		False	True
+Architecture	Architecture	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_MODEL_GROUP_RibbonListButton	Model  Group		False	True
+Architecture	Architecture	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_GROUP	Place Model Group		False	True
+Architecture	Architecture	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		False	True
+Architecture	Architecture	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_LOAD_INTO_PROJECTS	Load as Group into Open Projects		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_ROOM_RibbonListButton	Room	Room	False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Room)	Autodesk.Windows.RibbonButton	ID_OBJECTS_ROOM	Room		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Room)	Autodesk.Windows.RibbonButton	ID_RECENTER_REFERENCE_LINE	Re-center Reference		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_AREA_SEPARATION	Room  Separator		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_ROOM_TAG_RibbonListButton	Tag  Room	Tag Room	False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Tag  Room)	Autodesk.Windows.RibbonButton	ID_OBJECTS_ROOM_TAG	Tag Room		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Tag  Room)	Autodesk.Windows.RibbonButton	ID_OBJECTS_AREA_TAG	Tag Area		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Tag  Room)	Autodesk.Windows.RibbonButton	ID_BUTTON_TAG_ALL	Tag All Not Tagged		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_AREA_RibbonListButton	Area	Area	False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Area)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_AREASCHEME	Area	Area Plan	False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Area)	Autodesk.Windows.RibbonButton	ID_OBJECTS_AREA	Area	Area	False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_AREASCHEME_BOUNDARY	Area  Boundary		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_AREA_TAG_RibbonListButton	Tag  Area	Tag Area	False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Tag  Area)	Autodesk.Windows.RibbonButton	ID_OBJECTS_AREA_TAG	Tag Area		False	True
+Architecture	Architecture	Room & Area	/RibbonFoldPanel()/RibbonSplitButton(Tag  Area)	Autodesk.Windows.RibbonButton	ID_BUTTON_TAG_ALL	Tag All Not Tagged		False	True
+Architecture	Architecture	Room & Area	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_COLORFILLSCHEMES	Color Schemes		False	True
+Architecture	Architecture	Room & Area	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTING_AREACALCULATIONS	Area and Volume Computations		False	True
+Architecture	Architecture	Room & Area	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTING_AREACALCULATIONS	Area Computations		False	True
+Architecture	Architecture	Opening		Autodesk.Windows.RibbonButton	ID_CREATE_OPENING_BY_FACE_TB	By  Face	Opening by Face	False	True
+Architecture	Architecture	Opening		Autodesk.Windows.RibbonButton	ID_CREATE_SHAFT_OPENING_TB	Shaft	Shaft Opening	False	True
+Architecture	Architecture	Opening	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_WALL_OPENING_TB	Wall	Wall Opening	False	True
+Architecture	Architecture	Opening	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_VERTICAL_OPENING_TB	Vertical	Vertical Opening	False	True
+Architecture	Architecture	Opening	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_DORMER_OPENING_TB	Dormer	Dormer Opening	False	True
+Architecture	Architecture	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_LEVEL	Level		False	True
+Architecture	Architecture	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_GRID	Grid		False	True
+Architecture	Architecture	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_REFERENCE_CURVE	Reference  Line		False	True
+Architecture	Architecture	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Reference  Plane		False	True
+Architecture	Architecture	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	False	True
+Architecture	Architecture	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	False	True
+Architecture	Architecture	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		False	True
+Architecture	Architecture	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	False	True
+Architecture	Architecture	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Ref  Plane	Reference Plane	False	True
+Architecture	Architecture	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	False	True
+Architecture	Architecture	Upgrade	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CONVERT_LEGACY_TO_COMPOUND_ELEMENT	Upgrade to  Real Layers	Upgrade to Real Layers	False	False
+Structure	Structure	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Structure	Structure	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Structure	Structure	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Structure	Structure	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Structure	Structure	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Structure	Structure	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Structure	Structure	Structure		Autodesk.Windows.RibbonButton	ID_OBJECTS_BEAM	Beam	Structural Framing: Beam	False	True
+Structure	Structure	Structure	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_STRUCTURAL_WALL_RibbonListButton	Wall	Wall: Structural	False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_STRUCTURAL_WALL	Wall: Structural		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_WALL	Wall: Architectural		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_INPLACE_WALL	In-Place Wall		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_CORNICE	Wall: Sweep		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Wall)	Autodesk.Windows.RibbonButton	ID_OBJECTS_REVEAL	Wall: Reveal		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_STRUCTURAL_COLUMN	Column	Structural Column	False	True
+Structure	Structure	Structure	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_SLAB_RibbonListButton	Floor	Floor: Structural	False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_OBJECTS_SLAB	Floor: Structural		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FLOOR	Floor: Architectural		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()/RibbonSplitButton(Floor)	Autodesk.Windows.RibbonButton	ID_CREATE_SLAB_EDGE_TB	Floor: Slab Edge		False	True
+Structure	Structure	Structure	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_TRUSS	Truss	Structural Trusses	False	True
+Structure	Structure	Structure	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_BRACE	Brace	Structural Framing: Brace	False	True
+Structure	Structure	Structure	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_JOIST_SYSTEM	Beam  System	Structural Beam System	False	True
+Structure	Structure	Structure	DialogLauncher	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS		Structural Settings	False	True
+Structure	Structure	Connection		Autodesk.Windows.RibbonButton	ID_STRUCTURAL_CONNECTION_DIRECT_CREATION	Connection	Structural Connection	False	True
+Structure	Structure	Connection		Autodesk.Windows.RibbonButton	ID_STRUCTURAL_AUTO_CONNECTION	Auto  Connection	Auto Connection	False	True
+Structure	Structure	Connection		Autodesk.Windows.RibbonButton	ID_STEEL_PLAYLIST_DYNAMO	Connection  Automation	Steel Connection Automation	False	True
+Structure	Structure	Connection	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_STRUCTCONNECTIONS_SHOW_WARNINGS	Show warnings in views		False	True
+Structure	Structure	Connection	DialogLauncher	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_CONNECTION_SETTINGS		Connection Settings	False	True
+Structure	Structure	Foundation		Autodesk.Windows.RibbonButton	ID_OBJECTS_ISOLATED_FOOTING	Isolated	Structural Foundation: Isolated	False	True
+Structure	Structure	Foundation		Autodesk.Windows.RibbonButton	ID_OBJECTS_CONTINUOUS_FOOTING	Wall	Structural Foundation: Wall	False	True
+Structure	Structure	Foundation		Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_FOOTING_SLAB_RibbonListButton	Slab	Structural Foundation: Slab	False	True
+Structure	Structure	Foundation	/RibbonSplitButton(Slab)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FOOTING_SLAB	Structural Foundation: Slab		False	True
+Structure	Structure	Foundation	/RibbonSplitButton(Slab)	Autodesk.Windows.RibbonButton	ID_CREATE_SLAB_EDGE_TB	Floor: Slab Edge		False	True
+Structure	Structure	Reinforcement		Autodesk.Windows.RibbonButton	ID_REBAR_PLACE	Rebar	Structural Rebar	False	True
+Structure	Structure	Reinforcement	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_REBAR_SYSTEM_SKETCH	Area	Structural Area Reinforcement	False	True
+Structure	Structure	Reinforcement	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_PATH_REIN_SKETCH	Path	Structural Path Reinforcement	False	True
+Structure	Structure	Reinforcement	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FABRIC_DISTR_SYSTEM_SKETCH	Fabric  Area	Structural Fabric Area	False	True
+Structure	Structure	Reinforcement	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FABRIC_SINGLE_PLACEMENT	Fabric  Sheet	Single Fabric Sheet Placement	False	True
+Structure	Structure	Reinforcement	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CONCRETE_COVER	Cover	Edit Rebar Cover	False	True
+Structure	Structure	Reinforcement	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_REBAR_COUPLER	Rebar  Coupler	Structural Rebar Coupler	False	True
+Structure	Structure	Reinforcement	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_REBAR_COVER_SETTINGS	Rebar Cover Settings		False	True
+Structure	Structure	Reinforcement	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_REBAR_ABBREVIATION	Reinforcement Settings		False	True
+Structure	Structure	Reinforcement	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_NUMBERING_REINF_PARTITIONS	Reinforcement Numbers		False	True
+Structure	Structure	Model		Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_FAMSYM_RibbonListButton	Component	Place a Component	False	True
+Structure	Structure	Model	/RibbonSplitButton(Component)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMSYM	Place a Component		False	True
+Structure	Structure	Model	/RibbonSplitButton(Component)	Autodesk.Windows.RibbonButton	ID_INPLACE_COMPONENT	Model In-Place		False	True
+Structure	Structure	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MODELTEXT	Model  Text		False	True
+Structure	Structure	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_PROJECT_CURVE	Model  Line		False	True
+Structure	Structure	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_MODEL_GROUP_RibbonListButton	Model  Group		False	True
+Structure	Structure	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_GROUP	Place Model Group		False	True
+Structure	Structure	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		False	True
+Structure	Structure	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_LOAD_INTO_PROJECTS	Load as Group into Open Projects		False	True
+Structure	Structure	Opening		Autodesk.Windows.RibbonButton	ID_CREATE_OPENING_BY_FACE_TB	By  Face	Opening by Face	False	True
+Structure	Structure	Opening		Autodesk.Windows.RibbonButton	ID_CREATE_SHAFT_OPENING_TB	Shaft	Shaft Opening	False	True
+Structure	Structure	Opening	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_WALL_OPENING_TB	Wall	Wall Opening	False	True
+Structure	Structure	Opening	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_VERTICAL_OPENING_TB	Vertical	Vertical Opening	False	True
+Structure	Structure	Opening	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_DORMER_OPENING_TB	Dormer	Dormer Opening	False	True
+Structure	Structure	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_LEVEL	Level		False	True
+Structure	Structure	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_GRID	Grid		False	True
+Structure	Structure	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_REFERENCE_CURVE	Reference  Line		False	True
+Structure	Structure	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Reference  Plane		False	True
+Structure	Structure	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	False	True
+Structure	Structure	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	False	True
+Structure	Structure	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		False	True
+Structure	Structure	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	False	True
+Structure	Structure	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Ref  Plane	Reference Plane	False	True
+Structure	Structure	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	False	True
+Structure	Structure	Join Tools		Autodesk.Windows.RibbonButton	ID_STRUCT_CONNECTIVITY_EDIT_MODE_START	Join  Adjust	Join Adjust	False	False
+Structure	Structure	Join Tools		Autodesk.Windows.RibbonButton	ID_STRUCT_CONNECTIVITY_RESET	Join  Reset	Join Reset	False	False
+Steel	Steel	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Steel	Steel	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Steel	Steel	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Steel	Steel	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Steel	Steel	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Steel	Steel	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Steel	Steel	Connection		Autodesk.Windows.RibbonButton	ID_STRUCTURAL_CONNECTION_DIRECT_CREATION	Connection	Structural Connection	False	True
+Steel	Steel	Connection		Autodesk.Windows.RibbonButton	ID_STRUCTURAL_AUTO_CONNECTION	Auto  Connection	Auto Connection	False	True
+Steel	Steel	Connection		Autodesk.Windows.RibbonButton	ID_STEEL_PLAYLIST_DYNAMO	Connection  Automation	Steel Connection Automation	False	True
+Steel	Steel	Connection	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_STRUCTCONNECTIONS_SHOW_WARNINGS	Show warnings in views		False	True
+Steel	Steel	Connection	DialogLauncher	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_CONNECTION_SETTINGS		Connection Settings	False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_PLATE	Plate		False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_CREATE_EXT_ENTITY_BOLT_RibbonListButton	Bolts	Bolts	False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()/RibbonSplitButton(Bolts)	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_BOLT	Bolts		False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()/RibbonSplitButton(Bolts)	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_ANCHOR	Anchors		False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()/RibbonSplitButton(Bolts)	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_HOLE	Holes		False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()/RibbonSplitButton(Bolts)	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_SHEAR_STUD	Shear Studs		False	True
+Steel	Steel	Fabrication Elements	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_WELD	Welds		False	True
+Steel	Steel	Modifiers	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_CORNER_CUT	Corner  Cut		False	True
+Steel	Steel	Modifiers	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_BEAM_COPE	Cope  Skewed		False	True
+Steel	Steel	Modifiers	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_SHORTENING	Shorten		False	True
+Steel	Steel	Modifiers	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_EXT_ENTITY_CONTOUR	Contour  Cut		False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_STEEL_PARAM_CUT_COPE	Cope		False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_STEEL_PARAM_CUT_MITER_RibbonListButton	Miter	Miter	False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()/RibbonSplitButton(Miter)	Autodesk.Windows.RibbonButton	ID_STEEL_PARAM_CUT_MITER	Miter		False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()/RibbonSplitButton(Miter)	Autodesk.Windows.RibbonButton	ID_STEEL_PARAM_CUT_SAW_CUT_FLANGE	Saw cut - Flange		False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()/RibbonSplitButton(Miter)	Autodesk.Windows.RibbonButton	ID_STEEL_PARAM_CUT_SAW_CUT_WEB	Saw cut - Web		False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_STEEL_PARAM_CUT_THROUGH	Cut Through		False	True
+Steel	Steel	Parametric Cuts	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_STEEL_PARAM_CUT_BY	Cut By		False	True
+Steel	Steel	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	False	True
+Steel	Steel	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	False	True
+Steel	Steel	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		False	True
+Steel	Steel	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	False	True
+Steel	Steel	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Ref  Plane	Reference Plane	False	True
+Steel	Steel	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	False	True
+Steel	Steel	Steel Assemblies	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_IDENTIFY_STEEL_ASSEMBLIES	Identify Steel Assembly		False	False
+thePrecastTab	Precast	Segmentation		Autodesk.Windows.RibbonButton	CustomCtrl_%PanelParts%Split	Split		False	True
+thePrecastTab	Precast	Segmentation		Autodesk.Windows.RibbonButton	CustomCtrl_%PanelParts%PRECAST_INTERNAL_UPDATE	PRECAST_INTERNAL_UPDATE		False	True
+thePrecastTab	Precast	Connections		Autodesk.Windows.RibbonButton	CustomCtrl_%PanelConnections%MountingParts	Mounting Parts		False	True
+thePrecastTab	Precast	Reinforcement		Autodesk.Windows.RibbonButton	CustomCtrl_%panelReinforcement%Reinforcement	Reinforcement		False	True
+thePrecastTab	Precast	Reinforcement		Autodesk.Windows.RibbonButton	CustomCtrl_%panelReinforcement%CustomFabricSheet	Custom Fabric Sheet		False	True
+thePrecastTab	Precast	Reinforcement		Autodesk.Windows.RibbonButton	CustomCtrl_%panelReinforcement%CFSConfig	CFS Config		False	True
+thePrecastTab	Precast	Fabrication		Autodesk.Windows.RibbonButton	CustomCtrl_%panelConstruction%ShopDrawings	Shop Drawings		False	True
+thePrecastTab	Precast	Fabrication		Autodesk.Windows.RibbonButton	CustomCtrl_%panelConstruction%CAMExport	CAM Export		False	True
+thePrecastTab	Precast	Configuration		Autodesk.Windows.RibbonButton	CustomCtrl_%PanelConfiguration%Configuration	Configuration		False	True
+thePrecastTab	Precast	Precast Updates		Autodesk.Windows.RibbonSplitButton	CustomCtrl_%panelTurnOff%Precast Updates	Precast Updates		False	True
+thePrecastTab	Precast	Precast Updates	/RibbonSplitButton(Precast Updates)	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%panelTurnOff%Precast Updates%DisablePrecastUpdates	Disable		False	True
+thePrecastTab	Precast	Precast Updates	/RibbonSplitButton(Precast Updates)	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%panelTurnOff%Precast Updates%EnablePrecastUpdates	Enable		False	True
+Systems	Systems	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Systems	Systems	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Systems	Systems	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Systems	Systems	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Systems	Systems	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Systems	Systems	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Systems	Systems	HVAC		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_DUCT	Duct		False	True
+Systems	Systems	HVAC		Autodesk.Windows.RibbonButton	ID_DUCT_1LINE_PATH	Duct  Placeholder		False	True
+Systems	Systems	HVAC	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_FITTING	Duct  Fitting		False	True
+Systems	Systems	HVAC	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_ACCESSORY	Duct  Accessory		False	True
+Systems	Systems	HVAC	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_CONVERTTOFLEX	Convert to  Flex Duct		False	True
+Systems	Systems	HVAC		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_FLEX	Flex  Duct		False	True
+Systems	Systems	HVAC		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_DIFFUSER	Air  Terminal		False	True
+Systems	Systems	HVAC	DialogLauncher	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_SETTINGS		Mechanical Settings	False	True
+Systems	Systems	Fabrication		Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_FABPART_BROWSER	Fabrication  Part		False	True
+Systems	Systems	Fabrication		Autodesk.Windows.RibbonToggleButton	ID_FABRICATION_PART_START_MPR	Multi-Point  Routing		False	True
+Systems	Systems	Fabrication	DialogLauncher	Autodesk.Windows.RibbonButton	ID_MEP_FABRICATION_SETTINGS		Fabrication Settings	False	True
+Systems	Systems	MEP Detailing		Autodesk.Windows.RibbonButton	ID_RBS_FABRICATION_DUCTWORK_STIFFENER	MEP Fabrication  Ductwork Stiffener		False	True
+Systems	Systems	P&ID Collaboration		Autodesk.Windows.RibbonButton	ID_MEP_PNID_MODELER	P&ID Modeler		False	True
+Systems	Systems	P&ID Collaboration	DialogLauncher	Autodesk.Windows.RibbonButton	ID_MEP_PNID_SETTINGS		P&ID Settings	False	True
+Systems	Systems	Mechanical		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_EQUIPMENT	Mechanical  Equipment		False	True
+Systems	Systems	Mechanical		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_CONTROL_DEVICE	Mechanical  Control Device		False	True
+Systems	Systems	Mechanical	DialogLauncher	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_SETTINGS		Mechanical Settings	False	True
+Systems	Systems	Mechanical		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_EQUIPMENT	Mechanical  Equipment		False	False
+Systems	Systems	Mechanical		Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_CONTROL_DEVICE	Mechanical  Control Device		False	False
+Systems	Systems	Plumbing & Piping		Autodesk.Windows.RibbonButton	ID_RBS_PIPE_PIPE	Pipe		False	True
+Systems	Systems	Plumbing & Piping		Autodesk.Windows.RibbonButton	ID_PIPE_1LINE_PATH	Pipe  Placeholder		False	True
+Systems	Systems	Plumbing & Piping		Autodesk.Windows.RibbonButton	ID_PARALLEL_PIPES	Parallel  Pipes		False	True
+Systems	Systems	Plumbing & Piping	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_PIPE_FITTING	Pipe  Fitting		False	True
+Systems	Systems	Plumbing & Piping	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_PIPE_ACCESSORY	Pipe  Accessory		False	True
+Systems	Systems	Plumbing & Piping	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_PIPE_FLEX	Flex  Pipe		False	True
+Systems	Systems	Plumbing & Piping		Autodesk.Windows.RibbonButton	ID_RBS_PLUMBING_EQUIPMENT	Plumbing  Equipment		False	True
+Systems	Systems	Plumbing & Piping		Autodesk.Windows.RibbonButton	ID_RBS_PLUMBING_FIXTURE	Plumbing  Fixture		False	True
+Systems	Systems	Plumbing & Piping		Autodesk.Windows.RibbonButton	ID_RBS_SPRINKLER	Sprinkler		False	True
+Systems	Systems	Plumbing & Piping	DialogLauncher	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_SETTINGS		Mechanical Settings	False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonSplitButton	Wire_Split_Button			False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Wire_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_WIRE	Wire	Arc Wire	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Wire_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_WIRE_SPLINE	Wire	Spline Wire	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Wire_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_WIRE_CHAMFER	Wire	Chamfered Wire	False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonButton	ID_RBS_CABLE_TRAY	Cable  Tray		False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonButton	ID_RBS_CONDUIT	Conduit		False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonButton	ID_PARALLEL_CONDUIT	Parallel  Conduits		False	True
+Systems	Systems	Electrical	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_CABLETRAY_FITTING	Cable Tray  Fitting		False	True
+Systems	Systems	Electrical	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_CONDUIT_FITTING	Conduit  Fitting		False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_EQUIPMENT	Electrical  Equipment		False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonSplitButton	Device_Split_Button			False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_DEVICE	Device	Electrical Fixture	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_COMMUNICATION_DEVICE	Device	Communication	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_DATA_DEVICE	Device	Data	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_FIREALARM_DEVICE	Device	Fire Alarm	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_LIGHTING_DEVICE	Device	Lighting	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_NURSECALL_DEVICE	Device	Nurse Call	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_SECURITY_DEVICE	Device	Security	False	True
+Systems	Systems	Electrical	/RibbonSplitButton(Device_Split_Button)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_TELEPHONE_DEVICE	Device	Telephone	False	True
+Systems	Systems	Electrical		Autodesk.Windows.RibbonButton	ID_RBS_LIGHTING_FIXTURE	Lighting  Fixture		False	True
+Systems	Systems	Electrical	DialogLauncher	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_SETTINGS		Electrical Settings	False	True
+Systems	Systems	Model		Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_FAMSYM_RibbonListButton	Component	Place a Component	False	True
+Systems	Systems	Model	/RibbonSplitButton(Component)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMSYM	Place a Component		False	True
+Systems	Systems	Model	/RibbonSplitButton(Component)	Autodesk.Windows.RibbonButton	ID_INPLACE_COMPONENT	Model In-Place		False	True
+Systems	Systems	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	False	True
+Systems	Systems	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	False	True
+Systems	Systems	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		False	True
+Systems	Systems	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	False	True
+Systems	Systems	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Ref  Plane	Reference Plane	False	True
+Systems	Systems	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	False	True
+Insert	Insert	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Insert	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Insert	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Insert	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Insert	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Insert	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Insert	Insert	Manage		Autodesk.Windows.RibbonButton	ID_LINKED_DWG	Manage  Links		False	True
+Insert	Insert	Link		Autodesk.Windows.RibbonButton	ID_RVTDOC_LINK	Link  Revit		False	True
+Insert	Insert	Link		Autodesk.Windows.RibbonButton	ID_IFC_LINK	Link  IFC		False	True
+Insert	Insert	Link		Autodesk.Windows.RibbonButton	ID_FILE_CADFORMAT_LINK	Link  CAD		False	True
+Insert	Insert	Link		Autodesk.Windows.RibbonButton	ID_FILE_TOPOSURFACE_LINK	Link  Topography		False	True
+Insert	Insert	Link		Autodesk.Windows.RibbonButton	ID_TOPOGRAPHY_LINK	Link  Topography		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MARKUPS_LOAD	DWF  Markup		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_RM_CREATE_DECAL_RibbonListButton	Decal	Place Decal	False	True
+Insert	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Decal)	Autodesk.Windows.RibbonButton	ID_RM_CREATE_DECAL	Place Decal		False	True
+Insert	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Decal)	Autodesk.Windows.RibbonButton	ID_SETTINGS_DECAL_TYPES	Decal Types		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_POINT_CLOUD	Point  Cloud		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_COORDINATION_MODEL	Coordination  Model		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_COORDINATION_MODEL_RibbonListButton	Coordination  Model		False	True
+Insert	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Coordination  Model)	Autodesk.Windows.RibbonButton	ID_COORDINATIONMODEL_ADD_LOCAL	Local		False	True
+Insert	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Coordination  Model)	Autodesk.Windows.RibbonButton	ID_COORDINATIONMODEL_ADD_AUTODESKDOCS	Autodesk Docs		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_LINK_PDF	Link  PDF		False	True
+Insert	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_LINK_IMAGE	Link  Image		False	True
+Insert	Insert	Import		Autodesk.Windows.RibbonButton	ID_FILE_IMPORT	Import  CAD		False	True
+Insert	Insert	Import		Autodesk.Windows.RibbonButton	ID_ABS_IMPORT_GBXML	Import  gbXML		False	True
+Insert	Insert	Import		Autodesk.Windows.RibbonButton	ID_IMPORT_FAB_MAJ	Import MEP  Fabrication Job		False	True
+Insert	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_RASTER_PDF	Import  PDF		False	True
+Insert	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_RASTER	Import  Image		False	True
+Insert	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_RASTER_SYMBOLS	Manage  Images		False	True
+Insert	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_IMPORT_FAM_TYPES	Import  Family Types		False	True
+Insert	Insert	Import	DialogLauncher	Autodesk.Windows.RibbonButton	ID_FILE_IMPORT_ACAD_LINEWEIGHT_TABLE		Import Line Weights	False	True
+Insert	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_FAMILY_LOAD	Load  Family		False	True
+Insert	Insert	Load from Library	/RibbonSplitButton(Content  Catalog)	Autodesk.Windows.RibbonButton	ID_CONTENT_CATALOG_APP	Launch as App		False	True
+Insert	Insert	Load from Library	/RibbonSplitButton(Content  Catalog)	Autodesk.Windows.RibbonButton	ID_CONTENT_CATALOG_BROWSER	Launch in Browser		False	True
+Insert	Insert	Load from Library	/RibbonSplitButton(Content  Catalog)	Autodesk.Windows.RibbonButton	ID_CONTENT_CATALOG_DOCKED_WINDOW	Launch in Docked Window		False	True
+Insert	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_FAMILY_LOAD_CLOUD	Load Autodesk  Family		False	True
+Insert	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_FAMILY_LOAD	Load Framing  Family		False	True
+Insert	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_LOAD_GROUP	Load as  Group		False	True
+Insert	Insert	Load from Library		Autodesk.Windows.RibbonSplitButton	HID_INSERT_FROM_FILE_RibbonListButton	Insert  from File		False	True
+Insert	Insert	Load from Library	/RibbonSplitButton(Insert  from File)	Autodesk.Windows.RibbonButton	ID_INSERT_VIEWS_FROM_FILE	Insert Views from File		False	True
+Insert	Insert	Load from Library	/RibbonSplitButton(Insert  from File)	Autodesk.Windows.RibbonButton	ID_INSERT_2D_ELEMENTS_FROM_FILE	Insert 2D Elements from File		False	True
+Annotate	Annotate	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Annotate	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Annotate	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Annotate	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Annotate	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Annotate	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Annotate	Annotate	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned	Aligned Dimension	False	True
+Annotate	Annotate	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear	Linear Dimension	False	True
+Annotate	Annotate	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular	Angular Dimension	False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial	Radial Dimension	False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter	Diameter Dimension	False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc  Length	Arc Length Dimension	False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot  Elevation		False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot  Coordinate		False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot  Slope		False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_ALIGNMENT_STATION_LABEL_RibbonListButton	Alignment  Station		False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()/RibbonSplitButton(Alignment  Station)	Autodesk.Windows.RibbonButton	ID_ALIGNMENT_STATION_LABEL	Alignment Station		False	True
+Annotate	Annotate	Dimension	/RibbonFoldPanel()/RibbonSplitButton(Alignment  Station)	Autodesk.Windows.RibbonButton	ID_ALIGNMENT_STATION_LABEL_SET	Alignment Station Set		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_LINEAR	Linear Dimension Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_ANGULAR	Angular Dimension Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_RADIAL	Radial Dimension Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_DIAMETER	Diameter Dimension Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_ELEVATION	Spot Elevation Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_COORDINATE	Spot Coordinate Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_SLOPE	Spot Slope Types		False	True
+Annotate	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_ALIGNMENT_STATION_LABEL	Alignment Station Label Types		False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_DETAIL_CURVES	Detail  Line		False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	Region_Split_Button			False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Region_Split_Button)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FILLED_REGION	Region	Filled Region	False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Region_Split_Button)	Autodesk.Windows.RibbonButton	ID_MASKING_REGION	Region	Masking Region	False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	Detail_Component_Split_Button			False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail_Component_Split_Button)	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMDETAIL	Component	Detail Component	False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail_Component_Split_Button)	Autodesk.Windows.RibbonButton	ID_OBJECTS_REPEATING_DETAIL	Component	Repeating Detail Component	False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail_Component_Split_Button)	Autodesk.Windows.RibbonButton	ID_OBJECTS_LEGEND_COMPONENT	Component	Legend Component	False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLOUD	Revision  Cloud		False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_DETAIL_GROUP_RibbonListButton	Detail  Group		False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_DETAIL_GROUP	Place Detail Group		False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		False	True
+Annotate	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_INSULATION	Insulation		False	True
+Annotate	Annotate	Text		Autodesk.Windows.RibbonButton	ID_OBJECTS_TAG_NOTE	Label		False	True
+Annotate	Annotate	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_TEXT_NOTE	Text		False	True
+Annotate	Annotate	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CHECK_SPELLING	Check  Spelling		False	True
+Annotate	Annotate	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FIND_REPLACE	Find/  Replace		False	True
+Annotate	Annotate	Text	DialogLauncher	Autodesk.Windows.RibbonButton	ID_SETTINGS_TEXT		Text Types	False	True
+Annotate	Annotate	Tag		Autodesk.Windows.RibbonButton	ID_BUTTON_TAG	Tag by  Category		False	True
+Annotate	Annotate	Tag		Autodesk.Windows.RibbonButton	ID_BUTTON_TAG_ALL	Tag  All	Tag All Not Tagged	False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_BEAM_ANNOTATION_PLACEMENT	Beam  Annotations		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TAG_MULTI	Multi-  Category	Multi-Category Tag	False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TAG_MATERIAL	Material  Tag		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_AREA_TAG	Area  Tag		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_OBJECTS_ROOM_TAG_RibbonListButton	Room  Tag		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()/RibbonSplitButton(Room  Tag)	Autodesk.Windows.RibbonButton	ID_OBJECTS_ROOM_TAG	Room  Tag		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()/RibbonSplitButton(Room  Tag)	Autodesk.Windows.RibbonButton	ID_RECENTER_REFERENCE_LINE	Re-center Reference		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MEP_SPACE_TAG	Space  Tag		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_NEW_REFERENCE_VIEWER	View  Reference		False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_STAIRS_TRISER_NUMBER	Tread  Number	Stair Tread/Riser Number	False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_MULTI_REFERENCE_ANNOTATION_RibbonListButton			False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()/RibbonSplitButton(HID_MULTI_REFERENCE_ANNOTATION_RibbonListButton)	Autodesk.Windows.RibbonButton	ID_MULTI_REFERENCE_ANNOTATION_ALIGNED	Multi-  Rebar	Aligned Multi-Rebar Annotation	False	True
+Annotate	Annotate	Tag	/RibbonFoldPanel()/RibbonSplitButton(HID_MULTI_REFERENCE_ANNOTATION_RibbonListButton)	Autodesk.Windows.RibbonButton	ID_MULTI_REFERENCE_ANNOTATION_LINEAR	Multi-  Rebar	Linear Multi-Rebar Annotation	False	True
+Annotate	Annotate	Tag		Autodesk.Windows.RibbonSplitButton	HID_KEYNOTE_RibbonListButton			False	True
+Annotate	Annotate	Tag	/RibbonSplitButton(HID_KEYNOTE_RibbonListButton)	Autodesk.Windows.RibbonButton	ID_KEYNOTE_ELEMENT	Keynote	Element Keynote	False	True
+Annotate	Annotate	Tag	/RibbonSplitButton(HID_KEYNOTE_RibbonListButton)	Autodesk.Windows.RibbonButton	ID_KEYNOTE_MATERIAL	Keynote	Material Keynote	False	True
+Annotate	Annotate	Tag	/RibbonSplitButton(HID_KEYNOTE_RibbonListButton)	Autodesk.Windows.RibbonButton	ID_KEYNOTE_USER	Keynote	User Keynote	False	True
+Annotate	Annotate	Tag	/RibbonSplitButton(HID_KEYNOTE_RibbonListButton)	Autodesk.Windows.RibbonButton	ID_SETTINGS_KEYNOTING	Keynote	Keynoting Settings	False	True
+Annotate	Annotate	Tag	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_TAGS	Loaded Tags And Symbols		False	True
+Annotate	Annotate	Color Fill	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_COLOR_FILL	Duct  Legend		False	True
+Annotate	Annotate	Color Fill	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_PIPING_COLOR_FILL	Pipe  Legend		False	True
+Annotate	Annotate	Color Fill	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_ROOM_FILL	Color Fill  Legend		False	True
+Annotate	Annotate	Symbol		Autodesk.Windows.RibbonButton	ID_OBJECTS_FAM_ANN_INST	Symbol		False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_SPAN_DIR_SYM	Span  Direction	Span Direction Symbol	False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_BEAM_SYSTEM_TAG	Beam	Beam System Symbol	False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_STAIRS_PATH	Stair  Path		False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_REBAR_SYSTEM_SPAN_SYM	Area	Area Reinforcement Symbol	False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_PATH_REIN_SPAN_SYM	Path	Path Reinforcement Symbol	False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_PLACE_BENDING_DETAIL	Rebar	Rebar Bending Detail	False	True
+Annotate	Annotate	Symbol	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FABRIC_SYSTEM_PLACE_SPANSYMBOL	Fabric	Fabric Reinforcement Symbol	False	True
+Analyze	Analyze	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Analyze	Analyze	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Analyze	Analyze	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Analyze	Analyze	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Analyze	Analyze	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Analyze	Analyze	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Analyze	Analyze	Structural Analytical Model		Autodesk.Windows.RibbonButton	ID_ANALYTICAL_MODEL_MEMBERS	Member	Analytical Member	False	True
+Analyze	Analyze	Structural Analytical Model		Autodesk.Windows.RibbonSplitButton	ANALYTICAL_PANEL_GROUP_RibbonListButton	Panel	Analytical Panel	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonSplitButton(Panel)	Autodesk.Windows.RibbonButton	ID_CREATE_ANALYTICAL_MODEL_PANEL	Panel by  Boundary	Panel by Boundary	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonSplitButton(Panel)	Autodesk.Windows.RibbonButton	ID_CREATE_ANALYTICAL_MODEL_PANEL_BY_EXTRUSION	Panel by  Extrusion	Panel by Extrusion	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_ANALYTICAL_LINK	Link	Analytical Link	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECT_BC	Boundary  Conditions		False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANALYTICAL_MODEL_LOADS	Loads		False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_ANALYTICAL_AUTOMATION_GROUP_RibbonListButton	Analytical  Automation	Analytical Automation	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()/RibbonSplitButton(Analytical  Automation)	Autodesk.Windows.RibbonButton	ID_PHYSICAL_TO_ANALYTICAL_RUN_DYNAMO	Run Physical to Analytical For Buildings	Run Physical to Analytical For Buildings	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()/RibbonSplitButton(Analytical  Automation)	Autodesk.Windows.RibbonButton	ID_ANALYTICAL_TO_PHYSICAL_RUN_DYNAMO	Run Analytical to Physical For Buildings	Run Analytical to Physical For Buildings	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()/RibbonSplitButton(Analytical  Automation)	Autodesk.Windows.RibbonButton	ID_ANALYTICAL_AUTOMATION_PLAYLIST_DYNAMO	Automation Customization	Automation Customization	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANALYTICAL_AUTOMATION_CHECK_TOOLS_PLAYLIST_DYNAMO	Results  Checker	Results Checker	False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS_LOAD_COMB	Load Cases and Combinations		False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS_LOAD_CASES	Load Cases Display		False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS_BOUND_COND	Boundary Conditions Settings		False	True
+Analyze	Analyze	Structural Analytical Model	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS_LOADS_SCALING_DISPLAY	Loads Scaling Display		False	True
+Analyze	Analyze	Analytical Model Tools	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_AM_EDIT_MODE_START	Adjust	Adjust Analytical Model	False	False
+Analyze	Analyze	Analytical Model Tools	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RESET_ANALYTICAL_MODEL	Reset	Reset Analytical Model	False	False
+Analyze	Analyze	Analytical Model Tools	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_COMMAND_CHECK_MEMBER_SUPPORTS	Supports	Check Member Supports	False	False
+Analyze	Analyze	Analytical Model Tools	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_COMMAND_ANALYTICAL_CONSISTENCY_CHECKS	Consistency	Analytical Consistency Checks	False	False
+Analyze	Analyze	Analytical Model Tools	DialogLauncher	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS_ANALY_MODEL		Analytical Model Settings	False	False
+Analyze	Analyze	Spaces	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MEP_SPACE	Space		False	True
+Analyze	Analyze	Spaces	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MEP_SPACE_SEPARATION	Space  Separator		False	True
+Analyze	Analyze	Spaces	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MEP_SPACE_TAG	Space  Tag		False	True
+Analyze	Analyze	Spaces	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MEP_SPACE_NAMING_UTILITY	Space  Naming		False	True
+Analyze	Analyze	Spaces	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_HVAC_ZONE	HVAC  Zone		False	True
+Analyze	Analyze	Spaces	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_COLORFILLSCHEMES	Color Schemes		False	True
+Analyze	Analyze	Spaces	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTING_AREACALCULATIONS	Area and Volume Computations		False	True
+Analyze	Analyze	Spaces	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTING_AREACALCULATIONS	Area Computations		False	True
+Analyze	Analyze	Zoning	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MEP_SYSTEM_ZONE_BY_SKETCH	By  Sketch		False	True
+Analyze	Analyze	Zoning	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MEP_SYSTEM_ZONE_BY_SPACES	By  Space		False	True
+Analyze	Analyze	Reports & Schedules	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_HVAC_LOADS	Heating and  Cooling Loads		False	True
+Analyze	Analyze	Reports & Schedules	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_VIEW_PANEL_SCHEDULE	Panel  Schedules		False	True
+Analyze	Analyze	Reports & Schedules	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_SCHEDULE	Schedule/  Quantities		False	True
+Analyze	Analyze	Reports & Schedules	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MEP_DUCT_PRESSURE_LOSS_REPORT	Duct Pressure  Loss Report		False	True
+Analyze	Analyze	Reports & Schedules	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MEP_PIPE_PRESSURE_LOSS_REPORT	Pipe Pressure  Loss Report		False	True
+Analyze	Analyze	Reports & Schedules	DialogLauncher	Autodesk.Windows.RibbonButton	ID_RBS_BUILDINGSPACE_TYPE_SETTINGS		Building/Space Type Settings	False	True
+Analyze	Analyze	Check Systems	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_RBS_CHECK_DUCT_SYSTEMS	Check Duct  Systems		False	True
+Analyze	Analyze	Check Systems	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_RBS_CHECK_PIPE_SYSTEMS	Check Pipe  Systems		False	True
+Analyze	Analyze	Check Systems	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_CHECK_CIRCUITS	Check  Circuits		False	True
+Analyze	Analyze	Check Systems	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SHOWDISCONNECTS_BUTTON	Show  Disconnects		False	True
+Analyze	Analyze	Color Fill	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_COLOR_FILL	Duct  Legend		False	True
+Analyze	Analyze	Color Fill	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_PIPING_COLOR_FILL	Pipe  Legend		False	True
+Analyze	Analyze	Color Fill	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_ROOM_FILL	Color Fill  Legend		False	True
+Analyze	Analyze	Energy Optimization	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_GEO_MANAGE_LOCATIONS	Location		False	True
+Analyze	Analyze	Energy Optimization	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ENABLE_ENERGY_ANALYSIS	Create  Energy Model		False	True
+Analyze	Analyze	Energy Optimization	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_DISABLE_ENERGY_ANALYSIS	Delete  Energy Model		False	True
+Analyze	Analyze	Energy Optimization	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ENERGY_MODEL_UPDATE	Update  Energy Model		False	True
+Analyze	Analyze	Energy Optimization	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RUN_SYSTEMS_ANALYSIS	Systems  Analysis		False	True
+Analyze	Analyze	Energy Optimization	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CEA_VIEW_ENERGY_DATA	Energy  Settings		False	True
+Analyze	Analyze	Carbon Insights		Autodesk.Windows.RibbonButton	CustomCtrl_%idCarbonAnalysis%idRunCarbonAnalysis	Analyze		False	True
+Analyze	Analyze	Carbon Insights		Autodesk.Windows.RibbonButton	CustomCtrl_%idCarbonAnalysis%idShowCarbonAnalysis	View		False	True
+Analyze	Analyze	Energy Insights	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CEA_LAUNCH_ANALYSIS	Generate		False	False
+Analyze	Analyze	Energy Insights	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CEA_OPTIMIZE	Optimize		False	False
+Analyze	Analyze	Electrical Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_RBS_ANALYTICAL_AREA_BASED_LOAD_BOUNDARY_RibbonListButton	Area Based Load  Boundary		False	True
+Analyze	Analyze	Electrical Analysis	/RibbonFoldPanel()/RibbonSplitButton(Area Based Load  Boundary)	Autodesk.Windows.RibbonButton	ID_RBS_ANALYTICAL_AREA_BASED_LOAD_BOUNDARY	Area Based Load Boundary		False	True
+Analyze	Analyze	Electrical Analysis	/RibbonFoldPanel()/RibbonSplitButton(Area Based Load  Boundary)	Autodesk.Windows.RibbonButton	ID_RBS_SHOW_ABL_SEPARATION_LINE_OPEN_END	Show Boundary Open-Ends		False	True
+Analyze	Analyze	Electrical Analysis	/RibbonFoldPanel()/RibbonSplitButton(Area Based Load  Boundary)	Autodesk.Windows.RibbonButton	ID_RBS_HIDE_ABL_SEPARATION_LINE_OPEN_END	Hide Boundary Open-Ends		False	True
+Analyze	Analyze	Electrical Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	IDS_RBS_ANALYTICAL_LOADZONE	Area Based  Load		False	True
+Analyze	Analyze	Electrical Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_ANALYSIS_ADD_EQUIPMENT_LOAD	Equipment  Load		False	True
+Analyze	Analyze	Route Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_PATH_OF_TRAVEL	Path of  Travel		False	True
+Analyze	Analyze	Route Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_PATH_OF_TRAVEL_SHOW_OBSTACLES	Reveal  Obstacles		False	True
+Analyze	Analyze	Route Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MULTIPLE_PATHS	Multiple  Paths		False	True
+Analyze	Analyze	Route Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ONE_WAY_INDICATOR	One Way  Indicator		False	True
+Analyze	Analyze	Route Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_PEOPLE_CONTENT	People  Content		False	True
+Analyze	Analyze	Route Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPATIAL_GRID	Spatial  Grid		False	True
+Analyze	Analyze	Route Analysis	DialogLauncher	Autodesk.Windows.RibbonButton	ID_ROUTE_ANALYSIS_SETTINGS		Route Analysis Settings	False	True
+Analyze	Analyze	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	False	True
+Analyze	Analyze	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	False	True
+Analyze	Analyze	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		False	True
+Analyze	Analyze	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	False	True
+Analyze	Analyze	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Ref  Plane	Reference Plane	False	True
+Analyze	Analyze	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	False	True
+Analyze	Analyze	Structural Analysis		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Analyze%Structural Analysis%ResultsManager	Results Manager		False	True
+Analyze	Analyze	Structural Analysis		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Analyze%Structural Analysis%ResultsExplorer	Results Explorer		False	True
+MassingSite	Massing & Site	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+MassingSite	Massing & Site	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+MassingSite	Massing & Site	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+MassingSite	Massing & Site	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+MassingSite	Massing & Site	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+MassingSite	Massing & Site	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+MassingSite	Massing & Site	Conceptual Mass	/SplitRadioGroup()	Autodesk.Windows.RibbonToggleButton	ID_SHOW_MASS_NO_OVERRIDE	Show Mass  by View Settings		False	True
+MassingSite	Massing & Site	Conceptual Mass	/SplitRadioGroup()	Autodesk.Windows.RibbonToggleButton	ID_SHOW_MASS_STANDARD	Show Mass  Form and Floors		False	True
+MassingSite	Massing & Site	Conceptual Mass	/SplitRadioGroup()	Autodesk.Windows.RibbonToggleButton	ID_SHOW_MASS_SURFACES	Show Mass  Surface Types		False	True
+MassingSite	Massing & Site	Conceptual Mass	/SplitRadioGroup()	Autodesk.Windows.RibbonToggleButton	ID_SHOW_MASS_ZONES	Show Mass  Zones and Shades		False	True
+MassingSite	Massing & Site	Conceptual Mass	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SHOW_MASS	Show  Mass		False	True
+MassingSite	Massing & Site	Conceptual Mass	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_INPLACE_MASS	In-Place  Mass		False	True
+MassingSite	Massing & Site	Conceptual Mass	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MASS	Place  Mass		False	True
+MassingSite	Massing & Site	Conceptual Mass	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_LAUNCH_FORMIT	3D  Sketch		False	True
+MassingSite	Massing & Site	Model by Face		Autodesk.Windows.RibbonButton	ID_CURTA_SYSTEM_PICK_FACES	Curtain  System	Curtain System by Face	False	True
+MassingSite	Massing & Site	Model by Face	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ROOF_PICK_FACES	Roof	Roof by Face	False	True
+MassingSite	Massing & Site	Model by Face	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_WALL_PICK_FACES	Wall	Wall by Face	False	True
+MassingSite	Massing & Site	Model by Face	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FLOOR_PICK_FACES	Floor	Floor by Face	False	True
+MassingSite	Massing & Site	Model by Face	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TOPOSOLID_PICK_FACES	Toposolid	Toposolid by Face	False	True
+MassingSite	Massing & Site	Model Site		Autodesk.Windows.RibbonButton	ID_SITE_TOPO_SURFACE	Toposurface		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_SITE_TOPO_SOLID_RibbonListButton	Toposolid	Toposolid	False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()/RibbonSplitButton(Toposolid)	Autodesk.Windows.RibbonButton	ID_SITE_TOPO_SOLID	Create from Sketch		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()/RibbonSplitButton(Toposolid)	Autodesk.Windows.RibbonButton	ID_SITE_TOPO_SOLID_FROM_IMPORT	Create from Import		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_COMPONENT	Site  Component		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_PARKING_COMPONENT	Parking  Component		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_PROPERTYLINE	Property  Line		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_LABEL_CONTOURS	Label  Contours		False	True
+MassingSite	Massing & Site	Model Site	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_BUILDINGPAD	Building  Pad		False	True
+MassingSite	Massing & Site	Model Site	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_PROPERTY_LINE_DATA	Property Line Data		False	True
+MassingSite	Massing & Site	Model Site	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SITE_BOOLEAN_PERTURBATION_UI	Topography Cut Void Stability		False	True
+MassingSite	Massing & Site	Model Site	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_SMOOTH_TOPOSOLID	Toposolid Smooth Shading		False	True
+MassingSite	Massing & Site	Model Site	DialogLauncher	Autodesk.Windows.RibbonButton	ID_SITE_SETTINGS		Site Settings	False	True
+MassingSite	Massing & Site	Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_GRADE	Graded  Region		False	True
+MassingSite	Massing & Site	Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_SURFACE	Split  Surface		False	True
+MassingSite	Massing & Site	Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MERGE_SURFACE	Merge  Surfaces		False	True
+MassingSite	Massing & Site	Analysis	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SITE_AREA	Subregion		False	True
+Collaborate	Collaborate	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Collaborate	Collaborate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Collaborate	Collaborate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Collaborate	Collaborate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Collaborate	Collaborate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Collaborate	Collaborate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Collaborate	Collaborate	Communicate		Autodesk.Windows.RibbonButton	ID_TEAM	Communicator		False	True
+Collaborate	Collaborate	Communicate		Autodesk.Windows.RibbonButton	ID_WORKSET_EDITING_REQUESTS	Editing  Requests		False	True
+Collaborate	Collaborate	Manage Collaboration		Autodesk.Windows.RibbonButton	ID_COLLABORATE	Collaborate		False	True
+Collaborate	Collaborate	Manage Collaboration		Autodesk.Windows.RibbonButton	ID_COLLABORATE_360	Collaborate in  Cloud		False	True
+Collaborate	Collaborate	Manage Collaboration		Autodesk.Windows.RibbonButton	ID_SETTINGS_PARTITIONS	Worksets		False	True
+Collaborate	Collaborate	Manage Collaboration	/RibbonRowPanel()	UIFramework.WorkSetCombo	workset_option		Active Workset	False	True
+Collaborate	Collaborate	Manage Collaboration	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_GRAY_INACTIVE_WORKSET_GRAPHICS	Gray Inactive Worksets		False	True
+Collaborate	Collaborate	Manage Collaboration	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_SHOW_MAKE_ELEMENT_EDITABLE_CONTROLS	Show Worksharing Make Editable Controls		False	True
+Collaborate	Collaborate	Synchronize		Autodesk.Windows.RibbonSplitButton	Sync_with_Central_Split_Button	Synchronize with Central		False	True
+Collaborate	Collaborate	Synchronize	/RibbonSplitButton(Synchronize with Central)	Autodesk.Windows.RibbonButton	ID_FILE_SAVE_TO_CENTRAL	Synchronize  with Central	Synchronize and Modify Settings	False	True
+Collaborate	Collaborate	Synchronize	/RibbonSplitButton(Synchronize with Central)	Autodesk.Windows.RibbonButton	ID_FILE_SAVE_TO_CENTRAL_SHORTCUT	Synchronize  with Central	Synchronize Now	False	True
+Collaborate	Collaborate	Synchronize		Autodesk.Windows.RibbonButton	ID_WORKSETS_RELOAD_LATEST	Reload  Latest		False	True
+Collaborate	Collaborate	Synchronize		Autodesk.Windows.RibbonButton	ID_RELINQUISH_ALL_MINE	Relinquish  All Mine		False	True
+Collaborate	Collaborate	Synchronize		Autodesk.Windows.RibbonButton	ID_WORKSHARING_MONITOR	Worksharing  Monitor		False	True
+Collaborate	Collaborate	Synchronize		Autodesk.Windows.RibbonRowPanel	RibbonRowPanel_ManageConnectionToARevitServerAccelerator			False	True
+Collaborate	Collaborate	Synchronize	/RibbonRowPanel(RibbonRowPanel_ManageConnectionToARevitServerAccelerator)	Autodesk.Windows.RibbonButton	RibbonButton_ManageConnectionToARevitServerAccelerator	Manage Connection to a Revit Server Accelerator		False	True
+Collaborate	Collaborate	Manage Models		Autodesk.Windows.RibbonButton	ID_PARTITIONS_SHOW_HISTORY	Show  History		False	True
+Collaborate	Collaborate	Manage Models		Autodesk.Windows.RibbonButton	ID_FILE_BACKUPS	Restore  Backup		False	True
+Collaborate	Collaborate	Manage Models		Autodesk.Windows.RibbonButton	ID_VIEWS_FOR_A360	Publish  Settings		False	True
+Collaborate	Collaborate	Manage Models	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_REPAIR_CENTRAL_MODEL	Repair Central Model		False	True
+Collaborate	Collaborate	Coordinate		Autodesk.Windows.RibbonSplitButton	HID_COPY_MONITOR_RibbonListButton	Copy/  Monitor		False	True
+Collaborate	Collaborate	Coordinate	/RibbonSplitButton(Copy/  Monitor)	Autodesk.Windows.RibbonButton	ID_COPY_WATCH_CURRENT	Use Current Project		False	True
+Collaborate	Collaborate	Coordinate	/RibbonSplitButton(Copy/  Monitor)	Autodesk.Windows.RibbonButton	ID_COPY_WATCH_LINK	Select Link		False	True
+Collaborate	Collaborate	Coordinate		Autodesk.Windows.RibbonSplitButton	HID_REVIEW_RibbonListButton	Coordination  Review		False	True
+Collaborate	Collaborate	Coordinate	/RibbonSplitButton(Coordination  Review)	Autodesk.Windows.RibbonButton	ID_RECONCILE_CURRENT	Use Current Project		False	True
+Collaborate	Collaborate	Coordinate	/RibbonSplitButton(Coordination  Review)	Autodesk.Windows.RibbonButton	ID_RECONCILE_LINK	Select Link		False	True
+Collaborate	Collaborate	Coordinate		Autodesk.Windows.RibbonButton	ID_COPY_SETTINGS	Coordination  Settings		False	True
+Collaborate	Collaborate	Coordinate		Autodesk.Windows.RibbonButton	ID_TOGGLE_HOST_BY_LINK_BROWSER	Reconcile  Hosting		False	True
+Collaborate	Collaborate	Coordinate		Autodesk.Windows.RibbonSplitButton	HID_INTERFERENCE_RibbonListButton	Interference  Check		False	True
+Collaborate	Collaborate	Coordinate	/RibbonSplitButton(Interference  Check)	Autodesk.Windows.RibbonButton	ID_INTERFERENCE_CHECK	Run Interference Check		False	True
+Collaborate	Collaborate	Coordinate	/RibbonSplitButton(Interference  Check)	Autodesk.Windows.RibbonButton	ID_INTERFERENCE_REPORT	Show Last Report		False	True
+Collaborate	Collaborate	Coordinate		Autodesk.Windows.RibbonToggleButton	ID_COORDINATIONMODEL_CHANGESREVIEW	Coordination Model  Changes		False	True
+Collaborate	Collaborate	Share	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SHARED_VIEWS	Shared  Views		False	True
+Collaborate	Collaborate	Share	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CLOUD_DATA_EXCHANGE	Data  Exchange		False	True
+View	View	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+View	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+View	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+View	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+View	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+View	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+View	View	Graphics		Autodesk.Windows.RibbonSplitButton	HID_VIEW_TEMPLATE_RibbonListButton	View  Templates		False	True
+View	View	Graphics	/RibbonSplitButton(View  Templates)	Autodesk.Windows.RibbonButton	ID_APPLY_VIEW_TEMPLATE	Apply Template Properties to Current View		False	True
+View	View	Graphics	/RibbonSplitButton(View  Templates)	Autodesk.Windows.RibbonButton	ID_CREATE_VIEW_TEMPLATE	Create Template from Current View		False	True
+View	View	Graphics	/RibbonSplitButton(View  Templates)	Autodesk.Windows.RibbonButton	ID_SETTINGS_VIEWTEMPLATES	Manage View Templates		False	True
+View	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_CATEGORY_VISIBILITY	Visibility/  Graphics		False	True
+View	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_FILTERS	Filters		False	True
+View	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_THIN_LINES	Thin  Lines		False	True
+View	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_HIDE_ELEMENTS_EDITOR	Show  Hidden Lines	Show Hidden Lines by Element	False	True
+View	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_UNHIDE_ELEMENTS_EDITOR	Remove  Hidden Lines	Remove Hidden Lines by Element	False	True
+View	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CUT_BOUNDARY	Cut  Profile		False	True
+View	View	Graphics	DialogLauncher	Autodesk.Windows.RibbonButton	ID_GRAPHIC_DISPLAY_OPTIONS		Graphic Display Options	False	True
+View	View	Presentation		Autodesk.Windows.RibbonButton	ID_PHOTO_RENDERING_VIEW	Render		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Cloud  Rendering)	Autodesk.Windows.RibbonButton	ID_PHOTO_RENDER_IN_CLOUD	Render in Cloud		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Cloud  Rendering)	Autodesk.Windows.RibbonButton	ID_PHOTO_RENDER_GALLERY	Render Gallery		False	True
+View	View	Presentation	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_TWINMOTION_RibbonListButton	Twinmotion		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_OPEN_IN_TWINMOTION	Open in Twinmotion 		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_DIRECT_LINK_AUTOSYNC_ENABLE	Auto Sync		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_DIRECT_LINK_AUTOSYNC_DISABLE	Auto Sync		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_DIRECT_LINK_SYNCHRONIZE	Synchronize		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_DIRECT_LINK_CONNECTIONS	Connections		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_EXPORT_TO_DATASMITH_FILE	Export to Datasmith file		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_MESSAGES	Export Messages		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_SETTINGS	Export Settings		False	True
+View	View	Presentation	/RibbonFoldPanel()/RibbonSplitButton(Twinmotion)	Autodesk.Windows.RibbonButton	ID_TWINMOTION_SUB_SETTINGS	Substitution Settings		False	True
+View	View	Create		Autodesk.Windows.RibbonSplitButton	ID_VIEW_DEFAULT_3DVIEW	3D  View	Default 3D View	False	True
+View	View	Create	/RibbonSplitButton(3D  View)	Autodesk.Windows.RibbonButton	ID_VIEW_DEFAULT_3DVIEW	Default 3D View		False	True
+View	View	Create	/RibbonSplitButton(3D  View)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_3DVIEW	Camera		False	True
+View	View	Create	/RibbonSplitButton(3D  View)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_WALKTHROUGH	Walkthrough		False	True
+View	View	Create		Autodesk.Windows.RibbonButton	ID_VIEW_DEFAULT_3DVIEW	Default  3D	Default 3D View	False	True
+View	View	Create		Autodesk.Windows.RibbonButton	ID_VIEW_NEW_3DVIEW	Camera		False	True
+View	View	Create		Autodesk.Windows.RibbonButton	ID_VIEW_NEW_SECTION	Section		False	True
+View	View	Create		Autodesk.Windows.RibbonSplitButton	ID_VIEW_NEW_CALLOUT_RibbonListButton	Callout	Callout	False	True
+View	View	Create	/RibbonSplitButton(Callout)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_CALLOUT	Rectangle		False	True
+View	View	Create	/RibbonSplitButton(Callout)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_CALLOUT_SKETCH	Sketch		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_PLAN	Floor  Plan		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_STRUCTURAL_PLAN	Structural  Plan		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_NEW_PLAN_REGION	Plan  Region		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_PLAN_VIEWS_RibbonListButton	Plan  Views		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_PLAN	Floor Plan		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_RCP	Reflected Ceiling Plan		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_STRUCTURAL_PLAN	Structural Plan		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_NEW_PLAN_REGION	Plan Region		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_AREASCHEME	Area Plan		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_BUTTON_BRACING_ELEVATION_RibbonListButton	Elevation	Framing Elevation	False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_BRACING_ELEVATION	Framing Elevation		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Building Elevation		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Elevation		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton	Elevation		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Elevation		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_BRACING_ELEVATION	Framing Elevation		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton	Elevation		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Elevation		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_BRACING_ELEVATION	Framing Elevation		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_DRAFTING	Drafting  View		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_DUPLICATE_VIEWS_RibbonListButton	Duplicate  View		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Duplicate  View)	Autodesk.Windows.RibbonButton	ID_PRJBROWSER_COPY	Duplicate View		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Duplicate  View)	Autodesk.Windows.RibbonButton	ID_DUPLICATE_WITH_DETAILING	Duplicate with Detailing		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Duplicate  View)	Autodesk.Windows.RibbonButton	ID_CREATE_DEPENDENT_VIEW	Duplicate as Dependent		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_LEGENDS_RibbonListButton	Legends		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Legends)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_LEGEND	Legend		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Legends)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_KEYNOTE_LEGEND	Keynote Legend		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_SCHEDULES_RibbonListButton	Schedules		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_SCHEDULE	Schedule/Quantities		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_GRAPH_SCHED_COLUMN	Graphical Column Schedule		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_MATERIAL_TAKEOFF	Material Takeoff		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_DRAWING_LIST	Sheet List		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_NOTE_BLOCK	Note Block		False	True
+View	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_NEW_VIEWLIST	View List		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_REVISION_SCHEDULE	Revision  Schedule		False	True
+View	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VOLUME_OF_INTEREST	Scope  Box		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_SHEET	Sheet		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_PLACE_VIEW	View	Place View	False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_TITLEBLOCK	Title  Block		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_REVISIONS	Revisions	Sheet Issues/Revisions	False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_GUIDE_GRID	Guide  Grid		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_NEW_MATCHLINE	Matchline		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_NEW_REFERENCE_VIEWER	View  Reference		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_VIEWPORTS_RibbonListButton	Viewports		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()/RibbonSplitButton(Viewports)	Autodesk.Windows.RibbonButton	ID_VIEWPORT_ACTIVATE	Activate View		False	True
+View	View	Sheet Composition	/RibbonFoldPanel()/RibbonSplitButton(Viewports)	Autodesk.Windows.RibbonButton	ID_VIEWPORT_ACTIVATE_BASE	Deactivate View		False	True
+View	View	Windows		UIFramework.SwitchWindowMenuButton	manage_views	Switch  Windows		False	True
+View	View	Windows		Autodesk.Windows.RibbonButton	ID_VIEW_CLOSE_INACTIVE	Close  Inactive	Close Inactive Views	False	True
+View	View	Windows		Autodesk.Windows.RibbonButton	ID_VIEW_TAB	Tab  Views	Tab Views	False	True
+View	View	Windows		Autodesk.Windows.RibbonButton	ID_WINDOW_TILE_VERT	Tile  Views	Tile Views	False	True
+View	View	Windows		Autodesk.Windows.RibbonChecklistButton	HID_APPLICATION_ELEMENTS_RibbonListButton	User  Interface		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_SHOW_VIEWCUBE	ViewCube		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_NAVIGATION_BAR	Navigation Bar		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_VIEW_PROJECTEXPLORER	Project Browser		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_RBS_SYSTEM_NAVIGATOR	System Browser		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_PROPERTIES_PALETTE	Properties		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_FABPART_BROWSER	MEP Fabrication Parts		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_MEP_TOGGLE_PNID_BROWSER	P&ID Modeler		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_CONTENT_DELIVERY	Content Delivery		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_VIEW_STATUS_BAR	Status Bar		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_STATUSBAR_WORKSETS	Status Bar - Worksets		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_STATUSBAR_DESIGNOPTIONS	Status Bar - Design Options		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_STARTUP_PAGE	Recent Files		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonMenuItem	ID_BROWSER_ORGANIZATION	Browser Organization		False	True
+View	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonMenuItem	ID_KEYBOARD_SHORTCUT_DIALOG	Keyboard Shortcuts		False	True
+View	View	Windows		Autodesk.Windows.RibbonButton	ID_CANVAS_THEME_SWITCH	Canvas  Theme	Canvas Theme	False	True
+Manage	Manage	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Manage	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Manage	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Manage	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Manage	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Manage	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Manage	Manage	Settings		Autodesk.Windows.RibbonButton	ID_SETTINGS_MATERIALS	Materials		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_OBJECTSTYLES	Object  Styles		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SNAPPING	Snaps		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_PROJECT_INFORMATION	Project  Information		False	True
+Manage	Manage	Settings		Autodesk.Windows.RibbonButton	ID_SETTINGS_FORGE_PARAMETERS	Parameters  Service		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_PROJECT_PARAMETERS	Project  Parameters		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FILE_EXTERNAL_PARAMETERS	Shared  Parameters		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_GLOBAL_PARAMETERS	Global  Parameters		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TRANSFER_PROJECT_STANDARDS	Transfer  Project Standards		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_PURGE_UNUSED	Purge  Unused		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_UNITS	Project  Units		False	True
+Manage	Manage	Settings		Autodesk.Windows.RibbonButton	ID_NUMBERING_OPTIONS	Numbering		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_STRUCTURAL_SETTINGS_GENERAL_RibbonListButton	Structural  Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Structural  Settings)	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS	Structural  Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Structural  Settings)	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_CONNECTION_SETTINGS	Connection  Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_RME_SETTINGS_RibbonListButton	MEP  Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_SETTINGS	Mechanical Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_SETTINGS	Electrical Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_MEP_FABRICATION_SETTINGS	Fabrication Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	IDS_CONDUCTOR_CABLE_DIALOG	Electrical Conductor and Cable Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_LOAD_CLASSIFICATION	Load Classifications		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_DEMAND_FACTOR	Demand Factors		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_BUILDINGSPACE_TYPE_SETTINGS	Building/Space Type Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_OPERATING_SCHEDULES	Building Operating Schedules		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_MEP_ELECTRICAL_ANALYSIS_SETTINGS	Electrical Analytical Load Type Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_MEP_PNID_SETTINGS	P&ID Settings		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_PANELSCHEDULE_TEMPLATES	Panel Schedule  Templates		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Panel Schedule  Templates)	Autodesk.Windows.RibbonButton	ID_RBS_PANEL_SCHEDULE_MANAGE_TEMPLATES	Manage Templates		False	True
+Manage	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Panel Schedule  Templates)	Autodesk.Windows.RibbonButton	ID_RBS_PANEL_SCHEDULE_EDIT_A_TEMPLATE	Edit a Template		False	True
+Manage	Manage	Settings		UIFramework.RvtMenuSplitButton	HID_SETTINGS_RibbonListButton	Additional  Settings		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_LINE_STYLES	Line Styles		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_PENS	Line Weights		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_PEN_FONTS	Line Patterns		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_REVISIONS	Sheet Issues/Revisions		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_FILLPATTERNS	Fill Patterns		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ANNOTATIONS_MENU	Annotations		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ANNOTATIONS_LEADERS	Arrowheads		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_DIMENSIONS	Temporary Dimensions		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_VIEWTAGSTYLES_SECTIONTAGS	Section Tags		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_VIEWTAGSTYLES_ELEVATIONTAGS	Elevation Tags		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_VIEWTAGSTYLES_CALLOUTTAGS	Callout Tags		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_KEYNOTING	Keynoting Settings		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_HALFTONE	Halftone / Underlay		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_SUNANDSHADOWSSETTINGS	Sun Settings		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_RENDERING_APPEARANCE	Material Assets		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ANALYSIS_DISPLAY_STYLES	Analysis Display Styles		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_DETAIL_LEVEL	Detail Level		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ASSEMBLY_CODE	Assembly Code		False	True
+Manage	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_MULTIPLE_VALUES_INDICATOR_SETTINGS	Multiple Values Indication		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_GEO_MANAGE_LOCATIONS	Location		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_COORDINATES_RibbonListButton	Coordinates		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Coordinates)	Autodesk.Windows.RibbonButton	ID_GEO_ACQUIRE_COORDINATES	Acquire Coordinates		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Coordinates)	Autodesk.Windows.RibbonButton	ID_GEO_PUBLISH_COORDINATES	Publish Coordinates		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Coordinates)	Autodesk.Windows.RibbonButton	ID_RESET_SHARED_COORDINATES	Reset Shared Coordinates		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Coordinates)	Autodesk.Windows.RibbonButton	ID_SPECIFY_SHARED_COORDINATES	Specify Coordinates at Point		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Coordinates)	Autodesk.Windows.RibbonButton	ID_REPORT_SHARED_COORDINATES	Report Shared Coordinates		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Coordinates)	Autodesk.Windows.RibbonButton	ID_REPORT_COORDINATES	Report Coordinates		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_PROJECT_POSITION_RibbonListButton	Position		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Position)	Autodesk.Windows.RibbonButton	ID_RELOCATE_SHARED_COORDINATES	Relocate Project		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Position)	Autodesk.Windows.RibbonButton	ID_RELOCATE_PROJECT	Relocate Project		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Position)	Autodesk.Windows.RibbonButton	ID_ROTATE_SHARED_COORDINATES	Rotate True North		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Position)	Autodesk.Windows.RibbonButton	ID_ROTATE_TRUE_NORTH	Rotate True North		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Position)	Autodesk.Windows.RibbonButton	ID_MIRROR_PROJECT	Mirror Project		False	True
+Manage	Manage	Project Location	/RibbonFoldPanel()/RibbonSplitButton(Position)	Autodesk.Windows.RibbonButton	ID_ROTATE_PROJECT	Rotate Project North		False	True
+Manage	Manage	Design Options		Autodesk.Windows.RibbonButton	ID_EDIT_DESIGNOPTIONS	Design  Options		False	True
+Manage	Manage	Design Options	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_ADDTODESIGNOPTIONSET	Add to Set		False	True
+Manage	Manage	Design Options	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_PICKS_OPTION	Pick to Edit		False	True
+Manage	Manage	Design Options	/RibbonRowPanel()	UIFramework.DesignOptionCombo	DesignOptions	Active Design Option		False	True
+Manage	Manage	Design Options	/RibbonRowPanel()/DesignOptionCombo(Active Design Option)	Autodesk.Windows.RibbonCommandItem	-1	Main Model		False	True
+Manage	Manage	Generative Design		Autodesk.Windows.RibbonButton	ID_GENERATIVE_DESIGN_CREATE_STUDY	Create  Study		False	True
+Manage	Manage	Generative Design		Autodesk.Windows.RibbonButton	ID_GENERATIVE_DESIGN_EXPLORE_OUTCOMES	Explore  Outcomes		False	True
+Manage	Manage	Manage Project		Autodesk.Windows.RibbonButton	ID_LINKED_DWG	Manage  Links		False	True
+Manage	Manage	Manage Project	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_RASTER_SYMBOLS	Manage  Images		False	True
+Manage	Manage	Manage Project	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DECAL_TYPES	Decal  Types		False	True
+Manage	Manage	Manage Project	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_STARTING_VIEW	Starting  View		False	True
+Manage	Manage	Phasing		Autodesk.Windows.RibbonButton	ID_SETTINGS_PHASES	Phases		False	True
+Manage	Manage	Selection	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FILTERS_SELECTION_SAVE	Save	Save Selection	False	True
+Manage	Manage	Selection	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RETRIEVE_FILTERS	Load	Load Selection	False	True
+Manage	Manage	Selection	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_SELECTIONS	Edit	Edit Selection	False	True
+Manage	Manage	Inquiry	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_IDS_OF_SELECTION	IDs of  Selection		False	True
+Manage	Manage	Inquiry	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SELECT_BY_ID	Select  by ID		False	True
+Manage	Manage	Inquiry	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_REVIEW_WARNINGS	Warnings	Review Warnings	False	True
+Manage	Manage	Extensions	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ADD_IN_MANAGER	Add-Ins  Manager		False	True
+Manage	Manage	Extensions	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TOOLS_MACROS	Macro  Manager		False	True
+Manage	Manage	Extensions	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TOOLS_MACROSECURITY	Macro  Security		False	True
+Manage	Manage	Visual Programming		Autodesk.Windows.RibbonButton	ID_VISUAL_PROGRAMMING_DYNAMO	Dynamo		False	True
+Manage	Manage	Visual Programming		Autodesk.Windows.RibbonButton	ID_PLAYLIST_DYNAMO	Dynamo  Player		False	True
+Home_Family	Create	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		True	True
+Home_Family	Create	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		True	True
+Home_Family	Create	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		True	True
+Home_Family	Create	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		True	True
+Home_Family	Create	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		True	True
+Home_Family	Create	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		True	True
+Home_Family	Create	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_TYPE	Type Properties		True	True
+Home_Family	Create	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_PROPERTIES_PALETTE	Properties		True	True
+Home_Family	Create	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMILYHOST	Family Category and Parameters		True	True
+Home_Family	Create	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_FAMILY_TYPE	Family Types		True	True
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REBAR_CURVE	Rebar	Rebar Line	True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REFERENCE_CURVE	Reference	Reference Line	True	False
+Home_Family	Create	Draw		UIFramework.SketchGallery	SketchGallery			True	False
+Home_Family	Create	Draw		Autodesk.Windows.RibbonButton	ID_MAJOR_SEGMENT	Major  Segment		True	False
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CURVE	Line		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMDETAIL	Detail  Component		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_DETAIL_GROUP_RibbonListButton	Detail  Group		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_DETAIL_GROUP	Place Detail Group		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAM_ANN_INST	Symbol		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MASKING_REGION	Masking  Region		True	True
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FILLED_REGION	Filled  Region		True	True
+Home_Family	Create	Detail		Autodesk.Windows.RibbonButton	ID_OBJECTS_CURVE	Line		True	False
+Home_Family	Create	Detail		Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMDETAIL	Detail  Component		True	False
+Home_Family	Create	Detail		Autodesk.Windows.RibbonSplitButton	HID_DETAIL_GROUP_RibbonListButton	Detail  Group		True	False
+Home_Family	Create	Detail	/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_DETAIL_GROUP	Place Detail Group		True	False
+Home_Family	Create	Detail	/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		True	False
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_TRUSS_TOP_CHORD_CURVE	Top  Chord		True	False
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_TRUSS_WEB_CURVE	Web		True	False
+Home_Family	Create	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_TRUSS_BOTTOM_CHORD_CURVE	Bottom  Chord		True	False
+Home_Family	Create	Detail		Autodesk.Windows.RibbonSplitButton	HID_DETAIL_GROUP_RibbonListButton	Detail  Group		True	False
+Home_Family	Create	Detail	/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_DETAIL_GROUP	Place Detail Group		True	False
+Home_Family	Create	Detail	/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_CURVE	Model	Model Line	True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REFERENCE_CURVE	Reference	Reference Line	True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_CLINE	Plane	Reference Plane	True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_SPLIT_FACE_IN_NEW_FAMILIES	Split Face		True	False
+Home_Family	Create	Draw		UIFramework.SketchGallery	SketchGallery			True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	IDC_DRAW_ON_FACE	Face	Draw on Face	True	False
+Home_Family	Create	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	IDC_DRAW_ON_WORKPLANE	Work  Plane	Draw on Work Plane	True	False
+Home_Family	Create	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	True	False
+Home_Family	Create	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	True	False
+Home_Family	Create	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		True	False
+Home_Family	Create	Work Plane	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	True	False
+Home_Family	Create	Work Plane	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	True	False
+Home_Family	Create	Model		Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMSYM	Component	Place a Component	True	False
+Home_Family	Create	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned	Aligned Dimension	True	True
+Home_Family	Create	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear	Linear Dimension	True	True
+Home_Family	Create	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular	Angular Dimension	True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial	Radial Dimension	True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter	Diameter Dimension	True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc  Length	Arc Length Dimension	True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot  Elevation		True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot  Coordinate		True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot  Slope		True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_ALIGNMENT_STATION_LABEL_RibbonListButton	Alignment  Station		True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()/RibbonSplitButton(Alignment  Station)	Autodesk.Windows.RibbonButton	ID_ALIGNMENT_STATION_LABEL	Alignment Station		True	True
+Home_Family	Create	Dimension	/RibbonFoldPanel()/RibbonSplitButton(Alignment  Station)	Autodesk.Windows.RibbonButton	ID_ALIGNMENT_STATION_LABEL_SET	Alignment Station Set		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_LINEAR	Linear Dimension Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_ANGULAR	Angular Dimension Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_RADIAL	Radial Dimension Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_DIAMETER	Diameter Dimension Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_ELEVATION	Spot Elevation Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_COORDINATE	Spot Coordinate Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_SLOPE	Spot Slope Types		True	True
+Home_Family	Create	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_ALIGNMENT_STATION_LABEL	Alignment Station Label Types		True	True
+Home_Family	Create	Text		Autodesk.Windows.RibbonButton	ID_OBJECTS_TAG_NOTE	Label		True	True
+Home_Family	Create	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_TEXT_NOTE	Text		True	True
+Home_Family	Create	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CHECK_SPELLING	Check  Spelling		True	True
+Home_Family	Create	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FIND_REPLACE	Find/  Replace		True	True
+Home_Family	Create	Text	DialogLauncher	Autodesk.Windows.RibbonButton	ID_SETTINGS_TEXT		Text Types	True	True
+Home_Family	Create	Forms	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_EXTRUSION	Extrusion	Solid Extrusion	True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_BLEND	Blend	Solid Blend	True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_REVOLUTION	Revolve	Solid Revolve	True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_SWEEP	Sweep	Solid Sweep	True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_SWEPTBLEND	Swept  Blend	Solid Swept Blend	True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_VOID_RibbonListButton	Void  Forms		True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()/RibbonSplitButton(Void  Forms)	Autodesk.Windows.RibbonButton	ID_OBJECTS_EXTRUSION_CUT	Void Extrusion		True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()/RibbonSplitButton(Void  Forms)	Autodesk.Windows.RibbonButton	ID_OBJECTS_BLEND_CUT	Void Blend		True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()/RibbonSplitButton(Void  Forms)	Autodesk.Windows.RibbonButton	ID_OBJECTS_REVOLUTION_CUT	Void Revolve		True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()/RibbonSplitButton(Void  Forms)	Autodesk.Windows.RibbonButton	ID_OBJECTS_SWEEP_CUT	Void Sweep		True	False
+Home_Family	Create	Forms	/RibbonFoldPanel()/RibbonSplitButton(Void  Forms)	Autodesk.Windows.RibbonButton	ID_OBJECTS_SWEPTBLEND_CUT	Void Swept Blend		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CURVE	Model  Line		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMSYM	Component	Place a Component	True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MASS	Place  Mass		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_MODEL_GROUP_RibbonListButton	Model  Group		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_GROUP	Place Model Group		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_MODELTEXT	Model  Text		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_OPENING	Opening		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_MODEL_GROUP_RibbonListButton	Model  Group		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_GROUP	Place Model Group		True	False
+Home_Family	Create	Model	/RibbonFoldPanel()/RibbonSplitButton(Model  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		True	False
+Home_Family	Create	Control		Autodesk.Windows.RibbonButton	ID_OBJECTS_CONTROL	Control		True	False
+Home_Family	Create	Connectors	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_ELECTRICAL_CONNECTOR	Electrical  Connector		True	False
+Home_Family	Create	Connectors	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_DUCT_CONNECTOR	Duct  Connector		True	False
+Home_Family	Create	Connectors	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_PIPE_CONNECTOR	Pipe  Connector		True	False
+Home_Family	Create	Connectors	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_CABLETRAY_CONNECTOR	Cable Tray  Connector		True	False
+Home_Family	Create	Connectors	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_CONDUIT_CONNECTOR	Conduit  Connector		True	False
+Home_Family	Create	Connectors	/RibbonSplitButton()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_ELECTRICAL_CONNECTOR	Connector	Electrical Connector	True	False
+Home_Family	Create	Connectors	/RibbonSplitButton()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_DUCT_CONNECTOR	Connector	Duct Connector	True	False
+Home_Family	Create	Connectors	/RibbonSplitButton()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_PIPE_CONNECTOR	Connector	Pipe Connector	True	False
+Home_Family	Create	Connectors	/RibbonSplitButton()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_CABLETRAY_CONNECTOR	Connector	Cable Tray Connector	True	False
+Home_Family	Create	Connectors	/RibbonSplitButton()	Autodesk.Windows.RibbonButton	ID_RBS_ADD_CONDUIT_CONNECTOR	Connector	Conduit Connector	True	False
+Home_Family	Create	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_LEVEL	Level		True	True
+Home_Family	Create	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_GRID	Grid		True	True
+Home_Family	Create	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_REFERENCE_CURVE	Reference  Line		True	True
+Home_Family	Create	Datum	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Reference  Plane		True	True
+Home_Family	Create	Datum		Autodesk.Windows.RibbonButton	ID_OBJECTS_LEVEL	Level		True	False
+Home_Family	Create	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	True	True
+Home_Family	Create	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	True	True
+Home_Family	Create	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		True	True
+Home_Family	Create	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	True	True
+Home_Family	Create	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_CLINE	Ref  Plane	Reference Plane	True	True
+Home_Family	Create	Work Plane	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	True	True
+Home_Family	Create	Rebar Types		Autodesk.Windows.RibbonButton	ID_REBAR_SHAPE_ALLOWABLE_BAR_TYPES	Allowable  Bar Types		True	False
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Manage		Autodesk.Windows.RibbonButton	ID_LINKED_DWG	Manage  Links		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link		Autodesk.Windows.RibbonButton	ID_RVTDOC_LINK	Link  Revit		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link		Autodesk.Windows.RibbonButton	ID_IFC_LINK	Link  IFC		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link		Autodesk.Windows.RibbonButton	ID_FILE_CADFORMAT_LINK	Link  CAD		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link		Autodesk.Windows.RibbonButton	ID_FILE_TOPOSURFACE_LINK	Link  Topography		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link		Autodesk.Windows.RibbonButton	ID_TOPOGRAPHY_LINK	Link  Topography		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MARKUPS_LOAD	DWF  Markup		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_RM_CREATE_DECAL_RibbonListButton	Decal	Place Decal	True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Decal)	Autodesk.Windows.RibbonButton	ID_RM_CREATE_DECAL	Place Decal		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Decal)	Autodesk.Windows.RibbonButton	ID_SETTINGS_DECAL_TYPES	Decal Types		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_POINT_CLOUD	Point  Cloud		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_COORDINATION_MODEL	Coordination  Model		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_COORDINATION_MODEL_RibbonListButton	Coordination  Model		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Coordination  Model)	Autodesk.Windows.RibbonButton	ID_COORDINATIONMODEL_ADD_LOCAL	Local		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()/RibbonSplitButton(Coordination  Model)	Autodesk.Windows.RibbonButton	ID_COORDINATIONMODEL_ADD_AUTODESKDOCS	Autodesk Docs		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_LINK_PDF	Link  PDF		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Link	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_LINK_IMAGE	Link  Image		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import		Autodesk.Windows.RibbonButton	ID_FILE_IMPORT	Import  CAD		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import		Autodesk.Windows.RibbonButton	ID_ABS_IMPORT_GBXML	Import  gbXML		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import		Autodesk.Windows.RibbonButton	ID_IMPORT_FAB_MAJ	Import MEP  Fabrication Job		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_RASTER_PDF	Import  PDF		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_RASTER	Import  Image		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_RASTER_SYMBOLS	Manage  Images		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_IMPORT_FAM_TYPES	Import  Family Types		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Import	DialogLauncher	Autodesk.Windows.RibbonButton	ID_FILE_IMPORT_ACAD_LINEWEIGHT_TABLE		Import Line Weights	True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_FAMILY_LOAD	Load  Family		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library	/RibbonSplitButton(Content  Catalog)	Autodesk.Windows.RibbonButton	ID_CONTENT_CATALOG_APP	Launch as App		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library	/RibbonSplitButton(Content  Catalog)	Autodesk.Windows.RibbonButton	ID_CONTENT_CATALOG_BROWSER	Launch in Browser		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library	/RibbonSplitButton(Content  Catalog)	Autodesk.Windows.RibbonButton	ID_CONTENT_CATALOG_DOCKED_WINDOW	Launch in Docked Window		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_FAMILY_LOAD_CLOUD	Load Autodesk  Family		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_FAMILY_LOAD	Load Framing  Family		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library		Autodesk.Windows.RibbonButton	ID_LOAD_GROUP	Load as  Group		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library		Autodesk.Windows.RibbonSplitButton	HID_INSERT_FROM_FILE_RibbonListButton	Insert  from File		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library	/RibbonSplitButton(Insert  from File)	Autodesk.Windows.RibbonButton	ID_INSERT_VIEWS_FROM_FILE	Insert Views from File		True	True
+Insert_AnnotationDetailModelMassConceptualProfileTrussFamily	Insert	Load from Library	/RibbonSplitButton(Insert  from File)	Autodesk.Windows.RibbonButton	ID_INSERT_2D_ELEMENTS_FROM_FILE	Insert 2D Elements from File		True	True
+Annotate_ModelMassFamily	Annotate	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Annotate_ModelMassFamily	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Annotate_ModelMassFamily	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Annotate_ModelMassFamily	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Annotate_ModelMassFamily	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Annotate_ModelMassFamily	Annotate	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Annotate_ModelMassFamily	Annotate	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned	Aligned Dimension	False	True
+Annotate_ModelMassFamily	Annotate	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear	Linear Dimension	False	True
+Annotate_ModelMassFamily	Annotate	Dimension		Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular	Angular Dimension	False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial	Radial Dimension	False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter	Diameter Dimension	False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc  Length	Arc Length Dimension	False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot  Elevation		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot  Coordinate		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot  Slope		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_ALIGNMENT_STATION_LABEL_RibbonListButton	Alignment  Station		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()/RibbonSplitButton(Alignment  Station)	Autodesk.Windows.RibbonButton	ID_ALIGNMENT_STATION_LABEL	Alignment Station		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonFoldPanel()/RibbonSplitButton(Alignment  Station)	Autodesk.Windows.RibbonButton	ID_ALIGNMENT_STATION_LABEL_SET	Alignment Station Set		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_LINEAR	Linear Dimension Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_ANGULAR	Angular Dimension Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_RADIAL	Radial Dimension Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DIMENSIONS_DIAMETER	Diameter Dimension Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_ELEVATION	Spot Elevation Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_COORDINATE	Spot Coordinate Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SPOT_SLOPE	Spot Slope Types		False	True
+Annotate_ModelMassFamily	Annotate	Dimension	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_ALIGNMENT_STATION_LABEL	Alignment Station Label Types		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_VIEW_DIR_SPEC_CURVE	Symbolic  Line		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMDETAIL	Detail  Component		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_DETAIL_GROUP_RibbonListButton	Detail  Group		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_OBJECTS_PLACE_DETAIL_GROUP	Place Detail Group		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()/RibbonSplitButton(Detail  Group)	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAM_ANN_INST	Symbol		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_MASKING_REGION	Masking  Region		False	True
+Annotate_ModelMassFamily	Annotate	Detail	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FILLED_REGION	Filled  Region		False	True
+Annotate_ModelMassFamily	Annotate	Text		Autodesk.Windows.RibbonButton	ID_OBJECTS_TAG_NOTE	Label		False	True
+Annotate_ModelMassFamily	Annotate	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_TEXT_NOTE	Text		False	True
+Annotate_ModelMassFamily	Annotate	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_CHECK_SPELLING	Check  Spelling		False	True
+Annotate_ModelMassFamily	Annotate	Text	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FIND_REPLACE	Find/  Replace		False	True
+Annotate_ModelMassFamily	Annotate	Text	DialogLauncher	Autodesk.Windows.RibbonButton	ID_SETTINGS_TEXT		Text Types	False	True
+View_Family	View	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		True	True
+View_Family	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		True	True
+View_Family	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		True	True
+View_Family	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		True	True
+View_Family	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		True	True
+View_Family	View	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		True	True
+View_Family	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_CATEGORY_VISIBILITY	Visibility/  Graphics		True	True
+View_Family	View	Graphics	/RibbonFoldPanel()	Autodesk.Windows.RibbonToggleButton	ID_THIN_LINES	Thin  Lines		True	True
+View_Family	View	Create		Autodesk.Windows.RibbonSplitButton	ID_VIEW_DEFAULT_3DVIEW	3D  View	Default 3D View	True	True
+View_Family	View	Create	/RibbonSplitButton(3D  View)	Autodesk.Windows.RibbonButton	ID_VIEW_DEFAULT_3DVIEW	Default 3D View		True	True
+View_Family	View	Create	/RibbonSplitButton(3D  View)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_3DVIEW	Camera		True	True
+View_Family	View	Create	/RibbonSplitButton(3D  View)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_WALKTHROUGH	Walkthrough		True	True
+View_Family	View	Create		Autodesk.Windows.RibbonButton	ID_VIEW_DEFAULT_3DVIEW	Default  3D	Default 3D View	True	True
+View_Family	View	Create		Autodesk.Windows.RibbonButton	ID_VIEW_NEW_3DVIEW	Camera		True	True
+View_Family	View	Create		Autodesk.Windows.RibbonButton	ID_VIEW_NEW_SECTION	Section		True	True
+View_Family	View	Create		Autodesk.Windows.RibbonSplitButton	ID_VIEW_NEW_CALLOUT_RibbonListButton	Callout	Callout	True	True
+View_Family	View	Create	/RibbonSplitButton(Callout)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_CALLOUT	Rectangle		True	True
+View_Family	View	Create	/RibbonSplitButton(Callout)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_CALLOUT_SKETCH	Sketch		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_PLAN	Floor  Plan		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_STRUCTURAL_PLAN	Structural  Plan		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_NEW_PLAN_REGION	Plan  Region		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_PLAN_VIEWS_RibbonListButton	Plan  Views		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_PLAN	Floor Plan		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_RCP	Reflected Ceiling Plan		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_STRUCTURAL_PLAN	Structural Plan		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_NEW_PLAN_REGION	Plan Region		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Plan  Views)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_AREASCHEME	Area Plan		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_BUTTON_BRACING_ELEVATION_RibbonListButton	Elevation	Framing Elevation	True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_BRACING_ELEVATION	Framing Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Building Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton	Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_BRACING_ELEVATION	Framing Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton	Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_INTERIOR_ROOM_ELEVATION	Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Elevation)	Autodesk.Windows.RibbonButton	ID_BUTTON_BRACING_ELEVATION	Framing Elevation		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_DRAFTING	Drafting  View		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_DUPLICATE_VIEWS_RibbonListButton	Duplicate  View		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Duplicate  View)	Autodesk.Windows.RibbonButton	ID_PRJBROWSER_COPY	Duplicate View		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Duplicate  View)	Autodesk.Windows.RibbonButton	ID_DUPLICATE_WITH_DETAILING	Duplicate with Detailing		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Duplicate  View)	Autodesk.Windows.RibbonButton	ID_CREATE_DEPENDENT_VIEW	Duplicate as Dependent		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_LEGENDS_RibbonListButton	Legends		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Legends)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_LEGEND	Legend		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Legends)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_KEYNOTE_LEGEND	Keynote Legend		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_SCHEDULES_RibbonListButton	Schedules		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_SCHEDULE	Schedule/Quantities		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_GRAPH_SCHED_COLUMN	Graphical Column Schedule		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_MATERIAL_TAKEOFF	Material Takeoff		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_DRAWING_LIST	Sheet List		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_NOTE_BLOCK	Note Block		True	True
+View_Family	View	Create	/RibbonFoldPanel()/RibbonSplitButton(Schedules)	Autodesk.Windows.RibbonButton	ID_NEW_VIEWLIST	View List		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_NEW_REVISION_SCHEDULE	Revision  Schedule		True	True
+View_Family	View	Create	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_VOLUME_OF_INTEREST	Scope  Box		True	True
+View_Family	View	Windows		UIFramework.SwitchWindowMenuButton	manage_views	Switch  Windows		True	True
+View_Family	View	Windows		Autodesk.Windows.RibbonButton	ID_VIEW_CLOSE_INACTIVE	Close  Inactive	Close Inactive Views	True	True
+View_Family	View	Windows		Autodesk.Windows.RibbonButton	ID_VIEW_TAB	Tab  Views	Tab Views	True	True
+View_Family	View	Windows		Autodesk.Windows.RibbonButton	ID_WINDOW_TILE_VERT	Tile  Views	Tile Views	True	True
+View_Family	View	Windows		Autodesk.Windows.RibbonChecklistButton	HID_APPLICATION_ELEMENTS_RibbonListButton	User  Interface		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_SHOW_VIEWCUBE	ViewCube		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_NAVIGATION_BAR	Navigation Bar		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_VIEW_PROJECTEXPLORER	Project Browser		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_RBS_SYSTEM_NAVIGATOR	System Browser		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_PROPERTIES_PALETTE	Properties		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_FABPART_BROWSER	MEP Fabrication Parts		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_MEP_TOGGLE_PNID_BROWSER	P&ID Modeler		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_CONTENT_DELIVERY	Content Delivery		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_VIEW_STATUS_BAR	Status Bar		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_STATUSBAR_WORKSETS	Status Bar - Worksets		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_STATUSBAR_DESIGNOPTIONS	Status Bar - Design Options		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonToggleButton	ID_STARTUP_PAGE	Recent Files		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonMenuItem	ID_BROWSER_ORGANIZATION	Browser Organization		True	True
+View_Family	View	Windows	/RibbonChecklistButton(User  Interface)	Autodesk.Windows.RibbonMenuItem	ID_KEYBOARD_SHORTCUT_DIALOG	Keyboard Shortcuts		True	True
+View_Family	View	Windows		Autodesk.Windows.RibbonButton	ID_CANVAS_THEME_SWITCH	Canvas  Theme	Canvas Theme	True	True
+Manage_Family	Manage	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		True	True
+Manage_Family	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		True	True
+Manage_Family	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		True	True
+Manage_Family	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		True	True
+Manage_Family	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		True	True
+Manage_Family	Manage	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		True	True
+Manage_Family	Manage	Settings		Autodesk.Windows.RibbonButton	ID_SETTINGS_MATERIALS	Materials		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_OBJECTSTYLES	Object  Styles		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_SNAPPING	Snaps		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_PROJECT_INFORMATION	Project  Information		True	True
+Manage_Family	Manage	Settings		Autodesk.Windows.RibbonButton	ID_SETTINGS_FORGE_PARAMETERS	Parameters  Service		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_PROJECT_PARAMETERS	Project  Parameters		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_FILE_EXTERNAL_PARAMETERS	Shared  Parameters		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_GLOBAL_PARAMETERS	Global  Parameters		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TRANSFER_PROJECT_STANDARDS	Transfer  Project Standards		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_PURGE_UNUSED	Purge  Unused		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_UNITS	Project  Units		True	True
+Manage_Family	Manage	Settings		Autodesk.Windows.RibbonButton	ID_NUMBERING_OPTIONS	Numbering		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_STRUCTURAL_SETTINGS_GENERAL_RibbonListButton	Structural  Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Structural  Settings)	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_SETTINGS	Structural  Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Structural  Settings)	Autodesk.Windows.RibbonButton	ID_STRUCTURAL_CONNECTION_SETTINGS	Connection  Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	HID_RME_SETTINGS_RibbonListButton	MEP  Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_MECHANICAL_SETTINGS	Mechanical Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_SETTINGS	Electrical Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_MEP_FABRICATION_SETTINGS	Fabrication Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	IDS_CONDUCTOR_CABLE_DIALOG	Electrical Conductor and Cable Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_LOAD_CLASSIFICATION	Load Classifications		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_ELECTRICAL_DEMAND_FACTOR	Demand Factors		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_RBS_BUILDINGSPACE_TYPE_SETTINGS	Building/Space Type Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_OPERATING_SCHEDULES	Building Operating Schedules		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_MEP_ELECTRICAL_ANALYSIS_SETTINGS	Electrical Analytical Load Type Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(MEP  Settings)	Autodesk.Windows.RibbonButton	ID_MEP_PNID_SETTINGS	P&ID Settings		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()	Autodesk.Windows.RibbonSplitButton	ID_PANELSCHEDULE_TEMPLATES	Panel Schedule  Templates		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Panel Schedule  Templates)	Autodesk.Windows.RibbonButton	ID_RBS_PANEL_SCHEDULE_MANAGE_TEMPLATES	Manage Templates		True	True
+Manage_Family	Manage	Settings	/RibbonFoldPanel()/RibbonSplitButton(Panel Schedule  Templates)	Autodesk.Windows.RibbonButton	ID_RBS_PANEL_SCHEDULE_EDIT_A_TEMPLATE	Edit a Template		True	True
+Manage_Family	Manage	Settings		UIFramework.RvtMenuSplitButton	HID_SETTINGS_RibbonListButton	Additional  Settings		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_LINE_STYLES	Line Styles		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_PENS	Line Weights		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_PEN_FONTS	Line Patterns		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_REVISIONS	Sheet Issues/Revisions		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_FILLPATTERNS	Fill Patterns		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ANNOTATIONS_MENU	Annotations		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ANNOTATIONS_LEADERS	Arrowheads		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_DIMENSIONS	Temporary Dimensions		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_VIEWTAGSTYLES_SECTIONTAGS	Section Tags		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_VIEWTAGSTYLES_ELEVATIONTAGS	Elevation Tags		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_VIEWTAGSTYLES_CALLOUTTAGS	Callout Tags		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)/RvtLargeMenuItem(Annotations)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_KEYNOTING	Keynoting Settings		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_HALFTONE	Halftone / Underlay		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_SUNANDSHADOWSSETTINGS	Sun Settings		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_RENDERING_APPEARANCE	Material Assets		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ANALYSIS_DISPLAY_STYLES	Analysis Display Styles		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_DETAIL_LEVEL	Detail Level		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_SETTINGS_ASSEMBLY_CODE	Assembly Code		True	True
+Manage_Family	Manage	Settings	/RvtMenuSplitButton(Additional  Settings)	UIFramework.RvtLargeMenuItem	ID_MULTIPLE_VALUES_INDICATOR_SETTINGS	Multiple Values Indication		True	True
+Manage_Family	Manage	Project Location		Autodesk.Windows.RibbonButton	ID_GEO_MANAGE_LOCATIONS	Location		True	False
+Manage_Family	Manage	Manage Project		Autodesk.Windows.RibbonButton	ID_LINKED_DWG	Manage  Links		True	True
+Manage_Family	Manage	Manage Project	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_RASTER_SYMBOLS	Manage  Images		True	True
+Manage_Family	Manage	Manage Project	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SETTINGS_DECAL_TYPES	Decal  Types		True	True
+Manage_Family	Manage	Manage Project	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_STARTING_VIEW	Starting  View		True	True
+Manage_Family	Manage	Inquiry	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_IDS_OF_SELECTION	IDs of  Selection		True	True
+Manage_Family	Manage	Inquiry	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_SELECT_BY_ID	Select  by ID		True	True
+Manage_Family	Manage	Inquiry	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_REVIEW_WARNINGS	Warnings	Review Warnings	True	True
+Manage_Family	Manage	Extensions	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_ADD_IN_MANAGER	Add-Ins  Manager		True	True
+Manage_Family	Manage	Extensions	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TOOLS_MACROS	Macro  Manager		True	True
+Manage_Family	Manage	Extensions	/RibbonFoldPanel()	Autodesk.Windows.RibbonButton	ID_TOOLS_MACROSECURITY	Macro  Security		True	True
+Manage_Family	Manage	Visual Programming		Autodesk.Windows.RibbonButton	ID_VISUAL_PROGRAMMING_DYNAMO	Dynamo		True	True
+Manage_Family	Manage	Visual Programming		Autodesk.Windows.RibbonButton	ID_PLAYLIST_DYNAMO	Dynamo  Player		True	True
+Add-Ins	Add-Ins	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		True	True
+Add-Ins	Add-Ins	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		True	True
+Add-Ins	Add-Ins	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		True	True
+Add-Ins	Add-Ins	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		True	True
+Add-Ins	Add-Ins	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		True	True
+Add-Ins	Add-Ins	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		True	True
+Add-Ins	Add-Ins	External		Autodesk.Windows.RibbonSplitButton	EXTERNAL_TOOLS_BTN	External  Tools		True	False
+Add-Ins	Add-Ins	eTransmit		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%eTransmit%eTransmit	Transmit model(s)		True	True
+Add-Ins	Add-Ins	eTransmit	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%eTransmit%eTransmitHelp	Help		True	True
+Add-Ins	Add-Ins	eTransmit	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%eTransmit%eTransmitAbout	About		True	True
+Add-Ins	Add-Ins	FormIt Converter		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%FormIt Converter%Convert RFA to FormIt	Convert RFA to FormIt		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%alignLeftButton	Align Left		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%alignCenterButton	Align Center		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%alignRightButton	Align Right		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%alignTopButton	Align Top		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%alignMiddleButton	Align Middle		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%alignBottomButton	Align Bottom		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%distributeHorizontallyButton	Distribute Horizontally		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%distributeVerticallyButton	Distribute Vertically		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%ArrangeButton	Arrange Tags		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%UntangleVerticallyButton	Untangle Vertically		True	True
+Add-Ins	Add-Ins	Align	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%Align%UntangleHorizontallyButton	Untangle Horizontally		True	True
+Add-Ins	Add-Ins	RST		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_Builder	Builder		True	True
+Add-Ins	Add-Ins	RST		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_Loader	Loader		True	True
+Add-Ins	Add-Ins	RST		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_Rstify	RSTify		True	True
+Add-Ins	Add-Ins	RST		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_Health	Health		True	True
+Add-Ins	Add-Ins	RST		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Add-Ins%RST%RST_SearchIt	Search-It		True	True
+DiRootsOne	DiRootsOne	Data IO		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Data IO%SheetLink	SheetLink		True	True
+DiRootsOne	DiRootsOne	Data IO		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Data IO%PanelLink	PanelLink		True	True
+DiRootsOne	DiRootsOne	Data IO		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Data IO%TableGen	TableGen		True	True
+DiRootsOne	DiRootsOne	Data IO		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Data IO%OneParameter	OneParameter		True	True
+DiRootsOne	DiRootsOne	Views and Sheets		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Views and Sheets%btnSheetGen	SheetGen		True	True
+DiRootsOne	DiRootsOne	Views and Sheets		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Views and Sheets%btnViewManager	View Manager		True	True
+DiRootsOne	DiRootsOne	Views and Sheets		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Views and Sheets%QuickViews	QuickViews		True	True
+DiRootsOne	DiRootsOne	Views and Sheets		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Views and Sheets%btnViewAligner	View Aligner		True	True
+DiRootsOne	DiRootsOne	Manage		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Manage%FamilyReviser	FamilyReviser		True	True
+DiRootsOne	DiRootsOne	Manage		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Manage%ParaManager	ParaManager		True	True
+DiRootsOne	DiRootsOne	Find		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Find%OneFilter	OneFilter		True	True
+DiRootsOne	DiRootsOne	Find		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Find%Selections Manager	Selections Manager		True	True
+DiRootsOne	DiRootsOne	Utility		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Utility%btnReOrdering	ReOrdering		True	True
+DiRootsOne	DiRootsOne	Utility		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne%Utility%btnSectionBox	Section Boxer		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Select Points	Select Points		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()/RibbonSplitButton(Select Points)	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Select Points%Select Points	Select Points		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()/RibbonSplitButton(Select Points)	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Select Points%Select Between Levels	Select Between Levels		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Export	Export		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Import  DXF File	Import DXF File		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()/RibbonSplitButton(Import DXF File)	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Import  DXF File%Import DXF File	Import DXF File		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()/RibbonSplitButton(Import DXF File)	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Import  DXF File%Import ASCII point cloud file	Import ASCII point cloud file		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Undo	Undo		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Reset	Reset		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Redo	Redo		True	True
+DiRootsOne	DiRootsOne	 Point Cloud	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%DiRootsOne% Point Cloud%Show/Hide	Show/Hide		True	True
+Modify	Modify	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		True	True
+Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		True	True
+Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		True	True
+Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		True	True
+Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		True	True
+Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		True	True
+Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_TYPE	Type Properties		True	True
+Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_PROPERTIES_PALETTE	Properties		True	True
+Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMILYHOST	Family Category and Parameters		True	True
+Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_FAMILY_TYPE	Family Types		True	True
+Modify	Modify	Type Selector		UIFramework.TypeSelector	TypeSelector	Floor Plan	Type Selector	True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REBAR_CURVE	Rebar	Rebar Line	True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REFERENCE_CURVE	Reference	Reference Line	True	False
+Modify	Modify	Draw		UIFramework.SketchGallery	SketchGallery			True	False
+Modify	Modify	Draw		Autodesk.Windows.RibbonButton	ID_MAJOR_SEGMENT	Major  Segment		True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_CURVE	Model	Model Line	True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REFERENCE_CURVE	Reference	Reference Line	True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_CLINE	Plane	Reference Plane	True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_SPLIT_FACE_IN_NEW_FAMILIES	Split Face		True	False
+Modify	Modify	Draw		UIFramework.SketchGallery	SketchGallery			True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	IDC_DRAW_ON_FACE	Face	Draw on Face	True	False
+Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	IDC_DRAW_ON_WORKPLANE	Work  Plane	Draw on Work Plane	True	False
+Modify	Modify	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	True	False
+Modify	Modify	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	True	False
+Modify	Modify	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		True	False
+Modify	Modify	Work Plane	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	True	False
+Modify	Modify	Work Plane	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	True	False
+Modify	Modify	Clipboard		Autodesk.Windows.RibbonSplitButton	ID_EDIT_PASTE_RibbonListButton	Paste	Paste from Clipboard	True	True
+Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE	Paste from Clipboard		True	True
+Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_LEVEL_BY_NAME	Aligned to Selected Levels		True	True
+Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_VIEWS_BY_NAME	Aligned to Selected Views		True	True
+Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED	Aligned to Current View		True	True
+Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_SAME_PLACE	Aligned to Same Place		True	True
+Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_PICK_LEVEL	Aligned to Picked Level		True	True
+Modify	Modify	Clipboard	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CUT	Cut	Cut to Clipboard	True	True
+Modify	Modify	Clipboard	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_COPY	Copy	Copy to Clipboard	True	True
+Modify	Modify	Clipboard	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MATCH_TYPE	Match Type	Match Type Properties	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_EDIT_PAINT_RibbonListButton	Paint	Paint	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_PAINT	Paint		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_UNPAINT	Remove Paint		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_COPING_RibbonListButton	Cope	Apply Coping	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cope)	Autodesk.Windows.RibbonButton	ID_COPING	Apply Coping		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cope)	Autodesk.Windows.RibbonButton	ID_UNCOPING	Remove Coping		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_CUT_HOST_RibbonListButton	Cut	Cut Geometry	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cut)	Autodesk.Windows.RibbonButton	ID_CUT_HOST	Cut Geometry		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cut)	Autodesk.Windows.RibbonButton	ID_UNCUT_HOST	Uncut Geometry		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_JOIN_ELEMENTS_EDITOR_RibbonListButton	Join	Join Geometry	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Join)	Autodesk.Windows.RibbonButton	ID_JOIN_ELEMENTS_EDITOR	Join Geometry		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Join)	Autodesk.Windows.RibbonButton	ID_UNJOIN_ELEMENTS_EDITOR	Unjoin Geometry		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Join)	Autodesk.Windows.RibbonButton	ID_SWITCH_JOIN_ORDER_EDITOR	Switch Join Order		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_JOIN_ROOF	Join/Unjoin Roof		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_BEAM_JOINS	Beam/Column Joins		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_WALL_JOINS	Wall Joins		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_FACE	Split Face		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_EDIT_PAINT_RibbonListButton	Paint	Paint	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_PAINT	Paint		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_UNPAINT	Remove Paint		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_DEMOLISH	Demolish	Demolish	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_FACE_IN_NEW_FAMILIES	Split Face		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_EDIT_PAINT_RibbonListButton	Paint	Paint	True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_PAINT	Paint		True	True
+Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_UNPAINT	Remove Paint		True	True
+Modify	Modify	Controls		Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_ACTIVATE_CONTROLS	Activate	Activate Controls and Dimensions	True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_ALIGN	Align		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MOVE	Move		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OFFSET	Offset		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MOVE_COPY	Copy		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR	Mirror - Pick Axis		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_ROTATE	Rotate		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR_LINE	Mirror - Draw Axis		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_CORNER	Trim/Extend to Corner		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR	Mirror - Pick Axis		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OFFSET	Offset		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MOVE_COPY	Copy		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR_LINE	Mirror - Draw Axis		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_ROTATE	Rotate		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_CORNER	Trim/Extend to Corner		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT	Split Element		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CREATE_PATTERN	Array		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_REPEAT_COMPONENT	Repeat		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_SINGLE	Trim/Extend Single Element		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_WITH_GAP	Split with Gap		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_SCALE	Scale		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_MULTIPLE	Trim/Extend Multiple Elements		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_UNLOCK_ELEMENTS	Unpin		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_LOCK_ELEMENTS	Pin		True	True
+Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_BUTTON_DELETE	Delete		True	True
+Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	HID_HIDE_RibbonListButton	Hide in View		True	False
+Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Hide in View)	Autodesk.Windows.RibbonButton	ID_VIEW_HIDE_ELEMENTS	Hide Elements		True	False
+Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Hide in View)	Autodesk.Windows.RibbonButton	ID_VIEW_HIDE_CATEGORY	Hide Category		True	False
+Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Hide in View)	Autodesk.Windows.RibbonButton	ID_VIEW_GO_FILTER	Hide by Filter		True	False
+Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_DISPLACEMENT_CREATE	Displace Elements		True	False
+Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	HID_OVERRIDE_RibbonListButton	Override Graphics in View		True	False
+Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Override Graphics in View)	Autodesk.Windows.RibbonButton	ID_VIEW_OVERRIDE_ELEMENTS	Override by Element		True	False
+Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Override Graphics in View)	Autodesk.Windows.RibbonButton	ID_VIEW_OVERRIDE_CATEGORY	Override by Category		True	False
+Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Override Graphics in View)	Autodesk.Windows.RibbonButton	ID_VIEW_GO_FILTER	Override by Filter		True	False
+Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_LINEWORK	Linework		True	False
+Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_APPLY_SELECTION_BOX	Selection Box		True	False
+Modify	Modify	Measure	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	Measure_Split_Button	Measure		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Measure)	Autodesk.Windows.RibbonButton	ID_MEASURE_LINE	Measure Between Two References		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Measure)	Autodesk.Windows.RibbonButton	ID_MEASURE_PICK_LINES	Measure Along an Element		True	True
+Modify	Modify	Measure	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	Dimension_Split_Button			True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned Dimension		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear Dimension		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular Dimension		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial Dimension		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter Dimension		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc Length Dimension		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot Elevation		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot Coordinate		True	True
+Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot Slope		True	True
+Modify	Modify	Measure		Autodesk.Windows.RibbonSplitButton	Dimension_Split_Button_1			True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned Dimension		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear Dimension		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular Dimension		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial Dimension		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter Dimension		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc Length Dimension		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot Elevation		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot Coordinate		True	True
+Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot Slope		True	True
+Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_ASSEMBLY	Create Assembly		True	True
+Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		True	True
+Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_PARTS	Create Parts		True	True
+Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CREATE_SIMILAR	Create Similar		True	True
+Modify	Modify	Utility		Autodesk.Windows.RibbonButton	CustomCtrl_%CustomCtrl_%Modify%Utility%btnSectionBox	Section Boxer		True	True
+Second_Modify	Modify	Select		Autodesk.Windows.RibbonButton	ID_BUTTON_SELECT	Modify		False	True
+Second_Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_LINK_SELECTION	Select links		False	True
+Second_Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_UNDERLAY_SELECTION	Select underlay elements		False	True
+Second_Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_PINNED_SELECTION	Select pinned elements		False	True
+Second_Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_FACE_SELECTION	Select elements by face		False	True
+Second_Modify	Modify	Select	/RibbonRowPanel()	Autodesk.Windows.RibbonCheckBox	ID_TOGGLE_ALLOW_DRAG_ON_SELECTION	Drag elements on selection		False	True
+Second_Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_TYPE	Type Properties		False	True
+Second_Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_PROPERTIES_PALETTE	Properties		False	True
+Second_Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OBJECTS_FAMILYHOST	Family Category and Parameters		False	True
+Second_Modify	Modify	Properties	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_FAMILY_TYPE	Family Types		False	True
+Second_Modify	Modify	Type Selector		UIFramework.TypeSelector	TypeSelector	Floor Plan	Type Selector	False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REBAR_CURVE	Rebar	Rebar Line	False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REFERENCE_CURVE	Reference	Reference Line	False	False
+Second_Modify	Modify	Draw		UIFramework.SketchGallery	SketchGallery			False	False
+Second_Modify	Modify	Draw		Autodesk.Windows.RibbonButton	ID_MAJOR_SEGMENT	Major  Segment		False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_CURVE	Model	Model Line	False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_REFERENCE_CURVE	Reference	Reference Line	False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_OBJECTS_CLINE	Plane	Reference Plane	False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_SPLIT_FACE_IN_NEW_FAMILIES	Split Face		False	False
+Second_Modify	Modify	Draw		UIFramework.SketchGallery	SketchGallery			False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	IDC_DRAW_ON_FACE	Face	Draw on Face	False	False
+Second_Modify	Modify	Draw	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	IDC_DRAW_ON_WORKPLANE	Work  Plane	Draw on Work Plane	False	False
+Second_Modify	Modify	Work Plane		Autodesk.Windows.RibbonSplitButton	ID_SKETCH_PLANE_TOOL_RibbonListButton	Set	Set Work Plane	False	False
+Second_Modify	Modify	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_SKETCH_PLANE_TOOL	Set	Set Work Plane	False	False
+Second_Modify	Modify	Work Plane	/RibbonSplitButton(Set)	Autodesk.Windows.RibbonButton	ID_PICK_WORKPLANE	Pick a Plane		False	False
+Second_Modify	Modify	Work Plane	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_SKETCH_GRID_VIS	Show	Show Work Plane	False	False
+Second_Modify	Modify	Work Plane	/RibbonRowPanel()	Autodesk.Windows.RibbonToggleButton	ID_WORKPLANE_VIEW	Viewer	Workplane Viewer	False	False
+Second_Modify	Modify	Clipboard		Autodesk.Windows.RibbonSplitButton	ID_EDIT_PASTE_RibbonListButton	Paste	Paste from Clipboard	False	True
+Second_Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE	Paste from Clipboard		False	True
+Second_Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_LEVEL_BY_NAME	Aligned to Selected Levels		False	True
+Second_Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_VIEWS_BY_NAME	Aligned to Selected Views		False	True
+Second_Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED	Aligned to Current View		False	True
+Second_Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_SAME_PLACE	Aligned to Same Place		False	True
+Second_Modify	Modify	Clipboard	/RibbonSplitButton(Paste)	Autodesk.Windows.RibbonButton	ID_EDIT_PASTE_ALIGNED_PICK_LEVEL	Aligned to Picked Level		False	True
+Second_Modify	Modify	Clipboard	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CUT	Cut	Cut to Clipboard	False	True
+Second_Modify	Modify	Clipboard	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_COPY	Copy	Copy to Clipboard	False	True
+Second_Modify	Modify	Clipboard	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MATCH_TYPE	Match Type	Match Type Properties	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_EDIT_PAINT_RibbonListButton	Paint	Paint	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_PAINT	Paint		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_UNPAINT	Remove Paint		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_COPING_RibbonListButton	Cope	Apply Coping	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cope)	Autodesk.Windows.RibbonButton	ID_COPING	Apply Coping		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cope)	Autodesk.Windows.RibbonButton	ID_UNCOPING	Remove Coping		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_CUT_HOST_RibbonListButton	Cut	Cut Geometry	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cut)	Autodesk.Windows.RibbonButton	ID_CUT_HOST	Cut Geometry		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Cut)	Autodesk.Windows.RibbonButton	ID_UNCUT_HOST	Uncut Geometry		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_JOIN_ELEMENTS_EDITOR_RibbonListButton	Join	Join Geometry	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Join)	Autodesk.Windows.RibbonButton	ID_JOIN_ELEMENTS_EDITOR	Join Geometry		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Join)	Autodesk.Windows.RibbonButton	ID_UNJOIN_ELEMENTS_EDITOR	Unjoin Geometry		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Join)	Autodesk.Windows.RibbonButton	ID_SWITCH_JOIN_ORDER_EDITOR	Switch Join Order		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_JOIN_ROOF	Join/Unjoin Roof		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_BEAM_JOINS	Beam/Column Joins		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_WALL_JOINS	Wall Joins		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_FACE	Split Face		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_EDIT_PAINT_RibbonListButton	Paint	Paint	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_PAINT	Paint		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_UNPAINT	Remove Paint		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_DEMOLISH	Demolish	Demolish	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_FACE_IN_NEW_FAMILIES	Split Face		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	ID_EDIT_PAINT_RibbonListButton	Paint	Paint	False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_PAINT	Paint		False	True
+Second_Modify	Modify	Geometry	/RibbonRowPanel()/RibbonSplitButton(Paint)	Autodesk.Windows.RibbonButton	ID_EDIT_UNPAINT	Remove Paint		False	True
+Second_Modify	Modify	Controls		Autodesk.Windows.RibbonToggleButton	ID_TOGGLE_ACTIVATE_CONTROLS	Activate	Activate Controls and Dimensions	False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_ALIGN	Align		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MOVE	Move		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OFFSET	Offset		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MOVE_COPY	Copy		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR	Mirror - Pick Axis		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_ROTATE	Rotate		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR_LINE	Mirror - Draw Axis		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_CORNER	Trim/Extend to Corner		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR	Mirror - Pick Axis		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_OFFSET	Offset		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MOVE_COPY	Copy		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_MIRROR_LINE	Mirror - Draw Axis		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_ROTATE	Rotate		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_CORNER	Trim/Extend to Corner		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT	Split Element		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CREATE_PATTERN	Array		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_REPEAT_COMPONENT	Repeat		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_SINGLE	Trim/Extend Single Element		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_SPLIT_WITH_GAP	Split with Gap		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_SCALE	Scale		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_TRIM_EXTEND_MULTIPLE	Trim/Extend Multiple Elements		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_UNLOCK_ELEMENTS	Unpin		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_LOCK_ELEMENTS	Pin		False	True
+Second_Modify	Modify	Modify	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_BUTTON_DELETE	Delete		False	True
+Second_Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	HID_HIDE_RibbonListButton	Hide in View		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Hide in View)	Autodesk.Windows.RibbonButton	ID_VIEW_HIDE_ELEMENTS	Hide Elements		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Hide in View)	Autodesk.Windows.RibbonButton	ID_VIEW_HIDE_CATEGORY	Hide Category		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Hide in View)	Autodesk.Windows.RibbonButton	ID_VIEW_GO_FILTER	Hide by Filter		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_DISPLACEMENT_CREATE	Displace Elements		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	HID_OVERRIDE_RibbonListButton	Override Graphics in View		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Override Graphics in View)	Autodesk.Windows.RibbonButton	ID_VIEW_OVERRIDE_ELEMENTS	Override by Element		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Override Graphics in View)	Autodesk.Windows.RibbonButton	ID_VIEW_OVERRIDE_CATEGORY	Override by Category		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()/RibbonSplitButton(Override Graphics in View)	Autodesk.Windows.RibbonButton	ID_VIEW_GO_FILTER	Override by Filter		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_LINEWORK	Linework		False	False
+Second_Modify	Modify	View	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_VIEW_APPLY_SELECTION_BOX	Selection Box		False	False
+Second_Modify	Modify	Measure	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	Measure_Split_Button	Measure		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Measure)	Autodesk.Windows.RibbonButton	ID_MEASURE_LINE	Measure Between Two References		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Measure)	Autodesk.Windows.RibbonButton	ID_MEASURE_PICK_LINES	Measure Along an Element		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()	Autodesk.Windows.RibbonSplitButton	Dimension_Split_Button			False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc Length Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot Elevation		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot Coordinate		False	True
+Second_Modify	Modify	Measure	/RibbonRowPanel()/RibbonSplitButton(Dimension_Split_Button)	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot Slope		False	True
+Second_Modify	Modify	Measure		Autodesk.Windows.RibbonSplitButton	Dimension_Split_Button_1			False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ALIGNED	Aligned Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_LINEAR	Linear Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ANGULAR	Angular Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_RADIAL	Radial Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_DIAMETER	Diameter Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Arc Length Dimension		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_SPOT_ELEVATION	Spot Elevation		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_SPOT_COORDINATE	Spot Coordinate		False	True
+Second_Modify	Modify	Measure	/RibbonSplitButton(Dimension_Split_Button_1)	Autodesk.Windows.RibbonButton	ID_SPOT_SLOPE	Spot Slope		False	True
+Second_Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_ASSEMBLY	Create Assembly		False	True
+Second_Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_GROUP	Create Group		False	True
+Second_Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_CREATE_PARTS	Create Parts		False	True
+Second_Modify	Modify	Create	/RibbonRowPanel()	Autodesk.Windows.RibbonButton	ID_EDIT_CREATE_SIMILAR	Create Similar		False	True
+InPlaceModelFamilyTab	In-Place Model	In-Place Editor		Autodesk.Windows.RibbonButton	ID_END_INPLACE_FAMILY	Finish  Model		False	False
+InPlaceModelFamilyTab	In-Place Model	In-Place Editor		Autodesk.Windows.RibbonButton	ID_QUIT_INPLACE_FAMILY	Cancel  Model		False	False
+InPlaceMassFamilyTab	In-Place Mass	In-Place Editor		Autodesk.Windows.RibbonButton	ID_END_INPLACE_MASS	Finish  Mass		False	False
+InPlaceMassFamilyTab	In-Place Mass	In-Place Editor		Autodesk.Windows.RibbonButton	ID_QUIT_INPLACE_MASS	Cancel  Mass		False	False
+InPlaceZoneFamilyTab	Zone	Edit		Autodesk.Windows.RibbonButton	ID_END_INPLACE_ZONE	Finish		False	False
+InPlaceZoneFamilyTab	Zone	Edit		Autodesk.Windows.RibbonButton	ID_QUIT_INPLACE_ZONE	Cancel		False	False
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonButton	ID_LOAD_INTO_PROJECTS	Load into  Project		True	True
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonButton	ID_LOAD_INTO_PROJECTS_CLOSE	Load into  Project and Close		True	True
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonButton	ID_COUPLER_STATUS	Family Status		True	True
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonToggleButton	ID_TURN_ON_MULTI_PLANAR_SHAPE	Multi-planar		True	True
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonButton	ID_SHAPE_STATUS	Shape  Status		True	True
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonButton	ID_LOAD_INTO_PROJECTS_REBAR_SHAPE	Load into  Project		True	True
+FamilyEditorTab	Family Editor	Family Editor		Autodesk.Windows.RibbonButton	ID_LOAD_INTO_PROJECTS_CLOSE_REBAR_SHAPE	Load into  Project and Close		True	True

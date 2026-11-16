@@ -34,6 +34,7 @@ public sealed class RstApplication : IExternalApplication
 {
     private static readonly object CatalogLock = new();
     private static IReadOnlyList<ScannedCommand>? _catalogCache;
+    private static SearchItCatalog _searchCache = SearchItCatalog.Empty;
     private static string? _catalogVersion;
 
     private ControlledApplication? _controlledApp;
@@ -356,6 +357,7 @@ public sealed class RstApplication : IExternalApplication
             {
                 var catalog = CommandCatalog.Build(revitVersion);
                 _catalogCache = catalog.Commands;
+                _searchCache = catalog.Search;
                 _catalogVersion = revitVersion;
                 Log.Information("GetOrBuildCatalog OK: {Count} commands in {Ms}ms",
                                 _catalogCache.Count, sw.ElapsedMilliseconds);
@@ -364,9 +366,23 @@ public sealed class RstApplication : IExternalApplication
             {
                 Log.Error(ex, "GetOrBuildCatalog FAILED after {Ms}ms; serving empty list", sw.ElapsedMilliseconds);
                 _catalogCache = Array.Empty<ScannedCommand>();
+                _searchCache = SearchItCatalog.Empty;
                 _catalogVersion = revitVersion;
             }
             return _catalogCache;
+        }
+    }
+
+    /// <summary>
+    /// Search-It's catalogue (spec #33). It is built by the same scan as <see cref="GetOrBuildCatalog"/>
+    /// and cached beside it, so whichever of the two is asked first builds both.
+    /// </summary>
+    internal static SearchItCatalog GetOrBuildSearchCatalog(string revitVersion)
+    {
+        lock (CatalogLock)
+        {
+            GetOrBuildCatalog(revitVersion);
+            return _searchCache;
         }
     }
 

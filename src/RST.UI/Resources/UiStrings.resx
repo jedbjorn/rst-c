@@ -1458,6 +1458,16 @@ The other profiles were changed and stay changed.</value>
   <data name="SearchIt_CountAll" xml:space="preserve">
     <value>{0} tools</value>
   </data>
+  <data name="SearchIt_FamilyNoMatches" xml:space="preserve">
+    <value>No family tools match. Project tools are not listed while a family is open.</value>
+  </data>
+  <data name="SearchIt_FamilyCount" xml:space="preserve">
+    <value>{0} of {1} family tools</value>
+    <comment>The count under the search box while a family is open: shown, then all.</comment>
+  </data>
+  <data name="SearchIt_FamilyCountAll" xml:space="preserve">
+    <value>{0} family tools</value>
+  </data>
   <data name="SearchIt_RemoveChip" xml:space="preserve">
     <value>Remove this filter</value>
   </data>
