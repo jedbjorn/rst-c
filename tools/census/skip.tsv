@@ -1,0 +1,3 @@
+year	id	reason
+*	ID_VISUAL_PROGRAMMING_DYNAMO	crash: a real start crashed Revit 2026.4 (WU1d); Dynamo binds the id, so it cannot be bound and cancelled
+*	CustomCtrl_%idCarbonAnalysis%idRunCarbonAnalysis	outward: Carbon Insights > Analyze uploads the model to a cloud service

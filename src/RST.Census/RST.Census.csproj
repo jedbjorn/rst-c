@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RST.Census: the Ribbon Tool Census add-in (feature #22, spec #34). Test-seat tooling, NOT product code:
+    it starts every stock ribbon tool on the test VM, tears down what each one opens, and writes the census
+    table that tools/census turns into census/<year>/*.tsv.
+
+    It is never shipped: it is not in RST-C.sln (so `dotnet build RST-C.sln`, build/stage.sh and the MSI
+    never build or stage it), nothing references it, and RST.Tests (CensusFilesTests) fails if that changes.
+
+    Build (tools/census/build.sh does this):
+      dotnet build src/RST.Census/RST.Census.csproj -c "Release R26"    (net8.0-windows,  Revit 2026)
+      dotnet build src/RST.Census/RST.Census.csproj -c "Release R27"    (net10.0-windows, Revit 2027; .NET 10 SDK)
+    Revit API packages follow src/RST.Engine/RST.Engine.csproj (decision #26 floors).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RST.Census</RootNamespace>
+    <AssemblyName>RST.Census</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- Ported from the WU1b–d probe (untracked evidence); reflection-heavy, Revit-internal types. -->
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS0618;CS0162;CS0168;CS0219;CS4014;CS8632;CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2026.0.4" PrivateAssets="all" VersionOverride="2026.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RevitVersion)' == '2027'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+    <PackageReference Include="Nice3point.Revit.Api.AdWindows"  Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The census writes the context keys RST reads (RST.Core.Census.CensusContext): one source for both. -->
+    <Compile Include="..\RST.Core\Census\CensusContext.cs" Link="Shared\CensusContext.cs" />
+  </ItemGroup>
+
+</Project>
