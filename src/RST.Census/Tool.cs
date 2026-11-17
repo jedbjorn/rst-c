@@ -91,12 +91,21 @@ public sealed partial class CensusApp
         w.cls == "tooltips_class32" || w.title.EndsWith("Monitor", StringComparison.Ordinal) || w.cls.StartsWith("#32768") || w.cls == "Shell_TrayWnd" || w.cls == "Progman"
         || (w.cls == "Windows.UI.Core.CoreWindow" && w.title.Contains("Text Input", StringComparison.OrdinalIgnoreCase));
 
-    sealed class Snap { public HashSet<IntPtr> Wins; public HashSet<int> Pids; public string Mode; public HashSet<int> Kids; public int DocEv; public Dictionary<string, bool> Panes; }
+    sealed class Snap { public HashSet<IntPtr> Wins; public HashSet<int> Pids; public string Mode; public HashSet<string> CtxTabs; public string ModifyTitle; public HashSet<int> Kids; public int DocEv; public Dictionary<string, bool> Panes; }
+
+    static HashSet<string> CtxTabs() => new(ComponentManager.Ribbon?.Tabs.Where(t => t != null && t.IsVisible && t.IsContextualTab).Select(t => t.Id + ":" + t.Title) ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
+    static string ModifyTitle() => ComponentManager.Ribbon?.Tabs.FirstOrDefault(t => t?.Id == "Modify")?.Title ?? "";
+
+    /// <summary>
+    /// A mode is a contextual tab that was not there at the baseline, or a renamed Modify tab. A baseline contextual
+    /// tab that went away (a schedule's tab, when a pane takes the focus) is not a mode; the teardown restores it.
+    /// </summary>
+    static bool ModeChanged(Snap b) => CtxTabs().Any(t => !b.CtxTabs.Contains(t)) || ModifyTitle() != b.ModifyTitle;
 
     Snap Baseline()
     {
         int de; lock (_docEv) de = _docEv.Count;
-        return new Snap { Wins = new HashSet<IntPtr>(AllWins().Select(w => w.h)), Pids = AllPids(), Mode = ModeSig(), Kids = new HashSet<int>(Descendants().Select(p => p.pid)), DocEv = de };
+        return new Snap { Wins = new HashSet<IntPtr>(AllWins().Select(w => w.h)), Pids = AllPids(), Mode = ModeSig(), CtxTabs = CtxTabs(), ModifyTitle = ModifyTitle(), Kids = new HashSet<int>(Descendants().Select(p => p.pid)), DocEv = de };
     }
 
     /// <summary>A new window counts if it belongs to Revit or to a process that did not exist at the baseline.</summary>
@@ -222,7 +231,7 @@ public sealed partial class CensusApp
                     await Task.Delay(50);
                     var el = sw.ElapsedMilliseconds - t0;
                     var nw = NewWins(b); var mode = ModeSig(); var ac = ActiveCmd(); int dl; lock (_dlg) dl = _dlg.Count; int dc; lock (_docEv) dc = _docEv.Count;
-                    bool signal = nw.Count > 0 || mode != b.Mode || !CmdIdle(ac) || dl > 0 || dc > 0;
+                    bool signal = nw.Count > 0 || ModeChanged(b) || !CmdIdle(ac) || dl > 0 || dc > 0;
                     if (cancel && _fired && el > 150) break;
                     if (signal && el > 400) break;
                     if (el >= min && raReturned && (_idle - idle0 >= 3 || !postable)) break;
@@ -239,7 +248,7 @@ public sealed partial class CensusApp
                 if (nw.Count > 0) parts.Add("windows[" + string.Join("; ", nw.Select(w => $"'{S(w.title)}' {w.cls}{(w.pid == me ? "" : " pid " + w.pid + " " + ProcName(w.pid))}")) + "]");
                 foreach (var w in nw) r.Opened.Add(OpenedKind(w, kids));
                 if (kids.Count > 0) parts.Add("childProcs[" + string.Join("; ", kids.Select(k => k.exe + ":" + k.pid)) + "]");
-                if (mode != b.Mode) { parts.Add("mode[" + mode + "]"); r.Opened.Add(mode.Contains("Sketch", StringComparison.OrdinalIgnoreCase) || mode.Contains("Edit Profile") || mode.Contains("Edit Boundary") ? "sketch" : "placement"); }
+                if (ModeChanged(b)) { parts.Add("mode[" + mode + "]"); r.Opened.Add(mode.Contains("Sketch", StringComparison.OrdinalIgnoreCase) || mode.Contains("Edit Profile") || mode.Contains("Edit Boundary") ? "sketch" : "placement"); }
                 else if (!CmdIdle(ac)) r.Opened.Add("placement");
                 if (!CmdIdle(ac)) parts.Add("activeCommand[" + ac + "]");
                 lock (_docEv) if (_docEv.Count > 0) { parts.Add("doc[" + string.Join("; ", _docEv) + "]"); if (_docEv.Any(x => x.StartsWith("TransactionCommitted"))) r.Opened.Add("doc-change"); }
@@ -340,7 +349,7 @@ public sealed partial class CensusApp
         for (int round = 0; round < 8; round++)
         {
             var nw = NewWins(b); var mode = ModeSig(); var ac = ActiveCmd();
-            bool modeOn = mode != b.Mode || !CmdIdle(ac);
+            bool modeOn = ModeChanged(b) || !CmdIdle(ac);
             // an API pick prompt (Selection.PickObject) shows no tab and no active command: only an ExternalEvent that will not run tells
             if (deep && nw.Count == 0 && !modeOn && raReturned()) { var (ran, _) = await Api(app => { }, 1500); if (!ran) { modeOn = true; acts.Add("ExternalEvent blocked (pick prompt?)"); r?.Opened.Add("pick"); } }
             if (nw.Count == 0 && !modeOn && raReturned()) break;
@@ -385,6 +394,22 @@ public sealed partial class CensusApp
             }
             await Task.Delay(300); // route A still blocked but nothing visible: give it time
         }
+        // a baseline contextual tab that went away (the view lost the focus to a pane or window): give the view its focus back
+        if (b.CtxTabs.Count > 0 && b.CtxTabs.Any(t => !CtxTabs().Contains(t)))
+        {
+            Autodesk.Revit.DB.ElementId cur = null;
+            await Api(app =>
+            {
+                var ui = app.ActiveUIDocument; cur = ui.ActiveView.Id;
+                var other = new Autodesk.Revit.DB.FilteredElementCollector(ui.Document).OfClass(typeof(Autodesk.Revit.DB.View)).Cast<Autodesk.Revit.DB.View>()
+                    .FirstOrDefault(v => !v.IsTemplate && v.Id != cur && v.ViewType == Autodesk.Revit.DB.ViewType.FloorPlan);
+                if (other != null) ui.ActiveView = other;
+            }, 5000);
+            await Task.Delay(800);
+            await Api(app => { var ui = app.ActiveUIDocument; if (cur != null) ui.ActiveView = (Autodesk.Revit.DB.View)ui.Document.GetElement(cur); }, 5000);
+            await Task.Delay(1200);
+            acts.Add(b.CtxTabs.All(t => CtxTabs().Contains(t)) ? "view focus restored (its contextual tab was gone)" : "view focus NOT restored");
+        }
         // undo transactions committed during the tool that a later rollback or undo did not already remove
         int commits = 0;
         if (undo) lock (_docEv)
@@ -412,7 +437,7 @@ public sealed partial class CensusApp
         for (int i = 0; i < 20 && !raReturned(); i++) await Task.Delay(100);
         if (!raReturned()) left.Add("routeA call still blocked");
         var nw = NewWins(b); if (nw.Count > 0) left.Add("windows[" + string.Join("; ", nw.Select(w => $"'{S(w.title)}' {w.cls}")) + "]");
-        var mode = ModeSig(); if (mode != b.Mode) left.Add("mode[" + mode + "]");
+        var mode = ModeSig(); if (ModeChanged(b)) left.Add("mode[" + mode + "]");
         var ac = ActiveCmd(); if (!CmdIdle(ac)) left.Add("activeCommand[" + ac + "]");
         var (ran, _) = await Api(app => { }, 4000); if (!ran) left.Add("ExternalEvent did not run within 4 s (not idle)");
         // a WebView2 process may need a moment to exit after its window closed

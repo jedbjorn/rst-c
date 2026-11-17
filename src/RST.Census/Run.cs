@@ -196,7 +196,7 @@ public sealed partial class CensusApp
                     {
                         await Task.Delay(1000);
                         var (ran, _) = await Api(app => { }, 900);
-                        ok = ran && NewWins(_sess).Count == 0 && CmdIdle(ActiveCmd()) && ModeSig() == _sess.Mode;
+                        ok = ran && NewWins(_sess).Count == 0 && CmdIdle(ActiveCmd()) && !ModeChanged(_sess);
                         if (!ok && i % 10 == 5) { WmCmd(_cidCancelEditor); foreach (var w in NewWins(_sess)) PostMessage(w.h, 0x0010, IntPtr.Zero, IntPtr.Zero); }
                     }
                     Progress(ok ? "recovered" : "STILL STUCK: stopping the run");
