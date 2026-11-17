@@ -176,9 +176,9 @@ public sealed class CensusIndex
     /// <summary>
     /// What the index says about <paramref name="id"/> at <paramref name="place"/> in <paramref name="context"/>.
     /// <list type="bullet">
-    /// <item>NotDrawn when a not-drawn row has the same tab, panel and path (a null path never matches a not-drawn row).</item>
-    /// <item>Else NotRunnable when any not-runnable row has the id in this context: whether a tool starts does not depend
-    /// on which of its places is clicked.</item>
+    /// <item>NotRunnable when any not-runnable row has the id in this context: whether a tool starts does not depend on
+    /// which of its places is clicked, and not-runnable wins over not-drawn (decision #113).</item>
+    /// <item>Else NotDrawn when a not-drawn row has the same tab, panel and path (a null path never matches a not-drawn row).</item>
     /// <item>Else None (also for an unknown context, an unknown id, or empty arguments).</item>
     /// </list>
     /// </summary>
@@ -187,6 +187,8 @@ public sealed class CensusIndex
         if (string.IsNullOrEmpty(context) || string.IsNullOrEmpty(id)) return CensusMark.None;
         if (!_rows.TryGetValue((context, id), out var rows)) return CensusMark.None;
         foreach (var r in rows)
+            if (r.Mark == CensusMarkKind.NotRunnable) return new CensusMark(CensusMarkKind.NotRunnable, r.Reason);
+        foreach (var r in rows)
         {
             if (r.Mark != CensusMarkKind.NotDrawn) continue;
             if (!string.Equals(r.TabId, place.TabId, StringComparison.Ordinal)) continue;
@@ -194,8 +196,6 @@ public sealed class CensusIndex
             if (place.Path is null || !string.Equals(r.Path, place.Path, StringComparison.Ordinal)) continue;
             return new CensusMark(CensusMarkKind.NotDrawn, r.Reason);
         }
-        foreach (var r in rows)
-            if (r.Mark == CensusMarkKind.NotRunnable) return new CensusMark(CensusMarkKind.NotRunnable, r.Reason);
         return CensusMark.None;
     }
 

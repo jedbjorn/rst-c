@@ -87,6 +87,19 @@ public sealed class CensusIndexTests
     }
 
     [Fact]
+    public void Mark_NotRunnable_WinsOverNotDrawn_AtTheSamePlace()
+    {
+        // decision #113 (2): a place that is not drawn and whose id does not run is marked not-runnable
+        var index = CensusIndex.Parse(2026, string.Join("\n", Header,
+            "project/FloorPlan\tID_MIXED\tAnalyze\tSpaces\t/RibbonFoldPanel()\tnot-drawn\tnot drawn here",
+            "project/FloorPlan\tID_MIXED\tSystems\tHVAC\t\tnot-runnable\tcannot be invoked in this context"));
+        index.MalformedRows.Should().Be(0);
+        var mark = index.Mark("project/FloorPlan", "ID_MIXED", new CensusPlace("Analyze", "Spaces", "/RibbonFoldPanel()"));
+        mark.Kind.Should().Be(CensusMarkKind.NotRunnable);
+        mark.Reason.Should().Contain("cannot be invoked");
+    }
+
+    [Fact]
     public void Mark_IsNone_ForUnknownContextIdOrEmptyArguments()
     {
         var index = Index();
