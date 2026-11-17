@@ -264,7 +264,10 @@ def cmd_plan(year):
                 continue
             key = f"family/{f[1]}/{f[2]}"
             groups.setdefault(key, []).append((f[0], f[3]))
-    for key, members in groups.items():
+    # the WU1d oracle family first (AC3), then the model families, then annotation-like (view-based) ones
+    order = sorted(groups, key=lambda k: (k != "family/OST_GenericModel/OneLevelBased", k.endswith("/ViewBased"), k))
+    for key in order:
+        members = groups[key]
         # prefer an English-Imperial template (the project is imperial), then the shortest path
         members.sort(key=lambda m: ("English-Imperial" not in m[0], len(m[0]), m[0].lower()))
         first, types = members[0]
