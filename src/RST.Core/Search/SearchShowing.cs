@@ -83,7 +83,7 @@ public static class SearchShowing
             {
                 Postable = tool.Postable,
                 RunHandle = run.Handle,
-                RunPlaces = SearchClick.PlacesOf(tool),
+                RunPlacesFrom = () => SearchClick.PlacesOf(tool),
                 InFamily = isFamily,
             });
         }
@@ -156,7 +156,7 @@ public static class SearchShowing
             {
                 Postable = tool.Postable,
                 RunHandle = kept[0].Handle,
-                RunPlaces = SearchClick.PlacesOf(tool),
+                RunPlacesFrom = () => SearchClick.PlacesOf(tool),
                 InFamily = isFamily,
             });
         }

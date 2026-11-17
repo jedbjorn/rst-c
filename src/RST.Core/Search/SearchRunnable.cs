@@ -142,8 +142,11 @@ public static class SearchRunnable
         }
 
         var key = census?.Key.Key;
-        var notRunnable = census is not null
-            && census.Index.Mark(key, tool.Id, default).Kind == CensusMarkKind.NotRunnable;
+        // Most tools have no exceptions row in this context: then nothing is not-runnable or not-drawn here, and no
+        // place needs a lookup (the census cost of an open stays small, AC7).
+        var marks = census is not null && census.Index.HasRows(key, tool.Id) ? census : null;
+        var notRunnable = marks is not null
+            && marks.Index.Mark(key, tool.Id, default).Kind == CensusMarkKind.NotRunnable;
 
         var runs = new List<SearchCatalogPlace>(showing.Count);
         if (!notRunnable)
@@ -152,17 +155,17 @@ public static class SearchRunnable
 
         if (runs.Count > 0)
         {
-            var drawn = census is null ? runs : runs.Where(p => !NotDrawn(census, tool.Id, p)).ToList();
+            var drawn = marks is null ? runs : runs.Where(p => !NotDrawn(marks, tool.Id, p)).ToList();
             var mark = drawn.Count > 0 ? SearchToolMark.None : SearchToolMark.NotInGui;
             var places = drawn.Count > 0 ? drawn : runs;
-            return Make(tool, places, showing, census, mark, Array.Empty<string>(), isFamily);
+            return Make(tool, places, showing, marks, mark, Array.Empty<string>(), isFamily);
         }
 
         var views = census?.MustRunIn(tool.Id) ?? Array.Empty<string>();
         if (views.Count == 0) return null;
         var all = showing.ConvertAll(s => s.Place);
-        var drawnShowing = all.Where(p => !NotDrawn(census!, tool.Id, p)).ToList();
-        return Make(tool, drawnShowing.Count > 0 ? drawnShowing : all, showing, census, SearchToolMark.MustRunIn, views, false);
+        var drawnShowing = marks is null ? all : all.Where(p => !NotDrawn(marks, tool.Id, p)).ToList();
+        return Make(tool, drawnShowing.Count > 0 ? drawnShowing : all, showing, marks, SearchToolMark.MustRunIn, views, false);
     }
 
     /// <summary>True when the census marks every copy of the place not drawn in this context.</summary>
@@ -186,7 +189,8 @@ public static class SearchRunnable
     }
 
     /// <summary>
-    /// The listed tool. <see cref="SearchTool.RunHandle"/> is its first listed place (drawn copy if any); the click does
+    /// The listed tool (<paramref name="census"/>: the census when it has rows for this tool here, else null).
+    /// <see cref="SearchTool.RunHandle"/> is its first listed place (drawn copy if any); the click does
     /// not use it to choose: it chooses from <see cref="SearchTool.RunPlaces"/> with fresh visibility (decision #127).
     /// </summary>
     private static SearchTool Make(SearchCatalogTool tool, List<SearchCatalogPlace> places,
@@ -200,10 +204,10 @@ public static class SearchRunnable
             MustRunIn = mustRunIn,
             Postable = tool.Postable,
             RunHandle = runs ? RunCopy(census, tool.Id, places[0]) : null,
-            RunPlaces = runs
-                ? SearchClick.PlacesOf(tool, census is null ? null : (place, copy) =>
+            RunPlacesFrom = runs
+                ? () => SearchClick.PlacesOf(tool, census is null ? null : (place, copy) =>
                     census.Index.Mark(census.Key.Key, tool.Id, new CensusPlace(place.TabId, place.Panel, copy.Path)).Kind != CensusMarkKind.NotDrawn)
-                : Array.Empty<SearchRunPlace>(),
+                : () => Array.Empty<SearchRunPlace>(),
             InFamily = isFamily,
         };
     }

@@ -73,7 +73,20 @@ public sealed class SearchTool
     /// copies first, then the rest, in catalogue order. The click picks the first one showing at that moment
     /// (<see cref="SearchClick"/>). Empty for a Must Run In tool.
     /// </summary>
-    public IReadOnlyList<SearchRunPlace> RunPlaces { get; init; } = Array.Empty<SearchRunPlace>();
+    public IReadOnlyList<SearchRunPlace> RunPlaces
+    {
+        get => _runPlaces ??= _runPlacesFrom?.Invoke() ?? Array.Empty<SearchRunPlace>();
+        init => _runPlaces = value;
+    }
+
+    /// <summary>Makes <see cref="RunPlaces"/> on first use (a click), not for every listed tool when the window opens.</summary>
+    public Func<IReadOnlyList<SearchRunPlace>> RunPlacesFrom
+    {
+        init => _runPlacesFrom = value;
+    }
+
+    private IReadOnlyList<SearchRunPlace>? _runPlaces;
+    private readonly Func<IReadOnlyList<SearchRunPlace>>? _runPlacesFrom;
 
     /// <summary>The list was a family's: a project tab's place is then hidden by Revit, not by the user.</summary>
     public bool InFamily { get; init; }
