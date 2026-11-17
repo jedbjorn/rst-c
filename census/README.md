@@ -246,6 +246,17 @@ Places per result, per context, as committed (written by `tools/census/assemble.
 
 ### 2027
 
+Notes on the 2027 run:
+
+- Revit 2027's Forma tools (Site Analyses, Wind, Microclimate, Contextual Data, Forma Connected) and Coordination
+  Issues open dockable panes that host WebView2. A pane is not a window, so the idle proof passes, and Revit keeps the
+  pane's WebView2 alive: the census never ends those processes. The panes stay shown after their row; Revit is
+  restarted once before the family contexts, which starts it with its default layout. Opening these panels sends no
+  model data, so they are classified like 2026's Shared Views and Autodesk Docs.
+- The legend context's New Legend View dialog is a WPF window in 2027; the census accepts its defaults.
+- Numbering is drawn and runs in every 2027 project context (it is not drawn in 2026); the family editor does not
+  draw it.
+
 <!-- counts:2027 -->
 <!-- /counts:2027 -->
 
