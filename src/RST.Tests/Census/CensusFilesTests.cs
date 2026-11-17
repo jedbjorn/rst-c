@@ -154,7 +154,8 @@ public sealed class CensusFilesTests
     [MemberData(nameof(Years))]
     public void NoThirdPartyRows(int year)
     {
-        var markers = new[] { "DiRoots", "Twinmotion", "BIM 42", "BIM42" };
+        // Revit's built-in TwinmotionForRevit (vendor ADSK) is stock and keeps its rows (decision #113)
+        var markers = new[] { "DiRoots", "BIM 42", "BIM42" };
         foreach (var name in new[] { "full.tsv", "exceptions.tsv" })
         {
             var text = File.ReadAllText(Path.Combine(CensusDir, year.ToString(System.Globalization.CultureInfo.InvariantCulture), name));

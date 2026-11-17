@@ -39,10 +39,7 @@ def clean(s):
 def main(argv):
     year = argv[0]
     allow = "--allow-errors" in argv
-    # A place that is not drawn AND whose id does not run (accepted-nothing / refused) fits two classes; the spec names
-    # no precedence. Default: not-runnable first (AC3 expects HVAC Zone not-runnable in the 2026 floor plan, and its only
-    # place there is not drawn in 2026.4). --not-drawn-first gives the other reading. Open question for the Planner.
-    nd_first = "--not-drawn-first" in argv
+    # A place that is not drawn AND whose id does not run (accepted-nothing / refused): not-runnable wins (decision #113)
     src = EVIDENCE / year / "census"
     rows_path = src / "rows.tsv"
     lines = rows_path.read_text(encoding="utf-8-sig").splitlines()
@@ -64,7 +61,7 @@ def main(argv):
                 r = dict(r)
                 r["result"] = m.group(1)
                 r["note"] = "panel hidden here"
-        if r["result"] == "not-drawn" and not nd_first:
+        if r["result"] == "not-drawn":
             m = re.search(r"\(the id: ([a-z-]+)\)", r.get("note", ""))
             if m and m.group(1) in ("accepted-nothing", "refused"):
                 r = dict(r)

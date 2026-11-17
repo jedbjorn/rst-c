@@ -42,7 +42,7 @@ places and results. They hold no icons and no screenshots.
 | `result` | See [Results](#results) |
 | `tested` | How the id was tested: `gate` (only `CanExecute` was asked), `bind+cancel`, or `real` (really started, then torn down); empty when nothing was asked |
 | `opened` | What a real start opened: `revit-dialog`, `win32`, `wpf`, `webview2`, `external-process:<exe>`, `browser`, `placement`, `sketch`, `pick`, `doc-change`, `pane`; several are comma-separated |
-| `teardown` | What the teardown did (`none` when nothing was left). A `skipped` row carries `skip: <reason>` here instead |
+| `teardown` | What the teardown did (`none` when nothing was left). A `skipped` row was never started, so this column carries `skip: <reason>` instead (the table has no reason column; `tools/census/skip.tsv` holds the same reason) |
 | `left` | Anything still open after the teardown; empty when the idle proof passed |
 | `gate` | The `CanExecute` answer at test time: `True`, `False`, `False(own)` (the add-in's own handler), `False(IsEnabled)` |
 | `ms` | Time spent on the id |
@@ -144,7 +144,8 @@ Each scratch document ends with its starting element count; the run summary reco
 
 ## Limits
 
-- **Stock Revit only.** Third-party add-ins have no rows. Their buttons are listed live by RST and are runnable unless
+- **Stock Revit only.** Third-party add-ins have no rows. Stock means Revit and the add-ins Autodesk installs with it,
+  including Revit's built-in Twinmotion integration (`TwinmotionForRevit`, vendor ADSK), which keeps its rows. Their buttons are listed live by RST and are runnable unless
   Revit greys them.
 - **English Revit.** Rows are keyed by command id, so they apply in any language; only `label` and `panel` are English.
   `tab` is the tab's id.
