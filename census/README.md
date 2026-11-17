@@ -124,7 +124,9 @@ test VM. For each context it:
    whose add-in has a non-Autodesk vendor id (from its `.addin` manifest), and a native id such an add-in has bound, get
    no row. The run summary counts them.
 3. **Checks what is drawn.** For each tab it activates the tab, opens every dropdown, slide-out and collapsed panel, and
-   reads WPF's visual tree for a visible control bound to each ribbon item. A place never seen drawn is `not-drawn`.
+   reads WPF's visual tree for a visible control bound to each ribbon item. A place on a visible panel that is never
+   seen drawn is `not-drawn`. A place on a panel Revit hides in that context keeps its id's result: an add-in sees a
+   hidden panel itself (`RibbonPanel.IsVisible`), so the census adds nothing there.
 4. **Asks the gate**: `CanExecute` (Revit's global ribbon handler `Autodesk.Windows.ComponentManager.CommandHandler`;
    for an add-in button its own handler; and `IsEnabled`). False: `greyed`.
 5. **Starts the tool.** If the id accepts an `AddInCommandBinding`, the census binds it with only a `BeforeExecuted`
