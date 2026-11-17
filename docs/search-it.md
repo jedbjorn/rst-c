@@ -72,7 +72,7 @@ Badges apply to Revit's own tools in Revit 2026 and 2027 (see [Notes & limits](#
 
 **With the keyboard:** press **Down** to move from the search box to the first result, **Up** and **Down** to move through the results (the list scrolls to follow), and **Enter** to run the highlighted one.
 
-Either way, RST first checks with Revit that the tool can run right now. If it can, the window closes and Revit starts the tool, as if you had clicked it on the ribbon. Tools that Revit does not let add-ins start, such as Site Settings, are started through the ribbon's own command, so they run from Search-It too (they still cannot go on a profile toolbar).
+Either way, RST first checks with Revit that the tool can run right now (a tool that is only on tabs you hid in a project is started without that check, if Revit lets add-ins start it). If it can, the window closes and Revit starts the tool, as if you had clicked it on the ribbon. Tools that Revit does not let add-ins start, such as Site Settings, are started through the ribbon's own command, so they run from Search-It too (they still cannot go on a profile toolbar).
 
 If the tool cannot run right now, nothing starts and the window stays open with an amber message, for example: "This tool can't be run with RST here: Level (Architecture › Datum)." This can happen when the view or selection changed since the window opened.
 
@@ -116,7 +116,7 @@ It finds more than the [Profile Builder](profile-builder.md)'s Commands list: fa
 
 ## The first search of a session
 
-The first time you open Search-It, the Builder or the Loader after starting Revit, RST reads the whole ribbon; the three share what it finds. This takes a few seconds, and the window says **Finding Revit's tools…** while it happens. You can start typing straight away; clicks made during the wait are ignored, so a stray click cannot start a tool. After that, Search-It opens straight away, with its results, until you close Revit.
+The first time you open Search-It, the Builder or the Loader after starting Revit, RST reads the whole ribbon; the three share what it finds. This takes a few seconds. If Search-It is the one doing that first read, its window says **Finding Revit's tools…** while it happens. You can start typing straight away; clicks made during the wait are ignored, so a stray click cannot start a tool. After that, Search-It opens straight away, with its results, until you close Revit.
 
 ## Notes & limits
 
