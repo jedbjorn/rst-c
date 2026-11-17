@@ -103,3 +103,7 @@ TestResults/
 
 ## Setup bundle: downloaded companion payloads (fetch-companions.ps1)
 installer-bundle/payload/
+
+# Python bytecode
+__pycache__/
+*.pyc
