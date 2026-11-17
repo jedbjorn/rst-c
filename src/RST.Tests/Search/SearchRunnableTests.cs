@@ -410,17 +410,77 @@ public sealed class SearchRunnableFallbackTests
     private static SearchCensus Census() => FakeCensus.Project("FloorPlan",
         FakeCensus.Index("project/FloorPlan\tID_FILLER\tA\tB\t\tnot-drawn\t"), FakeCensus.RunsIn("project/Elevation\tID_OBJECTS_LEVEL"));
 
+    // Planner's ruling on AC4 (review of PR #231): a CanExecute throw for one item counts that tool runnable here, with
+    // no label from the gate; the other tools keep their labels; one Warning per open, naming the first id.
     [Fact]
-    public void When_the_gate_throws_the_showing_tools_are_listed_unlabelled_with_one_Warning()
+    public void A_gate_throw_for_one_item_counts_that_tool_runnable_and_the_others_keep_their_labels()
     {
-        var boom = new InvalidOperationException("gate");
+        var boom = new InvalidOperationException("UIFramework");
+        var catalog = SearchCatalog.Build([],
+        [
+            Hit("ID_OBJECTS_LEVEL", "Level", "Architecture", "Datum"),
+            Hit("ID_OBJECTS_WALL", "Wall", "Architecture", "Build"),
+            Hit("ID_OBJECTS_DOOR", "Door", "Architecture", "Build"),
+        ]);
         SearchList? list = null;
-        var events = CaptureLog(() => list = SearchRunnable.ListOrFallBack(Catalog, false, Visibility, _ => throw boom, Census));
+        var events = CaptureLog(() => list = SearchRunnable.ListOrFallBack(catalog, false, Visibility,
+            p => p.Label == "Level" ? false : throw boom, Census));
 
-        events.Should().ContainSingle().Which.Should().Match<LogEvent>(e => e.Level == LogLevel.Warning && e.Exception == boom);
-        list!.Tools.Select(t => t.Id).Should().Equal("ID_OBJECTS_LEVEL", "ID_OBJECTS_WALL");
-        list.Tools.Should().OnlyContain(t => t.Mark == SearchToolMark.None);
-        list.Census.Should().BeNull();
+        var warning = events.Should().ContainSingle().Subject;
+        warning.Level.Should().Be(LogLevel.Warning);
+        warning.Exception.Should().BeSameAs(boom);
+        warning.PropertyValues.Should().Contain("ID_OBJECTS_WALL", "the first id that threw is named");
+        list!.Census.Should().NotBeNull("the list keeps its census");
+        list.Tools.Single(t => t.Id == "ID_OBJECTS_LEVEL").Mark.Should().Be(SearchToolMark.MustRunIn, "the other tools keep their labels");
+        list.Tools.Where(t => t.Id != "ID_OBJECTS_LEVEL").Should().OnlyContain(t => t.Mark == SearchToolMark.None && t.CanRun);
+        list.Tools.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void When_the_judging_throws_the_showing_fallback_keeps_how_each_tool_runs_and_every_live_copy()
+    {
+        // Site Settings: not postable (route A). Level: two live Datum panels, the first one hidden here.
+        var catalog = SearchCatalog.Build([],
+        [
+            new RibbonHit("ID_SITE_SETTINGS", "Site Settings", RibbonContainerKind.DialogLauncher, RibbonLeafKind.Button, null,
+                "Massing & Site", "Model Site", "MassingSite", "DialogLauncher", Postable: false),
+            new RibbonHit("ID_OBJECTS_LEVEL", "Level", RibbonContainerKind.Stack, RibbonLeafKind.Button, null, "Create", "Datum", "Home_Family", "/RibbonFoldPanel()"),
+            new RibbonHit("ID_OBJECTS_LEVEL", "Level", RibbonContainerKind.Panel, RibbonLeafKind.Button, null, "Create", "Datum", "Home_Family", ""),
+        ]);
+        var boom = new InvalidOperationException("the list builder");
+        var reads = 0;
+        PlaceState State(SearchCatalogPlace p) => ++reads == 2 ? throw boom : new PlaceState(true, PanelVisible: p.Handle != 1);
+        SearchList? list = null;
+        var events = CaptureLog(() => list = SearchRunnable.ListOrFallBack(catalog, true, State, _ => true, null));
+
+        events.Should().ContainSingle().Which.Exception.Should().BeSameAs(boom);
+        var site = list!.Tools.Single(t => t.Id == "ID_SITE_SETTINGS");
+        site.Postable.Should().BeFalse("a non-postable tool still runs through route A");
+        site.RunHandle.Should().Be(0);
+        site.GateAtClick.Should().BeTrue();
+        var level = list.Tools.Single(t => t.Id == "ID_OBJECTS_LEVEL");
+        level.Location.Should().Be("Create › Datum", "the place shows through its second, showing copy (decision #125)");
+        level.RunHandle.Should().Be(2);
+        level.Postable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void The_unfiltered_fallback_keeps_how_each_tool_runs()
+    {
+        var catalog = SearchCatalog.Build([],
+        [
+            new RibbonHit("ID_SITE_SETTINGS", "Site Settings", RibbonContainerKind.DialogLauncher, RibbonLeafKind.Button, null,
+                "Massing & Site", "Model Site", "MassingSite", "DialogLauncher", Postable: false),
+            Hit("ID_OBJECTS_WALL", "Wall", "Architecture", "Build"),
+        ]);
+        SearchList? list = null;
+        var events = CaptureLog(() => list = SearchRunnable.ListOrFallBack(catalog, false, _ => throw new InvalidOperationException("ribbon"), _ => true, null));
+
+        events.Should().ContainSingle();
+        var site = list!.Tools.Single(t => t.Id == "ID_SITE_SETTINGS");
+        (site.Postable, site.RunHandle, site.GateAtClick).Should().Be((false, 0, true));
+        var wall = list.Tools.Single(t => t.Id == "ID_OBJECTS_WALL");
+        (wall.Postable, wall.RunHandle, wall.GateAtClick).Should().Be((true, 1, false), "the ribbon's state is unknown: posted as before spec #35");
     }
 
     [Theory]

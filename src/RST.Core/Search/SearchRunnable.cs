@@ -87,47 +87,40 @@ public static class SearchRunnable
         var tools = new List<SearchTool>(catalog.Count);
         var hidden = 0;
         var leftOut = 0;
+        // Planner's ruling on AC4 (review of PR #231): a CanExecute throw for one item counts that tool as runnable
+        // here, with no label from the gate; the other tools keep theirs. One Warning per open, naming the first id.
+        var threwLogged = false;
+        bool? Ask(SearchCatalogTool tool, SearchCatalogPlace place)
+        {
+            try
+            {
+                return gate(place);
+            }
+            catch (Exception ex)
+            {
+                if (!threwLogged)
+                {
+                    threwLogged = true;
+                    Log.Warning(ex, "Search-It: Revit's CanExecute threw for {CommandId}; counted as runnable here (logged once per open)", tool.Id);
+                }
+                return null;
+            }
+        }
         foreach (var tool in catalog)
         {
             var showing = new List<(SearchCatalogPlace Place, bool TabVisible)>(tool.Places.Count);
             foreach (var place in tool.Places)
-                if (Showing(place, isFamily, visibility) is { } shown) showing.Add(shown);
+                if (SearchShowing.Showing(place, isFamily, p => visibility(p) with { CanExecute = null }) is { } shown) showing.Add(shown);
             if (showing.Count == 0)
             {
                 hidden++;
                 continue;
             }
-            var judged = Judge(tool, showing, gate, census);
+            var judged = Judge(tool, showing, p => Ask(tool, p), census);
             if (judged is null) leftOut++;
             else tools.Add(judged);
         }
         return new SearchList(tools, isFamily) { Hidden = hidden, LeftOut = leftOut, Census = census };
-    }
-
-    /// <summary>
-    /// The place as it shows now, or null when it does not. A place is one (tab, panel) by title, and Revit can keep
-    /// two live panels of the same title on a tab (Create › Datum in a family: Level in a fold panel on one, directly
-    /// on the other; each family kind shows one of them). The place shows when any copy's tab and panel show; what
-    /// comes back keeps only the showing copies, its <see cref="SearchCatalogPlace.Handle"/> the first of them, so
-    /// the gate, the not-drawn check and route A all use an item Revit is showing.
-    /// </summary>
-    private static (SearchCatalogPlace Place, bool TabVisible)? Showing(SearchCatalogPlace place, bool isFamily,
-        Func<SearchCatalogPlace, PlaceState> visibility)
-    {
-        var copies = place.CopiesOrSelf;
-        List<SearchPlaceCopy>? shown = null;
-        var tabVisible = false;
-        foreach (var copy in copies)
-        {
-            var at = copy.Handle == place.Handle ? place : place with { Handle = copy.Handle };
-            var state = visibility(at) with { CanExecute = null };
-            if (!state.Shows(place.OnFamilyEditorTab, isFamily)) continue;
-            if (shown is null) tabVisible = state.TabVisible;
-            (shown ??= new List<SearchPlaceCopy>(copies.Count)).Add(copy);
-        }
-        if (shown is null) return null;
-        if (shown.Count == copies.Count && shown[0].Handle == place.Handle) return (place, tabVisible);
-        return (place with { Handle = shown[0].Handle, Copies = shown }, tabVisible);
     }
 
     private static SearchTool? Judge(SearchCatalogTool tool, List<(SearchCatalogPlace Place, bool TabVisible)> showing,
@@ -161,14 +154,14 @@ public static class SearchRunnable
             var drawn = census is null ? runs : runs.Where(p => !NotDrawn(census, tool.Id, p)).ToList();
             var mark = drawn.Count > 0 ? SearchToolMark.None : SearchToolMark.NotInGui;
             var places = drawn.Count > 0 ? drawn : runs;
-            return Make(tool, places, census, mark, Array.Empty<string>());
+            return Make(tool, places, showing, census, mark, Array.Empty<string>());
         }
 
         var views = census?.MustRunIn(tool.Id) ?? Array.Empty<string>();
         if (views.Count == 0) return null;
         var all = showing.ConvertAll(s => s.Place);
         var drawnShowing = all.Where(p => !NotDrawn(census!, tool.Id, p)).ToList();
-        return Make(tool, drawnShowing.Count > 0 ? drawnShowing : all, census, SearchToolMark.MustRunIn, views);
+        return Make(tool, drawnShowing.Count > 0 ? drawnShowing : all, showing, census, SearchToolMark.MustRunIn, views);
     }
 
     /// <summary>True when the census marks every copy of the place not drawn in this context.</summary>
@@ -191,24 +184,35 @@ public static class SearchRunnable
         return copies[0].Handle;
     }
 
-    private static SearchTool Make(SearchCatalogTool tool, List<SearchCatalogPlace> places, SearchCensus? census,
-        SearchToolMark mark, IReadOnlyList<string> mustRunIn) =>
-        new(tool.Id, places.Select(p => p.ToSearchPlace()))
+    /// <summary>
+    /// The listed tool. A click runs (and first asks the gate on) its first listed place on a visible tab, else its first
+    /// listed place; a postable tool with no showing place on a visible tab is not asked at click time.
+    /// </summary>
+    private static SearchTool Make(SearchCatalogTool tool, List<SearchCatalogPlace> places,
+        List<(SearchCatalogPlace Place, bool TabVisible)> showing, SearchCensus? census, SearchToolMark mark, IReadOnlyList<string> mustRunIn)
+    {
+        bool OnVisibleTab(SearchCatalogPlace p) => showing.Exists(s => ReferenceEquals(s.Place, p) && s.TabVisible);
+        var run = places.Find(OnVisibleTab) ?? places[0];
+        return new SearchTool(tool.Id, places.Select(p => p.ToSearchPlace()))
         {
             Mark = mark,
             MustRunIn = mustRunIn,
             Postable = tool.Postable,
-            RunHandle = mark == SearchToolMark.MustRunIn ? null : RunCopy(census, tool.Id, places[0]),
+            RunHandle = mark == SearchToolMark.MustRunIn ? null : RunCopy(census, tool.Id, run),
+            GateAtClick = showing.Exists(s => s.TabVisible) || !tool.Postable,
         };
+    }
 
     /// <summary>
     /// <see cref="List"/>, made safe: a failure never stops Search-It (spec #35, AC4).
     /// <list type="bullet">
     /// <item>The census can't be read (the key or an index throws): the tools are judged by the live gate alone, unlabelled.</item>
-    /// <item>The judging throws (the gate, or the census mid-way): the showing tools are listed unlabelled (spec #33's
-    /// rule, nothing asked); if the ribbon's state can't be read either, <see cref="SearchShowing.Unfiltered"/>.</item>
+    /// <item>The judging throws (the census mid-way, or the list builder): the showing tools are listed unlabelled
+    /// (spec #33's rule with every live copy, nothing asked); if the ribbon's state can't be read either,
+    /// <see cref="SearchShowing.Unfiltered"/>. Either keeps how each tool runs (postable or route A, and its item).</item>
     /// </list>
-    /// Each failure is logged once, at Warning.
+    /// A gate throw for one item is not a failure of the list: <see cref="List"/> counts that tool runnable. Each failure
+    /// is logged once, at Warning.
     /// </summary>
     public static SearchList ListOrFallBack(IReadOnlyList<SearchCatalogTool> catalog, bool isFamily,
         Func<SearchCatalogPlace, PlaceState> visibility, Func<SearchCatalogPlace, bool?> gate, Func<SearchCensus?>? census)

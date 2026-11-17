@@ -67,6 +67,13 @@ public sealed class SearchTool
     /// tab, drawn if any. Null when the host has none (fixtures; a list made without the ribbon).
     /// </summary>
     public int? RunHandle { get; init; }
+
+    /// <summary>
+    /// True when a click asks Revit's live gate first, on <see cref="RunHandle"/>'s item (spec #35, "Running a Tool",
+    /// step 4). False only for a postable tool whose showing places are all on project tabs the user hid: those are
+    /// never asked (spec #33 AC12, decision #125) and a click posts it as before.
+    /// </summary>
+    public bool GateAtClick { get; init; } = true;
 }
 
 /// <summary>What the census says about a listed tool in the open file and view (spec #35, "Runnable Only").</summary>

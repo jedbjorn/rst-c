@@ -47,14 +47,13 @@ internal sealed record SearchItCatalog(IReadOnlyList<SearchCatalogTool> Tools, I
     public SearchList ListShowing(bool isFamily, Func<SearchCensus?>? census = null)
     {
         var handlerThrowLogged = false;
-        var gateThrowLogged = false;
         return SearchRunnable.ListOrFallBack(Tools, isFamily,
             place =>
             {
                 var handle = Handles[place.Handle];
                 return new PlaceState(handle.Tab.IsVisible, handle.Panel.IsVisible);
             },
-            place => Gate(Handles[place.Handle].Item, ref handlerThrowLogged, ref gateThrowLogged),
+            place => GateWhileListing(place.Handle, ref handlerThrowLogged),
             census);
     }
 
@@ -63,43 +62,71 @@ internal sealed record SearchItCatalog(IReadOnlyList<SearchCatalogTool> Tools, I
         handle is { } h && h >= 0 && h < Handles.Count ? Handles[h].Item : null;
 
     /// <summary>
-    /// The live gate of one item (file header). An add-in's handler that throws counts as "cannot run"; Revit's global
-    /// handler that throws counts as "can't tell" (null: listed, decision #92). The first throw of each kind in an open
-    /// is logged at Debug.
+    /// The one way Search-It asks Revit's live gate about a ribbon item (<see cref="SearchGate"/>): the item's live tab
+    /// and panel are read first, and an item that is not showing is never asked (asking a hidden family tab's item
+    /// crashed Revit: WU1c, WU1d). An add-in's button answers with IsEnabled AND its own handler, as the census asked;
+    /// Revit's items with the ribbon's global handler (<see cref="NativeGate"/>). Never throws.
     /// </summary>
-    private bool? Gate(RibbonItem item, ref bool handlerThrowLogged, ref bool gateThrowLogged)
+    public GateAnswer AskLive(int? handle, out Exception? error)
+    {
+        if (handle is not { } h || h < 0 || h >= Handles.Count)
+        {
+            error = null;
+            return GateAnswer.NotShowing;
+        }
+        var place = Handles[h];
+        return SearchGate.Ask(() => place.Tab.IsVisible, () => place.Panel.IsVisible, () => CanExecute(place.Item), out error);
+    }
+
+    /// <summary>
+    /// The gate while listing. An add-in's handler that throws counts as "cannot run" (spec #33, Debug once per open);
+    /// Revit's handler that throws is passed on, and SearchRunnable counts that tool runnable with one Warning (the
+    /// Planner's ruling on AC4).
+    /// </summary>
+    private bool? GateWhileListing(int handle, ref bool handlerThrowLogged)
+    {
+        switch (AskLive(handle, out var error))
+        {
+            case GateAnswer.Runs: return true;
+            case GateAnswer.Greyed: return false;
+            case GateAnswer.NothingToAsk: return null;
+            case GateAnswer.NotShowing: return false;
+            default:
+                var item = Handles[handle].Item;
+                if (item is RibbonCommandItem button && PostCommandRule.IsExternalCommandId(button.Id))
+                {
+                    if (!handlerThrowLogged)
+                    {
+                        handlerThrowLogged = true;
+                        Log.Debug(error, "Search-It: CanExecute threw for {CommandId}; a handler that throws counts as not runnable (logged once per open)", button.Id);
+                    }
+                    return false;
+                }
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error!).Throw();
+                return null; // not reached
+        }
+    }
+
+    private bool? CanExecute(RibbonItem item)
     {
         if (item is RibbonCommandItem button && PostCommandRule.IsExternalCommandId(button.Id))
         {
-            try
-            {
-                // As the census asked (src/RST.Census/Ribbon.cs, Gate): IsEnabled first, then the add-in's own handler.
-                if (!button.IsEnabled) return false;
-                return button.CommandHandler is { } handler ? handler.CanExecute(button) : null;
-            }
-            catch (Exception ex)
-            {
-                if (!handlerThrowLogged)
-                {
-                    handlerThrowLogged = true;
-                    Log.Debug(ex, "Search-It: CanExecute threw for {CommandId}; a handler that throws counts as not runnable (logged once per open)", button.Id);
-                }
-                return false;
-            }
+            // As the census asked (src/RST.Census/Ribbon.cs, Gate): IsEnabled first, then the add-in's own handler.
+            if (!button.IsEnabled) return false;
+            return button.CommandHandler is { } handler ? handler.CanExecute(button) : null;
         }
-        try
-        {
-            return NativeGate(item);
-        }
-        catch (Exception ex)
-        {
-            if (!gateThrowLogged)
-            {
-                gateThrowLogged = true;
-                Log.Debug(ex, "Search-It: Revit's CanExecute threw for {CommandId}; counted as runnable (logged once per open)", item.Id);
-            }
-            return null;
-        }
+        return NativeGate(item);
+    }
+
+    /// <summary>
+    /// Route A (decision #92): asks the live gate again through <see cref="AskLive"/> and, only when Revit says the item
+    /// runs, calls the ribbon's command path on it at once. Returns what the gate said; a throw from Execute is passed on.
+    /// </summary>
+    public GateAnswer ExecuteLive(int? handle, Action<RibbonItem> execute, out Exception? error)
+    {
+        var answer = AskLive(handle, out error);
+        if (SearchGate.AllowsExecute(answer)) execute(Handles[handle!.Value].Item);
+        return answer;
     }
 
     /// <summary>Revit's ribbon handler: <c>ComponentManager.CommandHandler.CanExecute(item)</c>; null when there is no handler.</summary>

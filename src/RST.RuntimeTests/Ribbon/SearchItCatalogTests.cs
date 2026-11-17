@@ -298,8 +298,9 @@ public sealed class SearchItCatalogTests
     });
 
     [Fact]
-    public void A_gate_that_throws_counts_as_runnable_and_is_logged_once_at_Debug() => Screenshots.RunSta(() =>
+    public void A_gate_that_throws_counts_as_runnable_and_is_logged_once_at_Warning() => Screenshots.RunSta(() =>
     {
+        // Planner's ruling on AC4 (review of PR #231): one Warning per open, naming the first id; the tools stay listed.
         var session = new Session().InAProject();
         var catalog = session.Catalog with { NativeGate = _ => throw new InvalidOperationException("UIFramework") };
 
@@ -307,8 +308,59 @@ public sealed class SearchItCatalogTests
         var events = CaptureLog(() => list = catalog.ListShowing(isFamily: false));
 
         Ids(list!).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_CLINE", "ID_JOIN", AddinId);
-        events.Where(e => e.Level == LogLevel.Debug && e.Exception is InvalidOperationException).Should().ContainSingle();
-        events.Should().NotContain(e => e.Level >= LogLevel.Warning);
+        var warning = events.Where(e => e.Level >= LogLevel.Warning).Should().ContainSingle().Subject;
+        warning.Level.Should().Be(LogLevel.Warning);
+        warning.Exception.Should().BeOfType<InvalidOperationException>();
+        warning.PropertyValues.Should().Contain("ID_OBJECTS_WALL");
+    });
+
+    // ── spec #35 review: every live gate call reads the item's tab and panel first ──
+
+    [Fact]
+    public void AskLive_never_asks_an_item_whose_tab_or_panel_is_hidden() => Screenshots.RunSta(() =>
+    {
+        var session = new Session().InAProject();      // the family-editor tabs are hidden
+        var asked = new List<string>();
+        var catalog = session.Catalog with { NativeGate = item => { asked.Add(item.Id); return true; } };
+        int HandleOf(string id, string tabId) => session.Scan.Hits.Select((h, i) => (h, i)).First(x => x.h.Id == id && x.h.TabId == tabId).i;
+
+        catalog.AskLive(HandleOf("ID_OBJECTS_EXTRUSION", "Home_Family"), out var error).Should().Be(GateAnswer.NotShowing);
+        error.Should().BeNull();
+        asked.Should().BeEmpty("a hidden family tab's item is never asked (WU1d)");
+
+        catalog.AskLive(HandleOf("ID_OBJECTS_WALL", "Architecture"), out _).Should().Be(GateAnswer.Runs);
+        asked.Should().Equal("ID_OBJECTS_WALL");
+
+        session.Modify.Panels[1].IsVisible = false;   // Modify › Draw
+        catalog.AskLive(HandleOf("ID_OBJECTS_CLINE", "Modify"), out _).Should().Be(GateAnswer.NotShowing);
+        session.Architecture.IsVisible = false;        // the family opened, or the tab hid, after the list
+        catalog.AskLive(HandleOf("ID_OBJECTS_WALL", "Architecture"), out _).Should().Be(GateAnswer.NotShowing);
+        asked.Should().Equal("ID_OBJECTS_WALL");
+
+        catalog.AskLive(null, out _).Should().Be(GateAnswer.NotShowing);
+        catalog.AskLive(999, out _).Should().Be(GateAnswer.NotShowing);
+    });
+
+    [Fact]
+    public void ExecuteLive_runs_only_a_showing_item_Revit_says_can_run() => Screenshots.RunSta(() =>
+    {
+        var session = new Session().InAProject();
+        var canRun = true;
+        var catalog = session.Catalog with { NativeGate = _ => canRun };
+        var wall = session.Scan.Hits.Select((h, i) => (h, i)).First(x => x.h.Id == "ID_OBJECTS_WALL").i;
+        var ran = new List<string>();
+
+        catalog.ExecuteLive(wall, item => ran.Add(item.Id), out _).Should().Be(GateAnswer.Runs);
+        canRun = false;
+        catalog.ExecuteLive(wall, item => ran.Add(item.Id), out _).Should().Be(GateAnswer.Greyed);
+        canRun = true;
+        session.Architecture.IsVisible = false;
+        catalog.ExecuteLive(wall, item => ran.Add(item.Id), out _).Should().Be(GateAnswer.NotShowing);
+        var nothing = catalog with { NativeGate = _ => null };
+        session.Architecture.IsVisible = true;
+        nothing.ExecuteLive(wall, item => ran.Add(item.Id), out _).Should().Be(GateAnswer.NothingToAsk);
+
+        ran.Should().Equal("ID_OBJECTS_WALL");
     });
 
     [Fact]
