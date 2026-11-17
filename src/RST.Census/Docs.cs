@@ -292,11 +292,15 @@ public sealed partial class CensusApp
                     var me = Environment.ProcessId; var oldWins = new HashSet<IntPtr>(AllWins().Select(w => w.h));
                     _ = Task.Run(() =>
                     {
-                        (IntPtr h, string t) dlg = default;
-                        if (!WaitFor(() => (dlg = NewDialog(oldWins, me, t => true)).h != IntPtr.Zero, 8000)) return;
+                        // any new window of Revit: a classic dialog gets BM_CLICK on OK; any other (2027's is not a
+                        // #32770) gets Enter, which presses its default button (OK)
+                        (IntPtr h, string title, string cls, int pid) dlg = default;
+                        if (!WaitFor(() => (dlg = AllWins().FirstOrDefault(w => w.pid == me && !oldWins.Contains(w.h) && !w.title.EndsWith("Monitor"))).h != IntPtr.Zero, 8000)) return;
+                        Thread.Sleep(800);
                         var ok = Children(dlg.h).FirstOrDefault(c => Cls(c) == "Button" && GetDlgCtrlID(c) == 1);
                         if (ok != IntPtr.Zero) PostMessage(ok, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-                        Act($"legend: pressed OK in '{dlg.t}'");
+                        else { PostMessage(dlg.h, 0x0100, (IntPtr)0x0D, IntPtr.Zero); PostMessage(dlg.h, 0x0101, (IntPtr)0x0D, IntPtr.Zero); }
+                        Act($"legend: pressed {(ok != IntPtr.Zero ? "OK" : "Enter")} in '{dlg.title}' ({dlg.cls})");
                     });
                     var h = Autodesk.Windows.ComponentManager.CommandHandler;
                     System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => { try { h.Execute(item); } catch (Exception ex) { Err("legend", ex); } }));

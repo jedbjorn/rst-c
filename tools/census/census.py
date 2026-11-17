@@ -481,8 +481,17 @@ def cmd_all(year, until=None):
     plan = read_plan(year)
     finished = done_contexts(year)
     log(f"all {year}: {len(plan)} jobs, finished already: {len(finished)}")
+    restarted_for_families = False
     for job in plan:
         jkey = job["job"]
+        if job["kind"] == "family" and not restarted_for_families:
+            # project tools (2027's Forma and Issues panes) leave dockable panes shown; a Revit that was ended without
+            # a clean exit starts with its default layout, so restart once before the family contexts
+            restarted_for_families = True
+            if any(j["kind"] == "project" and j["job"] not in finished for j in plan) or not any(f.startswith("family/") for f in finished):
+                log("restart Revit before the family contexts (clears panes left by project tools)")
+                if not cmd_start(year):
+                    return "restart-failed"
         if any(f == jkey or (jkey.endswith("/Default") and f.startswith(jkey.rsplit("/", 1)[0] + "/") and not f.endswith("/ThreeD")) for f in finished):
             continue
         r = run_context(year, job, deadline)
