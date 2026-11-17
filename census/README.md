@@ -430,8 +430,11 @@ Each scratch document ends with its starting element count; the run summary reco
 - **Stock Revit only.** Third-party add-ins have no rows; RST lists their buttons live, runnable unless Revit greys them.
   Stock means Revit and the add-ins Autodesk installs with it, including Revit's built-in Twinmotion integration
   (`TwinmotionForRevit`, vendor ADSK), which keeps its rows.
-- **English Revit.** Rows are keyed by command id, so they apply in any language; only `label` and `panel` are English.
-  `tab` is the tab's id.
+- **English Revit.** The census ran in English Revit; other languages are out of scope. In a non-English Revit the
+  `not-runnable` marks still apply, because they are keyed by command id and context. The `not-drawn` marks may not:
+  they match the exact place, and `panel` is the panel's English title (`path` is container ids, except a container
+  with no id, recorded by its English text, such as `Content  Catalog`), so a tool that is not drawn could still be
+  listed. `tab` is the tab's id.
 - **Contexts are a fixed set**: nothing selected, no contextual tabs (`Modify | Walls`), no File menu, Quick Access
   Toolbar, view control bar, right-click menus or shortcut-only commands. Tools that start and then wait for a pick
   (Move, Copy, Align) count as `executes`.
