@@ -13,27 +13,6 @@
     ['.download-card > *', 100],
   ];
 
-  const video = document.querySelector('.highlight-video');
-  if (video && 'IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    let userPaused = false;
-    let autoPausing = false;
-    video.addEventListener('pause', () => {
-      userPaused = !autoPausing;
-      autoPausing = false;
-    });
-    video.addEventListener('play', () => { userPaused = false; });
-    new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting && !userPaused) {
-          video.play().catch(() => {});
-        } else if (!entry.isIntersecting && !video.paused) {
-          autoPausing = true;
-          video.pause();
-        }
-      }
-    }, { threshold: 0.35 }).observe(video);
-  }
-
   if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return;
   }
