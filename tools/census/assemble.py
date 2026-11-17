@@ -13,13 +13,22 @@ Refuses to write while any `error` row is left (AC1/AC2), unless --allow-errors 
 paths are cut to their language folder ("English-Imperial/Generic Model.rft"). Python 3 stdlib only.
 """
 import re
+import subprocess
 import sys
 from pathlib import Path
 
+
+def _main_checkout(here):
+    """The main checkout's root: the parent of the git common dir (works from any worktree)."""
+    common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=here,
+                            capture_output=True, text=True, check=True).stdout.strip()
+    return Path(common).resolve().parent
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-EVIDENCE = Path("/home/jedi/Repos/rst-c/shared/evidence/census")
-STATE = Path("/home/jedi/Repos/rst-c/.sc-state/local/vmwork/census")
+ROOT = _main_checkout(HERE)          # the main checkout: evidence and VM state live under it, never in a commit
+EVIDENCE = ROOT / "shared" / "evidence" / "census"
+STATE = ROOT / ".sc-state" / "local" / "vmwork" / "census"
 FULL = ["year", "build", "context", "id", "tab", "panel", "path", "label", "result", "tested", "opened", "teardown", "left",
         "gate", "ms", "run_date", "census_build"]
 EXC = ["context", "id", "tab", "panel", "path", "mark", "reason"]

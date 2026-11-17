@@ -33,11 +33,20 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+
+def _main_checkout(here):
+    """The main checkout's root: the parent of the git common dir (works from any worktree)."""
+    common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=here,
+                            capture_output=True, text=True, check=True).stdout.strip()
+    return Path(common).resolve().parent
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-PLN1 = Path("/home/jedi/Repos/rst-c/.sc-worktrees/pln1")
-STATE = Path("/home/jedi/Repos/rst-c/.sc-state/local/vmwork/census")
-EVIDENCE = Path("/home/jedi/Repos/rst-c/shared/evidence/census")
+ROOT = _main_checkout(HERE)          # the main checkout; evidence and VM state live under it, never in a commit
+# `./sc vm` runs from the Planner's worktree (rst_c_vm seat rules); override with CENSUS_SC_WORKTREE
+PLN1 = Path(os.environ.get("CENSUS_SC_WORKTREE", str(ROOT / ".sc-worktrees" / "pln1")))
+STATE = ROOT / ".sc-state" / "local" / "vmwork" / "census"
+EVIDENCE = ROOT / "shared" / "evidence" / "census"
 DOTNET = os.environ.get("CENSUS_DOTNET", "/tmp/dotnet10/dotnet")
 MCP_URL = "http://127.0.0.1:18000/mcp"
 G = "C:\\RstC"                      # guest workspace (rst-c's own)
