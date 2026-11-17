@@ -1,0 +1,470 @@
+id	description
+IDS_CONDUCTOR_CABLE_DIALOG	Electrical Conductor and Cable Dialog
+IDS_RBS_ANALYTICAL_LOADZONE	Create Electrical Analytical Load
+ID_ABS_IMPORT_GBXML	Import a gbXML file
+ID_ADD_IN_MANAGER	Launch Add-Ins Manager
+ID_ALIGN	Align references.
+ID_ALIGNMENT_STATION_LABEL	Create Alignment Station
+ID_ALIGNMENT_STATION_LABEL_SET	Create Alignment Station Set
+ID_AM_EDIT_MODE_START	Edit Analytical Model.
+ID_ANALYTICAL_AUTOMATION_CHECK_TOOLS_PLAYLIST_DYNAMO	Automation Customization
+ID_ANALYTICAL_AUTOMATION_PLAYLIST_DYNAMO	Launch Dynamo Playlist
+ID_ANALYTICAL_MODEL_LOADS	Loads
+ID_ANALYTICAL_MODEL_MEMBERS	Analytical Members
+ID_ANNOTATIONS_DIMENSION_ALIGNED	Create Aligned Dimensions
+ID_ANNOTATIONS_DIMENSION_ANGULAR	Create Angular Dimensions
+ID_ANNOTATIONS_DIMENSION_ARCLENGTH	Create Arc Length Dimensions
+ID_ANNOTATIONS_DIMENSION_DIAMETER	Create Diameter Dimensions
+ID_ANNOTATIONS_DIMENSION_LINEAR	Create Horizontal or Vertical Dimensions
+ID_ANNOTATIONS_DIMENSION_RADIAL	Create Radial Dimensions
+ID_APPLY_VIEW_TEMPLATE	Apply Template Properties
+ID_BEAM_ANNOTATION_PLACEMENT	Place tags and spot elevations on beams in the current view
+ID_BOUNDARY_CONDITIONS	Boundary Conditions
+ID_BROWSER_ORGANIZATION	Change browser organization: folders and filtering
+ID_BUTTON_BRACING_ELEVATION	Create a framing elevation view
+ID_BUTTON_DELETE	Delete the selection
+ID_BUTTON_INTERIOR_ROOM_ELEVATION	Create an elevation view
+ID_BUTTON_SELECT	Select objects to modify
+ID_BUTTON_TAG	Create a tag by category
+ID_BUTTON_TAG_ALL	Tag all visible elements of a particular category in the current view
+ID_CANVAS_THEME_SWITCH	Switch canvas theme between light and dark
+ID_CEA_LAUNCH_ANALYSIS	Start an energy simulation.
+ID_CEA_VIEW_ENERGY_DATA	View energy data.
+ID_CHECK_SPELLING	Review and correct spelling errors.
+ID_COLLABORATE	Collaborate
+ID_CONCRETE_COVER	Edit Rebar Cover
+ID_CONTEXTUAL_DATA_PANEL_TOGGLE	Contextual Data
+ID_CONVERT_LEGACY_TO_COMPOUND_ELEMENT	Convert Legacy to Compound Element
+ID_COORDINATIONMODEL_ADD_AUTODESKDOCS	Coordination Model Autodesk Docs
+ID_COORDINATIONMODEL_ADD_LOCAL	Coordination Model Local
+ID_COORDINATIONMODEL_CHANGESREVIEW	Coordination Model Changes
+ID_COORDINATION_ISSUES	Issues
+ID_COPING	Select elements for coping
+ID_COPY_WATCH_CURRENT	Start Coordination Monitor within current project
+ID_COPY_WATCH_LINK	Start Coordination Monitor with a linked project
+ID_CREATE_ANALYTICAL_LINK	Create Analytical Link
+ID_CREATE_ANALYTICAL_MODEL_PANEL	Create Analytical Panel
+ID_CREATE_ANALYTICAL_MODEL_PANEL_BY_EXTRUSION	Create Analytical Panel by Extrusion
+ID_CREATE_ASSEMBLY	Create assembly
+ID_CREATE_DEPENDENT_VIEW	Duplicate the view as a dependent view
+ID_CREATE_DORMER_OPENING_TB	Create a Dormer Opening by selecting a Roof.
+ID_CREATE_EXT_ENTITY_ANCHOR	Create Anchor
+ID_CREATE_EXT_ENTITY_BEAM_COPE	Create Cope
+ID_CREATE_EXT_ENTITY_BOLT	Create Bolt Pattern
+ID_CREATE_EXT_ENTITY_CONTOUR	Create Contour
+ID_CREATE_EXT_ENTITY_CORNER_CUT	Create Corner Cut
+ID_CREATE_EXT_ENTITY_HOLE	Create Hole
+ID_CREATE_EXT_ENTITY_PLATE	Create Steel Plate
+ID_CREATE_EXT_ENTITY_SHEAR_STUD	Create Shear Stud
+ID_CREATE_EXT_ENTITY_SHORTENING	Create Shortening
+ID_CREATE_EXT_ENTITY_WELD	Create Weld
+ID_CREATE_FASCIA_TB	Create a fascia
+ID_CREATE_GUIDE_GRID	Create guide grid on current sheet
+ID_CREATE_GUTTER_TB	Create a gutter
+ID_CREATE_OPENING_BY_FACE_TB	Create an Opening by selecting a planar face. Opening will cut perpendicular to the face.
+ID_CREATE_PARTS	Create Parts
+ID_CREATE_SHAFT_OPENING_TB	Create a Shaft Opening
+ID_CREATE_SLAB_EDGE_TB	Create a slab edge
+ID_CREATE_SOFFIT_TB	Create a roof soffit
+ID_CREATE_VERTICAL_OPENING_TB	Create a Vertical Opening by selecting a host object.
+ID_CREATE_VIEW_TEMPLATE	Create a template from this view
+ID_CREATE_WALL_OPENING_TB	Select a wall to create a rectangular opening.
+ID_CURTA_SYSTEM_PICK_FACES	Create a curtain system by picking one or more faces of a Mass instance.
+ID_CUT_HOST	Pick a host to be cut with current selection
+ID_CUT_PROFILE_BOUNDARY_BETWEEN_FACES	Cut Profile at boundary between face
+ID_CUT_PROFILE_ON_FACE	Cut Profile on face
+ID_DETAIL_LEVEL	Adjust view scale ranges for detail levels
+ID_DUCT_1LINE_PATH	Place Duct Placeholder
+ID_DUPLICATE_WITH_DETAILING	Duplicate the view and detailing as an independent view
+ID_EDIT_BEAM_JOINS	Edit appearance and geometry of beam and column joins.
+ID_EDIT_CREATE_PATTERN	Create an array from the selected objects
+ID_EDIT_DEMOLISH	Mark objects as demolished during current phase
+ID_EDIT_DESIGNOPTIONS	Review and change Design Options.
+ID_EDIT_GROUP	Create associative group of objects
+ID_EDIT_LINEWORK	Change style of selected lines
+ID_EDIT_MATCH_TYPE	Copy the type of one object to other objects
+ID_EDIT_MIRROR	Mirror selected object(s)
+ID_EDIT_MIRROR_LINE	Create a line
+ID_EDIT_MOVE	Move selected objects or their copies
+ID_EDIT_MOVE_COPY	Move copies of selected objects
+ID_EDIT_PAINT	Change materials on specified regions.
+ID_EDIT_RASTER_SYMBOLS	Display and manage loaded raster symbols
+ID_EDIT_ROTATE	Rotate selected object(s)
+ID_EDIT_SCALE	Scale selected objects
+ID_EDIT_SELECTIONS	Manage and/or modify saved selection sets
+ID_EDIT_WALL_JOINS	Edit appearance and geometry of wall joins.
+ID_ENABLE_ENERGY_ANALYSIS	Create Energy Model
+ID_ENERGY_MODEL_GUIDE	Energy Model Guide
+ID_ENERGY_MODEL_UPDATE	Update Energy Model
+ID_FABRIC_DISTR_SYSTEM_SKETCH	Create Fabric Reinforcement Distribution by Sketching Boundary
+ID_FABRIC_SINGLE_PLACEMENT	Place Single Fabric Sheet in Selected Host
+ID_FABRIC_SYSTEM_PLACE_SPANSYMBOL	Place Fabric Reinforcement Symbol
+ID_FAMILY_LOAD	Load a family into the project
+ID_FAMILY_LOAD_CLOUD	Load a family from cloud into the project
+ID_FAMILY_TYPE	Modify predefined types for this family
+ID_FILE_BACKUPS	Retrieve, or roll back to, a backup of a workset project
+ID_FILE_EXTERNAL_PARAMETERS	Manage, create, or modify shared parameters
+ID_FILE_IMPORT	Import vector data from other programs
+ID_FILE_IMPORT_ACAD_LINEWEIGHT_TABLE	Import Line Weights
+ID_FIND_REPLACE	Find and replace text
+ID_FLOOR_PICK_FACES	Create floors by picking Mass Floors of Mass Instances.
+ID_FORMA_CONNECTED_COMMAND	Forma Connected
+ID_FORMA_MICROCLIMATE	Microclimate Analysis
+ID_FORMA_ML_WIND_ANALYSIS	ML Wind Analysis
+ID_FORMA_SETUP_CFD	CFD Analysis Setup
+ID_FORMA_SITE_ANALYSES	Site Analyses Panel
+ID_GEO_ACQUIRE_COORDINATES	Acquire shared coordinate system from a linked project
+ID_GEO_MANAGE_LOCATIONS	Manage positions in this project
+ID_GEO_PUBLISH_COORDINATES	Publish shared coordinate system to a linked project
+ID_GRAPHIC_DISPLAY_OPTIONS	Show Graphic Display Options Dialog
+ID_HEATING_AND_COOLING_LOADS_ANALYSIS	Heating and Cooling Loads Analysis
+ID_HIDE_ELEMENTS_EDITOR	Select elements to show hidden lines
+ID_IFC_LINK	Link an IFC file for reference
+ID_INPLACE_COMPONENT	Create a component in place
+ID_INPLACE_MASS	Create a single Mass instance in place.
+ID_INSERT_2D_ELEMENTS_FROM_FILE	Insert 2D elements from file into project or clipboard
+ID_INSERT_VIEWS_FROM_FILE	Insert views from file
+ID_INTERFERENCE_CHECK	Run Interference Check on the current project, a selection, or a linked project.
+ID_ISOLATE_ANNOTATIONS	Isolate Annotations
+ID_JOIN_ELEMENTS_EDITOR	Select elements to join
+ID_KEYNOTE_ELEMENT	Create an element keynote
+ID_KEYNOTE_MATERIAL	Create a material keynote
+ID_KEYNOTE_USER	Create a user keynote
+ID_LINKED_DWG	Manage Links
+ID_LINK_EXTENDED_PROPERTIES	Link Extended Properties
+ID_LINK_IMAGE	Link Image
+ID_LINK_PDF	Link PDF
+ID_LOAD_GROUP	Load a file as a group
+ID_LOAD_INTO_PROJECTS	Load Document into open Projects
+ID_LOCK_ELEMENTS	Prevent change of element position
+ID_MAJOR_SEGMENT	Pick the major segment of the shape
+ID_MARKUPS_LOAD	Link DWF Markup Set
+ID_MASKING_REGION	Create a masking region
+ID_MEASURE_LINE	Create a line
+ID_MEASURE_PICK_LINES	Pick Lines
+ID_MEP_DUCT_PRESSURE_LOSS_REPORT	Duct Pressure Loss Report
+ID_MEP_ELECTRICAL_ANALYSIS_SETTINGS	Area Based Load Type Settings
+ID_MEP_FABRICATION_SETTINGS	Fabrication Settings
+ID_MEP_PIPE_PRESSURE_LOSS_REPORT	Pipe Pressure Loss Report
+ID_MEP_PNID_MODELER	P&ID Modeler
+ID_MEP_PNID_SETTINGS	P&ID Settings
+ID_MEP_SPACE_NAMING_UTILITY	Space Naming Utility
+ID_MEP_SYSTEM_ZONE_BY_SKETCH	Create System-Zone by Sketch
+ID_MEP_SYSTEM_ZONE_BY_SPACES	Create System-Zone by Spaces
+ID_MIRROR_PROJECT	Mirror all model geometry and annotations
+ID_MULTIPLE_VALUES_INDICATOR_SETTINGS	Modify multiple values indication Settings
+ID_MULTI_REFERENCE_ANNOTATION_ALIGNED	Place an aligned Multi-Rebar Annotation
+ID_MULTI_REFERENCE_ANNOTATION_LINEAR	Place a linear Multi-Rebar Annotation
+ID_NEW_MATCHLINE	Create a new matchline
+ID_NEW_PLAN_REGION	Create a new plan region
+ID_NEW_REFERENCE_VIEWER	Create a new view reference
+ID_NEW_VIEWLIST	Create a view list
+ID_NUMBERING_OPTIONS	Numbering
+ID_OBJECTS_AREA_SEPARATION	Draw Room Separation Lines
+ID_OBJECTS_BEAM	Create a beam
+ID_OBJECTS_BEAM_SYSTEM_TAG	Create Beam System Tag for Beam Systems
+ID_OBJECTS_BLEND	Create a solid by blending between two parallel sketches
+ID_OBJECTS_BLEND_CUT	Create a void by blending between two parallel sketches
+ID_OBJECTS_BRACE	Create a brace
+ID_OBJECTS_CEILING	Create a ceiling
+ID_OBJECTS_CLINE	Create a reference plane
+ID_OBJECTS_CLOUD	Create a revision cloud
+ID_OBJECTS_COLUMN	Create a column
+ID_OBJECTS_CONTINUOUS_FOOTING	Create Wall Foundation
+ID_OBJECTS_CONTROL	Create a control
+ID_OBJECTS_CORNICE	Create a wall sweep
+ID_OBJECTS_CURVE	Create a straight line or an arc
+ID_OBJECTS_CW_GRID	Create a grid line on a curtain wall
+ID_OBJECTS_DETAIL_CURVES	Create a straight detail line or a detail arc
+ID_OBJECTS_DOOR	Create a door
+ID_OBJECTS_EXTRUSION	Create a solid by extruding the sketch orthogonally
+ID_OBJECTS_EXTRUSION_CUT	Create a void by extruding the sketch orthogonally
+ID_OBJECTS_FAMDETAIL	Create a detail component
+ID_OBJECTS_FAMILYHOST	Set the family's category
+ID_OBJECTS_FAMSYM	Create an instance of a component type
+ID_OBJECTS_FAM_ANN_INST	Create an instance of a symbol type
+ID_OBJECTS_FILLED_REGION	Create a filled region
+ID_OBJECTS_FLOOR	Create a floor
+ID_OBJECTS_FOOTING_SLAB	Create Foundation Slab
+ID_OBJECTS_GRID	Create a grid line
+ID_OBJECTS_INSULATION	Create an insulation line
+ID_OBJECTS_ISOLATED_FOOTING	Create Isolated Foundation
+ID_OBJECTS_JOIST_SYSTEM	Create a Structural Beam System
+ID_OBJECTS_LEGEND_COMPONENT	Place a representation of a component on a Legend
+ID_OBJECTS_LEVEL	Create a level
+ID_OBJECTS_MASS	Place an instance of a loaded Mass family.
+ID_OBJECTS_MEP_SPACE	Create a Space
+ID_OBJECTS_MEP_SPACE_SEPARATION	Draw Space Separation Lines
+ID_OBJECTS_MEP_SPACE_TAG	Tag a Space
+ID_OBJECTS_MODELTEXT	Create a model text
+ID_OBJECTS_MULLION	Create a mullion
+ID_OBJECTS_OPENING	Create an opening cut
+ID_OBJECTS_PATH_REIN_SPAN_SYM	Create Span Symbol for Structural Path Reinforcement
+ID_OBJECTS_PLACE_DETAIL_GROUP	Create an instance of an existing detail group
+ID_OBJECTS_PLACE_GROUP	Create an instance of an existing model or legacy mixed group
+ID_OBJECTS_PLACE_TITLEBLOCK	Place a titleblock on a sheet that does not have one
+ID_OBJECTS_PROJECT_CURVE	Create a straight line or an arc
+ID_OBJECTS_RAILING	Create a railing
+ID_OBJECTS_RAILING_ON_HOST	Place Railing on Stair/Ramp
+ID_OBJECTS_RAMP	Create a ramp
+ID_OBJECTS_RASTER	Import a picture bitmap
+ID_OBJECTS_REBAR_CURVE	Create a rebar line or arc
+ID_OBJECTS_REBAR_SYSTEM_SPAN_SYM	Create Span Symbol for Structural Area Reinforcement
+ID_OBJECTS_REFERENCE_CURVE	Create a reference line
+ID_OBJECTS_REPEATING_DETAIL	Create a repeating detail
+ID_OBJECTS_REVEAL	Create a reveal
+ID_OBJECTS_REVOLUTION	Create a solid by revolving a sketch
+ID_OBJECTS_REVOLUTION_CUT	Create a void by revolving a sketch
+ID_OBJECTS_ROOM	Create a room
+ID_OBJECTS_ROOM_FILL	Create a color fill legend
+ID_OBJECTS_ROOM_TAG	Tag a room
+ID_OBJECTS_SLAB	Create a Slab
+ID_OBJECTS_SPAN_DIR_SYM	Create Span Direction Symbol for Structural Floors
+ID_OBJECTS_STAIRS	Create a staircase
+ID_OBJECTS_STAIRS_PATH	Create a Stair Path by selecting a Stairs.
+ID_OBJECTS_STRUCTURAL_COLUMN	Create a structural column
+ID_OBJECTS_STRUCTURAL_WALL	Create a structural wall
+ID_OBJECTS_SWEEP	Create a solid by sweeping a sketch along a path
+ID_OBJECTS_SWEEP_CUT	Create a void by sweeping a sketch along a path
+ID_OBJECTS_SWEPTBLEND	Create a solid by blending two sketches along a path
+ID_OBJECTS_SWEPTBLEND_CUT	Create a void by blending two sketches along a path
+ID_OBJECTS_TAG_NOTE	Create a label object for a tag
+ID_OBJECTS_TEXT_NOTE	Create a text object
+ID_OBJECTS_TRUSS	Create a Truss
+ID_OBJECTS_VIEW_DIR_SPEC_CURVE	Create a symbolic line or arc
+ID_OBJECTS_WALL	Create a wall
+ID_OBJECTS_WINDOW	Create a window
+ID_OFFSET	Offset walls and lines.
+ID_OPERATING_SCHEDULES	Operating Schedules
+ID_PARALLEL_CONDUIT	Add Parallel Conduits
+ID_PARALLEL_PIPES	Add Parallel Pipes
+ID_PARTITIONS_SHOW_HISTORY	Show usernames, times, and comments for successive saves of a file.
+ID_PATH_OF_TRAVEL	Place Path of Travel
+ID_PATH_OF_TRAVEL_SHOW_OBSTACLES	Toggle Obstacles mode for Path of Travel
+ID_PATH_REIN_SKETCH	Create Path Reinforcement by Sketching Path
+ID_PHOTO_RENDERING_VIEW	Show or hide Rendering dialog.
+ID_PHYSICAL_TO_ANALYTICAL_RUN_DYNAMO	Run Physical to Analytical for Buildings
+ID_PIPE_1LINE_PATH	Place Pipe Placeholder
+ID_PLACE_BENDING_DETAIL	Place Bending Detail
+ID_PLAYLIST_DYNAMO	Launch Dynamo Playlist
+ID_POINT_CLOUD	Create a point cloud
+ID_PRJBROWSER_COPY	Duplicate the view as an independent view
+ID_PROPERTY_LINE_DATA	Property Line Data
+ID_PURGE_UNUSED	Purge (delete) unused families and types
+ID_RBS_ADD_CABLETRAY_CONNECTOR	Add Cable Tray Connector to the family
+ID_RBS_ADD_CONDUIT_CONNECTOR	Add Conduit Connector to the family
+ID_RBS_ADD_DUCT_CONNECTOR	Add Duct Connector to the family
+ID_RBS_ADD_ELECTRICAL_CONNECTOR	Add Electrical Connector to the family
+ID_RBS_ADD_PIPE_CONNECTOR	Add Pipe Connector to the family
+ID_RBS_ANALYTICAL_AREA_BASED_LOAD_BOUNDARY	Area Based Load Boundary
+ID_RBS_BUILDINGSPACE_TYPE_SETTINGS	Building/Space Type Settings
+ID_RBS_CABLETRAY_FITTING	Insert a Cable Tray fitting
+ID_RBS_CABLE_TRAY	Add Cable Tray
+ID_RBS_CHECK_CIRCUITS	Check for unassigned circuits
+ID_RBS_CHECK_DUCT_SYSTEMS	Validate Duct Systems
+ID_RBS_CHECK_PIPE_SYSTEMS	Validate Pipe Systems
+ID_RBS_CONDUIT	Add Conduit
+ID_RBS_CONDUIT_FITTING	Insert a Conduit fitting
+ID_RBS_ELECTRICAL_COMMUNICATION_DEVICE	Place a communication device in the model
+ID_RBS_ELECTRICAL_DATA_DEVICE	Place a data device in the model
+ID_RBS_ELECTRICAL_DEMAND_FACTOR	Demand Factors
+ID_RBS_ELECTRICAL_DEVICE	Add Electrical Devices
+ID_RBS_ELECTRICAL_EQUIPMENT	Add Electrical Equipment
+ID_RBS_ELECTRICAL_FIREALARM_DEVICE	Place a fire alarm device in the model
+ID_RBS_ELECTRICAL_LIGHTING_DEVICE	Place a lighting device in the model
+ID_RBS_ELECTRICAL_LOAD_CLASSIFICATION	Load Classifications
+ID_RBS_ELECTRICAL_NURSECALL_DEVICE	Place a nurse call device in the model
+ID_RBS_ELECTRICAL_SECURITY_DEVICE	Place a security device in the model
+ID_RBS_ELECTRICAL_SETTINGS	Electrical Settings
+ID_RBS_ELECTRICAL_TELEPHONE_DEVICE	Place a telephone device in the model
+ID_RBS_ELECTRICAL_WIRE	Add Electrical Wires
+ID_RBS_ELECTRICAL_WIRE_CHAMFER	Place Wires with a Chamfered Corner
+ID_RBS_ELECTRICAL_WIRE_SPLINE	Place Wires with a Spline Curve
+ID_RBS_FABRICATION_DUCTWORK_STIFFENER	Create a MEP fabrication ductwork stiffener
+ID_RBS_HIDE_ABL_SEPARATION_LINE_OPEN_END	Hide Boundary Open-Ends
+ID_RBS_LIGHTING_FIXTURE	Add Lighting Fixtures
+ID_RBS_MECHANICAL_ACCESSORY	Insert a duct accessory
+ID_RBS_MECHANICAL_COLOR_FILL	Color Fill Ductwork based on parameters.
+ID_RBS_MECHANICAL_CONTROL_DEVICE	Place a mechanical control device
+ID_RBS_MECHANICAL_CONVERTTOFLEX	Convert Rigid Duct to Flex Duct
+ID_RBS_MECHANICAL_DIFFUSER	Insert an Air Terminal
+ID_RBS_MECHANICAL_DUCT	Create ducts
+ID_RBS_MECHANICAL_EQUIPMENT	Create mechanical equipment
+ID_RBS_MECHANICAL_FITTING	Insert a duct fitting
+ID_RBS_MECHANICAL_FLEX	Create flex ducts
+ID_RBS_MECHANICAL_SETTINGS	Mechanical Settings
+ID_RBS_PANEL_SCHEDULE_EDIT_A_TEMPLATE	Edit a Template
+ID_RBS_PANEL_SCHEDULE_MANAGE_TEMPLATES	Manage Templates
+ID_RBS_PIPE_ACCESSORY	Insert a pipe accessory
+ID_RBS_PIPE_FITTING	Insert a pipe fitting
+ID_RBS_PIPE_FLEX	Create flex pipes
+ID_RBS_PIPE_PIPE	Create pipes
+ID_RBS_PIPING_COLOR_FILL	Color Fill Piping based on parameters.
+ID_RBS_PLUMBING_EQUIPMENT	Create plumbing equipment
+ID_RBS_PLUMBING_FIXTURE	Insert a plumbing fixture
+ID_RBS_SPRINKLER	Insert a sprinkler
+ID_RBS_SYSTEM_NAVIGATOR	Show or hide the system browser
+ID_RBS_VIEW_PANEL_SCHEDULE	Create a Panel Schedule
+ID_REBAR_ABBREVIATION	Reinforcement Settings
+ID_REBAR_COVER_SETTINGS	Edit Cover Settings
+ID_REBAR_FREE_FORM_ANY_MORPHED	Place Rebar
+ID_REBAR_FREE_FORM_ANY_PATH	Place Rebar
+ID_REBAR_PLACE	Place Rebar
+ID_REBAR_SHAPE_ALLOWABLE_BAR_TYPES	Edit Allowable Bar Types
+ID_REBAR_SYSTEM_SKETCH	Create Area Reinforcement by Sketching Boundary
+ID_RECENTER_REFERENCE_LINE	Re-center reference(s) in current view
+ID_RECONCILE_LINK	Open Coordination Review dialog for a linked project
+ID_RELOCATE_PROJECT	Move the origin of the project's coordinates
+ID_RELOCATE_SHARED_COORDINATES	Move the origin of the project's shared coordinates
+ID_REPORT_COORDINATES	Report the coordinates of a reference
+ID_REPORT_SHARED_COORDINATES	Report the shared coordinates of a reference
+ID_RESET_ANALYTICAL_MODEL	Reset Adjustment for one Analytical Model
+ID_RESET_SHARED_COORDINATES	Reset Shared Coordinates
+ID_RM_CREATE_DECAL	Create a decal
+ID_ROOF_EXTRUSION	Create a roof by extrusion
+ID_ROOF_FOOTPRINT	Create a roof by specifying footprint
+ID_ROOF_PICK_FACES	Create a roof by picking non-vertical faces of a Mass instance.
+ID_ROTATE_PROJECT	Rotate all model geometry and annotations relative to Project North
+ID_ROTATE_SHARED_COORDINATES	Rotate project shared coordinates
+ID_ROTATE_TRUE_NORTH	Rotate project coordinates
+ID_ROUTE_ANALYSIS_SETTINGS	Route Analysis Settings
+ID_RUN_SYSTEMS_ANALYSIS	Run systems analysis.
+ID_RVTDOC_LINK	Link another Revit project
+ID_SELECT_BY_ID	Select elements by comma-delimited list of ids
+ID_SETTINGS_ALIGNMENT_STATION_LABEL	Modify Alignment Station Label Styles
+ID_SETTINGS_ANALYSIS_DISPLAY_STYLES	Modify Analysis Display Styles
+ID_SETTINGS_ANNOTATIONS_LEADERS	Modify Text Note Leaders
+ID_SETTINGS_ASSEMBLY_CODE	Modify assembly code settings
+ID_SETTINGS_COLORFILLSCHEMES	Color Fill Schemes
+ID_SETTINGS_DECAL_TYPES	Modify decal types
+ID_SETTINGS_DIMENSIONS	Modify dimension settings
+ID_SETTINGS_DIMENSIONS_ANGULAR	Modify Angular Dimension Styles
+ID_SETTINGS_DIMENSIONS_DIAMETER	Modify Diameter Dimension Styles
+ID_SETTINGS_DIMENSIONS_LINEAR	Modify Linear Dimension Styles
+ID_SETTINGS_DIMENSIONS_RADIAL	Modify Radial Dimension Styles
+ID_SETTINGS_FILLPATTERNS	Modify fill patterns
+ID_SETTINGS_FILTERS	Manage filters
+ID_SETTINGS_FORGE_PARAMETERS	Manage Parameters Service
+ID_SETTINGS_GLOBAL_PARAMETERS	Global Parameters
+ID_SETTINGS_HALFTONE	Modify halftone and underlay settings
+ID_SETTINGS_KEYNOTING	Modify keynoting settings
+ID_SETTINGS_LINE_STYLES	Line Styles
+ID_SETTINGS_MATERIALS	Modify materials
+ID_SETTINGS_OBJECTSTYLES	Modify object styles
+ID_SETTINGS_PARTITIONS	Workset control
+ID_SETTINGS_PENS	Modify line weight settings
+ID_SETTINGS_PHASES	Phases control
+ID_SETTINGS_PROJECT_INFORMATION	Modify project information
+ID_SETTINGS_PROJECT_PARAMETERS	Modify project-wide parameters
+ID_SETTINGS_RENDERING_APPEARANCE	Show materials appearance
+ID_SETTINGS_REVISIONS	Revisions control
+ID_SETTINGS_SNAPPING	Modify snap distances or angles
+ID_SETTINGS_SPOT_COORDINATE	Modify Spot Coordinate Styles
+ID_SETTINGS_SPOT_ELEVATION	Modify Spot Elevation Styles
+ID_SETTINGS_SPOT_SLOPE	Modify Spot Slope Styles
+ID_SETTINGS_SUNANDSHADOWSSETTINGS	Sun Settings
+ID_SETTINGS_TAGS	Tags
+ID_SETTINGS_TEXT	Text Types
+ID_SETTINGS_UNITS	Specify project units
+ID_SETTINGS_VIEWTEMPLATES	Modify View Templates
+ID_SETTING_AREACALCULATIONS	Area and Volume Calculation
+ID_SHOWDISCONNECTS_BUTTON	Show Disconnects
+ID_SHOW_CONNECTOR_CONTROLS_BUTTON	Show Connector Controls
+ID_SHOW_MASS_NO_OVERRIDE	Only show Mass instances in views where they are set visible.
+ID_SHOW_MASS_STANDARD	Show all Mass instances and floor area faces in all views. This does not affect printing.
+ID_SHOW_VIEWCUBE	Show ViewCube
+ID_SITE_BOOLEAN_PERTURBATION_UI	Topography Cut Void Stability
+ID_SITE_COMPONENT	Create a site component
+ID_SITE_PARKING_COMPONENT	Create a parking component
+ID_SITE_PROPERTYLINE	Create a property line
+ID_SITE_SETTINGS	Site Settings
+ID_SITE_TOPO_SOLID	Create a topographical solid
+ID_SITE_TOPO_SOLID_FROM_IMPORT	Create Toposolid From Import
+ID_SITE_TOPO_SURFACE	Create a topographical surface
+ID_SKETCH_GRID_VIS	Show or hide work plane
+ID_SKETCH_PLANE_TOOL	Set a Work Plane for the view or the sketch
+ID_SPECIFY_SHARED_COORDINATES	Manually type known coordinates of a point in the project
+ID_SPLIT	Split walls and lines
+ID_SPLIT_FACE	Split a face into different regions.
+ID_SPLIT_FACE_IN_NEW_FAMILIES	Split Face
+ID_SPLIT_WITH_GAP	Split Elements With Gap
+ID_SPOT_COORDINATE	Create Spot Coordinate
+ID_SPOT_ELEVATION	Create Spot Elevation
+ID_SPOT_SLOPE	Create Spot Slope
+ID_STAIRS_TRISER_NUMBER	Place a Stair Tread/Riser Number
+ID_STARTING_VIEW	Set the starting view
+ID_STARTUP_PAGE	Show or hide recent files
+ID_STEEL_PARAM_CUT_BY	Create Parametric Cut By
+ID_STEEL_PARAM_CUT_COPE	Create Parametric Cope
+ID_STEEL_PARAM_CUT_MITER	Create Parametric Miter
+ID_STEEL_PARAM_CUT_SAW_CUT_FLANGE	Create Parametric Saw cut - Flange
+ID_STEEL_PARAM_CUT_SAW_CUT_WEB	Create Parametric Saw cut - Web
+ID_STEEL_PARAM_CUT_THROUGH	Create Parametric Cut Through
+ID_STEEL_PLAYLIST_DYNAMO	Launch Dynamo Playlist
+ID_STRUCTURAL_CONNECTION_DIRECT_CREATION	Create a structural connection
+ID_STRUCTURAL_CONNECTION_SETTINGS	Structural Connection Settings
+ID_STRUCTURAL_SETTINGS	Structural Settings
+ID_STRUCTURAL_SETTINGS_ANALY_MODEL	Analytical Model Settings
+ID_STRUCTURAL_SETTINGS_BOUND_COND	Boundary Condition Settings
+ID_STRUCTURAL_SETTINGS_LOADS_SCALING_DISPLAY	Loads Scaling Display
+ID_STRUCTURAL_SETTINGS_LOAD_CASES	Load Cases Settings
+ID_STRUCTURAL_SETTINGS_LOAD_COMB	Load Combinations Settings
+ID_STRUCT_CONNECTIVITY_RESET	Structural Connectivity Reset.
+ID_SWITCH_JOIN_ORDER_EDITOR	Select joined elements to switch the join order
+ID_TAG_BY_EXAMPLE	Tag By Example
+ID_TAG_MATERIAL	Create a material tag
+ID_TAG_MULTI	Create a multi-category tag
+ID_THIN_LINES	Draw all lines as thin lines. This does not affect printing.
+ID_TOGGLE_ACTIVATE_CONTROLS	Activate Controls
+ID_TOGGLE_MEP_SIZING_CALCULATOR	MEP Sizing Calculator
+ID_TOGGLE_SMOOTH_TOPOSOLID	Smooth Toposolid
+ID_TOGGLE_STRUCTCONNECTIONS_SHOW_WARNINGS	Show warnings for Structural Connections
+ID_TOOLS_MACROS	View the list of macros, from which you can run, create, or delete a macro.
+ID_TOOLS_MACROSECURITY	Launch macro security setting, from which you can set the macro security level.
+ID_TOPOSOLID_PICK_FACES	Create a toposolid by picking non-vertical faces of a Mass instance.
+ID_TRANSFER_PROJECT_STANDARDS	Transfer Project Standards From an Open Document
+ID_TRIM_EXTEND_CORNER	Trim/Extend two lines or walls to make a corner.
+ID_TRIM_EXTEND_MULTIPLE	Trim/Extend multiple lines or walls to the same bounding reference.
+ID_TRIM_EXTEND_SINGLE	Trim/Extend a single line or wall to a bounding reference.
+ID_TRUSS_BOTTOM_CHORD_CURVE	Bottom Chord
+ID_TRUSS_TOP_CHORD_CURVE	Top Chord
+ID_TRUSS_WEB_CURVE	Web
+ID_UNCOPING	Select elements to remove coping
+ID_UNCUT_HOST	Current selection will not cut the host anymore
+ID_UNHIDE_ELEMENTS_EDITOR	Select elements to remove hidden lines
+ID_UNJOIN_ELEMENTS_EDITOR	Select elements to unjoin
+ID_UNLOCK_ELEMENTS	Allow change of element position
+ID_VIEWS_FOR_A360	Publish Settings
+ID_VIEWTAGSTYLES_CALLOUTTAGS	Callout Tags
+ID_VIEWTAGSTYLES_ELEVATIONTAGS	Elevation Tags
+ID_VIEWTAGSTYLES_SECTIONTAGS	Section Tags
+ID_VIEW_CATEGORY_VISIBILITY	Control visibility and appearance of objects (applied only in the active view)
+ID_VIEW_CLOSE_INACTIVE	Close all views that are inactive
+ID_VIEW_DEFAULT_3DVIEW	Create a default 3D orthographic view.
+ID_VIEW_NEW_3DVIEW	Create a 3D view by placing camera and focus target
+ID_VIEW_NEW_AREASCHEME	Create an area scheme plan view
+ID_VIEW_NEW_CALLOUT	Create a callout view
+ID_VIEW_NEW_CALLOUT_SKETCH	Sketch a callout view
+ID_VIEW_NEW_DRAFTING	Create a drafting view
+ID_VIEW_NEW_DRAWING_LIST	Create a sheet list
+ID_VIEW_NEW_GRAPH_SCHED_COLUMN	Create a graphic column schedule view.
+ID_VIEW_NEW_KEYNOTE_LEGEND	Create a keynote legend
+ID_VIEW_NEW_LEGEND	Create a legend
+ID_VIEW_NEW_MATERIAL_TAKEOFF	Create a material takeoff
+ID_VIEW_NEW_NOTE_BLOCK	Create a note block
+ID_VIEW_NEW_PLAN	Create a floor plan view
+ID_VIEW_NEW_RCP	Create a ceiling plan view
+ID_VIEW_NEW_REVISION_SCHEDULE	Create a revision schedule
+ID_VIEW_NEW_SCHEDULE	Create a schedule
+ID_VIEW_NEW_SECTION	Create a section view
+ID_VIEW_NEW_SHEET	Create a drawing sheet
+ID_VIEW_NEW_STRUCTURAL_PLAN	Create a structural plan view
+ID_VIEW_NEW_WALKTHROUGH	Create a walkthrough
+ID_VIEW_PLACE_VIEW	Create a view
+ID_VIEW_PROJECTEXPLORER	Show or hide the project browser
+ID_VIEW_STATUS_BAR	Show or hide the status bar
+ID_VIEW_TAB	Arrange views so they tabbed
+ID_VOLUME_OF_INTEREST	Scope Box
+ID_WALL_PICK_FACES	Create walls by picking vertical faces of Mass instances.
+ID_WINDOW_TILE_VERT	Arrange windows as non-overlapping tiles
+ID_WORKPLANE_VIEW	Show or hide workplane view

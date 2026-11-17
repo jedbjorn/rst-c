@@ -100,6 +100,12 @@ Search-It finds a tool when you know its name but not where it is on the ribbon.
 
 **[Search-It docs →](https://github.com/jedbjorn/rst-c/blob/main/docs/search-it.md)**
 
+### Revit ribbon command index
+
+An open reference for anyone building on Revit's ribbon: every stock ribbon command in Revit 2026 and 2027 (709 ids), with its label, Revit's one-line description, where it sits on the ribbon, and whether it actually runs in each project view and family type. It comes from the census that backs Search-It, which started every tool on a test machine. Plain-text tables (TSV) and a page to browse, MIT like the rest of the repository.
+
+**[Browse the command index →](https://github.com/jedbjorn/rst-c/blob/main/census/COMMANDS.md)** · **[Census README: files, columns, method, limits →](https://github.com/jedbjorn/rst-c/blob/main/census/README.md)**
+
 ### Tray
 
 From v3.1, RST installs a small tray app, `RST.Tray.exe`, in the Windows notification area (the icons by the clock). It runs while you are signed in, uses the .NET that Revit already installs, and nothing in Revit depends on it. Click its icon to open its window; closing the window leaves it running. The window has five pages:
