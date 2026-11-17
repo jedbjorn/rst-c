@@ -56,6 +56,14 @@ def main(argv):
         r = dict(zip(head, f + [""] * (len(head) - len(f))))
         if r["result"] == "error" and r.get("note") == "re-run requested":
             continue
+        # a place on a hidden panel: the live check sees the panel (Search-It's showing rule), so it is not a not-drawn
+        # exception; it carries its id's result (rows from runs before the add-in applied this rule themselves)
+        if r["result"] == "not-drawn" and r.get("note", "").startswith("not drawn: its panel is hidden here"):
+            m = re.search(r"\(the id: ([a-z-]+)\)", r.get("note", ""))
+            if m:
+                r = dict(r)
+                r["result"] = m.group(1)
+                r["note"] = "panel hidden here"
         if r["result"] == "not-drawn" and not nd_first:
             m = re.search(r"\(the id: ([a-z-]+)\)", r.get("note", ""))
             if m and m.group(1) in ("accepted-nothing", "refused"):

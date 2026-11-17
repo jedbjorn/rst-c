@@ -173,7 +173,9 @@ public sealed partial class CensusApp
                 {
                     var p = g.OrderByDescending(x => drawn.Contains(x.Item)).ThenByDescending(x => x.Panel.IsVisible).First();
                     string result = r.Result, note = r.Note;
-                    if (result is not ("skipped" or "not-a-command" or "error") && !drawn.Contains(p.Item))
+                    // a place on a hidden panel is something the live check sees (the panel), so it keeps its id's result
+                    if (!p.Panel.IsVisible) note = (note + " panel hidden here").Trim();
+                    else if (result is not ("skipped" or "not-a-command" or "error") && !drawn.Contains(p.Item))
                     {
                         result = "not-drawn";
                         note = (!p.Panel.IsVisible ? "not drawn: its panel is hidden here" : !p.Item.IsVisible || !p.ParentsVisible ? "not drawn: hidden in the ribbon model at this place" : "not drawn: no visible control at this place")
