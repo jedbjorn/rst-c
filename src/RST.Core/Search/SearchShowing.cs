@@ -37,7 +37,23 @@ public readonly record struct PlaceState(bool TabVisible, bool PanelVisible, boo
 
 /// <summary>The tools Search-It lists for the open file.</summary>
 /// <param name="IsFamily">The list is a family's: the window names it ("12 of 240 family tools").</param>
-public sealed record SearchList(IReadOnlyList<SearchTool> Tools, bool IsFamily = false);
+public sealed record SearchList(IReadOnlyList<SearchTool> Tools, bool IsFamily = false)
+{
+    /// <summary>Catalogue tools with no showing place (not counted in <see cref="Tools"/>).</summary>
+    public int Hidden { get; init; }
+
+    /// <summary>Showing tools that run nowhere in this file, by the live gate and the census (spec #35): not listed.</summary>
+    public int LeftOut { get; init; }
+
+    /// <summary>The census applied to this list; null when none was (no key, no index, or it could not be read).</summary>
+    public SearchCensus? Census { get; init; }
+
+    /// <summary>Listed tools badged Must Run In.</summary>
+    public int MustRunInCount => Tools.Count(t => t.Mark == SearchToolMark.MustRunIn);
+
+    /// <summary>Listed tools badged NOT IN GUI.</summary>
+    public int NotInGuiCount => Tools.Count(t => t.Mark == SearchToolMark.NotInGui);
+}
 
 public static class SearchShowing
 {

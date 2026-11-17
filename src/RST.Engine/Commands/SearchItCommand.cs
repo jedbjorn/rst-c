@@ -24,6 +24,17 @@
 //     UIApplication.PostCommand from an AdWindows click, which is outside an API context too, and
 //     carries the not-found and not-postable handling (SlotMessages). Nothing is forked here.
 //
+// Spec #35 (runs per file type): the list is cut down further to what runs here. Revit's live CanExecute is
+// asked for places on visible tabs (SearchItCatalog), and the Ribbon Tool Census (RST.Core.Census, embedded per
+// Revit year) is applied for the open file and view: its context key is built here from the active document and
+// view (CensusDocument), and RST.Core.Search.SearchRunnable lists what runs here, badges NOT IN GUI the tools that
+// run only from places Revit does not draw, badges Must Run In the tools that run only in another view of this
+// file, and leaves out the rest. A click runs a postable id through SlotInvokeCommand (PostCommand), and any other
+// through the ribbon's own command path ("route A", decision #92): after the window has closed, on the UI thread
+// outside an API context, Autodesk.Windows.Autodesk.Windows.ComponentManager.CommandHandler.Execute(item) once CanExecute(item) is
+// true again. A click that can't run says so (the window's amber message, or the same words in a dialog once the
+// window is gone): no click is silent.
+//
 // Guards (SC-045 / SC-046): the window is shown through WindowGuard, so a fault on the UI thread
 // while it is open is logged and closes the window; everything here is caught and logged, and a
 // failure returns Result.Failed with a plain message. Nothing can take Revit down.
@@ -33,6 +44,7 @@ using System.Diagnostics;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using RST.Core.Census;
 using RST.Core.Logging;
 using RST.Core.Ribbon;
 using RST.Core.Search;
@@ -60,8 +72,9 @@ public sealed class SearchItCommand : IExternalCommand
             var opened = SearchItLauncher.Show(
                 uiApp.MainWindowHandle,
                 tools: () => ListForOpenFile(uiApp, revitVersion),
-                run: tool => Run(uiApp, tool),
-                isReady: () => RstApplication.HasCatalog(revitVersion));
+                run: tool => Run(uiApp, revitVersion, tool),
+                isReady: () => RstApplication.HasCatalog(revitVersion),
+                canRunNow: tool => CanRunNow(revitVersion, tool));
             Log.Information(opened
                     ? "Search-It window shown in {Ms}ms; it stays open until the user closes it or picks a tool"
                     : "Search-It was already open; focused it ({Ms}ms)",
@@ -77,21 +90,75 @@ public sealed class SearchItCommand : IExternalCommand
     }
 
     /// <summary>
-    /// The tools to list now (spec #33, "Showing Rule"), and the log line that says which list it is, how
-    /// many tools it has, how many catalogue tools it leaves out, and what the rule cost. The time is
-    /// the rule's alone: a cold catalogue build is logged by RstApplication.
+    /// The tools to list now (spec #33's showing rule, spec #35's runnable rule), and the log line that says which list
+    /// it is, which census context and index it used, how many tools it lists, badges and leaves out, how many
+    /// catalogue tools are not showing, and what the rule cost. The time is the rule's alone: a cold catalogue build is
+    /// logged by RstApplication.
     /// </summary>
     private static SearchList ListForOpenFile(UIApplication uiApp, string revitVersion)
     {
         var catalog = RstApplication.GetOrBuildSearchCatalog(revitVersion);
         var sw = Stopwatch.StartNew();
         var isFamily = IsFamilyOpen(uiApp);
-        var list = catalog.ListShowing(isFamily);
-        // list= is the kind of the open file; hidden= counts catalogue tools not listed (not places).
-        Log.Information("Search-It opened: revit={Version}, list={List}, tools={Tools}, hidden={Hidden}, rule={Ms}ms",
-            revitVersion, isFamily ? "family" : "project", list.Tools.Count, catalog.Tools.Count - list.Tools.Count,
-            sw.ElapsedMilliseconds);
+        var year = int.TryParse(revitVersion, out var y) ? y : 0;
+        var hasIndex = year > 0 && !CensusIndex.For(year).IsEmpty;
+        string? noKey = null;
+        var list = catalog.ListShowing(isFamily, () =>
+        {
+            if (!hasIndex) return null;
+            var document = ReadDocument(uiApp, isFamily);
+            var census = SearchCensus.For(year, document);
+            if (census is null)
+                noKey = string.IsNullOrEmpty(document.ViewType) ? "no active view"
+                    : isFamily ? CensusContext.Family(document.Category ?? "", document.Placement ?? "", document.ViewType)
+                    : CensusContext.Project(document.ViewType);
+            return census;
+        });
+        var ms = sw.ElapsedMilliseconds;
+        // list= is the kind of the open file; context= the census key used (with the view it stands in for after a
+        // fallback); left-out= showing tools that run nowhere in this file; hidden= catalogue tools with no showing place.
+        Log.Information("Search-It opened: revit={Version}, list={List}, context={Context}, index={Index}, tools={Tools}, "
+                + "must-run-in={MustRunIn}, left-out={LeftOut}, not-in-gui={NotInGui}, hidden={Hidden}, rule={Ms}ms",
+            revitVersion, isFamily ? "family" : "project", list.Census?.Key.ToString() ?? "none", hasIndex ? year.ToString(System.Globalization.CultureInfo.InvariantCulture) : "none",
+            list.Tools.Count, list.MustRunInCount, list.LeftOut, list.NotInGuiCount, list.Hidden, ms);
+        if (!hasIndex)
+            Log.Information("Search-It: no census index for revit={Version}; the census removes, badges and labels nothing (Revit's live check only)", revitVersion);
+        else if (noKey is not null)
+            Log.Information("Search-It: the census has no context for {Asked}; it removes, badges and labels nothing (Revit's live check only)", noKey);
         return list;
+    }
+
+    /// <summary>
+    /// The census's plain values for the open file and view (spec #35, "Context Key"), read as the census read them
+    /// (src/RST.Census/Docs.cs): the family's category as its BuiltInCategory name and its FamilyPlacementType, and the
+    /// active view's ViewType. A value that can't be read is "Invalid", which no census context has. Throws only when
+    /// the active document or view itself can't be read; the caller then lists without the census, with one Warning.
+    /// </summary>
+    private static CensusDocument ReadDocument(UIApplication uiApp, bool isFamily)
+    {
+        var ui = uiApp.ActiveUIDocument;
+        var view = ui?.ActiveView;
+        var viewType = view?.ViewType.ToString();
+        if (!isFamily || ui?.Document is not { } document) return new CensusDocument(false, null, null, viewType);
+        var family = document.OwnerFamily;
+        string category = "Invalid", placement = "Invalid";
+        try
+        {
+            if (family?.FamilyCategory is { } c) category = ((BuiltInCategory)c.Id.Value).ToString();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Search-It: the family's category could not be read");
+        }
+        try
+        {
+            if (family is not null) placement = family.FamilyPlacementType.ToString();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Search-It: the family's placement type could not be read");
+        }
+        return new CensusDocument(true, category, placement, viewType);
     }
 
     /// <summary>
@@ -113,21 +180,77 @@ public sealed class SearchItCommand : IExternalCommand
     }
 
     /// <summary>
-    /// Runs the tool the user chose (a click, or Enter on the highlighted card), after the window has
-    /// closed: the profile buttons' dispatch (<see cref="SlotInvokeCommand"/>: PostCommand, with its
-    /// not-found and not-postable messages). Queued by the window on the dispatcher, outside Execute;
-    /// it never throws.
+    /// Asked on a click, before the window closes (spec #35, "Running a Tool"). A postable id runs through PostCommand,
+    /// whose own messages cover it: true. Any other runs through route A, so its ribbon item's CanExecute must be true
+    /// now; false (or no item, or a throw) keeps the window open with the amber message.
     /// </summary>
-    private static void Run(UIApplication uiApp, SearchTool tool)
+    private static bool CanRunNow(string revitVersion, SearchTool tool)
+    {
+        if (tool.Postable) return true;
+        var item = RstApplication.GetOrBuildSearchCatalog(revitVersion).ItemAt(tool.RunHandle);
+        if (item is null || Autodesk.Windows.ComponentManager.CommandHandler is not { } handler) return false;
+        try
+        {
+            return handler.CanExecute(item);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Search-It: CanExecute threw for {Name} ({CommandId})", tool.DisplayName, tool.Id);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Runs the tool the user chose (a click, or Enter on the highlighted card), after the window has closed. Queued
+    /// by the window on the dispatcher (Dispatcher.BeginInvoke), outside Execute and outside any API context; it never
+    /// throws.
+    /// <list type="number">
+    /// <item>A postable id: the profile buttons' dispatch (<see cref="SlotInvokeCommand"/>: PostCommand, with its
+    /// not-found and not-postable messages).</item>
+    /// <item>Any other: route A (decision #92), <c>Autodesk.Windows.ComponentManager.CommandHandler.Execute(item)</c> on the item the list
+    /// chose (<see cref="SearchTool.RunHandle"/>: its first showing place, drawn if any), once <c>CanExecute(item)</c> is
+    /// true again. False, or a throw, shows the amber message's words in a dialog: the window is gone by now.</item>
+    /// </list>
+    /// A Must Run In tool never gets here (the window does not run it).
+    /// </summary>
+    private static void Run(UIApplication uiApp, string revitVersion, SearchTool tool)
     {
         try
         {
-            Log.Information("Search-It: running {Name} ({CommandId}) from {Location}", tool.DisplayName, tool.Id, tool.Location);
-            new SlotInvokeCommand(uiApp, new SlotTarget(SlotKind.Command, tool.Id, tool.DisplayName)).Execute(null);
+            if (!tool.CanRun)
+            {
+                Log.Warning("Search-It: {Name} ({CommandId}) must run in another view; not run", tool.DisplayName, tool.Id);
+                return;
+            }
+            if (tool.Postable)
+            {
+                Log.Information("Search-It: running {Name} ({CommandId}) from {Location}", tool.DisplayName, tool.Id, tool.Location);
+                new SlotInvokeCommand(uiApp, new SlotTarget(SlotKind.Command, tool.Id, tool.DisplayName)).Execute(null);
+                return;
+            }
+            var item = RstApplication.GetOrBuildSearchCatalog(revitVersion).ItemAt(tool.RunHandle);
+            Log.Information("Search-It: running {Name} ({CommandId}) from {Location} through the ribbon's command path (not postable)",
+                tool.DisplayName, tool.Id, tool.Location);
+            var handler = Autodesk.Windows.ComponentManager.CommandHandler;
+            if (item is null || handler is null || !handler.CanExecute(item))
+            {
+                Log.Warning("Search-It: {Name} ({CommandId}) can't be run now (item={Item}, handler={Handler})",
+                    tool.DisplayName, tool.Id, item is null ? "none" : "found", handler is null ? "none" : "found");
+                ShowCantRun(tool);
+                return;
+            }
+            var sw = Stopwatch.StartNew();
+            handler.Execute(item);
+            Log.Information("Search-It: {CommandId} returned from the ribbon's command path in {Ms}ms", tool.Id, sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Search-It: running {Name} ({CommandId}) failed", tool.DisplayName, tool.Id);
+            ShowCantRun(tool);
         }
     }
+
+    /// <summary>The amber message's words, in Revit's dialog: a route A click that failed after the window closed.</summary>
+    private static void ShowCantRun(SearchTool tool) =>
+        SlotInvokeCommand.Show(new SlotMessage(SearchViews.CantRunHere(tool.DisplayName, tool.Location), ""), "search-it-cant-run");
 }

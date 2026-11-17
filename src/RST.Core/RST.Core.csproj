@@ -33,6 +33,7 @@
     <ParameterGroup>
       <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
       <OutputDir ParameterType="System.String" Required="true" />
+      <Kind ParameterType="System.String" />
       <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
     </ParameterGroup>
     <Task>
@@ -40,18 +41,77 @@
       <Using Namespace="System.IO.Compression" />
       <Code Type="Fragment" Language="cs"><![CDATA[
         Directory.CreateDirectory(OutputDir);
+        var kind = string.IsNullOrEmpty(Kind) ? "exceptions" : Kind;
         var list = new System.Collections.Generic.List<Microsoft.Build.Framework.ITaskItem>();
         foreach (var src in Sources)
         {
           var full = src.GetMetadata("FullPath");
           var year = Path.GetFileName(Path.GetDirectoryName(full));
-          var dst = Path.Combine(OutputDir, year + ".exceptions.tsv.gz");
+          var dst = Path.Combine(OutputDir, year + "." + kind + ".tsv.gz");
           using (var input = File.OpenRead(full))
           using (var output = File.Create(dst))
           using (var gz = new GZipStream(output, CompressionLevel.Optimal))
             input.CopyTo(gz);
           var item = new Microsoft.Build.Utilities.TaskItem(dst);
-          item.SetMetadata("LogicalName", "RST.Core.Census." + year + ".exceptions.tsv.gz");
+          item.SetMetadata("LogicalName", "RST.Core.Census." + year + "." + kind + ".tsv.gz");
+          list.Add(item);
+        }
+        Outputs = list.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Spec #35 (Search-It, runs per file type): two more resources per year, made the same way from the committed
+       census files, never committed themselves:
+         RST.Core.Census.<year>.runs-in.tsv.gz   the distinct (context, id) pairs of census/<year>/full.tsv whose
+                                                 result is "executes": "context<TAB>id" under that header, sorted
+                                                 ordinally by context, then id, "\n" line ends;
+         RST.Core.Census.<year>.contexts.tsv.gz  census/<year>/contexts.tsv as it is (the context keys, in order).
+       Census/CensusRunsIn.cs and Census/CensusContexts.cs read them. -->
+  <UsingTask TaskName="RstCensusRunsIn" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDir ParameterType="System.String" Required="true" />
+      <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.IO.Compression" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(OutputDir);
+        var list = new System.Collections.Generic.List<Microsoft.Build.Framework.ITaskItem>();
+        foreach (var src in Sources)
+        {
+          var full = src.GetMetadata("FullPath");
+          var year = Path.GetFileName(Path.GetDirectoryName(full));
+          var pairs = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+          int ctx = -1, id = -1, result = -1;
+          foreach (var line in File.ReadLines(full))
+          {
+            var f = line.Split('\t');
+            if (ctx < 0)
+            {
+              ctx = System.Array.IndexOf(f, "context"); id = System.Array.IndexOf(f, "id"); result = System.Array.IndexOf(f, "result");
+              if (ctx < 0 || id < 0 || result < 0) throw new System.Exception(full + ": no context, id or result column");
+              continue;
+            }
+            if (f.Length <= System.Math.Max(ctx, System.Math.Max(id, result))) continue;
+            if (f[result] == "executes") pairs.Add(f[ctx] + "\t" + f[id]);
+          }
+          var sorted = pairs.ToList();
+          sorted.Sort(System.StringComparer.Ordinal);
+          var dst = Path.Combine(OutputDir, year + ".runs-in.tsv.gz");
+          using (var output = File.Create(dst))
+          using (var gz = new GZipStream(output, CompressionLevel.Optimal))
+          using (var w = new StreamWriter(gz, new System.Text.UTF8Encoding(false)))
+          {
+            w.NewLine = "\n";
+            w.WriteLine("context\tid");
+            foreach (var p in sorted) w.WriteLine(p);
+          }
+          var item = new Microsoft.Build.Utilities.TaskItem(dst);
+          item.SetMetadata("LogicalName", "RST.Core.Census." + year + ".runs-in.tsv.gz");
           list.Add(item);
         }
         Outputs = list.ToArray();
@@ -69,6 +129,21 @@
     <ItemGroup>
       <EmbeddedResource Include="@(_RstCensusGz)" />
       <FileWrites Include="@(_RstCensusGz)" />
+    </ItemGroup>
+    <!-- Spec #35: the runs-in pairs and the context keys (see the RstCensusRunsIn task above). -->
+    <ItemGroup>
+      <_RstCensusFull Include="..\..\census\*\full.tsv" />
+      <_RstCensusContexts Include="..\..\census\*\contexts.tsv" />
+    </ItemGroup>
+    <RstCensusRunsIn Sources="@(_RstCensusFull)" OutputDir="$(IntermediateOutputPath)census" Condition="'@(_RstCensusFull)' != ''">
+      <Output TaskParameter="Outputs" ItemName="_RstCensusRunsInGz" />
+    </RstCensusRunsIn>
+    <RstGzipFiles Sources="@(_RstCensusContexts)" OutputDir="$(IntermediateOutputPath)census" Kind="contexts" Condition="'@(_RstCensusContexts)' != ''">
+      <Output TaskParameter="Outputs" ItemName="_RstCensusContextsGz" />
+    </RstGzipFiles>
+    <ItemGroup>
+      <EmbeddedResource Include="@(_RstCensusRunsInGz);@(_RstCensusContextsGz)" />
+      <FileWrites Include="@(_RstCensusRunsInGz);@(_RstCensusContextsGz)" />
     </ItemGroup>
   </Target>
 

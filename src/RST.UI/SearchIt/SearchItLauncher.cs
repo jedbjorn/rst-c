@@ -42,10 +42,12 @@ public static class SearchItLauncher
     /// <param name="tools">The tools to list for the open file (may build the catalogue); called once.</param>
     /// <param name="run">Runs the tool the user chose; called after the window has closed.</param>
     /// <param name="isReady">True when <paramref name="tools"/> will return at once (catalogue already built): no busy overlay.</param>
-    public static bool Show(IntPtr owner, Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null) =>
-        Show(owner, new SearchItBackend(tools, run, isReady));
+    /// <param name="canRunNow">Asked on a click before the window closes; false keeps it open with the amber message (spec #35).</param>
+    public static bool Show(IntPtr owner, Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
+        Func<SearchTool, bool>? canRunNow = null) =>
+        Show(owner, new SearchItBackend(tools, run, isReady, canRunNow));
 
-    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?)"/>
+    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?, Func{SearchTool, bool}?)"/>
     public static bool Show(IntPtr owner, ISearchItBackend backend) => Show(owner, backend, sampler: null);
 
     /// <param name="sampler">Tests only: the mouse reading the window's watch uses instead of Windows'.</param>

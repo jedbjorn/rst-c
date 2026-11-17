@@ -4,7 +4,9 @@
 // placement and drops headless ids. This layer supplies Revit, manifests, bans and logging.
 //
 // Spec #33: the same scan also makes Search-It's catalogue (Core's SearchCatalog), which keeps the
-// family-editor tabs and the mode-only ids Revit lets add-ins post. The Builder's catalogue is merged
+// family-editor tabs and the mode-only ids Revit lets add-ins post. Spec #35: it also keeps the ids Revit
+// won't let add-ins post (Search-It runs them through the ribbon's own command path); the Builder never
+// sees them. The Builder's catalogue is merged
 // from the scan's hits outside the family-editor tabs (RibbonScan.BuilderHits): the input it always
 // had, so the list it always was.
 
@@ -94,9 +96,9 @@ public sealed class CommandCatalog
                         preFilter, filtered.Count, modeDropped, bansDropped);
 
         var searchTools = SearchCatalog.Build(seed, scan.Hits, bans.IsBanned, revitYear);
-        Log.Information("Search catalogue: {Hits} hits → {Tools} tools, {Places} places ({FamilyPlaces} on family-editor tabs)",
+        Log.Information("Search catalogue: {Hits} hits → {Tools} tools, {Places} places ({FamilyPlaces} on family-editor tabs; {NotPostable} tools Revit won't let add-ins post, run through the ribbon's command path)",
                         scan.Hits.Count, searchTools.Count, searchTools.Sum(t => t.Places.Count),
-                        searchTools.Sum(t => t.Places.Count(p => p.OnFamilyEditorTab)));
+                        searchTools.Sum(t => t.Places.Count(p => p.OnFamilyEditorTab)), searchTools.Count(t => !t.Postable));
 
         return new CommandCatalog(filtered, manifests, new SearchItCatalog(searchTools, scan.Handles));
     }

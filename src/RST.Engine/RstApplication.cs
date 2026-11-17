@@ -361,6 +361,7 @@ public sealed class RstApplication : IExternalApplication
                 _catalogVersion = revitVersion;
                 Log.Information("GetOrBuildCatalog OK: {Count} commands in {Ms}ms",
                                 _catalogCache.Count, sw.ElapsedMilliseconds);
+                LoadCensus(revitVersion);
             }
             catch (Exception ex)
             {
@@ -371,6 +372,21 @@ public sealed class RstApplication : IExternalApplication
             }
             return _catalogCache;
         }
+    }
+
+    /// <summary>
+    /// Reads the year's census lists once, with the cold catalogue build (spec #35), so no Search-It open pays for
+    /// decompressing them. Each loader caches its list and never throws; an empty one means "no census".
+    /// </summary>
+    private static void LoadCensus(string revitVersion)
+    {
+        if (!int.TryParse(revitVersion, out var year)) return;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var index = RST.Core.Census.CensusIndex.For(year);
+        var runsIn = RST.Core.Census.CensusRunsIn.For(year);
+        var contexts = RST.Core.Census.CensusContexts.For(year);
+        Log.Information("Census index: revit={Year}, exceptions={Exceptions}, runs-in={RunsIn}, contexts={Contexts} in {Ms}ms",
+                        year, index.Rows.Count, runsIn.PairCount, contexts.Rows.Count, sw.ElapsedMilliseconds);
     }
 
     /// <summary>

@@ -23,11 +23,20 @@ public interface ISearchItBackend
 
     /// <summary>Runs <paramref name="tool"/>. Called after the window has closed.</summary>
     void Run(SearchTool tool);
+
+    /// <summary>
+    /// Asked on a click, before the window closes: false when the tool can't run now, and the window then stays open
+    /// with the amber message (spec #35, "Running a Tool", 4). Revit UI thread, outside an API context.
+    /// </summary>
+    bool CanRunNow(SearchTool tool) => true;
 }
 
 /// <summary>The backend in Revit: the tools the ribbon is showing for the open file (<see cref="SearchShowing"/>).</summary>
-public sealed class SearchItBackend(Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null) : ISearchItBackend
+public sealed class SearchItBackend(Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
+    Func<SearchTool, bool>? canRunNow = null) : ISearchItBackend
 {
+    public bool CanRunNow(SearchTool tool) => canRunNow?.Invoke(tool) ?? true;
+
     public bool IsReady => isReady?.Invoke() ?? false;
 
     private readonly Func<SearchList> _tools = tools ?? throw new ArgumentNullException(nameof(tools));

@@ -1,6 +1,11 @@
 // rst-c's own (not vendored): the Search-It window's view-model (v3.4). The rules are RST.Core.Search's:
 // ToolSearch (chips filter exactly and are ANDed; the text ranks fuzzily inside them) and SearchChips.
 // Enter makes a chip and never runs a tool; a click on a result closes the window, then runs the tool.
+//
+// Spec #35: a card carries the census's label, right-aligned: NOT IN GUI (amber; the tool runs) or Must Run In
+// <views> (the theme's neutral chip; the card is dimmed and never runs: a click, a double-click or Enter on it leaves
+// the window open and runs nothing). A click on a runnable card that the host says can't run now leaves the window
+// open with the amber message naming the tool's ribbon place: no click is silent.
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -25,8 +30,24 @@ public sealed class SearchResultItem(SearchHit hit, ICommand runCommand)
         1 => UiStrings.SearchIt_OneMorePlace,
         var n => UiStrings.SearchIt_MorePlaces(n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)),
     };
-    public string ToolTip => HasMore ? UiStrings.SearchIt_ToolTipMore(Location, MoreText) : Location;
+    public string ToolTip => IsMustRunIn ? BadgeToolTip
+        : HasMore ? UiStrings.SearchIt_ToolTipMore(Location, MoreText) : Location;
     public ICommand RunCommand { get; } = runCommand;
+
+    /// <summary>The tool runs only in other views of this file: dimmed, badged, never run from here (spec #35).</summary>
+    public bool IsMustRunIn => Tool.Mark == SearchToolMark.MustRunIn;
+
+    /// <summary>The tool runs here, but only from places Revit does not draw: the amber NOT IN GUI badge.</summary>
+    public bool IsNotInGui => Tool.Mark == SearchToolMark.NotInGui;
+
+    /// <summary>The card carries a badge.</summary>
+    public bool HasBadge => IsMustRunIn || IsNotInGui;
+
+    /// <summary>"NOT IN GUI", or "Must Run In Elevation, Section"; empty for no badge.</summary>
+    public string BadgeText => IsMustRunIn ? SearchViews.MustRunInBadge(Tool.MustRunIn) : IsNotInGui ? SearchViews.NotInGui : "";
+
+    /// <summary>A Must Run In badge's tooltip: every view it runs in; empty otherwise.</summary>
+    public string BadgeToolTip => IsMustRunIn ? SearchViews.MustRunInToolTip(Tool.MustRunIn) : "";
 }
 
 /// <summary>One chip: an exact filter on the tool name, with its × button.</summary>
@@ -49,6 +70,7 @@ public sealed class SearchItViewModel : ObservableObject
     private string _emptyText = "";
     private bool _isLoading;
     private bool _isFamily;
+    private string _message = "";
 
     /// <param name="post">Tests only: how the chosen tool's run is queued (default: the dispatcher, at Background priority).</param>
     public SearchItViewModel(ISearchItBackend backend, Action<Action>? post = null)
@@ -114,6 +136,21 @@ public sealed class SearchItViewModel : ObservableObject
     }
 
     public bool IsEmpty => _emptyText.Length > 0;
+
+    /// <summary>
+    /// The amber message of a click that could not run (spec #35, "Running a Tool", 4); empty when there is none.
+    /// Cleared by the next search or click.
+    /// </summary>
+    public string Message
+    {
+        get => _message;
+        private set
+        {
+            if (SetField(ref _message, value ?? "")) OnPropertyChanged(nameof(HasMessage));
+        }
+    }
+
+    public bool HasMessage => _message.Length > 0;
 
     /// <summary>The tool a click chose; null when the window closed without running anything.</summary>
     public SearchTool? Chosen { get; private set; }
@@ -198,6 +235,30 @@ public sealed class SearchItViewModel : ObservableObject
     {
         if (item is null || Chosen is not null || IsLoading) return;
         var tool = item.Tool;
+        if (!tool.CanRun)
+        {
+            // A Must Run In card: nothing runs and the window stays open; the badge and its tooltip say where it runs.
+            Log.Information("Search-It: {Name} ({CommandId}) must run in {Views}; not run", item.Name, tool.Id, string.Join(", ", tool.MustRunIn));
+            return;
+        }
+        bool canRun;
+        try
+        {
+            canRun = _backend.CanRunNow(tool);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Search-It: could not check whether {Name} ({CommandId}) can run", item.Name, tool.Id);
+            canRun = false;
+        }
+        if (!canRun)
+        {
+            Message = SearchViews.CantRunHere(item.Name, item.Location);
+            Log.Information("Search-It: {Name} ({CommandId}) at {Location} can't be run with RST now; the window stays open with the message",
+                item.Name, tool.Id, item.Location);
+            return;
+        }
+        Message = "";
         Chosen = tool;
         Log.Information("Search-It: chose {Name} ({CommandId}) at {Location}; text={Text}, chips={Chips}",
             item.Name, tool.Id, item.Location, _text, Chips.Count);
@@ -214,6 +275,7 @@ public sealed class SearchItViewModel : ObservableObject
 
     private void Refresh()
     {
+        Message = "";
         if (IsLoading)
         {
             Results = [];

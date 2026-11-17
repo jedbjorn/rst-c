@@ -115,7 +115,8 @@ public sealed class SearchItCatalogTests
 
             Scan = RibbonScanner.ScanTabs([Architecture, Modify, AddIns, FamilyCreate, FamilyEditor, InPlace], _ => true, Counts,
                 familyCounts: FamilyCounts);
-            Catalog = new SearchItCatalog(SearchCatalog.Build([], Scan.Hits), Scan.Handles);
+            // Outside Revit there is no Revit ribbon handler to ask: Revit's own items answer "nothing to ask" unless a test says.
+            Catalog = new SearchItCatalog(SearchCatalog.Build([], Scan.Hits), Scan.Handles) { NativeGate = _ => null };
         }
 
         /// <summary>The ribbon as Revit shows it with a project open: the family-editor tabs are hidden.</summary>
@@ -256,7 +257,7 @@ public sealed class SearchItCatalogTests
     });
 
     [Fact]
-    public void Revits_own_buttons_are_not_asked() => Screenshots.RunSta(() =>
+    public void Revits_own_buttons_own_handlers_are_not_asked() => Screenshots.RunSta(() =>
     {
         var session = new Session().InAProject();
         var handler = new Handler(() => false);
@@ -270,6 +271,102 @@ public sealed class SearchItCatalogTests
         handler.Asked.Should().Be(0);
     });
 
+    // ── spec #35: Revit's live gate, the census path, ids Revit won't post ──
+
+    [Fact]
+    public void Revits_global_gate_is_asked_once_per_tool_and_only_for_items_on_visible_tabs() => Screenshots.RunSta(() =>
+    {
+        var session = new Session().InAFamily();
+        var asked = new List<string>();
+        var catalog = session.Catalog with
+        {
+            NativeGate = item =>
+            {
+                asked.Add(item.Id);
+                return item.Id != "ID_JOIN";
+            },
+        };
+
+        var family = catalog.ListShowing(isFamily: true);
+
+        // Architecture is hidden in a family: its items are never asked. Model Line is asked once (Modify › Draw),
+        // not again at Create › Model. Join is greyed and, with no census, left out.
+        asked.Should().Equal("ID_OBJECTS_CLINE", "ID_JOIN", "ID_OBJECTS_EXTRUSION", "ID_LOAD_INTO_PROJECTS");
+        Ids(family).Should().Equal("ID_OBJECTS_CLINE", AddinId, "ID_OBJECTS_EXTRUSION", "ID_LOAD_INTO_PROJECTS");
+        family.LeftOut.Should().Be(1);
+        family.Tools.Should().OnlyContain(t => t.Mark == SearchToolMark.None, "no census: nothing is badged");
+    });
+
+    [Fact]
+    public void A_gate_that_throws_counts_as_runnable_and_is_logged_once_at_Debug() => Screenshots.RunSta(() =>
+    {
+        var session = new Session().InAProject();
+        var catalog = session.Catalog with { NativeGate = _ => throw new InvalidOperationException("UIFramework") };
+
+        SearchList? list = null;
+        var events = CaptureLog(() => list = catalog.ListShowing(isFamily: false));
+
+        Ids(list!).Should().Equal("ID_OBJECTS_WALL", "ID_OBJECTS_CLINE", "ID_JOIN", AddinId);
+        events.Where(e => e.Level == LogLevel.Debug && e.Exception is InvalidOperationException).Should().ContainSingle();
+        events.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    });
+
+    [Fact]
+    public void A_disabled_add_in_button_is_greyed_whatever_its_handler_says() => Screenshots.RunSta(() =>
+    {
+        var session = new Session().InAProject();
+        var handler = new Handler(() => true);
+        session.Addin.CommandHandler = handler;
+        session.Addin.IsEnabled = false;
+
+        Ids(session.Catalog.ListShowing(isFamily: false)).Should().NotContain(AddinId);
+        handler.Asked.Should().Be(0, "IsEnabled is read first, as the census did");
+    });
+
+    [Fact]
+    public void Each_hit_carries_the_census_path_of_its_place() => Screenshots.RunSta(() =>
+    {
+        var inSplit = Button("ID_OBJECTS_WALL", "Wall: Architectural");
+        var split = new RibbonSplitButton { Id = "ID_OBJECTS_WALL_RibbonListButton", Text = "Wall" };
+        split.Items.Add(inSplit);
+        var fold = new RibbonFoldPanel();
+        fold.Items.Add(Button("ID_OBJECTS_DOOR", "Door"));
+        var launcher = Button("ID_SETTINGS_STRUCTURAL", "Structural Settings");
+        var panel = Panel("Build", Button("ID_BUTTON_SELECT", "Modify"), split, fold, new RibbonPanelBreak(), Button("ID_SLIDE", "In the slide-out"));
+        panel.Source.DialogLauncher = launcher;
+
+        var scan = RibbonScanner.ScanTabs([Tab("Architecture", "Architecture", panel)], _ => true);
+
+        scan.Hits.Select(h => (h.Id, h.Path)).Should().Equal(
+            ("ID_BUTTON_SELECT", ""),
+            ("ID_OBJECTS_WALL", "/RibbonSplitButton(ID_OBJECTS_WALL_RibbonListButton)"),
+            ("ID_OBJECTS_DOOR", "/RibbonFoldPanel()"),
+            ("ID_SLIDE", "/SlideOut"),
+            ("ID_SETTINGS_STRUCTURAL", "DialogLauncher"));
+    });
+
+    [Fact]
+    public void Ids_Revit_wont_post_reach_Search_It_only() => Screenshots.RunSta(() =>
+    {
+        var textTypes = Button("ID_SETTINGS_TEXT", "Text Types");
+        var panel = Panel("Text", Button("ID_TEXT", "Text"));
+        panel.Source.DialogLauncher = textTypes;
+        var counts = new RibbonScanCounts();
+
+        var scan = RibbonScanner.ScanTabs([Tab("Annotate", "Annotate", panel)], _ => true, counts, isPostableCommand: id => id != "ID_SETTINGS_TEXT");
+
+        scan.Hits.Select(h => (h.Id, h.Postable)).Should().Equal(("ID_TEXT", true), ("ID_SETTINGS_TEXT", false));
+        scan.BuilderHits.Select(h => h.Id).Should().Equal("ID_TEXT");
+        counts.CollectedTotal.Should().Be(1, "the summary counts what the Builder gets");
+        counts.OutsidePostableCommandIds.Should().Equal("ID_SETTINGS_TEXT");
+        var catalog = new SearchItCatalog(SearchCatalog.Build([], scan.Hits), scan.Handles) { NativeGate = _ => true };
+        var text = catalog.ListShowing(isFamily: false).Tools.Single(t => t.Id == "ID_SETTINGS_TEXT");
+        text.Postable.Should().BeFalse();
+        catalog.ItemAt(text.RunHandle).Should().BeSameAs(textTypes, "a click runs the ribbon item itself (route A)");
+        catalog.ItemAt(null).Should().BeNull();
+        catalog.ItemAt(99).Should().BeNull();
+    });
+
     [Fact]
     public void A_handler_that_throws_counts_as_cannot_run_and_is_logged_once_at_Debug() => Screenshots.RunSta(() =>
     {
@@ -278,7 +375,7 @@ public sealed class SearchItCatalogTests
         var second = Button("CustomCtrl_%CustomCtrl_%Add-Ins%Kinship%Sync", "Sync");
         var tabs = new[] { session.Architecture, session.AddIns, Tab("Kinship", "Kinship", Panel("Library", second)) };
         var scan = RibbonScanner.ScanTabs(tabs, _ => true);
-        var catalog = new SearchItCatalog(SearchCatalog.Build([], scan.Hits), scan.Handles);
+        var catalog = new SearchItCatalog(SearchCatalog.Build([], scan.Hits), scan.Handles) { NativeGate = _ => null };
         session.Addin.CommandHandler = new Handler(() => throw new InvalidOperationException("add-in bug"));
         second.CommandHandler = new Handler(() => throw new InvalidOperationException("add-in bug"));
 
