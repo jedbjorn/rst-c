@@ -179,7 +179,7 @@ def cmd_begin():
         if "Windows" in gx("cmd", "/c", "ver", timeout=60):
             break
         time.sleep(10)
-    vm("mcp", "up", timeout=300)
+    # no Windows MCP: start-up prompts are answered by a scheduled task in the console session (rv.ps1 answer)
     gx("cmd", "/c", f"mkdir {G}\\census-tools {G}\\stage\\2026 {G}\\stage\\2027 {GC} 2>nul")
     for f in sorted((HERE / "guest").glob("*.ps1")):
         push(f, f"{G}\\census-tools\\{f.name}")
@@ -221,8 +221,15 @@ def cmd_start(year, tries=2):
         log(ps("rv.ps1", "-Action", "stop", "-Year", year))
         before = started_count(year)
         log(ps("rv.ps1", "-Action", "launch", "-Year", year))
-        ans = mcp_ps(f"& {G}\\census-tools\\answer.ps1 -Seconds 150 -Year {year}", timeout=175)
-        log("answer: " + ans.strip()[-500:])
+        # Revit's start-up prompts are answered in the console session by a scheduled task (no Windows MCP: the
+        # host relay port is shared with other projects)
+        log(ps("rv.ps1", "-Action", "answer", "-Year", year))
+        for _ in range(20):
+            time.sleep(10)
+            ans = gx("cmd", "/c", f"type {GC}\\answer.log 2>nul")
+            if "answer.ps1 done" in ans:
+                break
+        log("answer: " + " | ".join(l.strip() for l in ans.splitlines() if l.strip())[-500:])
         for _ in range(12):
             if started_count(year) > before and "REVIT running" in revit_status(year):
                 log("Revit up with the census add-in")
@@ -527,7 +534,7 @@ def cmd_end():
     for y in YEARS:
         if "census" in gx("cmd", "/c", f"dir /b {GC}\\{y} 2>nul") or gx("cmd", "/c", f"if exist {GC}\\{y}\\progress.txt echo yes").strip() == "yes":
             cmd_pull(y)
-    vm("mcp", "down", timeout=120)
+    # no MCP was brought up by the census (rv.ps1 answer replaces it)
     vm("reset", "--off", timeout=900)
     log("end: " + status_text().strip()[:300])
 

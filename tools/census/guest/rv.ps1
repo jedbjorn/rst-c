@@ -1,4 +1,4 @@
-# rv.ps1 -Action launch|stop|status -Year 2026|2027  (tools/census): Revit on the console desktop through a one-shot
+# rv.ps1 -Action launch|stop|status|answer -Year 2026|2027  (tools/census): Revit on the console desktop through a one-shot
 # Interactive scheduled task (exec runs in a non-interactive session). stop also ends the crash reporter unsent.
 param([Parameter(Mandatory)][string]$Action, [string]$Year = '2026')
 switch ($Action) {
@@ -13,6 +13,17 @@ switch ($Action) {
     Register-ScheduledTask -TaskName 'RstC-Census' -Action $a -Principal $p -Settings $s -Force | Out-Null
     Start-ScheduledTask -TaskName 'RstC-Census'; Start-Sleep 3
     "launched $Year pid=$((Get-Process Revit -ea 0).Id) at $(Get-Date -Format o)"
+  }
+  'answer' {
+    # answer.ps1 in the console session (it needs the interactive desktop) through a one-shot Interactive task;
+    # its output goes to C:\RstC\census\answer.log. No Windows MCP needed.
+    Remove-Item C:\RstC\census\answer.log -ea 0
+    $a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -Command `"& C:\RstC\census-tools\answer.ps1 -Seconds 150 -Year $Year *> C:\RstC\census\answer.log`""
+    $p = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+    $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::FromMinutes(5))
+    Register-ScheduledTask -TaskName 'RstC-Census-Answer' -Action $a -Principal $p -Settings $s -Force | Out-Null
+    Start-ScheduledTask -TaskName 'RstC-Census-Answer'
+    "answer task started at $(Get-Date -Format o)"
   }
   'stop' {
     Get-Process Revit -ea 0 | Stop-Process -Force
