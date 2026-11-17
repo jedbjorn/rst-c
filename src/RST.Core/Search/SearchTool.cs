@@ -49,4 +49,62 @@ public sealed class SearchTool
 
     /// <summary>How many places the tool has beyond the one a result shows.</summary>
     public int OtherPlaces => Places.Count - 1;
+
+    /// <summary>The census's label for this tool in the open file and view (spec #35); None when it has none.</summary>
+    public SearchToolMark Mark { get; init; }
+
+    /// <summary>For <see cref="SearchToolMark.MustRunIn"/>: the views of this file where it runs, in the name table's order.</summary>
+    public IReadOnlyList<string> MustRunIn { get; init; } = Array.Empty<string>();
+
+    /// <summary>False for a <see cref="SearchToolMark.MustRunIn"/> tool: Search-It lists it but never runs it.</summary>
+    public bool CanRun => Mark != SearchToolMark.MustRunIn;
+
+    /// <summary>Revit lets add-ins post the id (decision #63): it runs through PostCommand; otherwise through route A (#92).</summary>
+    public bool Postable { get; init; } = true;
+
+    /// <summary>
+    /// The host's handle of the ribbon item a click runs through route A: the tool's first showing place on a visible
+    /// tab, drawn if any. Null when the host has none (fixtures; a list made without the ribbon).
+    /// </summary>
+    public int? RunHandle { get; init; }
+
+    /// <summary>
+    /// Every place a click may run the tool from (decision #127): each live copy of each of its catalogue places, drawn
+    /// copies first, then the rest, in catalogue order. The click picks the first one showing at that moment
+    /// (<see cref="SearchClick"/>). Empty for a Must Run In tool.
+    /// </summary>
+    public IReadOnlyList<SearchRunPlace> RunPlaces
+    {
+        get => _runPlaces ??= _runPlacesFrom?.Invoke() ?? Array.Empty<SearchRunPlace>();
+        init => _runPlaces = value;
+    }
+
+    /// <summary>Makes <see cref="RunPlaces"/> on first use (a click), not for every listed tool when the window opens.</summary>
+    public Func<IReadOnlyList<SearchRunPlace>> RunPlacesFrom
+    {
+        init => _runPlacesFrom = value;
+    }
+
+    private IReadOnlyList<SearchRunPlace>? _runPlaces;
+    private readonly Func<IReadOnlyList<SearchRunPlace>>? _runPlacesFrom;
+
+    /// <summary>The list was a family's: a project tab's place is then hidden by Revit, not by the user.</summary>
+    public bool InFamily { get; init; }
+}
+
+/// <summary>One live item a click may run a tool from.</summary>
+/// <param name="Handle">The host's handle of the ribbon item.</param>
+/// <param name="Drawn">Not marked not-drawn by the census here (always true without a census).</param>
+/// <param name="OnFamilyEditorTab">On a family-editor tab (never a tab the user hides).</param>
+public readonly record struct SearchRunPlace(int Handle, bool Drawn, bool OnFamilyEditorTab);
+
+/// <summary>What the census says about a listed tool in the open file and view (spec #35, "Runnable Only").</summary>
+public enum SearchToolMark
+{
+    /// <summary>Runs here from a drawn place, or the census has nothing to say: listed as before; a click runs it.</summary>
+    None,
+    /// <summary>Runs here, but only from places Revit models and does not draw: the amber NOT IN GUI badge; a click runs it.</summary>
+    NotInGui,
+    /// <summary>Does not run here but runs in another view of this file: listed, dimmed, never run from Search-It.</summary>
+    MustRunIn,
 }

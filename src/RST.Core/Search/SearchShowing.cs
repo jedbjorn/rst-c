@@ -37,7 +37,23 @@ public readonly record struct PlaceState(bool TabVisible, bool PanelVisible, boo
 
 /// <summary>The tools Search-It lists for the open file.</summary>
 /// <param name="IsFamily">The list is a family's: the window names it ("12 of 240 family tools").</param>
-public sealed record SearchList(IReadOnlyList<SearchTool> Tools, bool IsFamily = false);
+public sealed record SearchList(IReadOnlyList<SearchTool> Tools, bool IsFamily = false)
+{
+    /// <summary>Catalogue tools with no showing place (not counted in <see cref="Tools"/>).</summary>
+    public int Hidden { get; init; }
+
+    /// <summary>Showing tools that run nowhere in this file, by the live gate and the census (spec #35): not listed.</summary>
+    public int LeftOut { get; init; }
+
+    /// <summary>The census applied to this list; null when none was (no key, no index, or it could not be read).</summary>
+    public SearchCensus? Census { get; init; }
+
+    /// <summary>Listed tools badged Must Run In.</summary>
+    public int MustRunInCount => Tools.Count(t => t.Mark == SearchToolMark.MustRunIn);
+
+    /// <summary>Listed tools badged NOT IN GUI.</summary>
+    public int NotInGuiCount => Tools.Count(t => t.Mark == SearchToolMark.NotInGui);
+}
 
 public static class SearchShowing
 {
@@ -49,14 +65,55 @@ public static class SearchShowing
     public static SearchList List(IReadOnlyList<SearchCatalogTool> catalog, bool isFamily, Func<SearchCatalogPlace, PlaceState> stateOf)
     {
         var tools = new List<SearchTool>(catalog.Count);
+        var hidden = 0;
         foreach (var tool in catalog)
         {
-            var showing = new List<SearchPlace>(tool.Places.Count);
+            var showing = new List<(SearchCatalogPlace Place, bool TabVisible)>(tool.Places.Count);
             foreach (var place in tool.Places)
-                if (stateOf(place).Shows(place.OnFamilyEditorTab, isFamily)) showing.Add(place.ToSearchPlace());
-            if (showing.Count > 0) tools.Add(new SearchTool(tool.Id, showing));
+                if (Showing(place, isFamily, stateOf) is { } shown) showing.Add(shown);
+            if (showing.Count == 0)
+            {
+                hidden++;
+                continue;
+            }
+            // Spec #35 (review): the fallback keeps how a click runs the tool, so a non-postable tool still goes
+            // through route A, on an item that showed.
+            var run = showing.Find(s => s.TabVisible) is { Place: { } p } ? p : showing[0].Place;
+            tools.Add(new SearchTool(tool.Id, showing.Select(s => s.Place.ToSearchPlace()))
+            {
+                Postable = tool.Postable,
+                RunHandle = run.Handle,
+                RunPlacesFrom = () => SearchClick.PlacesOf(tool),
+                InFamily = isFamily,
+            });
         }
-        return new SearchList(tools, isFamily);
+        return new SearchList(tools, isFamily) { Hidden = hidden };
+    }
+
+    /// <summary>
+    /// The place as it shows now, or null when it does not (decision #125). A place is one (tab, panel) by title, and
+    /// Revit can keep two live panels of the same title on a tab (Create › Datum in a family: Level in a fold panel on
+    /// one, directly on the other; each family kind shows one of them). The place shows when any copy shows; what
+    /// comes back keeps only the showing copies, its <see cref="SearchCatalogPlace.Handle"/> the first of them, so the
+    /// gate, the not-drawn check and route A all use an item Revit is showing.
+    /// </summary>
+    internal static (SearchCatalogPlace Place, bool TabVisible)? Showing(SearchCatalogPlace place, bool isFamily,
+        Func<SearchCatalogPlace, PlaceState> stateOf)
+    {
+        var copies = place.CopiesOrSelf;
+        List<SearchPlaceCopy>? shown = null;
+        var tabVisible = false;
+        foreach (var copy in copies)
+        {
+            var at = copy.Handle == place.Handle ? place : place with { Handle = copy.Handle };
+            var state = stateOf(at);
+            if (!state.Shows(place.OnFamilyEditorTab, isFamily)) continue;
+            if (shown is null) tabVisible = state.TabVisible;
+            (shown ??= new List<SearchPlaceCopy>(copies.Count)).Add(copy);
+        }
+        if (shown is null) return null;
+        if (shown.Count == copies.Count && shown[0].Handle == place.Handle) return (place, tabVisible);
+        return (place with { Handle = shown[0].Handle, Copies = shown }, tabVisible);
     }
 
     /// <summary>
@@ -92,8 +149,16 @@ public static class SearchShowing
         var tools = new List<SearchTool>(catalog.Count);
         foreach (var tool in catalog)
         {
-            var places = tool.Places.Where(p => isFamily || !p.OnFamilyEditorTab).Select(p => p.ToSearchPlace()).ToList();
-            if (places.Count > 0) tools.Add(new SearchTool(tool.Id, places));
+            var kept = tool.Places.Where(p => isFamily || !p.OnFamilyEditorTab).ToList();
+            if (kept.Count == 0) continue;
+            // The ribbon's state is unknown here; the click reads it afresh and chooses the place then (decision #127).
+            tools.Add(new SearchTool(tool.Id, kept.Select(p => p.ToSearchPlace()))
+            {
+                Postable = tool.Postable,
+                RunHandle = kept[0].Handle,
+                RunPlacesFrom = () => SearchClick.PlacesOf(tool),
+                InFamily = isFamily,
+            });
         }
         return new SearchList(tools);
     }

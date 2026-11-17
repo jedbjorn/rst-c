@@ -121,11 +121,11 @@ internal sealed class SlotInvokeCommand : ICommand
     }
 
     /// <summary>
-    /// Surface a click that couldn't run via Revit's TaskDialog. Defensive
+    /// Surface a click that couldn't run via Revit's TaskDialog (Search-It's route A uses it too, spec #35). Defensive
     /// try/catch around .Show() — a click handler that throws while
     /// reporting an error is worse than the silent failure we're trying to fix.
     /// </summary>
-    private static void Show(SlotMessage message, string kind)
+    internal static void Show(SlotMessage message, string kind)
     {
         try
         {

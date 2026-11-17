@@ -31,6 +31,13 @@ public static class CensusContext
         return i <= 0 ? key ?? "" : key![..i];
     }
 
+    /// <summary>The key's view part: "FloorPlan" for project/FloorPlan.</summary>
+    public static string ViewPart(string key)
+    {
+        var i = (key ?? "").LastIndexOf('/');
+        return i < 0 ? key ?? "" : key![(i + 1)..];
+    }
+
     private static string Part(string? s)
     {
         var t = (s ?? "").Trim();

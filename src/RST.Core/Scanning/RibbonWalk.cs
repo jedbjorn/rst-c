@@ -120,6 +120,12 @@ public enum RibbonNodeRole
 /// <param name="Children">For a container: its items.</param>
 /// <param name="Name">The raw ribbon name, kept until the catalog knows the origin.</param>
 /// <param name="IsCheckable">The item says it holds a check state (RibbonCommandItem.IsCheckable).</param>
+/// <param name="PathSegment">
+/// For a container: what it adds to the place path of the items inside it, as the census writes it
+/// ("/RibbonSplitButton(ID_OBJECTS_WALL_RibbonListButton)", "/RibbonFoldPanel()"; spec #34, "full.tsv columns").
+/// Null adds nothing.
+/// </param>
+/// <param name="IsPanelBreak">A panel's break (RibbonPanelBreak): the items after it are in the slide-out.</param>
 public readonly record struct RibbonNode<TNode>(
     RibbonNodeRole Role,
     RibbonContainerKind ContainerKind,
@@ -128,10 +134,15 @@ public readonly record struct RibbonNode<TNode>(
     string? Text,
     IEnumerable<TNode?>? Children,
     bool IsCheckable = false,
-    string? Name = null)
+    string? Name = null,
+    string? PathSegment = null,
+    bool IsPanelBreak = false)
     where TNode : class
 {
     public static RibbonNode<TNode> Ignored => new(RibbonNodeRole.Ignore, default, default, null, null, null);
+
+    /// <summary>A panel break: not a tool, and the items after it on the panel are in its slide-out.</summary>
+    public static RibbonNode<TNode> PanelBreak => new(RibbonNodeRole.Ignore, default, default, null, null, null, IsPanelBreak: true);
 
     public static RibbonNode<TNode> Leaf(RibbonLeafKind kind, string? id, string? text, bool isCheckable = false, string? name = null) =>
         new(RibbonNodeRole.Leaf, default, kind, id, text, null, isCheckable, name);
@@ -141,6 +152,15 @@ public readonly record struct RibbonNode<TNode>(
 }
 
 /// <summary>A collected leaf.</summary>
+/// <param name="Path">
+/// The containers between the panel and the item, as the census writes a place's path: "/SlideOut" when the item is in
+/// the panel's slide-out, then one segment per container (<see cref="RibbonNode{TNode}.PathSegment"/>), or
+/// "DialogLauncher"; empty for an item straight on the panel. Null when the walk was not asked for paths.
+/// </param>
+/// <param name="Postable">
+/// False for an id Revit does not let add-ins post (SC-051), kept only when the walk was asked to keep them
+/// (Search-It's catalogue, spec #35). The Builder never sees such a hit.
+/// </param>
 public readonly record struct RibbonHit(
     string Id,
     string? Text,
@@ -149,7 +169,9 @@ public readonly record struct RibbonHit(
     string? Name = null,
     string? SourceTab = null,
     string? SourcePanel = null,
-    string? TabId = null);
+    string? TabId = null,
+    string? Path = null,
+    bool Postable = true);
 
 public static class RibbonWalkRules
 {
@@ -337,6 +359,8 @@ public sealed class RibbonWalker<TNode> where TNode : class
     private readonly Func<TNode, RibbonNode<TNode>> _describe;
     private readonly Func<string, bool> _resolves;
     private readonly Func<string, bool>? _isPostableCommand;
+    private readonly bool _keepNotPostable;
+    private readonly bool _recordPaths;
     private readonly HashSet<TNode> _onPath = new(ReferenceEqualityComparer.Instance);
     private List<TNode>? _sources;
 
@@ -349,12 +373,20 @@ public sealed class RibbonWalker<TNode> where TNode : class
     /// Holds this Revit's PostableCommand Ids. When given, every Id is checked against
     /// <see cref="PostCommandRule.LetsAddinsPost"/> first (SC-051); when null, that check is off.
     /// </param>
+    /// <param name="keepNotPostable">
+    /// Spec #35: an id that fails the SC-051 check is still returned, with <see cref="RibbonHit.Postable"/> false, when
+    /// it passes every other rule. It is counted as outside PostableCommand all the same and never as collected, so
+    /// the scan's summary is the one it always was.
+    /// </param>
+    /// <param name="recordPaths">Spec #35: give each hit its census place path (<see cref="RibbonHit.Path"/>); otherwise it is null.</param>
     public RibbonWalker(Func<TNode, RibbonNode<TNode>> describe, Func<string, bool> resolves, RibbonScanCounts? counts = null,
-                        Func<string, bool>? isPostableCommand = null)
+                        Func<string, bool>? isPostableCommand = null, bool keepNotPostable = false, bool recordPaths = false)
     {
+        _recordPaths = recordPaths;
         _describe = describe ?? throw new ArgumentNullException(nameof(describe));
         _resolves = resolves ?? throw new ArgumentNullException(nameof(resolves));
         _isPostableCommand = isPostableCommand;
+        _keepNotPostable = keepNotPostable;
         Counts = counts ?? new RibbonScanCounts();
     }
 
@@ -364,14 +396,32 @@ public sealed class RibbonWalker<TNode> where TNode : class
     public List<RibbonHit> WalkItems(IEnumerable<TNode?>? items, Action<Exception, string>? onSkip = null, List<TNode>? sources = null) =>
         Run(sources, (tally, hits) =>
         {
+            var path = "";
             foreach (var item in Materialize(items, "the panel's items", tally, onSkip))
-                Visit(item, RibbonContainerKind.Panel, 0, hits, tally, onSkip);
+            {
+                // The census's slide-out rule: everything after the panel's break is in the slide-out.
+                if (_recordPaths && path.Length == 0 && IsPanelBreak(item)) { path = SlideOutPath; continue; }
+                Visit(item, RibbonContainerKind.Panel, 0, hits, tally, onSkip, path);
+            }
         });
+
+    /// <summary>The path of an item in a panel's slide-out (the census's "/SlideOut").</summary>
+    public const string SlideOutPath = "/SlideOut";
+
+    /// <summary>The path of a panel's dialog launcher (the census's "DialogLauncher").</summary>
+    public const string DialogLauncherPath = "DialogLauncher";
+
+    private bool IsPanelBreak(TNode? item)
+    {
+        if (item is null) return false;
+        try { return _describe(item).IsPanelBreak; }
+        catch { return false; } // Visit reports it
+    }
 
     /// <summary>The collected leaves of a panel's dialog launcher.</summary>
     /// <param name="sources">When given, receives the item behind each returned hit, in the same order.</param>
     public List<RibbonHit> WalkDialogLauncher(TNode? dialogLauncher, Action<Exception, string>? onSkip = null, List<TNode>? sources = null) =>
-        Run(sources, (tally, hits) => Visit(dialogLauncher, RibbonContainerKind.DialogLauncher, 0, hits, tally, onSkip));
+        Run(sources, (tally, hits) => Visit(dialogLauncher, RibbonContainerKind.DialogLauncher, 0, hits, tally, onSkip, DialogLauncherPath));
 
     /// <summary>Items, then dialog launcher: the order a single panel lists them in.</summary>
     public List<RibbonHit> WalkPanel(IEnumerable<TNode?>? items, TNode? dialogLauncher, Action<Exception, string>? onSkip = null)
@@ -394,7 +444,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
     }
 
     private void Visit(TNode? item, RibbonContainerKind container, int depth, List<RibbonHit> hits,
-                       RibbonScanCounts tally, Action<Exception, string>? onSkip)
+                       RibbonScanCounts tally, Action<Exception, string>? onSkip, string path)
     {
         if (item is null) return;
         RibbonNode<TNode> node;
@@ -411,13 +461,13 @@ public sealed class RibbonWalker<TNode> where TNode : class
         switch (node.Role)
         {
             case RibbonNodeRole.Leaf:
-                Emit(item, node.LeafKind, node.Id, node.Text, node.Name, node.IsCheckable, container, hits, tally);
+                Emit(item, node.LeafKind, node.Id, node.Text, node.Name, node.IsCheckable, container, hits, tally, path);
                 return;
 
             case RibbonNodeRole.Container:
                 if (node.Children is null)
                 {
-                    EmitContainer(item, node, container, hits, tally);
+                    EmitContainer(item, node, container, hits, tally, path);
                     return;
                 }
                 if (depth >= RibbonWalkRules.MaxDepth) { tally.AddDepthCapped(); return; }
@@ -428,9 +478,10 @@ public sealed class RibbonWalker<TNode> where TNode : class
                     // skipped whole (its header included).
                     var children = Materialize(node.Children, $"{node.ContainerKind} {node.Id}", tally, onSkip, out var ok);
                     if (!ok) return;
-                    EmitContainer(item, node, container, hits, tally);
+                    EmitContainer(item, node, container, hits, tally, path);
+                    var inside = path + (node.PathSegment ?? "");
                     foreach (var child in children)
-                        Visit(child, node.ContainerKind, depth + 1, hits, tally, onSkip);
+                        Visit(child, node.ContainerKind, depth + 1, hits, tally, onSkip, inside);
                 }
                 finally
                 {
@@ -443,10 +494,11 @@ public sealed class RibbonWalker<TNode> where TNode : class
         }
     }
 
-    private void EmitContainer(TNode item, RibbonNode<TNode> node, RibbonContainerKind container, List<RibbonHit> hits, RibbonScanCounts tally)
+    private void EmitContainer(TNode item, RibbonNode<TNode> node, RibbonContainerKind container, List<RibbonHit> hits, RibbonScanCounts tally,
+                               string path)
     {
         if (RibbonWalkRules.ContainerIsAlsoACommand(node.ContainerKind))
-            Emit(item, RibbonLeafKind.Button, node.Id, node.Text, node.Name, isCheckable: false, container, hits, tally);
+            Emit(item, RibbonLeafKind.Button, node.Id, node.Text, node.Name, isCheckable: false, container, hits, tally, path);
     }
 
     private static List<TNode?> Materialize(IEnumerable<TNode?>? items, string what, RibbonScanCounts tally, Action<Exception, string>? onSkip) =>
@@ -477,7 +529,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
     }
 
     private void Emit(TNode item, RibbonLeafKind leaf, string? id, string? text, string? name, bool isCheckable, RibbonContainerKind container,
-                      List<RibbonHit> hits, RibbonScanCounts tally)
+                      List<RibbonHit> hits, RibbonScanCounts tally, string path)
     {
         if (string.IsNullOrEmpty(id)) return;
         if (RibbonWalkRules.Decide(leaf, container, isCheckable) == RibbonLeafDecision.ExcludeToggle)
@@ -489,6 +541,12 @@ public sealed class RibbonWalker<TNode> where TNode : class
         if (_isPostableCommand is not null && !PostCommandRule.LetsAddinsPost(id, _isPostableCommand))
         {
             tally.AddOutsidePostableCommand(id!);
+            // Spec #35: Search-It lists it and runs it through the ribbon's own command path; the Builder never sees it.
+            if (_keepNotPostable && (RibbonWalkRules.ReachedBeforeSc027(leaf, container) || SafeResolves(id!)))
+            {
+                hits.Add(new RibbonHit(id!, text, container, leaf, name, Path: _recordPaths ? path : null, Postable: false));
+                _sources?.Add(item);
+            }
             return;
         }
         if (!RibbonWalkRules.ReachedBeforeSc027(leaf, container) && !SafeResolves(id!))
@@ -497,7 +555,7 @@ public sealed class RibbonWalker<TNode> where TNode : class
             return;
         }
         tally.AddCollected(container, leaf);
-        hits.Add(new RibbonHit(id!, text, container, leaf, name));
+        hits.Add(new RibbonHit(id!, text, container, leaf, name, Path: _recordPaths ? path : null));
         _sources?.Add(item);
     }
 

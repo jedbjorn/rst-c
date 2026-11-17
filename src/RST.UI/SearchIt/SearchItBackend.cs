@@ -23,11 +23,35 @@ public interface ISearchItBackend
 
     /// <summary>Runs <paramref name="tool"/>. Called after the window has closed.</summary>
     void Run(SearchTool tool);
+
+    /// <summary>
+    /// Asked on a click, before the window closes: false when the tool can't run now, and the window then stays open
+    /// with the amber message (spec #35, "Running a Tool", 4). Revit UI thread, outside an API context.
+    /// </summary>
+    bool CanRunNow(SearchTool tool) => true;
+
+    /// <summary>
+    /// True when <see cref="LoadTools"/> must run after the command has returned (spec #35: Revit's CanExecute answers
+    /// differently while an external command executes). <see cref="Prepare"/> is then called inside the command.
+    /// </summary>
+    bool DefersLoad => false;
+
+    /// <summary>With <see cref="DefersLoad"/>: what needs the Revit API, inside the command (it may build the catalogue).</summary>
+    void Prepare()
+    {
+    }
 }
 
 /// <summary>The backend in Revit: the tools the ribbon is showing for the open file (<see cref="SearchShowing"/>).</summary>
-public sealed class SearchItBackend(Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null) : ISearchItBackend
+public sealed class SearchItBackend(Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
+    Func<SearchTool, bool>? canRunNow = null, Action? prepare = null) : ISearchItBackend
 {
+    public bool CanRunNow(SearchTool tool) => canRunNow?.Invoke(tool) ?? true;
+
+    public bool DefersLoad => prepare is not null;
+
+    public void Prepare() => prepare?.Invoke();
+
     public bool IsReady => isReady?.Invoke() ?? false;
 
     private readonly Func<SearchList> _tools = tools ?? throw new ArgumentNullException(nameof(tools));

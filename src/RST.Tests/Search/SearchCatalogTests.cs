@@ -48,13 +48,20 @@ public class SearchCatalogTests
         // Every listed place is one Revit shows in that family: a visible tab and a visible panel.
         var shown = list.Tools.SelectMany(t => t.Places).Select(p => p.Tab).Distinct();
         shown.Should().BeEquivalentTo(new[] { "Create", "Insert", "Annotate", "View", "Manage", "Modify", "Add-Ins", "DiRootsOne", null });
+        // Decision #125 (spec #35 review): a place shows when any live copy of it shows (Revit keeps two panels of the
+        // same title on some family tabs, one per family kind).
+        var byCopy = new List<string>();
         foreach (var tool in capture.Catalog())
         {
-            var showing = tool.Places.Where(p => capture.StateOf(p) is { TabVisible: true, PanelVisible: true }).ToArray();
+            var showing = tool.Places.Where(p => p.CopiesOrSelf.Any(c => capture.States[c.Handle] is { TabVisible: true, PanelVisible: true })).ToArray();
+            if (showing.Length != tool.Places.Count(p => capture.StateOf(p) is { TabVisible: true, PanelVisible: true })) byCopy.Add(tool.Id);
             var listed = list.Tools.SingleOrDefault(t => t.Id == tool.Id);
             (listed?.Places ?? []).Should().Equal(showing.Select(p => p.ToSearchPlace()), tool.Id);
         }
-        list.Tools.Should().HaveCount(265);
+        // Shown only through a second copy in this capture: Component on Create › Model and the Work Plane tools, which
+        // Revit draws in a generic model family. 265 tools before decision #125.
+        byCopy.Should().BeEquivalentTo("ID_OBJECTS_FAMSYM", "ID_PICK_WORKPLANE", "ID_SKETCH_PLANE_TOOL", "ID_WORKPLANE_VIEW", "ID_SKETCH_GRID_VIS");
+        list.Tools.Should().HaveCount(270);
     }
 
     [Fact]

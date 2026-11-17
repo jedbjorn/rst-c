@@ -199,6 +199,10 @@ public sealed class CensusIndex
         return CensusMark.None;
     }
 
+    /// <summary>True when any row has <paramref name="id"/> in <paramref name="context"/>: without one, <see cref="Mark"/> is None at every place.</summary>
+    public bool HasRows(string? context, string? id) =>
+        !string.IsNullOrEmpty(context) && !string.IsNullOrEmpty(id) && _rows.ContainsKey((context!, id!));
+
     /// <summary>The distinct context keys that have rows.</summary>
     public IReadOnlyCollection<string> Contexts => Rows.Select(r => r.Context).Distinct(StringComparer.Ordinal).ToList();
 }

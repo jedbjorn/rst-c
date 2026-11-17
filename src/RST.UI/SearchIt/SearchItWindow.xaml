@@ -4,6 +4,8 @@
     and, under it, the Tab › Panel it lives on). Eight cards show at the default size; the rest
     scroll. Modeless and owned by Revit: see SearchItLauncher and the code-behind for how it closes.
     The view-model is SearchItViewModel.
+    Spec #35: a card's census badge sits right-aligned after its name and place (NOT IN GUI amber, Must Run In
+    the neutral chip, its card dimmed), and a click that can't run shows the amber message above the hint.
 -->
 <Window x:Class="RST.UI.SearchIt.SearchItWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -122,16 +124,36 @@
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Button Style="{StaticResource ResultButton}" Command="{Binding RunCommand}" CommandParameter="{Binding}"
-                            ToolTip="{Binding ToolTip}" AutomationProperties.Name="{Binding Name}">
-                        <StackPanel>
-                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis" />
-                            <DockPanel Margin="0,2,0,0">
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding MoreText}" Style="{StaticResource MutedText}" FontSize="11"
-                                           Margin="8,0,0,0" Visibility="{Binding HasMore, Converter={StaticResource BoolToVisible}}" />
-                                <TextBlock Text="{Binding Location}" Style="{StaticResource MutedText}" FontSize="11" />
-                            </DockPanel>
-                        </StackPanel>
+                            ToolTip="{Binding ToolTip}" AutomationProperties.Name="{Binding Name}"
+                            AutomationProperties.HelpText="{Binding BadgeText}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel x:Name="Text">
+                                <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis" />
+                                <DockPanel Margin="0,2,0,0">
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding MoreText}" Style="{StaticResource MutedText}" FontSize="11"
+                                               Margin="8,0,0,0" Visibility="{Binding HasMore, Converter={StaticResource BoolToVisible}}" />
+                                    <TextBlock Text="{Binding Location}" Style="{StaticResource MutedText}" FontSize="11" />
+                                </DockPanel>
+                            </StackPanel>
+                            <!-- The census's label (spec #35): right-aligned after the name and the place. -->
+                            <ContentControl x:Name="Badge" Grid.Column="1" Margin="10,0,0,0" Style="{StaticResource Pill}"
+                                            Content="{Binding BadgeText}" ToolTip="{Binding BadgeToolTip}"
+                                            Visibility="{Binding HasBadge, Converter={StaticResource BoolToVisible}}"
+                                            AutomationProperties.AutomationId="SearchIt.Badge" />
+                        </Grid>
                     </Button>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsNotInGui}" Value="True">
+                            <Setter TargetName="Badge" Property="Style" Value="{StaticResource WarningPill}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsMustRunIn}" Value="True">
+                            <Setter TargetName="Text" Property="Opacity" Value="0.5" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
@@ -140,9 +162,17 @@
                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisible}}"
                    AutomationProperties.AutomationId="SearchIt.Empty" />
 
-        <Border Grid.Row="4" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="14,6">
-            <TextBlock Text="{x:Static res:UiStrings.SearchIt_Hint}" Style="{StaticResource MutedText}" FontSize="11" />
-        </Border>
+        <StackPanel Grid.Row="4">
+            <!-- Spec #35: a click that can't run says so here, and the window stays open. -->
+            <Border Style="{StaticResource WarningBanner}" Margin="12,6,12,0"
+                    Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisible}}">
+                <TextBlock Text="{Binding Message}" Foreground="{StaticResource WarningTextBrush}" TextWrapping="Wrap" FontSize="11"
+                           AutomationProperties.AutomationId="SearchIt.Message" />
+            </Border>
+            <Border BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="14,6">
+                <TextBlock Text="{x:Static res:UiStrings.SearchIt_Hint}" Style="{StaticResource MutedText}" FontSize="11" />
+            </Border>
+        </StackPanel>
 
         <!-- The first open of a session may build the catalogue: the overlay says so. Last, over everything. -->
         <ContentControl Grid.RowSpan="5" Style="{StaticResource BusyOverlay}" Content="{Binding Busy}" />

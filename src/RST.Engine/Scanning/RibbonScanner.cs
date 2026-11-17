@@ -60,6 +60,14 @@
 // item it came from. Revit keeps those objects for the whole session, so
 // Search-It reads their state when it opens without walking the ribbon again.
 //
+// Spec #35 (Search-It runs per file type): every hit also carries its place path in
+// the census's own form (RibbonHit.Path: "/SlideOut", "/<Type>(<id or text>)" per
+// container, "DialogLauncher"), so the census's not-drawn rows can be matched to
+// it; and ids Revit won't let add-ins post are kept for Search-It (RibbonHit.Postable
+// false: a click runs them through the ribbon's own command path, decision #92).
+// They are still counted and logged as left out, never collected, and never reach
+// BuilderHits: the Builder's catalogue and the scan's summary line are unchanged.
+//
 // NOT excluded any more: BuiltinTabs (Architecture, Structure, …). Walking
 // them was previously skipped to avoid duplicates of BuiltinCommandScanner
 // output, but the catalog merge handles that now and gains tab/panel
@@ -86,8 +94,11 @@ internal sealed record RibbonScan(IReadOnlyList<RibbonHit> Hits, IReadOnlyList<R
 {
     public static readonly RibbonScan Empty = new(Array.Empty<RibbonHit>(), Array.Empty<RibbonPlaceHandle>());
 
-    /// <summary>The hits outside the family-editor tabs, in order: what the Builder's catalogue is merged from.</summary>
-    public IReadOnlyList<RibbonHit> BuilderHits => Hits.Where(h => !ModeRestrictedTabs.ContainsId(h.TabId)).ToList();
+    /// <summary>
+    /// The hits outside the family-editor tabs that Revit lets add-ins post, in order: what the Builder's catalogue is
+    /// merged from (spec #35 keeps the others for Search-It only).
+    /// </summary>
+    public IReadOnlyList<RibbonHit> BuilderHits => Hits.Where(h => h.Postable && !ModeRestrictedTabs.ContainsId(h.TabId)).ToList();
 }
 
 internal static class RibbonScanner
@@ -156,8 +167,8 @@ internal static class RibbonScanner
     {
         counts ??= new RibbonScanCounts();
         familyCounts ??= new RibbonScanCounts();
-        var walker = new RibbonWalker<RibbonItem>(Describe, resolves, counts, isPostableCommand);
-        var familyWalker = new RibbonWalker<RibbonItem>(Describe, resolves, familyCounts, isPostableCommand);
+        var walker = new RibbonWalker<RibbonItem>(Describe, resolves, counts, isPostableCommand, keepNotPostable: true, recordPaths: true);
+        var familyWalker = new RibbonWalker<RibbonItem>(Describe, resolves, familyCounts, isPostableCommand, keepNotPostable: true, recordPaths: true);
         var items = new List<(RibbonHit Hit, RibbonPlaceHandle Handle)>();
         var launchers = new List<(RibbonHit Hit, RibbonPlaceHandle Handle)>();
         var sources = new List<RibbonItem>();
@@ -295,22 +306,29 @@ internal static class RibbonScanner
     {
         switch (item)
         {
+            case RibbonPanelBreak:
+                // Spec #35: the items after it are in the panel's slide-out (the census's "/SlideOut").
+                return RibbonNode<RibbonItem>.PanelBreak;
             case RibbonSplitButton split:          // incl. UIFramework.RvtMenuSplitButton
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.SplitButton, split.Items);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.SplitButton, split.Items) with { PathSegment = Segment(split) };
             case RibbonChecklistButton checklist:
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.Checklist, checklist.Items, checklist.Id, checklist.Text, checklist.Name);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.Checklist, checklist.Items, checklist.Id, checklist.Text, checklist.Name)
+                    with { PathSegment = Segment(checklist) };
             case RibbonRadioButtonGroup radio:     // incl. UIFramework.SplitRadioGroup (blank Id)
                 // The header with an Id was emitted before SC-027 (review B2); its entries are not.
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.RadioGroup, radio.Items, radio.Id, radio.Text, radio.Name);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.RadioGroup, radio.Items, radio.Id, radio.Text, radio.Name)
+                    with { PathSegment = Segment(radio) };
             case RibbonMenuButton menu:            // incl. UIFramework.SwitchWindowMenuButton
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.MenuButton, menu.Items, menu.Id, menu.Text, menu.Name);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.MenuButton, menu.Items, menu.Id, menu.Text, menu.Name)
+                    with { PathSegment = Segment(menu) };
             case RibbonListButton list:
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.ListButton, list.Items, list.Id, list.Text, list.Name);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.ListButton, list.Items, list.Id, list.Text, list.Name)
+                    with { PathSegment = Segment(list) };
             case RibbonRowPanel row:               // incl. RibbonFoldPanel
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.Stack, row.Items);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.Stack, row.Items) with { PathSegment = Segment(row) };
             case RibbonMenuItem menuItem when menuItem.Items is { } subItems && subItems.Any():
                 // A sub-menu (UIFramework.RvtLargeMenuItem "Annotations"): its header only opens it.
-                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.SubMenu, subItems);
+                return RibbonNode<RibbonItem>.Container(RibbonContainerKind.SubMenu, subItems) with { PathSegment = Segment(menuItem) };
             case RibbonToggleButton toggle:
                 return RibbonNode<RibbonItem>.Leaf(RibbonLeafKind.ToggleButton, toggle.Id, toggle.Text, IsCheckable(toggle), toggle.Name);
             case RibbonButton button:
@@ -326,6 +344,21 @@ internal static class RibbonScanner
                 return RibbonNode<RibbonItem>.Ignored;
         }
     }
+
+    /// <summary>
+    /// A container's part of a place path, as the census writes it (src/RST.Census/Ribbon.cs, Rec): "/", the
+    /// container's runtime type name, then its Id in brackets, or its text (Text, else Name, else Id) when the Id is
+    /// empty; tabs and line breaks become spaces and the bracketed part is trimmed.
+    /// </summary>
+    internal static string Segment(RibbonItem container)
+    {
+        var id = container.Id;
+        var inner = !string.IsNullOrEmpty(id) ? id : container.Text ?? container.Name ?? container.Id;
+        return "/" + container.GetType().Name + "(" + CensusText(inner) + ")";
+    }
+
+    private static string CensusText(string? value) =>
+        (value ?? "").Replace("\t", " ").Replace("\r", " ").Replace("\n", " ").Trim();
 
     /// <summary>
     /// RibbonCommandItem.IsCheckable (AdWindows 2025.0.2, 2026.0.4, 2027.0.0). Only a checklist

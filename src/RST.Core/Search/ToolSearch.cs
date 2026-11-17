@@ -48,7 +48,8 @@ public sealed class ToolSearch
     /// ANDed) and, when <paramref name="text"/> is not blank, matches it (<see cref="ToolMatcher"/>).
     /// A tool the ribbon names differently in different places is tried under each name and shown
     /// once, under the one that matched best. With text, the order is exact, prefix, word start,
-    /// substring, fuzzy, then by name; without text it is by name.
+    /// substring, fuzzy, then by name; without text it is by name. Among equal matches a tool that runs
+    /// here comes before a Must Run In one (spec #35).
     /// </summary>
     public IReadOnlyList<SearchHit> Search(IEnumerable<string>? chips, string? text)
     {
@@ -79,6 +80,9 @@ public sealed class ToolSearch
         {
             var byMatch = Nullable.Compare(a.Hit.Match, b.Hit.Match);
             if (byMatch != 0) return byMatch;
+            // Spec #35: among equal matches, the tools that run here come before the Must Run In ones.
+            var byRun = b.Hit.Tool.CanRun.CompareTo(a.Hit.Tool.CanRun);
+            if (byRun != 0) return byRun;
             var byLength = query.Length == 0 ? 0 : a.Name.Length.CompareTo(b.Name.Length);
             if (byLength != 0) return byLength;
             var byName = string.CompareOrdinal(a.Name, b.Name);

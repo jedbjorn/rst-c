@@ -57,6 +57,26 @@ public class SearchItTests
         public bool IsReady { get; set; }
         public Action? OnLoad { get; set; }
         public Action? OnRun { get; set; }
+        /// <summary>Spec #35: what the host says on a click, before the window closes (null: it can run).</summary>
+        public Func<SearchTool, bool>? CanRun { get; set; }
+        public List<SearchTool> Checked { get; } = [];
+
+        public bool CanRunNow(SearchTool tool)
+        {
+            Checked.Add(tool);
+            return CanRun?.Invoke(tool) ?? true;
+        }
+
+        /// <summary>Spec #35: the tools are read after the command has returned; Prepare runs inside it.</summary>
+        public bool DefersLoad { get; set; }
+        public int Prepared { get; private set; }
+        public int LoadsAtPrepare { get; private set; } = -1;
+
+        public void Prepare()
+        {
+            Prepared++;
+            LoadsAtPrepare = Loads;
+        }
 
         public SearchList LoadTools()
         {
@@ -524,6 +544,63 @@ public class SearchItTests
         {
             SearchItLauncher.Current?.Close();
             owner.Close();
+        }
+    });
+
+    // Spec #35: the live gate is asked outside the command, so the host defers the read until Show has returned.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_deferred_read_happens_after_Show_returns_and_ends_ready_to_type(bool cold) => Sta(() =>
+    {
+        var owner = OwnerOnScreen();
+        var ownerHandle = new WindowInteropHelper(owner).Handle;
+        var backend = new FakeBackend { IsReady = !cold, DefersLoad = true, Tools = Sample.Concat(Many(40)).ToArray() };
+        bool? overlayAtLoad = null;
+        backend.OnLoad = () => overlayAtLoad = SearchItLauncher.Current?.ViewModel.Busy.IsBusy;
+        try
+        {
+            Assert.True(SearchItLauncher.Show(ownerHandle, backend, () => Idle));
+            var window = SearchItLauncher.Current!;
+            // When Show returns (the command returns to Revit), the host has prepared and nothing has been read yet.
+            Assert.Equal(1, backend.Prepared);
+            Assert.Equal(0, backend.LoadsAtPrepare);
+            Assert.Equal(0, backend.Loads);
+            Assert.True(window.ViewModel.IsLoading);
+            Assert.Empty(window.ViewModel.Results);
+            Assert.Equal(cold, window.ViewModel.Busy.IsBusy);
+
+            WindowCapture.DoEvents();
+
+            Assert.Equal(1, backend.Loads);
+            Assert.Equal(cold, overlayAtLoad);
+            Assert.False(window.ViewModel.IsLoading);
+            Assert.False(window.ViewModel.Busy.IsBusy);
+            Assert.Equal(backend.Tools.Count, window.ViewModel.Results.Count);
+            AssertReadyToType(window, "after the deferred read");
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+            owner.Close();
+        }
+    });
+
+    [Fact]
+    public void A_deferred_read_that_fails_closes_the_window() => Sta(() =>
+    {
+        var backend = new FakeBackend { IsReady = true, DefersLoad = true, OnLoad = () => throw new InvalidOperationException("ribbon gone") };
+        try
+        {
+            Assert.True(SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle));
+            var window = SearchItLauncher.Current!;
+            WindowCapture.DoEvents();
+            Assert.False(window.IsOpen);
+            Assert.Equal("failed", window.CloseReason);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
         }
     });
 
@@ -1617,6 +1694,149 @@ public class SearchItTests
             CloseIfOpen(o);
         }
     });
+
+    // ── spec #35: badges, Must Run In cards, the amber message ──────────
+
+    private static readonly SearchTool Level = new("ID_OBJECTS_LEVEL", "Level", "Architecture", "Datum")
+        { Mark = SearchToolMark.MustRunIn, MustRunIn = ["Elevation", "Section"] };
+
+    private static readonly SearchTool SiteSettings = new("ID_SITE_SETTINGS", "Site Settings", "Massing & Site", "Model Site")
+        { Mark = SearchToolMark.NotInGui, Postable = false, RunHandle = 7 };
+
+    private static readonly SearchTool Grid = new("ID_OBJECTS_GRID", "Grid", "Architecture", "Datum")
+        { Mark = SearchToolMark.MustRunIn, MustRunIn = ["Floor Plan", "Ceiling Plan", "Elevation", "Section", "3D View"] };
+
+    [Fact]
+    public void A_card_carries_its_census_badge_and_a_Must_Run_In_card_says_where_it_runs() => Sta(() =>
+    {
+        var vm = Loaded(new FakeBackend { Tools = [.. Sample, Level, SiteSettings, Grid] });
+
+        vm.Text = "level";
+        var level = vm.Results.Single(r => r.Tool.Id == "ID_OBJECTS_LEVEL");
+        Assert.True(level.IsMustRunIn);
+        Assert.True(level.HasBadge);
+        Assert.False(level.IsNotInGui);
+        Assert.Equal("Must Run In Elevation, Section", level.BadgeText);
+        Assert.Equal("Runs in: Elevation, Section. Switch to one of these views to run this tool.", level.BadgeToolTip);
+        Assert.Equal(level.BadgeToolTip, level.ToolTip);
+
+        vm.Text = "grid";
+        Assert.Equal("Must Run In Floor Plan, Ceiling Plan +3", vm.Results.Single(r => r.Tool.Id == "ID_OBJECTS_GRID").BadgeText);
+
+        vm.Text = "site settings";
+        var site = vm.Results.First();
+        Assert.True(site.IsNotInGui);
+        Assert.Equal("NOT IN GUI", site.BadgeText);
+        Assert.Equal("", site.BadgeToolTip);
+        Assert.Equal("Massing & Site › Model Site", site.ToolTip);
+
+        vm.Text = "door";
+        Assert.False(vm.Results.Single().HasBadge);
+        Assert.Equal("", vm.Results.Single().BadgeText);
+    });
+
+    [Fact]
+    public void A_Must_Run_In_card_never_runs_and_the_window_stays_open() => Sta(() =>
+    {
+        var backend = new FakeBackend { Tools = [.. Sample, Level] };
+        var o = Open(backend);
+        try
+        {
+            var window = o.Window;
+            window.SearchBox.Text = "level";
+            WindowCapture.DoEvents();
+            var card = window.ViewModel.Results.Single();
+            Assert.True(card.IsMustRunIn);
+
+            card.RunCommand.Execute(card);          // a click
+            card.RunCommand.Execute(card);          // a double-click
+            window.FocusCard(0);
+            Assert.True(Key2(Card(window, 0), window, Key.Enter), "Enter on the card is taken");
+            WindowCapture.DoEvents();
+
+            Assert.False(o.Closed, "the window stays open");
+            Assert.Null(window.ViewModel.Chosen);
+            Assert.Empty(backend.Ran);
+            Assert.Empty(backend.Checked);
+            Assert.False(window.ViewModel.HasMessage, "the badge says where it runs; no message");
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void A_click_the_host_says_cannot_run_keeps_the_window_open_with_the_amber_message() => Sta(() =>
+    {
+        var backend = new FakeBackend { Tools = [.. Sample, SiteSettings], CanRun = t => t.Id != "ID_SITE_SETTINGS" };
+        var o = Open(backend);
+        try
+        {
+            var vm = o.Window.ViewModel;
+            o.Window.SearchBox.Text = "site settings";
+            WindowCapture.DoEvents();
+            var card = vm.Results.First();
+            card.RunCommand.Execute(card);
+            WindowCapture.DoEvents();
+
+            Assert.False(o.Closed);
+            Assert.Null(vm.Chosen);
+            Assert.Empty(backend.Ran);
+            Assert.Same(SiteSettings, Assert.Single(backend.Checked));
+            Assert.True(vm.HasMessage);
+            Assert.Equal("This tool can't be run with RST here: Site Settings (Massing & Site › Model Site).", vm.Message);
+
+            // The next search clears it; a tool that can run then closes the window and runs.
+            o.Window.SearchBox.Text = "door";
+            WindowCapture.DoEvents();
+            Assert.False(vm.HasMessage);
+            var door = vm.Results.Single();
+            door.RunCommand.Execute(door);
+            WindowCapture.DoEvents();
+            Assert.True(o.Closed);
+            Assert.Equal("ID_OBJECTS_DOOR", Assert.Single(backend.Ran).Id);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Fact]
+    public void A_backend_that_throws_on_the_check_is_a_click_that_cannot_run() => Sta(() =>
+    {
+        var backend = new FakeBackend { Tools = [SiteSettings], CanRun = _ => throw new InvalidOperationException("ribbon gone") };
+        var vm = Loaded(backend, []);
+        var card = vm.Results.Single();
+        card.RunCommand.Execute(card);
+        Assert.Null(vm.Chosen);
+        Assert.True(vm.HasMessage);
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void Screenshots_of_the_census_badges_and_the_amber_message(UiTheme theme) => Sta(() =>
+    {
+        var o = Open(new FakeBackend { Tools = [.. Sample, Level, SiteSettings, Grid], CanRun = _ => false });
+        try
+        {
+            o.Window.SearchBox.Text = "l";
+            WindowCapture.DoEvents();
+            Capture(o.Window, theme, "search-it-badges");
+
+            o.Window.SearchBox.Text = "site settings";
+            WindowCapture.DoEvents();
+            var card = o.Window.ViewModel.Results.First();
+            card.RunCommand.Execute(card);
+            Assert.True(o.Window.ViewModel.HasMessage);
+            Capture(o.Window, theme, "search-it-cant-run");
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    }, theme);
 
     // ── screenshots ──────────────────────────────────────────────────────
 
