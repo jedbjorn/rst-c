@@ -274,12 +274,15 @@ public sealed partial class CensusApp
                 }
                 // a WebView2 child whose window is gone should exit on its own; one that hangs is killed (spec #34 "Teardown")
                 for (int i = 0; i < 20 && NewKids(b).Any(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase) && Alive(k.pid)) && NewWins(b).Count == 0; i++) await Task.Delay(300);
+                // only after a WebView2 *window* was closed; a dockable pane (Forma, Issues) keeps its WebView2 alive, and
+                // that process belongs to Revit: never killed
                 var hung = NewKids(b).Where(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase) && Alive(k.pid)).ToList();
-                if (hung.Count > 0 && NewWins(b).Count == 0)
+                if (hung.Count > 0 && NewWins(b).Count == 0 && r.Opened.Contains("webview2"))
                 {
                     foreach (var k in hung) { try { Process.GetProcessById(k.pid).Kill(); } catch { } }
                     late.Add($"killed {hung.Count} hung msedgewebview2 child(ren) after its window closed");
                 }
+                else if (hung.Count > 0) late.Add($"{hung.Count} WebView2 process(es) kept by Revit (a pane or embedded view, no window)");
                 if (late.Count > 0) r.Teardown += " | late: " + string.Join("; ", late);
                 if (waited.Count > 0) r.Note += " late watch waited for " + string.Join(",", waited);
                 var pn = await Panes(); var changed = b.Panes == null ? new List<string>() : pn.Where(kv => b.Panes.TryGetValue(kv.Key, out var was) && was != kv.Value).Select(kv => kv.Key).ToList();
@@ -300,7 +303,7 @@ public sealed partial class CensusApp
             bool jRefusedCtx = j.Contains("cannot be invoked in this context");
 
             // idle proof
-            var idle = await IdleProof(b, () => raReturned);
+            var idle = await IdleProof(b, () => raReturned, r.Opened.Contains("webview2"));
             if (idle != "") { r.Left = (r.Left + " " + idle).Trim(); }
             r.IdleOk = r.Left.Trim() == "";
 
@@ -431,7 +434,7 @@ public sealed partial class CensusApp
         return acts.Count == 0 ? "none" : string.Join("; ", acts);
     }
 
-    async Task<string> IdleProof(Snap b, Func<bool> raReturned)
+    async Task<string> IdleProof(Snap b, Func<bool> raReturned, bool webview2Window = false)
     {
         var left = new List<string>();
         for (int i = 0; i < 20 && !raReturned(); i++) await Task.Delay(100);
@@ -440,10 +443,13 @@ public sealed partial class CensusApp
         var mode = ModeSig(); if (ModeChanged(b)) left.Add("mode[" + mode + "]");
         var ac = ActiveCmd(); if (!CmdIdle(ac)) left.Add("activeCommand[" + ac + "]");
         var (ran, _) = await Api(app => { }, 4000); if (!ran) left.Add("ExternalEvent did not run within 4 s (not idle)");
-        // a WebView2 process may need a moment to exit after its window closed
-        for (int i = 0; i < 10 && NewKids(b).Any(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase)); i++) await Task.Delay(300);
-        var kids = NewKids(b).Where(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase)).ToList();
-        if (kids.Count > 0) left.Add("webview2 procs still running: " + kids.Count);
+        // after a WebView2 window was closed, its process must be gone too (a pane's WebView2 is Revit's to keep)
+        if (webview2Window)
+        {
+            for (int i = 0; i < 10 && NewKids(b).Any(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase)); i++) await Task.Delay(300);
+            var kids = NewKids(b).Where(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (kids.Count > 0) left.Add("webview2 procs still running: " + kids.Count);
+        }
         return string.Join(" ", left);
     }
 
