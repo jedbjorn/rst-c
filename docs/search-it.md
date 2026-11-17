@@ -123,7 +123,7 @@ The first time you open Search-It, the Builder or the Loader after starting Revi
 - **Names only.** Search-It does not search tooltips, keyboard shortcuts or command ids.
 - **Names as your Revit shows them.** Tools are listed under the names on your ribbon. Accents count: "ecole" does not find "École".
 - **Contextual tools.** The tools Revit adds when something is selected ("Modify | Walls") are not listed.
-- **Badges need Revit 2026 or 2027.** They come from RST's Ribbon Tool Census, a record of where each stock Revit tool runs, made by starting every tool in the project views and the stock family templates. A view the census did not run uses its nearest match (an area plan uses the floor plan's record). In Revit 2025, and in a file or view with no match, Search-It lists what Revit says is available and shows no badges.
+- **Badges need Revit 2026 or 2027.** They come from RST's [Ribbon Tool Census](../census/README.md) ([browse the command index](../census/COMMANDS.md)), a record of where each stock Revit tool runs, made by starting every tool in the project views and the stock family templates. A view the census did not run uses its nearest match (an area plan uses the floor plan's record). In Revit 2025, and in a file or view with no match, Search-It lists what Revit says is available and shows no badges.
 - **If RST cannot read the ribbon's state**, Search-It falls back to the whole list, without badges. In a family this can include project tools, and the count line says "tools".
 - **Revit's own tools only.** Add-in buttons never get a badge; a greyed one is left out.
 - **English Revit.** In another language, a tool Revit does not draw may be shown without its NOT IN GUI badge.
