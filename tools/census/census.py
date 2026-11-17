@@ -507,6 +507,19 @@ def cmd_pull(year):
     log(f"pulled {year} into {dest}")
 
 
+def cmd_dropctx(year, ctx):
+    """Forgets a context's rows (guest and pulled copy) so it runs again from scratch; Revit must not be running it."""
+    for path in (EVIDENCE / year / "census" / "rows.tsv",):
+        if path.exists():
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+            keep = [lines[0]] + [l for l in lines[1:] if l.split("\t")[2:3] != [ctx]]
+            path.write_text("\r\n".join(keep) + "\r\n", encoding="utf-8")
+            log(f"dropctx {year} {ctx}: {len(lines) - len(keep)} rows dropped from {path}")
+            push(path, f"{GC}\\{year}\\rows.tsv")
+    with open(STATE / f"dropped-{year}.txt", "a", encoding="utf-8") as f:
+        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{ctx}\n")
+
+
 def cmd_end():
     for y in YEARS:
         if "census" in gx("cmd", "/c", f"dir /b {GC}\\{y} 2>nul") or gx("cmd", "/c", f"if exist {GC}\\{y}\\progress.txt echo yes").strip() == "yes":
@@ -543,6 +556,8 @@ def main(argv):
         print(cmd_all(a[0], until))
     elif c == "pull":
         cmd_pull(a[0])
+    elif c == "dropctx":
+        cmd_dropctx(a[0], a[1])
     elif c == "end":
         cmd_end()
     elif c == "go":

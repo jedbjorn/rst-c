@@ -320,7 +320,9 @@ public sealed partial class CensusApp
         var views = new FilteredElementCollector(d).OfClass(typeof(View)).Cast<View>().Where(v => !v.IsTemplate).ToList();
         if (want == "Default") return "default view kept; ";
         if (!Enum.TryParse<ViewType>(want, out var vt)) throw new ArgumentException("unknown view type " + want);
-        View pick = views.Where(v => v.ViewType == vt).OrderByDescending(v => v.Name == "Level 1" || v.Name == "South" || v.Name == "{3D}").ThenBy(v => v.Name).FirstOrDefault();
+        // a schedule context is an ordinary schedule, not a title block's revision schedule
+        View pick = views.Where(v => v.ViewType == vt && !(v is ViewSchedule vs && (vs.IsTitleblockRevisionSchedule || vs.IsInternalKeynoteSchedule)))
+            .OrderByDescending(v => v.Name == "Level 1" || v.Name == "South" || v.Name == "{3D}").ThenBy(v => v.Name).FirstOrDefault();
         string how = "existing";
         if (pick is View3D v3 && v3.IsPerspective) pick = views.OfType<View3D>().FirstOrDefault(x => !x.IsPerspective);
         if (pick == null)
