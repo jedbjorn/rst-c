@@ -253,7 +253,7 @@ public sealed partial class CensusApp
                 if (!CmdIdle(ac)) parts.Add("activeCommand[" + ac + "]");
                 lock (_docEv) if (_docEv.Count > 0) { parts.Add("doc[" + string.Join("; ", _docEv) + "]"); if (_docEv.Any(x => x.StartsWith("TransactionCommitted"))) r.Opened.Add("doc-change"); }
                 if (!raReturned) parts.Add("routeA blocked");
-                if (raErr != "") parts.Add("routeA threw " + raErr);
+                // a route-A invocation exception is not a signal that the tool started: it is classified below
                 r.Signals = string.Join(" ", parts);
             }
 
@@ -315,7 +315,8 @@ public sealed partial class CensusApp
             if (idle != "") { r.Left = (r.Left + " " + idle).Trim(); }
             r.IdleOk = r.Left.Trim() == "";
 
-            // classify
+            // classify: a route-A invocation that threw is its own outcome, an error (assemble.py refuses to commit one)
+            if (r.Result == "" && raErr != "") { r.Result = "error"; r.Note += " routeA threw " + raErr; }
             if (r.Result == "")
             {
                 bool otherSignal = r.Signals.Replace($"BeforeExecuted(as {_firedAs}, cancellable {_cancellable})", "").Trim() != "";
