@@ -144,9 +144,9 @@ Each scratch document ends with its starting element count; the run summary reco
 
 ## Limits
 
-- **Stock Revit only.** Third-party add-ins have no rows. Stock means Revit and the add-ins Autodesk installs with it,
-  including Revit's built-in Twinmotion integration (`TwinmotionForRevit`, vendor ADSK), which keeps its rows. Their buttons are listed live by RST and are runnable unless
-  Revit greys them.
+- **Stock Revit only.** Third-party add-ins have no rows; RST lists their buttons live, runnable unless Revit greys them.
+  Stock means Revit and the add-ins Autodesk installs with it, including Revit's built-in Twinmotion integration
+  (`TwinmotionForRevit`, vendor ADSK), which keeps its rows.
 - **English Revit.** Rows are keyed by command id, so they apply in any language; only `label` and `panel` are English.
   `tab` is the tab's id.
 - **Contexts are a fixed set**: nothing selected, no contextual tabs (`Modify | Walls`), no File menu, Quick Access
