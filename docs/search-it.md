@@ -29,12 +29,12 @@ Start typing; the list updates with every letter.
 - **You search tool names**, as the ribbon shows them: "Align", "Wall: Architectural", "Aligned Dimension".
 - **Typos and skipped letters are fine.** "algn", "aling" and "allign" all find Align. Upper and lower case do not matter.
 - **The best matches come first:** the exact name, then names that start with what you typed, then names with a word that starts with it, then names that contain it anywhere, then the near misses.
-- **Each result is a card** with the tool's name and, under it in smaller text, where it lives: `Tab › Panel`, for example `Modify › Modify`.
+- **Each result is a card** with the tool's name and, under it in smaller text, where it lives: `Tab › Panel`, for example `Modify › Modify`. A tool on the family editor's own panel (Load into Project, for example) shows `Family Editor`.
 - **A tool that sits in more than one place appears once**, with a note such as "+2 more places". Revit sometimes gives the same tool a different name in each place ("Tag Room" on Architecture, "Room Tag" on Annotate). You can search by either name; the card shows the name you matched and the place that uses it.
 - **Eight results show at a time.** Scroll for the rest. The line under the search box says how many tools match, for example "12 of 1,204 tools". In a family it says "family tools" instead.
 - **Badges** sit at the right of a card: **Must Run In** and **NOT IN GUI** (see [Badges](#badges)).
 
-With nothing typed, the list holds every tool in alphabetical order.
+With nothing typed, the list holds every tool in alphabetical order: first the tools that run here, then the Must Run In ones.
 
 ## Chips: narrowing a search
 
@@ -50,7 +50,7 @@ Press **Enter** in the search box to keep what you typed as a **chip**. A chip i
 Each time the window opens, Search-It looks at what Revit is showing for the active file and view, and lists what can run there.
 
 - **A family lists family tools; a project lists project tools.** A project template (`.rte`) opened directly counts as a project. With a family and a project both open, the list follows the window you are in.
-- **Tabs and panels that are not showing for this file are left out**, so Wall does not appear in a family and Extrusion does not appear in a project. The one exception is a tab **you** chose to hide in a project (the Structure tab, for example): its tools stay listed and still run.
+- **Tabs and panels that are not showing for this file are left out**, so Wall does not appear in a family and Extrusion does not appear in a project. The one exception is a tab **you** chose to hide in a project (the Structure tab, for example): its tools stay listed. Most of them still run; a tool that is only on hidden tabs and that Revit does not let add-ins start (see [Running a tool](#running-a-tool)) shows the amber message instead.
 - **A tool that cannot run in this view but runs in another view of the same file** is listed with **Must Run In**. Level in a floor plan, for example, shows **Must Run In Elevation, Section**.
 - **A tool that runs in no view of this file is left out.** HVAC Zone is not listed in a project, and Electrical Connector is not listed in a Casework family (it runs in lighting, equipment and other MEP families). Search-It does not point you to another kind of family.
 - **A greyed add-in button is left out.** A Revit tool that needs something selected follows Revit's own check when the window opens, so select first, then open Search-It.
@@ -62,7 +62,7 @@ The list is set when the window opens. If you switch views, close Search-It and 
 | Badge | Means | A click |
 |---|---|---|
 | **Must Run In** *views* | The tool cannot run in this view. It runs in the views named, in this same file. Up to two names show, then `+N` for the rest, for example **Must Run In Floor Plan, Ceiling Plan +3**. Hover over the badge for the full list. The card is dimmed and comes after the cards that run with an equally good match. | Does nothing. The window stays open. Switch to one of the named views and open Search-It again. |
-| **NOT IN GUI** (amber) | The tool runs here, but Revit draws no button for it on the ribbon. Site Settings in a project is one. The card shows the place where Revit keeps it. | Runs it. |
+| **NOT IN GUI** (amber) | The tool runs here, but in this file Revit draws no button for it on the ribbon. Site Settings in a project is one. The card shows the place where Revit keeps it. | Runs it. |
 
 Badges apply to Revit's own tools in Revit 2026 and 2027 (see [Notes & limits](#notes--limits)).
 
@@ -76,7 +76,7 @@ Either way, RST first checks with Revit that the tool can run right now. If it c
 
 If the tool cannot run right now, nothing starts and the window stays open with an amber message, for example: "This tool can't be run with RST here: Level (Architecture › Datum)." This can happen when the view or selection changed since the window opened.
 
-If Revit refuses the tool after the window has closed, RST shows the same message in a small dialog, the same way a profile button does when its add-in is not installed or is switched off.
+If the tool still cannot start after the window has closed, RST tells you in a small dialog, the same way a profile button does when its add-in is not installed or is switched off.
 
 ## Keys
 
@@ -116,14 +116,15 @@ It finds more than the [Profile Builder](profile-builder.md)'s Commands list: fa
 
 ## The first search of a session
 
-The first time you open Search-It (or the Builder) after starting Revit, RST reads the whole ribbon. This takes a few seconds, and the window says **Finding Revit's tools…** while it happens. You can start typing straight away; clicks made during the wait are ignored, so a stray click cannot start a tool. After that, Search-It opens straight away, with its results, until you close Revit.
+The first time you open Search-It, the Builder or the Loader after starting Revit, RST reads the whole ribbon; the three share what it finds. This takes a few seconds, and the window says **Finding Revit's tools…** while it happens. You can start typing straight away; clicks made during the wait are ignored, so a stray click cannot start a tool. After that, Search-It opens straight away, with its results, until you close Revit.
 
 ## Notes & limits
 
 - **Names only.** Search-It does not search tooltips, keyboard shortcuts or command ids.
 - **Names as your Revit shows them.** Tools are listed under the names on your ribbon. Accents count: "ecole" does not find "École".
 - **Contextual tools.** The tools Revit adds when something is selected ("Modify | Walls") are not listed.
-- **Badges need Revit 2026 or 2027.** They come from RST's Ribbon Tool Census, a record of where each stock Revit tool runs, made by starting every tool in every kind of file and view. In Revit 2025, and in a view or family the census did not cover, Search-It lists what Revit says is available and shows no badges.
+- **Badges need Revit 2026 or 2027.** They come from RST's Ribbon Tool Census, a record of where each stock Revit tool runs, made by starting every tool in the project views and the stock family templates. A view the census did not run uses its nearest match (an area plan uses the floor plan's record). In Revit 2025, and in a file or view with no match, Search-It lists what Revit says is available and shows no badges.
+- **If RST cannot read the ribbon's state**, Search-It falls back to the whole list, without badges. In a family this can include project tools, and the count line says "tools".
 - **Revit's own tools only.** Add-in buttons never get a badge; a greyed one is left out.
 - **English Revit.** In another language, a tool Revit does not draw may be shown without its NOT IN GUI badge.
 - **Custom tools** (the web and email links a profile can hold) are not tools Revit runs, so Search-It does not list them.
