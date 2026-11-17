@@ -25,14 +25,52 @@
                       Link="Updates\companions.json" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- The Ribbon Tool Census exceptions (feature #22, spec #34; Census/CensusIndex.cs): each Revit year's
-         census/<year>/exceptions.tsv is embedded from the repo file itself, with no second copy (decision #97).
-         A new year directory is picked up by the wildcard. Resource name: RST.Core.Census.<year>.exceptions.tsv. -->
-    <EmbeddedResource Include="..\..\census\*\exceptions.tsv"
-                      LogicalName="RST.Core.Census.$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('%(FullPath)')))).exceptions.tsv"
-                      Link="Census\$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('%(FullPath)'))))\exceptions.tsv" />
-  </ItemGroup>
+  <!-- The Ribbon Tool Census exceptions (feature #22, spec #34; Census/CensusIndex.cs): each Revit year's
+       census/<year>/exceptions.tsv is gzipped at build time from the repo file itself (no second copy is committed,
+       decision #97) and embedded as RST.Core.Census.<year>.exceptions.tsv.gz. A new year directory is picked up by
+       the wildcard. -->
+  <UsingTask TaskName="RstGzipFiles" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDir ParameterType="System.String" Required="true" />
+      <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.IO.Compression" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(OutputDir);
+        var list = new System.Collections.Generic.List<Microsoft.Build.Framework.ITaskItem>();
+        foreach (var src in Sources)
+        {
+          var full = src.GetMetadata("FullPath");
+          var year = Path.GetFileName(Path.GetDirectoryName(full));
+          var dst = Path.Combine(OutputDir, year + ".exceptions.tsv.gz");
+          using (var input = File.OpenRead(full))
+          using (var output = File.Create(dst))
+          using (var gz = new GZipStream(output, CompressionLevel.Optimal))
+            input.CopyTo(gz);
+          var item = new Microsoft.Build.Utilities.TaskItem(dst);
+          item.SetMetadata("LogicalName", "RST.Core.Census." + year + ".exceptions.tsv.gz");
+          list.Add(item);
+        }
+        Outputs = list.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="RstEmbedCensusExceptions" BeforeTargets="PrepareResources;AssignTargetPaths">
+    <ItemGroup>
+      <_RstCensusTsv Include="..\..\census\*\exceptions.tsv" />
+    </ItemGroup>
+    <RstGzipFiles Sources="@(_RstCensusTsv)" OutputDir="$(IntermediateOutputPath)census" Condition="'@(_RstCensusTsv)' != ''">
+      <Output TaskParameter="Outputs" ItemName="_RstCensusGz" />
+    </RstGzipFiles>
+    <ItemGroup>
+      <EmbeddedResource Include="@(_RstCensusGz)" />
+      <FileWrites Include="@(_RstCensusGz)" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <!-- Tests use internal seams (for example PackageContents.Series). -->

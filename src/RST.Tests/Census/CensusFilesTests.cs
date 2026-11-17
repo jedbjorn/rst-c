@@ -184,16 +184,16 @@ public sealed class CensusFilesTests
         Exceptions(year).Should().NotContain(r => skippedIds.Contains(r["id"]));
     }
 
-    // ---------- AC8: the built RST.Core carries the committed lists, byte for byte ----------
+    // ---------- AC8: the built RST.Core carries the committed lists (gzipped at build), byte for byte once decompressed ----------
 
     [Theory]
     [MemberData(nameof(Years))]
     public void BuiltRstCore_CarriesTheExceptionsFile_ByteIdentical(int year)
     {
         var asm = typeof(CensusIndex).Assembly;
-        var name = CensusIndex.ResourceNameFor(year);
+        var name = CensusIndex.ResourceNameFor(year) + ".gz";
         asm.GetManifestResourceNames().Should().Contain(name);
-        using var stream = asm.GetManifestResourceStream(name)!;
+        using var stream = CensusIndex.OpenResource(year)!;
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
         var onDisk = File.ReadAllBytes(Path.Combine(CensusDir, year.ToString(System.Globalization.CultureInfo.InvariantCulture), "exceptions.tsv"));

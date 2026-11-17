@@ -2,9 +2,9 @@
 //
 // The census (src/RST.Census, tools/census) starts every stock ribbon tool on the test VM, per Revit year and
 // context, and publishes the full table in census/<year>/full.tsv. Only its exceptions ship with RST:
-// census/<year>/exceptions.tsv, embedded into this assembly from the same repo files (decision #97: no second
-// copy; RST.Core.csproj). Each row says that a tool does not run in a context (`not-runnable`: Revit calls it
-// clickable but nothing starts) or that a ribbon place Revit models is not drawn (`not-drawn`).
+// census/<year>/exceptions.tsv, gzipped at build from the same repo files and embedded into this assembly
+// (decision #97: no second copy is committed; decision #114: gzip; RST.Core.csproj). Each row says that a tool
+// does not run in a context (`not-runnable`: Revit calls it clickable but nothing starts) or that a ribbon place Revit models is not drawn (`not-drawn`).
 //
 // The index never adds and never hides a showing tool (decision #107): the caller lists what its live ribbon walk
 // shows, then asks Mark() per place. A year with no file, a context with no rows, or an id the census did not
@@ -54,11 +54,14 @@ public sealed class CensusIndex
     /// <summary>The exceptions.tsv header, in order (spec #34, "Exceptions columns").</summary>
     public static readonly IReadOnlyList<string> Columns = new[] { "context", "id", "tab", "panel", "path", "mark", "reason" };
 
-    /// <summary>Embedded resource names are <c>RST.Core.Census.&lt;year&gt;.exceptions.tsv</c> (RST.Core.csproj).</summary>
+    /// <summary>
+    /// Embedded resource names are <c>RST.Core.Census.&lt;year&gt;.exceptions.tsv.gz</c>: the repo file, gzipped at build
+    /// (RST.Core.csproj, decision #114). <see cref="ResourceNameFor"/> gives the name without ".gz".
+    /// </summary>
     public const string ResourcePrefix = "RST.Core.Census.";
     public const string ResourceSuffix = ".exceptions.tsv";
 
-    private static readonly Regex ResourceName = new(@"^RST\.Core\.Census\.(\d{4})\.exceptions\.tsv$", RegexOptions.CultureInvariant);
+    private static readonly Regex ResourceName = new(@"^RST\.Core\.Census\.(\d{4})\.exceptions\.tsv(\.gz)?$", RegexOptions.CultureInvariant);
     private static readonly ConcurrentDictionary<int, CensusIndex> Cache = new();
 
     private readonly Dictionary<(string Context, string Id), List<CensusException>> _rows;
@@ -96,8 +99,18 @@ public sealed class CensusIndex
             .Select(n => ResourceName.Match(n))
             .Where(m => m.Success)
             .Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
+            .Distinct()
             .OrderBy(y => y)
             .ToList();
+
+    /// <summary>The year's exceptions list as embedded (gzipped at build time, <see cref="ResourceNameFor"/> + ".gz"), decompressed; null if none.</summary>
+    public static Stream? OpenResource(int year)
+    {
+        var asm = typeof(CensusIndex).Assembly;
+        var gz = asm.GetManifestResourceStream(ResourceNameFor(year) + ".gz");
+        if (gz is not null) return new System.IO.Compression.GZipStream(gz, System.IO.Compression.CompressionMode.Decompress);
+        return asm.GetManifestResourceStream(ResourceNameFor(year));
+    }
 
     /// <summary>The embedded resource name for a year.</summary>
     public static string ResourceNameFor(int year) => ResourcePrefix + year.ToString(System.Globalization.CultureInfo.InvariantCulture) + ResourceSuffix;
@@ -112,7 +125,7 @@ public sealed class CensusIndex
     {
         try
         {
-            using var stream = typeof(CensusIndex).Assembly.GetManifestResourceStream(ResourceNameFor(year));
+            using var stream = OpenResource(year);
             if (stream is null) return Empty(year);
             using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             return Parse(year, reader.ReadToEnd());
