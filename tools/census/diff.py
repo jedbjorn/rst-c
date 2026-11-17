@@ -62,7 +62,7 @@ def main(old, new):
             detail += [f"| `{i}` | {lb.get(i, la.get(i, ''))} | {res(ia[i])} | {res(ib[i])} |" for i in changed] + [""]
     out += ["", "## Per context", ""] + detail
     p = REPO / "census" / f"diff-{new}-vs-{old}.md"
-    p.write_text("\n".join(out) + "\n", encoding="utf-8")
+    p.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
     print(f"wrote {p}")
 
 
