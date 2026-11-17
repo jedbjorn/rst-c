@@ -268,9 +268,17 @@ public sealed partial class CensusApp
                     var t2 = await Teardown(b, () => raReturned, true, r, lw.ElapsedMilliseconds < 600); if (t2 != "none") late.Add(t2);
                     var wins = AllWins();
                     var pending = NewKids(b).Where(k => !BgExe(k.exe) && Alive(k.pid) && !wins.Any(w => w.pid == k.pid)).ToList();
+                    // a window-less process the tool started outside Revit's tree (GenerativeDesign.exe for Dynamo Player,
+                    // slow on its first start) is waited for too
+                    foreach (var pid in AllPids().Where(p => !b.Pids.Contains(p) && !pending.Any(k => k.pid == p)))
+                    {
+                        var name = ProcName(pid);
+                        if ((name.StartsWith("GenerativeDesign", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Dynamo", StringComparison.OrdinalIgnoreCase)) && !wins.Any(w => w.pid == pid))
+                            pending.Add((pid, 0, name + ".exe"));
+                    }
                     foreach (var k in pending) waited.Add(k.exe);
                     if (lw.ElapsedMilliseconds >= 1500 && pending.Count == 0) break;
-                    if (lw.ElapsedMilliseconds >= 15000) { r.Left += " windowless child process still running: " + string.Join(",", pending.Select(k => k.exe + ":" + k.pid)); break; }
+                    if (lw.ElapsedMilliseconds >= 25000) { r.Left += " windowless child process still running: " + string.Join(",", pending.Select(k => k.exe + ":" + k.pid)); break; }
                 }
                 // a WebView2 child whose window is gone should exit on its own; one that hangs is killed (spec #34 "Teardown")
                 for (int i = 0; i < 20 && NewKids(b).Any(k => k.exe.Equals("msedgewebview2.exe", StringComparison.OrdinalIgnoreCase) && Alive(k.pid)) && NewWins(b).Count == 0; i++) await Task.Delay(300);

@@ -164,7 +164,8 @@ public sealed class CensusIndexTests
     public void EmbeddedIndex_2027_DoesNotDropNumbering()
     {
         var index = CensusIndex.For(2027);
-        index.Rows.Should().NotContain(r => r.Id == "ID_NUMBERING_OPTIONS" && r.Mark == CensusMarkKind.NotDrawn, "Numbering is drawn in 2027 (WU1c)");
+        index.Rows.Should().NotContain(r => r.Id == "ID_NUMBERING_OPTIONS" && r.Mark == CensusMarkKind.NotDrawn && r.Context.StartsWith("project/"),
+            "Numbering is drawn in a 2027 project (WU1c)");
     }
 }
 

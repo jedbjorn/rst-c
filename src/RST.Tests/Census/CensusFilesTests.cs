@@ -144,7 +144,9 @@ public sealed class CensusFilesTests
     [Fact]
     public void Numbering_IsDrawnIn2027()
     {
-        Full(2027).Where(r => r["id"] == "ID_NUMBERING_OPTIONS").Should().NotBeEmpty()
+        // AC3: Numbering is drawn on Manage › Settings in a 2027 project (it is not in 2026); in the family editor
+        // Revit gates it off and does not draw it, so the check is the project contexts'
+        Full(2027).Where(r => r["id"] == "ID_NUMBERING_OPTIONS" && r["context"].StartsWith("project/", StringComparison.Ordinal)).Should().NotBeEmpty()
             .And.NotContain(r => r["result"] == "not-drawn");
     }
 
