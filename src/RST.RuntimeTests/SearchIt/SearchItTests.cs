@@ -67,6 +67,17 @@ public class SearchItTests
             return CanRun?.Invoke(tool) ?? true;
         }
 
+        /// <summary>Spec #35: the tools are read after the command has returned; Prepare runs inside it.</summary>
+        public bool DefersLoad { get; set; }
+        public int Prepared { get; private set; }
+        public int LoadsAtPrepare { get; private set; } = -1;
+
+        public void Prepare()
+        {
+            Prepared++;
+            LoadsAtPrepare = Loads;
+        }
+
         public SearchList LoadTools()
         {
             Loads++;
@@ -533,6 +544,63 @@ public class SearchItTests
         {
             SearchItLauncher.Current?.Close();
             owner.Close();
+        }
+    });
+
+    // Spec #35: the live gate is asked outside the command, so the host defers the read until Show has returned.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_deferred_read_happens_after_Show_returns_and_ends_ready_to_type(bool cold) => Sta(() =>
+    {
+        var owner = OwnerOnScreen();
+        var ownerHandle = new WindowInteropHelper(owner).Handle;
+        var backend = new FakeBackend { IsReady = !cold, DefersLoad = true, Tools = Sample.Concat(Many(40)).ToArray() };
+        bool? overlayAtLoad = null;
+        backend.OnLoad = () => overlayAtLoad = SearchItLauncher.Current?.ViewModel.Busy.IsBusy;
+        try
+        {
+            Assert.True(SearchItLauncher.Show(ownerHandle, backend, () => Idle));
+            var window = SearchItLauncher.Current!;
+            // When Show returns (the command returns to Revit), the host has prepared and nothing has been read yet.
+            Assert.Equal(1, backend.Prepared);
+            Assert.Equal(0, backend.LoadsAtPrepare);
+            Assert.Equal(0, backend.Loads);
+            Assert.True(window.ViewModel.IsLoading);
+            Assert.Empty(window.ViewModel.Results);
+            Assert.Equal(cold, window.ViewModel.Busy.IsBusy);
+
+            WindowCapture.DoEvents();
+
+            Assert.Equal(1, backend.Loads);
+            Assert.Equal(cold, overlayAtLoad);
+            Assert.False(window.ViewModel.IsLoading);
+            Assert.False(window.ViewModel.Busy.IsBusy);
+            Assert.Equal(backend.Tools.Count, window.ViewModel.Results.Count);
+            AssertReadyToType(window, "after the deferred read");
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+            owner.Close();
+        }
+    });
+
+    [Fact]
+    public void A_deferred_read_that_fails_closes_the_window() => Sta(() =>
+    {
+        var backend = new FakeBackend { IsReady = true, DefersLoad = true, OnLoad = () => throw new InvalidOperationException("ribbon gone") };
+        try
+        {
+            Assert.True(SearchItLauncher.Show(IntPtr.Zero, backend, () => Idle));
+            var window = SearchItLauncher.Current!;
+            WindowCapture.DoEvents();
+            Assert.False(window.IsOpen);
+            Assert.Equal("failed", window.CloseReason);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
         }
     });
 

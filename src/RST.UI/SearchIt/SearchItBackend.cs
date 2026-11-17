@@ -29,13 +29,28 @@ public interface ISearchItBackend
     /// with the amber message (spec #35, "Running a Tool", 4). Revit UI thread, outside an API context.
     /// </summary>
     bool CanRunNow(SearchTool tool) => true;
+
+    /// <summary>
+    /// True when <see cref="LoadTools"/> must run after the command has returned (spec #35: Revit's CanExecute answers
+    /// differently while an external command executes). <see cref="Prepare"/> is then called inside the command.
+    /// </summary>
+    bool DefersLoad => false;
+
+    /// <summary>With <see cref="DefersLoad"/>: what needs the Revit API, inside the command (it may build the catalogue).</summary>
+    void Prepare()
+    {
+    }
 }
 
 /// <summary>The backend in Revit: the tools the ribbon is showing for the open file (<see cref="SearchShowing"/>).</summary>
 public sealed class SearchItBackend(Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
-    Func<SearchTool, bool>? canRunNow = null) : ISearchItBackend
+    Func<SearchTool, bool>? canRunNow = null, Action? prepare = null) : ISearchItBackend
 {
     public bool CanRunNow(SearchTool tool) => canRunNow?.Invoke(tool) ?? true;
+
+    public bool DefersLoad => prepare is not null;
+
+    public void Prepare() => prepare?.Invoke();
 
     public bool IsReady => isReady?.Invoke() ?? false;
 

@@ -159,10 +159,11 @@ public sealed class SearchItViewModel : ObservableObject
     public int ToolCount => _search.Count;
 
     /// <summary>Before the window shows: the first frame is the chrome and the busy overlay.</summary>
-    public void BeginLoading()
+    /// <param name="showBusy">False for a warm open whose read is deferred (spec #35): the list is empty for a moment, with no overlay.</param>
+    public void BeginLoading(bool showBusy = true)
     {
         IsLoading = true;
-        Busy.Show(UiStrings.SearchIt_LoadingTitle, UiStrings.SearchIt_LoadingMessage);
+        if (showBusy) Busy.Show(UiStrings.SearchIt_LoadingTitle, UiStrings.SearchIt_LoadingMessage);
         Refresh();
     }
 

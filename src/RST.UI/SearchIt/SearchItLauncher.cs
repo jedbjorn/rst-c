@@ -16,6 +16,13 @@
 //     one doing the work. Clicks and Enter queued during the read are dropped (SearchItWindow.MarkReady).
 // Either way the window ends up active with the keyboard in the search box: the first keystroke after
 // the ribbon click lands there.
+//
+// Deferred (spec #35; ISearchItBackend.DefersLoad): Revit greys more of its own tools while an external command
+// is executing than it draws greyed, so the live CanExecute gate must not be asked inside the command's Execute
+// (VM, F21-2: about twice as many tools answered "cannot run" there as the census and the ribbon show). The host
+// then does what needs the API in Prepare (the catalogue, cold or warm, and the open file's facts), inside
+// Execute, and the tools are read on the dispatcher once Execute has returned. The window shows meanwhile with
+// its list empty (and the busy overlay on a cold open); input from before the read is handled as on a cold open.
 
 using RST.Core.Logging;
 using RST.Core.Search;
@@ -43,11 +50,15 @@ public static class SearchItLauncher
     /// <param name="run">Runs the tool the user chose; called after the window has closed.</param>
     /// <param name="isReady">True when <paramref name="tools"/> will return at once (catalogue already built): no busy overlay.</param>
     /// <param name="canRunNow">Asked on a click before the window closes; false keeps it open with the amber message (spec #35).</param>
+    /// <param name="prepare">
+    /// When given, called inside the command (it may build the catalogue), and <paramref name="tools"/> is called later,
+    /// on the dispatcher, once the command has returned (the file header's "Deferred").
+    /// </param>
     public static bool Show(IntPtr owner, Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
-        Func<SearchTool, bool>? canRunNow = null) =>
-        Show(owner, new SearchItBackend(tools, run, isReady, canRunNow));
+        Func<SearchTool, bool>? canRunNow = null, Action? prepare = null) =>
+        Show(owner, new SearchItBackend(tools, run, isReady, canRunNow, prepare));
 
-    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?, Func{SearchTool, bool}?)"/>
+    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?, Func{SearchTool, bool}?, Action?)"/>
     public static bool Show(IntPtr owner, ISearchItBackend backend) => Show(owner, backend, sampler: null);
 
     /// <param name="sampler">Tests only: the mouse reading the window's watch uses instead of Windows'.</param>
@@ -73,7 +84,9 @@ public static class SearchItLauncher
 
         var viewModel = new SearchItViewModel(backend);
         var cold = !backend.IsReady;
+        var deferred = backend.DefersLoad;
         if (cold) viewModel.BeginLoading();
+        else if (deferred) viewModel.BeginLoading(showBusy: false);
         else viewModel.Load();
         var window = new SearchItWindow(viewModel, sampler);
         WindowPlacement.Own(window, owner);
@@ -84,7 +97,8 @@ public static class SearchItLauncher
                 window.CloseReason ?? "closed", viewModel.Chosen is null ? "nothing run" : "tool chosen");
         });
         _open = window;
-        Log.Information("Search-It window opening ({Mode}, owner {Owner})", cold ? "cold: reading the tools" : "warm", owner == IntPtr.Zero ? "none" : "Revit");
+        Log.Information("Search-It window opening ({Mode}{Deferred}, owner {Owner})", cold ? "cold: reading the tools" : "warm",
+            deferred ? ", tools read after the command" : "", owner == IntPtr.Zero ? "none" : "Revit");
         WindowGuard.Show(window, "Search-It");
         try
         {
@@ -92,9 +106,20 @@ public static class SearchItLauncher
             {
                 // The first frame (the chrome and the busy overlay) is on screen before the catalogue is read.
                 window.DrawFirstFrame();
-                viewModel.Load();
-                // Input from before this moment was aimed at the overlay, not at the results now under it.
-                window.MarkReady();
+                if (!deferred)
+                {
+                    viewModel.Load();
+                    // Input from before this moment was aimed at the overlay, not at the results now under it.
+                    window.MarkReady();
+                }
+            }
+            if (deferred)
+            {
+                backend.Prepare();
+                // Queued only now: DrawFirstFrame pumps the dispatcher, and nothing may read the tools before the
+                // command has returned.
+                window.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                    () => UiGuard.Run("Search-It launcher: read the tools", () => LoadDeferred(window, viewModel)));
             }
         }
         catch
@@ -102,7 +127,7 @@ public static class SearchItLauncher
             window.CloseOnce("failed");
             throw;
         }
-        Log.Information("Search-It ready: {Count} tools", viewModel.ToolCount);
+        if (!deferred) Log.Information("Search-It ready: {Count} tools", viewModel.ToolCount);
         if (window.IsOpen)
         {
             window.RebaseWatch();
@@ -113,5 +138,26 @@ public static class SearchItLauncher
             window.FocusWhenSettled();
         }
         return true;
+    }
+
+    /// <summary>The deferred read (file header): the tools, then the same "ready" steps a cold open takes.</summary>
+    private static void LoadDeferred(SearchItWindow window, SearchItViewModel viewModel)
+    {
+        if (!window.IsOpen) return;
+        try
+        {
+            viewModel.Load();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Search-It: reading the tools failed; closing the window");
+            window.CloseOnce("failed");
+            return;
+        }
+        window.MarkReady();
+        Log.Information("Search-It ready: {Count} tools", viewModel.ToolCount);
+        if (!window.IsOpen) return;
+        window.RebaseWatch();
+        if (window.IsHostInFront()) window.FocusSearch();
     }
 }

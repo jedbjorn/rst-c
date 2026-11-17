@@ -14,8 +14,10 @@
 //
 // The window (RST.UI.SearchIt) is modeless, so the view behind it can be panned, zoomed and orbited.
 // That shapes the threading:
-//   - The catalogue and the ribbon's state are read here, inside Execute, on Revit's UI thread, before
-//     SearchItLauncher.Show returns. When the catalogue is already built this session
+//   - The catalogue and the open file's facts are read here, inside Execute, on Revit's UI thread, before
+//     SearchItLauncher.Show returns. The ribbon's state is read just after Execute has returned, on the
+//     dispatcher (spec #35: Revit greys more of its tools while an external command executes than its
+//     ribbon shows, so the live CanExecute gate is asked outside the command; SearchItLauncher, "Deferred"). When the catalogue is already built this session
 //     (RstApplication.HasCatalog) the window opens with its results. A cold build (first use in a session, a few seconds) happens under a window
 //     that is already drawn, with its busy overlay. It is never built later from the modeless window,
 //     which has no API context.
@@ -69,12 +71,14 @@ public sealed class SearchItCommand : IExternalCommand
             var revitVersion = uiApp.Application.VersionNumber;
             Log.Information("=== Search-It opened: revit={Version} ===", revitVersion);
             RevitThemeDetector.ApplyToWindows();
+            var open = new OpenFile(revitVersion);
             var opened = SearchItLauncher.Show(
                 uiApp.MainWindowHandle,
-                tools: () => ListForOpenFile(uiApp, revitVersion),
+                tools: () => ListForOpenFile(open),
                 run: tool => Run(uiApp, revitVersion, tool),
                 isReady: () => RstApplication.HasCatalog(revitVersion),
-                canRunNow: tool => CanRunNow(revitVersion, tool));
+                canRunNow: tool => CanRunNow(revitVersion, tool),
+                prepare: () => open.Read(uiApp));
             Log.Information(opened
                     ? "Search-It window shown in {Ms}ms; it stays open until the user closes it or picks a tool"
                     : "Search-It was already open; focused it ({Ms}ms)",
@@ -90,23 +94,56 @@ public sealed class SearchItCommand : IExternalCommand
     }
 
     /// <summary>
-    /// The tools to list now (spec #33's showing rule, spec #35's runnable rule), and the log line that says which list
-    /// it is, which census context and index it used, how many tools it lists, badges and leaves out, how many
-    /// catalogue tools are not showing, and what the rule cost. The time is the rule's alone: a cold catalogue build is
-    /// logged by RstApplication.
+    /// What Search-It needs from Revit's API for one open, read inside the command (<see cref="Read"/>): the catalogue
+    /// (built cold on the first open of a session), the open file's kind and its census values. The tools are judged
+    /// from it later, once the command has returned (<see cref="ListForOpenFile"/>): Revit greys more of its own tools
+    /// while an external command executes than its ribbon shows (VM, F21-2), so the live CanExecute gate is asked
+    /// outside the command, as the census and WU1c asked it.
     /// </summary>
-    private static SearchList ListForOpenFile(UIApplication uiApp, string revitVersion)
+    private sealed class OpenFile(string revitVersion)
     {
-        var catalog = RstApplication.GetOrBuildSearchCatalog(revitVersion);
+        public string RevitVersion { get; } = revitVersion;
+        public SearchItCatalog Catalog { get; private set; } = SearchItCatalog.Empty;
+        public bool IsFamily { get; private set; }
+        public CensusDocument? Document { get; private set; }
+        public Exception? DocumentError { get; private set; }
+
+        public void Read(UIApplication uiApp)
+        {
+            Catalog = RstApplication.GetOrBuildSearchCatalog(RevitVersion);
+            IsFamily = IsFamilyOpen(uiApp);
+            try
+            {
+                Document = ReadDocument(uiApp, IsFamily);
+            }
+            catch (Exception ex)
+            {
+                // Reported once, as the census's failure, when the tools are judged.
+                DocumentError = ex;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The tools to list now (spec #33's showing rule, spec #35's runnable rule), judged on the dispatcher after the
+    /// command has returned, and the log line that says which list it is, which census context and index it used, how
+    /// many tools it lists, badges and leaves out, how many catalogue tools are not showing, and what the rule cost.
+    /// The time is the rule's alone: a cold catalogue build is logged by RstApplication.
+    /// </summary>
+    private static SearchList ListForOpenFile(OpenFile open)
+    {
+        var revitVersion = open.RevitVersion;
+        var catalog = open.Catalog;
+        var isFamily = open.IsFamily;
         var sw = Stopwatch.StartNew();
-        var isFamily = IsFamilyOpen(uiApp);
         var year = int.TryParse(revitVersion, out var y) ? y : 0;
         var hasIndex = year > 0 && !CensusIndex.For(year).IsEmpty;
         string? noKey = null;
         var list = catalog.ListShowing(isFamily, () =>
         {
             if (!hasIndex) return null;
-            var document = ReadDocument(uiApp, isFamily);
+            if (open.DocumentError is { } error) throw new InvalidOperationException("the open file and view could not be read", error);
+            if (open.Document is not { } document) return null;
             var census = SearchCensus.For(year, document);
             if (census is null)
                 noKey = string.IsNullOrEmpty(document.ViewType) ? "no active view"
