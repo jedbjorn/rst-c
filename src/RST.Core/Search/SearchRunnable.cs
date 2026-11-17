@@ -2,7 +2,7 @@
 // "Runnable Only"; decisions #119, #120).
 //
 // Spec #33's showing rule still decides the candidates: a tool with a place on a panel Revit shows now
-// (SearchShowing, PlaceState.Shows). Spec #35 then asks, for each candidate, whether it runs here:
+// (SearchShowing, PlaceState.Shows), read for every live copy of the place (Showing, below). Spec #35 then asks, for each candidate, whether it runs here:
 //
 //   Runs here    Revit's live CanExecute is true at a showing place, and the census does not mark the id
 //                not-runnable in this context.
@@ -91,10 +91,7 @@ public static class SearchRunnable
         {
             var showing = new List<(SearchCatalogPlace Place, bool TabVisible)>(tool.Places.Count);
             foreach (var place in tool.Places)
-            {
-                var state = visibility(place) with { CanExecute = null };
-                if (state.Shows(place.OnFamilyEditorTab, isFamily)) showing.Add((place, state.TabVisible));
-            }
+                if (Showing(place, isFamily, visibility) is { } shown) showing.Add(shown);
             if (showing.Count == 0)
             {
                 hidden++;
@@ -105,6 +102,32 @@ public static class SearchRunnable
             else tools.Add(judged);
         }
         return new SearchList(tools, isFamily) { Hidden = hidden, LeftOut = leftOut, Census = census };
+    }
+
+    /// <summary>
+    /// The place as it shows now, or null when it does not. A place is one (tab, panel) by title, and Revit can keep
+    /// two live panels of the same title on a tab (Create › Datum in a family: Level in a fold panel on one, directly
+    /// on the other; each family kind shows one of them). The place shows when any copy's tab and panel show; what
+    /// comes back keeps only the showing copies, its <see cref="SearchCatalogPlace.Handle"/> the first of them, so
+    /// the gate, the not-drawn check and route A all use an item Revit is showing.
+    /// </summary>
+    private static (SearchCatalogPlace Place, bool TabVisible)? Showing(SearchCatalogPlace place, bool isFamily,
+        Func<SearchCatalogPlace, PlaceState> visibility)
+    {
+        var copies = place.CopiesOrSelf;
+        List<SearchPlaceCopy>? shown = null;
+        var tabVisible = false;
+        foreach (var copy in copies)
+        {
+            var at = copy.Handle == place.Handle ? place : place with { Handle = copy.Handle };
+            var state = visibility(at) with { CanExecute = null };
+            if (!state.Shows(place.OnFamilyEditorTab, isFamily)) continue;
+            if (shown is null) tabVisible = state.TabVisible;
+            (shown ??= new List<SearchPlaceCopy>(copies.Count)).Add(copy);
+        }
+        if (shown is null) return null;
+        if (shown.Count == copies.Count && shown[0].Handle == place.Handle) return (place, tabVisible);
+        return (place with { Handle = shown[0].Handle, Copies = shown }, tabVisible);
     }
 
     private static SearchTool? Judge(SearchCatalogTool tool, List<(SearchCatalogPlace Place, bool TabVisible)> showing,

@@ -457,3 +457,56 @@ public sealed class SearchRunnableFallbackTests
         list.Hidden.Should().Be(1);
     }
 }
+
+public class SearchRunnableCopiesTests
+{
+    private static RibbonHit Hit(string id, string tabId, string panel, string path) =>
+        new(id, "Level", RibbonContainerKind.Panel, RibbonLeafKind.Button, null, tabId, panel, tabId, path);
+
+    // Create › Datum in a family: two live panels of the same title, Level in a fold panel on one and directly on the
+    // other. A generic model family shows the first, a mass family the second (VM, F21-2; WU1c canexecute captures).
+    private static readonly IReadOnlyList<SearchCatalogTool> Catalog = SearchCatalog.Build([],
+    [
+        Hit("ID_OBJECTS_LEVEL", "Home_Family", "Datum", "/RibbonFoldPanel()"),
+        Hit("ID_OBJECTS_LEVEL", "Home_Family", "Datum", ""),
+    ]);
+
+    [Fact]
+    public void A_place_shows_when_any_of_its_copies_shows_and_the_gate_asks_a_showing_copy()
+    {
+        var place = Catalog.Single().Places.Single();
+        place.Copies.Select(c => c.Handle).Should().Equal(0, 1);
+        var asked = new List<int>();
+        var census = FakeCensus.Family("OST_GenericModel", "OneLevelBased", "ThreeD",
+            FakeCensus.Index("family/OST_GenericModel/OneLevelBased/ThreeD\tID_FILLER\tA\tB\t\tnot-drawn\t"),
+            FakeCensus.RunsIn("family/OST_GenericModel/OneLevelBased/ThreeD\tID_OBJECTS_LEVEL"));
+
+        // Only the second copy's panel shows (the mass family's Datum panel).
+        var list = SearchRunnable.List(Catalog, isFamily: true, p => new PlaceState(true, PanelVisible: p.Handle == 1),
+            p => { asked.Add(p.Handle); return true; }, census);
+
+        var level = list.Tools.Single();
+        level.Location.Should().Be("Home_Family › Datum");
+        level.Mark.Should().Be(SearchToolMark.None);
+        level.RunHandle.Should().Be(1, "route A runs the copy Revit shows");
+        asked.Should().Equal(1);
+        list.Hidden.Should().Be(0);
+
+        // Neither panel shows: the tool is not showing.
+        SearchRunnable.List(Catalog, true, _ => new PlaceState(true, false), _ => true, census).Hidden.Should().Be(1);
+    }
+
+    [Fact]
+    public void Only_showing_copies_decide_whether_a_place_is_drawn()
+    {
+        // The census marks the direct copy's path not drawn; when only that copy shows, the tool is NOT IN GUI.
+        var census = FakeCensus.Family("OST_GenericModel", "OneLevelBased", "ThreeD",
+            FakeCensus.Index("family/OST_GenericModel/OneLevelBased/ThreeD\tID_OBJECTS_LEVEL\tHome_Family\tDatum\t\tnot-drawn\t"),
+            FakeCensus.RunsIn("family/OST_GenericModel/OneLevelBased/ThreeD\tID_X"));
+
+        SearchRunnable.List(Catalog, true, p => new PlaceState(true, p.Handle == 1), _ => true, census)
+            .Tools.Single().Mark.Should().Be(SearchToolMark.NotInGui);
+        SearchRunnable.List(Catalog, true, _ => new PlaceState(true, true), _ => true, census)
+            .Tools.Single().Mark.Should().Be(SearchToolMark.None, "the fold panel's copy is drawn");
+    }
+}
