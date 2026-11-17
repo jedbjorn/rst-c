@@ -87,8 +87,9 @@ public static class SearchRunnable
         var tools = new List<SearchTool>(catalog.Count);
         var hidden = 0;
         var leftOut = 0;
-        // Planner's ruling on AC4 (review of PR #231): a CanExecute throw for one item counts that tool as runnable
-        // here, with no label from the gate; the other tools keep theirs. One Warning per open, naming the first id.
+        // Decision #127 (spec #35 AC4): a CanExecute throw for one item counts as a live yes for that tool, and the census
+        // judges it as any live-runnable tool (left out, Must Run In or NOT IN GUI still apply); other tools are
+        // unaffected. One Warning per open, naming the first id.
         var threwLogged = false;
         bool? Ask(SearchCatalogTool tool, SearchCatalogPlace place)
         {
@@ -101,9 +102,9 @@ public static class SearchRunnable
                 if (!threwLogged)
                 {
                     threwLogged = true;
-                    Log.Warning(ex, "Search-It: Revit's CanExecute threw for {CommandId}; counted as runnable here (logged once per open)", tool.Id);
+                    Log.Warning(ex, "Search-It: Revit's CanExecute threw for {CommandId}; counted as a live yes, the census still judges it (logged once per open)", tool.Id);
                 }
-                return null;
+                return true;
             }
         }
         foreach (var tool in catalog)
@@ -116,7 +117,7 @@ public static class SearchRunnable
                 hidden++;
                 continue;
             }
-            var judged = Judge(tool, showing, p => Ask(tool, p), census);
+            var judged = Judge(tool, showing, p => Ask(tool, p), census, isFamily);
             if (judged is null) leftOut++;
             else tools.Add(judged);
         }
@@ -124,7 +125,7 @@ public static class SearchRunnable
     }
 
     private static SearchTool? Judge(SearchCatalogTool tool, List<(SearchCatalogPlace Place, bool TabVisible)> showing,
-        Func<SearchCatalogPlace, bool?> gate, SearchCensus? census)
+        Func<SearchCatalogPlace, bool?> gate, SearchCensus? census, bool isFamily)
     {
         // The live gate (file header): per id for Revit's tools, per place for an add-in's buttons.
         var runsAt = new bool[showing.Count];
@@ -154,14 +155,14 @@ public static class SearchRunnable
             var drawn = census is null ? runs : runs.Where(p => !NotDrawn(census, tool.Id, p)).ToList();
             var mark = drawn.Count > 0 ? SearchToolMark.None : SearchToolMark.NotInGui;
             var places = drawn.Count > 0 ? drawn : runs;
-            return Make(tool, places, showing, census, mark, Array.Empty<string>());
+            return Make(tool, places, showing, census, mark, Array.Empty<string>(), isFamily);
         }
 
         var views = census?.MustRunIn(tool.Id) ?? Array.Empty<string>();
         if (views.Count == 0) return null;
         var all = showing.ConvertAll(s => s.Place);
         var drawnShowing = all.Where(p => !NotDrawn(census!, tool.Id, p)).ToList();
-        return Make(tool, drawnShowing.Count > 0 ? drawnShowing : all, showing, census, SearchToolMark.MustRunIn, views);
+        return Make(tool, drawnShowing.Count > 0 ? drawnShowing : all, showing, census, SearchToolMark.MustRunIn, views, false);
     }
 
     /// <summary>True when the census marks every copy of the place not drawn in this context.</summary>
@@ -185,21 +186,25 @@ public static class SearchRunnable
     }
 
     /// <summary>
-    /// The listed tool. A click runs (and first asks the gate on) its first listed place on a visible tab, else its first
-    /// listed place; a postable tool with no showing place on a visible tab is not asked at click time.
+    /// The listed tool. <see cref="SearchTool.RunHandle"/> is its first listed place (drawn copy if any); the click does
+    /// not use it to choose: it chooses from <see cref="SearchTool.RunPlaces"/> with fresh visibility (decision #127).
     /// </summary>
     private static SearchTool Make(SearchCatalogTool tool, List<SearchCatalogPlace> places,
-        List<(SearchCatalogPlace Place, bool TabVisible)> showing, SearchCensus? census, SearchToolMark mark, IReadOnlyList<string> mustRunIn)
+        List<(SearchCatalogPlace Place, bool TabVisible)> showing, SearchCensus? census, SearchToolMark mark,
+        IReadOnlyList<string> mustRunIn, bool isFamily)
     {
-        bool OnVisibleTab(SearchCatalogPlace p) => showing.Exists(s => ReferenceEquals(s.Place, p) && s.TabVisible);
-        var run = places.Find(OnVisibleTab) ?? places[0];
+        var runs = mark != SearchToolMark.MustRunIn;
         return new SearchTool(tool.Id, places.Select(p => p.ToSearchPlace()))
         {
             Mark = mark,
             MustRunIn = mustRunIn,
             Postable = tool.Postable,
-            RunHandle = mark == SearchToolMark.MustRunIn ? null : RunCopy(census, tool.Id, run),
-            GateAtClick = showing.Exists(s => s.TabVisible) || !tool.Postable,
+            RunHandle = runs ? RunCopy(census, tool.Id, places[0]) : null,
+            RunPlaces = runs
+                ? SearchClick.PlacesOf(tool, census is null ? null : (place, copy) =>
+                    census.Index.Mark(census.Key.Key, tool.Id, new CensusPlace(place.TabId, place.Panel, copy.Path)).Kind != CensusMarkKind.NotDrawn)
+                : Array.Empty<SearchRunPlace>(),
+            InFamily = isFamily,
         };
     }
 

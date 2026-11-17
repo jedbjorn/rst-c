@@ -83,7 +83,8 @@ public static class SearchShowing
             {
                 Postable = tool.Postable,
                 RunHandle = run.Handle,
-                GateAtClick = showing.Exists(s => s.TabVisible) || !tool.Postable,
+                RunPlaces = SearchClick.PlacesOf(tool),
+                InFamily = isFamily,
             });
         }
         return new SearchList(tools, isFamily) { Hidden = hidden };
@@ -150,13 +151,13 @@ public static class SearchShowing
         {
             var kept = tool.Places.Where(p => isFamily || !p.OnFamilyEditorTab).ToList();
             if (kept.Count == 0) continue;
-            // The ribbon's state is unknown: a postable tool is posted as before spec #35; a click on any other asks
-            // the live gate, which re-reads its item's tab and panel first (SearchGate).
+            // The ribbon's state is unknown here; the click reads it afresh and chooses the place then (decision #127).
             tools.Add(new SearchTool(tool.Id, kept.Select(p => p.ToSearchPlace()))
             {
                 Postable = tool.Postable,
                 RunHandle = kept[0].Handle,
-                GateAtClick = !tool.Postable,
+                RunPlaces = SearchClick.PlacesOf(tool),
+                InFamily = isFamily,
             });
         }
         return new SearchList(tools);

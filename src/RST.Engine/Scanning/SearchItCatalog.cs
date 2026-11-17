@@ -47,15 +47,35 @@ internal sealed record SearchItCatalog(IReadOnlyList<SearchCatalogTool> Tools, I
     public SearchList ListShowing(bool isFamily, Func<SearchCensus?>? census = null)
     {
         var handlerThrowLogged = false;
+        // Each tab's and panel's visibility is read once per open, not once per place (many places share a panel).
+        // The guarded gate (AskLive) still reads them afresh before every CanExecute.
+        var tabs = new Dictionary<RibbonTab, bool>(ReferenceEqualityComparer.Instance);
+        var panels = new Dictionary<RibbonPanel, bool>(ReferenceEqualityComparer.Instance);
         return SearchRunnable.ListOrFallBack(Tools, isFamily,
             place =>
             {
                 var handle = Handles[place.Handle];
-                return new PlaceState(handle.Tab.IsVisible, handle.Panel.IsVisible);
+                if (!tabs.TryGetValue(handle.Tab, out var tab)) tabs[handle.Tab] = tab = handle.Tab.IsVisible;
+                if (!panels.TryGetValue(handle.Panel, out var panel)) panels[handle.Panel] = panel = handle.Panel.IsVisible;
+                return new PlaceState(tab, panel);
             },
             place => GateWhileListing(place.Handle, ref handlerThrowLogged),
             census);
     }
+
+    /// <summary>A place's tab and panel visibility, read now (a click's choice of place, decision #127). Throws on a stale handle.</summary>
+    public (bool Tab, bool Panel) VisibilityNow(int handle)
+    {
+        var place = Handles[handle];
+        return (place.Tab.IsVisible, place.Panel.IsVisible);
+    }
+
+    /// <summary>
+    /// A click on a runnable card (spec #35, Running a Tool, steps 4-5; decision #127): the place chosen now from fresh
+    /// visibility and asked through <see cref="AskLive"/>.
+    /// </summary>
+    public ClickDecision DecideClick(SearchTool tool) =>
+        SearchClick.Decide(tool, VisibilityNow, h => (AskLive(h, out var error), error));
 
     /// <summary>The ribbon item behind a handle, or null when there is none (a stale handle).</summary>
     public RibbonItem? ItemAt(int? handle) =>

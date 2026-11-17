@@ -342,6 +342,30 @@ public sealed class SearchItCatalogTests
     });
 
     [Fact]
+    public void A_click_chooses_its_place_from_the_ribbon_as_it_is_at_the_click() => Screenshots.RunSta(() =>
+    {
+        // Decision #127: Model Line is listed in a project on Architecture › Model and Modify › Draw.
+        var session = new Session().InAProject();
+        var asked = new List<string>();
+        var catalog = session.Catalog with { NativeGate = item => { asked.Add(item.Id); return true; } };
+        var line = catalog.ListShowing(isFamily: false).Tools.Single(t => t.Id == "ID_OBJECTS_CLINE");
+        int HandleOf(string tabId) => session.Scan.Hits.Select((h, i) => (h, i)).First(x => x.h.Id == "ID_OBJECTS_CLINE" && x.h.TabId == tabId).i;
+        asked.Clear();
+
+        // The Architecture tab hid after the list: the click runs on Modify › Draw, and never asks the hidden item.
+        session.Architecture.IsVisible = false;
+        var click = catalog.DecideClick(line);
+        (click.Route, click.Handle).Should().Be((ClickRoute.Run, HandleOf("Modify")));
+        asked.Should().Equal("ID_OBJECTS_CLINE");
+
+        // Neither place shows now, and Modify's tab is visible (only its panel hid): the amber message.
+        session.Modify.Panels[1].IsVisible = false;
+        asked.Clear();
+        catalog.DecideClick(line).Route.Should().Be(ClickRoute.Refuse);
+        asked.Should().BeEmpty();
+    });
+
+    [Fact]
     public void ExecuteLive_runs_only_a_showing_item_Revit_says_can_run() => Screenshots.RunSta(() =>
     {
         var session = new Session().InAProject();

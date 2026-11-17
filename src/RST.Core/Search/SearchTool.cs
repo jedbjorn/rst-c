@@ -69,12 +69,21 @@ public sealed class SearchTool
     public int? RunHandle { get; init; }
 
     /// <summary>
-    /// True when a click asks Revit's live gate first, on <see cref="RunHandle"/>'s item (spec #35, "Running a Tool",
-    /// step 4). False only for a postable tool whose showing places are all on project tabs the user hid: those are
-    /// never asked (spec #33 AC12, decision #125) and a click posts it as before.
+    /// Every place a click may run the tool from (decision #127): each live copy of each of its catalogue places, drawn
+    /// copies first, then the rest, in catalogue order. The click picks the first one showing at that moment
+    /// (<see cref="SearchClick"/>). Empty for a Must Run In tool.
     /// </summary>
-    public bool GateAtClick { get; init; } = true;
+    public IReadOnlyList<SearchRunPlace> RunPlaces { get; init; } = Array.Empty<SearchRunPlace>();
+
+    /// <summary>The list was a family's: a project tab's place is then hidden by Revit, not by the user.</summary>
+    public bool InFamily { get; init; }
 }
+
+/// <summary>One live item a click may run a tool from.</summary>
+/// <param name="Handle">The host's handle of the ribbon item.</param>
+/// <param name="Drawn">Not marked not-drawn by the census here (always true without a census).</param>
+/// <param name="OnFamilyEditorTab">On a family-editor tab (never a tab the user hides).</param>
+public readonly record struct SearchRunPlace(int Handle, bool Drawn, bool OnFamilyEditorTab);
 
 /// <summary>What the census says about a listed tool in the open file and view (spec #35, "Runnable Only").</summary>
 public enum SearchToolMark

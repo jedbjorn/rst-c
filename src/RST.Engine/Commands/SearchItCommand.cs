@@ -216,34 +216,37 @@ public sealed class SearchItCommand : IExternalCommand
         return false;
     }
 
+    /// <summary>The click's decision, from <see cref="CanRunNow"/> to the queued <see cref="Run"/> of the same tool.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SearchTool, object> Decisions = new();
+
     /// <summary>
-    /// Asked on a click on a runnable card, before the window closes (spec #35, "Running a Tool", step 4): the live gate
-    /// on the item a click runs, through <see cref="SearchItCatalog.AskLive"/> (its tab and panel are read again first,
-    /// and an item that is not showing is never asked). False, a throw, or an item no longer showing keeps the window
-    /// open with the amber message. A postable tool whose showing places are all on project tabs the user hid is not
-    /// asked (spec #33 AC12; decision #125) and is posted as before.
+    /// Asked on a click on a runnable card, before the window closes (spec #35, Running a Tool, steps 4-5; decision
+    /// #127): the place is chosen now from fresh visibility (the first run place whose tab and panel show, drawn
+    /// first) and asked through <see cref="SearchItCatalog.AskLive"/>. False, a throw, or nothing showing keeps the
+    /// window open with the amber message; nothing showing with every project place on a user-hidden tab posts a
+    /// postable tool without asking (spec #33 AC12). The decision is kept for <see cref="Run"/>, which runs on that place.
     /// </summary>
     private static bool CanRunNow(string revitVersion, SearchTool tool)
     {
-        if (!tool.GateAtClick) return true;
-        var answer = RstApplication.GetOrBuildSearchCatalog(revitVersion).AskLive(tool.RunHandle, out var error);
-        if (SearchGate.AllowsClick(answer)) return true;
-        if (error is not null) Log.Warning(error, "Search-It: CanExecute threw for {Name} ({CommandId})", tool.DisplayName, tool.Id);
-        Log.Information("Search-It: {Name} ({CommandId}) can't run now ({Answer})", tool.DisplayName, tool.Id, answer);
+        var decision = RstApplication.GetOrBuildSearchCatalog(revitVersion).DecideClick(tool);
+        Decisions.AddOrUpdate(tool, decision);
+        if (decision.Route != ClickRoute.Refuse) return true;
+        if (decision.Error is { } error) Log.Warning(error, "Search-It: CanExecute threw for {Name} ({CommandId})", tool.DisplayName, tool.Id);
+        Log.Information("Search-It: {Name} ({CommandId}) can't run now ({Answer})", tool.DisplayName, tool.Id, decision.Answer);
         return false;
     }
 
     /// <summary>
     /// Runs the tool the user chose (a click, or Enter on the highlighted card), after the window has closed. Queued
     /// by the window on the dispatcher (Dispatcher.BeginInvoke), outside Execute and outside any API context; it never
-    /// throws.
+    /// throws. It follows the click's decision (<see cref="CanRunNow"/>):
     /// <list type="number">
     /// <item>A postable id: the profile buttons' dispatch (<see cref="SlotInvokeCommand"/>: PostCommand, with its
-    /// not-found and not-postable messages). Its gate was asked on the click (<see cref="CanRunNow"/>).</item>
-    /// <item>Any other: route A (decision #92) through <see cref="SearchItCatalog.ExecuteLive"/>: the item's tab and
-    /// panel are read again, then CanExecute, and only when that is true, ComponentManager.CommandHandler.Execute on the
-    /// item the list chose (<see cref="SearchTool.RunHandle"/>). Anything else, or a throw, shows the amber message's
-    /// words in a dialog: the window is gone by now.</item>
+    /// not-found and not-postable messages).</item>
+    /// <item>Any other: route A (decision #92) through <see cref="SearchItCatalog.ExecuteLive"/> on the place the click
+    /// chose: its tab and panel are read again, then CanExecute, and only when that is true,
+    /// ComponentManager.CommandHandler.Execute on that item. Anything else, or a throw, shows the amber message's words
+    /// in a dialog: the window is gone by now.</item>
     /// </list>
     /// A Must Run In tool never gets here (the window does not run it).
     /// </summary>
@@ -256,16 +259,26 @@ public sealed class SearchItCommand : IExternalCommand
                 Log.Warning("Search-It: {Name} ({CommandId}) must run in another view; not run", tool.DisplayName, tool.Id);
                 return;
             }
+            var catalog = RstApplication.GetOrBuildSearchCatalog(revitVersion);
+            var decision = Decisions.TryGetValue(tool, out var kept) ? (ClickDecision)kept : catalog.DecideClick(tool);
+            Decisions.Remove(tool);
+            if (decision.Route == ClickRoute.Refuse)
+            {
+                Log.Warning(decision.Error, "Search-It: {Name} ({CommandId}) can't be run now ({Answer}); not run", tool.DisplayName, tool.Id, decision.Answer);
+                ShowCantRun(tool);
+                return;
+            }
             if (tool.Postable)
             {
-                Log.Information("Search-It: running {Name} ({CommandId}) from {Location}", tool.DisplayName, tool.Id, tool.Location);
+                Log.Information("Search-It: running {Name} ({CommandId}) from {Location}{How}", tool.DisplayName, tool.Id, tool.Location,
+                    decision.Route == ClickRoute.PostWithoutAsking ? " (only on tabs the user hid: posted without asking)" : "");
                 new SlotInvokeCommand(uiApp, new SlotTarget(SlotKind.Command, tool.Id, tool.DisplayName)).Execute(null);
                 return;
             }
             Log.Information("Search-It: running {Name} ({CommandId}) from {Location} through the ribbon's command path (not postable)",
                 tool.DisplayName, tool.Id, tool.Location);
             var sw = Stopwatch.StartNew();
-            var answer = RstApplication.GetOrBuildSearchCatalog(revitVersion).ExecuteLive(tool.RunHandle, item =>
+            var answer = catalog.ExecuteLive(decision.Handle, item =>
             {
                 if (Autodesk.Windows.ComponentManager.CommandHandler is not { } handler)
                     throw new InvalidOperationException("Revit's ribbon command handler is not available");

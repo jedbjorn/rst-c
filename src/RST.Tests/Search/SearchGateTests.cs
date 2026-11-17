@@ -61,38 +61,128 @@ public sealed class SearchGateTests
         SearchGate.AllowsExecute(GateAnswer.Threw).Should().BeFalse();
     }
 
-    // ---- which item a click asks, and whether it asks --------------------------------------------
+    // ---- decision #127: a click chooses its place from fresh visibility ---------------------------
 
-    private static RibbonHit Hit(string id, string tabId, string panel, bool postable = true) =>
-        new(id, id, RibbonContainerKind.Panel, RibbonLeafKind.Button, null, tabId, panel, tabId, "", postable);
+    private static RibbonHit Hit(string id, string tabId, string panel, bool postable = true, string path = "") =>
+        new(id, id, RibbonContainerKind.Panel, RibbonLeafKind.Button, null, tabId, panel, tabId, path, postable);
 
-    private static SearchTool Only(IReadOnlyList<SearchCatalogTool> catalog, params string[] hiddenTabs) =>
-        SearchRunnable.List(catalog, false, p => new PlaceState(!hiddenTabs.Contains(p.TabId), true), _ => true, null).Tools.Single();
-
-    [Fact]
-    public void A_postable_tool_only_on_hidden_project_tabs_is_posted_without_asking()
+    /// <summary>A fake ribbon: tab and panel visibility per handle, read now; records what the gate was asked.</summary>
+    private sealed class Ribbon
     {
-        // Beam, with the Structure tab hidden in Revit's options (spec #33 AC12, decision #125).
-        var beam = Only(SearchCatalog.Build([], [Hit("ID_OBJECTS_BEAM", "Structure", "Structure")]), "Structure");
-        beam.GateAtClick.Should().BeFalse();
-        beam.Postable.Should().BeTrue();
+        public HashSet<int> HiddenTabs { get; } = [];
+        public HashSet<int> HiddenPanels { get; } = [];
+        public List<int> Asked { get; } = [];
+        public bool? Answer { get; set; } = true;
+
+        public (bool Tab, bool Panel) Now(int h) => (!HiddenTabs.Contains(h), !HiddenPanels.Contains(h));
+
+        public (GateAnswer, Exception?) Ask(int h)
+        {
+            Asked.Add(h);
+            return (SearchGate.Ask(() => Now(h).Tab, () => Now(h).Panel, () => Answer, out var e), e);
+        }
+
+        public ClickDecision Click(SearchTool tool) => SearchClick.Decide(tool, Now, Ask);
     }
 
     [Fact]
-    public void A_non_postable_tool_only_on_hidden_project_tabs_is_asked_and_so_refused()
+    public void The_unfiltered_fallback_chooses_at_the_click_once_visibility_has_recovered()
     {
-        var zone = Only(SearchCatalog.Build([], [Hit("ID_RBS_HVAC_ZONE", "Analyze", "Spaces", postable: false)]), "Analyze");
-        zone.GateAtClick.Should().BeTrue("route A needs CanExecute, and SearchGate never asks a hidden tab's item");
+        var catalog = SearchCatalog.Build([],
+        [
+            Hit("ID_SITE_SETTINGS", "MassingSite", "Model Site", postable: false, path: "DialogLauncher"),
+            Hit("ID_OBJECTS_WALL", "Architecture", "Build"),
+        ]);
+        var list = SearchShowing.Unfiltered(catalog, isFamily: false);
+        var ribbon = new Ribbon();
+
+        // The ribbon could not be read when the list was made; at the click it can.
+        var wall = ribbon.Click(list.Tools.Single(t => t.Id == "ID_OBJECTS_WALL"));
+        wall.Route.Should().Be(ClickRoute.Run, "a postable tool is asked too (Running a Tool, 4)");
+        wall.Handle.Should().Be(1);
+        var site = ribbon.Click(list.Tools.Single(t => t.Id == "ID_SITE_SETTINGS"));
+        (site.Route, site.Handle).Should().Be((ClickRoute.Run, 0));
+        ribbon.Asked.Should().Equal(1, 0);
+
+        ribbon.Answer = false;
+        ribbon.Click(list.Tools.Single(t => t.Id == "ID_OBJECTS_WALL")).Route.Should().Be(ClickRoute.Refuse, "greyed now: the amber message");
     }
 
     [Fact]
-    public void A_click_asks_the_first_listed_place_on_a_visible_tab()
+    public void A_hidden_drawn_place_and_a_visible_not_drawn_place_run_on_the_visible_one()
     {
-        // Structural Column: listed first on the hidden Structure tab, also on Architecture › Build.
-        var column = Only(SearchCatalog.Build([],
-            [Hit("ID_OBJECTS_STRUCTURAL_COLUMN", "Structure", "Structure"), Hit("ID_OBJECTS_STRUCTURAL_COLUMN", "Architecture", "Build")]), "Structure");
-        column.Location.Should().Be("Structure › Structure");
-        column.RunHandle.Should().Be(1, "the gate is asked on the visible tab's item");
-        column.GateAtClick.Should().BeTrue("a postable tool with a place on a visible tab is asked too (spec #35, Running a Tool, 4)");
+        // The census marks the visible place's path not drawn; the drawn one is on a tab that does not show now.
+        var catalog = SearchCatalog.Build([],
+        [
+            Hit("ID_T", "Structure", "Structure"),                     // 0: drawn, tab hidden now
+            Hit("ID_T", "Architecture", "Build", path: "/SlideOut"),   // 1: not drawn, showing
+        ]);
+        var census = FakeCensus.Project("FloorPlan",
+            FakeCensus.Index("project/FloorPlan\tID_T\tArchitecture\tBuild\t/SlideOut\tnot-drawn\t"), FakeCensus.RunsIn("project/FloorPlan\tID_T"));
+        var tool = SearchRunnable.List(catalog, false, p => new PlaceState(p.TabId != "Structure", true), _ => true, census).Tools.Single();
+        tool.RunPlaces.Select(p => (p.Handle, p.Drawn)).Should().Equal((0, true), (1, false));
+
+        var ribbon = new Ribbon();
+        ribbon.HiddenTabs.Add(0);
+        var click = ribbon.Click(tool);
+
+        (click.Route, click.Handle).Should().Be((ClickRoute.Run, 1), "the first place showing now, drawn ones first");
+        ribbon.Asked.Should().Equal([1], "the hidden drawn place is never asked");
+
+        // When the drawn place shows again, it is preferred.
+        ribbon.HiddenTabs.Clear();
+        ribbon.Click(tool).Handle.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(true, ClickRoute.PostWithoutAsking)]
+    [InlineData(false, ClickRoute.Refuse)]
+    public void A_tool_only_on_user_hidden_project_tabs_is_posted_without_asking_if_postable(bool postable, ClickRoute expected)
+    {
+        // Beam (postable) or HVAC Zone (not), with the tab hidden in Revit's options (spec #33 AC12).
+        var catalog = SearchCatalog.Build([], [Hit("ID_TOOL", "Structure", "Structure", postable)]);
+        var tool = SearchRunnable.List(catalog, false, _ => new PlaceState(false, true), _ => true, null).Tools.Single();
+        var ribbon = new Ribbon();
+        ribbon.HiddenTabs.Add(0);
+
+        var click = ribbon.Click(tool);
+
+        click.Route.Should().Be(expected);
+        ribbon.Asked.Should().BeEmpty("a hidden tab's item is never asked");
+    }
+
+    [Fact]
+    public void Nothing_showing_on_a_visible_tab_or_in_a_family_gives_the_amber_message()
+    {
+        var catalog = SearchCatalog.Build([], [Hit("ID_TOOL", "Modify", "Draw")]);
+        var tool = SearchRunnable.List(catalog, false, _ => new PlaceState(true, true), _ => true, null).Tools.Single();
+        var ribbon = new Ribbon();
+        ribbon.HiddenPanels.Add(0);    // the tab shows, the panel does not: not a user-hidden tab
+        ribbon.Click(tool).Route.Should().Be(ClickRoute.Refuse);
+
+        var inFamily = SearchRunnable.List(SearchCatalog.Build([], [Hit("ID_TOOL", "Structure", "Structure")]), true,
+            _ => new PlaceState(true, true), _ => true, null).Tools.Single();
+        inFamily.InFamily.Should().BeTrue();
+        var family = new Ribbon();
+        family.HiddenTabs.Add(0);      // Revit hides project tabs in a family; the user did not
+        family.Click(inFamily).Route.Should().Be(ClickRoute.Refuse);
+    }
+
+    [Fact]
+    public void A_Must_Run_In_tool_has_no_run_places_and_is_refused()
+    {
+        var tool = new SearchTool("ID_OBJECTS_LEVEL", "Level", "Architecture", "Datum") { Mark = SearchToolMark.MustRunIn, MustRunIn = ["Elevation"] };
+        new Ribbon().Click(tool).Route.Should().Be(ClickRoute.Refuse);
+    }
+
+    [Fact]
+    public void A_gate_that_throws_at_the_click_is_refused_with_the_error()
+    {
+        var tool = SearchRunnable.List(SearchCatalog.Build([], [Hit("ID_TOOL", "Architecture", "Build")]), false,
+            _ => new PlaceState(true, true), _ => true, null).Tools.Single();
+        var boom = new InvalidOperationException("UIFramework");
+        var click = SearchClick.Decide(tool, _ => (true, true), _ => (SearchGate.Ask(() => true, () => true, () => throw boom, out var e), e));
+        click.Route.Should().Be(ClickRoute.Refuse);
+        click.Error.Should().BeSameAs(boom);
     }
 }

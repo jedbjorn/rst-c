@@ -413,27 +413,37 @@ public sealed class SearchRunnableFallbackTests
     // Planner's ruling on AC4 (review of PR #231): a CanExecute throw for one item counts that tool runnable here, with
     // no label from the gate; the other tools keep their labels; one Warning per open, naming the first id.
     [Fact]
-    public void A_gate_throw_for_one_item_counts_that_tool_runnable_and_the_others_keep_their_labels()
+    public void A_gate_throw_for_one_item_counts_as_a_live_yes_and_the_census_still_judges_it()
     {
+        // Decision #127: Wall throws (a live yes, listed); HVAC Zone throws but the census says it does nothing here and
+        // runs nowhere in the project (left out); Site Settings throws and runs only from a not-drawn place (NOT IN GUI);
+        // Level answers false and keeps its Must Run In label.
         var boom = new InvalidOperationException("UIFramework");
         var catalog = SearchCatalog.Build([],
         [
             Hit("ID_OBJECTS_LEVEL", "Level", "Architecture", "Datum"),
             Hit("ID_OBJECTS_WALL", "Wall", "Architecture", "Build"),
-            Hit("ID_OBJECTS_DOOR", "Door", "Architecture", "Build"),
+            Hit("ID_RBS_HVAC_ZONE", "Zone", "Analyze", "Spaces"),
+            Hit("ID_SITE_SETTINGS", "Site Settings", "MassingSite", "Model Site"),
         ]);
+        var census = FakeCensus.Project("FloorPlan",
+            FakeCensus.Index("project/FloorPlan\tID_RBS_HVAC_ZONE\tAnalyze\tSpaces\t\tnot-runnable\tjournal: cannot be invoked in this context",
+                "project/FloorPlan\tID_SITE_SETTINGS\tMassingSite\tModel Site\t\tnot-drawn\t"),
+            FakeCensus.RunsIn("project/Elevation\tID_OBJECTS_LEVEL"));
         SearchList? list = null;
         var events = CaptureLog(() => list = SearchRunnable.ListOrFallBack(catalog, false, Visibility,
-            p => p.Label == "Level" ? false : throw boom, Census));
+            p => p.Label == "Level" ? false : throw boom, () => census));
 
         var warning = events.Should().ContainSingle().Subject;
         warning.Level.Should().Be(LogLevel.Warning);
         warning.Exception.Should().BeSameAs(boom);
         warning.PropertyValues.Should().Contain("ID_OBJECTS_WALL", "the first id that threw is named");
-        list!.Census.Should().NotBeNull("the list keeps its census");
-        list.Tools.Single(t => t.Id == "ID_OBJECTS_LEVEL").Mark.Should().Be(SearchToolMark.MustRunIn, "the other tools keep their labels");
-        list.Tools.Where(t => t.Id != "ID_OBJECTS_LEVEL").Should().OnlyContain(t => t.Mark == SearchToolMark.None && t.CanRun);
-        list.Tools.Should().HaveCount(3);
+        list!.Census.Should().BeSameAs(census);
+        list.Tools.Select(t => (t.Id, t.Mark)).Should().Equal(
+            ("ID_OBJECTS_LEVEL", SearchToolMark.MustRunIn),
+            ("ID_OBJECTS_WALL", SearchToolMark.None),
+            ("ID_SITE_SETTINGS", SearchToolMark.NotInGui));
+        list.LeftOut.Should().Be(1, "HVAC Zone runs nowhere in this file, whatever the live answer");
     }
 
     [Fact]
@@ -457,11 +467,12 @@ public sealed class SearchRunnableFallbackTests
         var site = list!.Tools.Single(t => t.Id == "ID_SITE_SETTINGS");
         site.Postable.Should().BeFalse("a non-postable tool still runs through route A");
         site.RunHandle.Should().Be(0);
-        site.GateAtClick.Should().BeTrue();
+        site.RunPlaces.Select(p => p.Handle).Should().Equal(0);
         var level = list.Tools.Single(t => t.Id == "ID_OBJECTS_LEVEL");
         level.Location.Should().Be("Create › Datum", "the place shows through its second, showing copy (decision #125)");
         level.RunHandle.Should().Be(2);
         level.Postable.Should().BeTrue();
+        level.RunPlaces.Select(p => p.Handle).Should().Equal([1, 2], "the click chooses among every live copy");
     }
 
     [Fact]
@@ -478,9 +489,11 @@ public sealed class SearchRunnableFallbackTests
 
         events.Should().ContainSingle();
         var site = list!.Tools.Single(t => t.Id == "ID_SITE_SETTINGS");
-        (site.Postable, site.RunHandle, site.GateAtClick).Should().Be((false, 0, true));
+        (site.Postable, site.RunHandle).Should().Be((false, 0));
+        site.RunPlaces.Select(p => p.Handle).Should().Equal(0);
         var wall = list.Tools.Single(t => t.Id == "ID_OBJECTS_WALL");
-        (wall.Postable, wall.RunHandle, wall.GateAtClick).Should().Be((true, 1, false), "the ribbon's state is unknown: posted as before spec #35");
+        (wall.Postable, wall.RunHandle).Should().Be((true, 1));
+        wall.RunPlaces.Select(p => p.Handle).Should().Equal(1);
     }
 
     [Theory]
