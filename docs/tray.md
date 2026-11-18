@@ -288,7 +288,7 @@ Deploy `RST-Machine.msi` on its own as SYSTEM. Run as SYSTEM, `RST-Setup.exe` wo
 
 ## Allowlisting (AppLocker, antivirus)
 
-RST's files are not code-signed yet, so allow them by path or by hash.
+RST's release files (the installers and every RST DLL and EXE they install) are code-signed by AnJ Arch-Tech LLC, so an AppLocker publisher rule for that signer allows them across updates ([installer/README.md](../installer/README.md#code-signing)). Releases made before code signing are unsigned: allow those by path or by hash.
 
 | Install | Paths |
 |---|---|
