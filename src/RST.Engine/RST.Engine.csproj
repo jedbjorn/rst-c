@@ -70,6 +70,4 @@
     </Content>
   </ItemGroup>
 
-  <Import Project="..\..\build\sign.targets" />
-
 </Project>

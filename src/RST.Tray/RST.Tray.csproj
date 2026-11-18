@@ -46,6 +46,4 @@
     <InternalsVisibleTo Include="RST.RuntimeTests" />
   </ItemGroup>
 
-  <Import Project="..\..\build\sign.targets" />
-
 </Project>
