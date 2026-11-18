@@ -67,8 +67,10 @@ jobs:
   # sign-payload, sign-msi and sign-bundle jobs, in the `signing` environment
   # (v* tags only), and makes its signatures job require every shipped file
   # signed. id-token: write is granted here, and only here: a called workflow
-  # cannot exceed its caller's permissions, and the sign jobs log in to Azure
-  # with the run's OIDC token. build.yml (push/PR) passes neither.
+  # cannot exceed its caller's permissions, and the sign jobs, which declare
+  # no permissions of their own, inherit it to log in to Azure with the run's
+  # OIDC token. Every other _build.yml job declares contents: read. build.yml
+  # (push/PR) passes neither.
   build:
     needs: prepare
     permissions:

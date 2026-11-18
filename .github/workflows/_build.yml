@@ -73,8 +73,9 @@ name: _build (reusable)
 #
 # Code signing (feature #10, spec #12; installer/README.md "Code signing").
 # Only release.yml passes `sign: true`. Then, and only then, three more jobs
-# run, each in the GitHub environment `signing` (v* tags only) with
-# id-token: write, all signing through .github/actions/codesign:
+# run, each in the GitHub environment `signing` (v* tags only) with the
+# id-token: write release.yml grants (see `jobs:`), all signing through
+# .github/actions/codesign:
 #   • sign-payload — after stage/stage-tray: signs every PE file of
 #                    stage-R25/R26/R27/Tray and re-uploads them under the
 #                    same names, so every later job sees the same signed
@@ -114,14 +115,25 @@ on:
         required: false
         default: false
 
-permissions:
-  contents: read
+# Permissions are set per job, not here (feature #10, spec #12). Every job
+# but the three sign-* jobs declares `contents: read`, exactly what each had
+# before. The sign-* jobs declare none, so they get what the CALLER grants:
+# release.yml grants id-token: write (their Azure login), build.yml does not.
+# A workflow-level block cannot do this. GitHub checks a called workflow's
+# job permissions against the caller's before it evaluates any `if:`, so a
+# sign job asking for id-token: write itself, even skipped, makes every
+# build.yml run fail at startup ("The nested job 'sign-payload' is requesting
+# 'id-token: write', but is only allowed 'id-token: none'"). A new job must
+# declare `permissions: contents: read` (or what it needs) too, or it gets
+# the caller's grant.
 
 jobs:
 
   test:
     name: Test (xunit)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Revit API floor (decision #26)
@@ -140,6 +152,8 @@ jobs:
   test-runtime:
     name: Test (runtime, Windows)
     runs-on: windows-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -179,6 +193,8 @@ jobs:
   probe:
     name: RST-Probe (test add-in)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -203,6 +219,8 @@ jobs:
   serilog-probe:
     name: SerilogProbe (test add-ins)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -227,6 +245,8 @@ jobs:
   stage:
     name: Stage ${{ matrix.major }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -274,6 +294,8 @@ jobs:
   stage-tray:
     name: Stage Tray
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -305,9 +327,7 @@ jobs:
     needs: [stage, stage-tray]
     runs-on: windows-latest
     environment: signing
-    permissions:
-      contents: read
-      id-token: write
+    # No `permissions:` here: it inherits the caller's (release.yml: contents: read, id-token: write). See above.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -395,6 +415,8 @@ jobs:
     needs: [stage, stage-tray, sign-payload]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       # SDK 8 only: the MSI carries files, so the R27 net10 payload needs
@@ -503,9 +525,7 @@ jobs:
     needs: msi-unified
     runs-on: windows-latest
     environment: signing
-    permissions:
-      contents: read
-      id-token: write
+    # No `permissions:` here: it inherits the caller's (release.yml: contents: read, id-token: write). See above.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -557,6 +577,8 @@ jobs:
     needs: [msi-unified, sign-msi]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -615,6 +637,8 @@ jobs:
     needs: [msi-unified, sign-msi]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -664,6 +688,8 @@ jobs:
     needs: [msi-unified, sign-msi]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -717,9 +743,7 @@ jobs:
     needs: bundle
     runs-on: windows-latest
     environment: signing
-    permissions:
-      contents: read
-      id-token: write
+    # No `permissions:` here: it inherits the caller's (release.yml: contents: read, id-token: write). See above.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -809,6 +833,8 @@ jobs:
     needs: [bundle, sign-bundle]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -881,6 +907,8 @@ jobs:
     needs: [bundle, sign-bundle]
     if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -912,6 +940,8 @@ jobs:
   tray-detect:
     name: Tray detection (fixture MSI)
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -948,6 +978,8 @@ jobs:
   tray-install:
     name: Tray installs (fixture MSI)
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -987,6 +1019,8 @@ jobs:
     needs: [stage, stage-tray, sign-payload]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -1089,6 +1123,8 @@ jobs:
     needs: [sign-payload, msi-unified, sign-msi, bundle, sign-bundle]
     if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
