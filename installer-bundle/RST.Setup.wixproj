@@ -90,13 +90,23 @@
          RstStartTray custom action), compiled in: after removing the user's
          own RST the helper starts the per-machine tray for that user. -->
     <RstStartTraySource>$(MSBuildProjectDirectory)\..\installer\helper\StartTray.cs</RstStartTraySource>
+    <!-- Company, product and description, shared with the installer's helpers (feature #10). -->
+    <RstHelperInfoSource>$(MSBuildProjectDirectory)\..\installer\helper\AssemblyInfo.cs</RstHelperInfoSource>
   </PropertyGroup>
-  <Target Name="RstBuildRemoveUserRst" BeforeTargets="CoreCompile" Inputs="$(RstRemoveUserRstSource);$(RstStartTraySource)" Outputs="$(RstRemoveUserRstExe)">
+  <Target Name="RstBuildRemoveUserRst" BeforeTargets="CoreCompile" Condition="'$(RstPrebuiltHelpers)' != 'true'" Inputs="$(RstRemoveUserRstSource);$(RstStartTraySource);$(RstHelperInfoSource)" Outputs="$(RstRemoveUserRstExe)">
     <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstRemoveUserRstExe)'))" />
-    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /main:RemoveUserRst /out:&quot;$(RstRemoveUserRstExe)&quot; &quot;$(RstRemoveUserRstSource)&quot; &quot;$(RstStartTraySource)&quot;" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /main:RemoveUserRst /define:RST_HELPER_REMOVEUSERRST /out:&quot;$(RstRemoveUserRstExe)&quot; &quot;$(RstRemoveUserRstSource)&quot; &quot;$(RstStartTraySource)&quot; &quot;$(RstHelperInfoSource)&quot;" />
   </Target>
 
+  <!-- Tag releases (feature #10, spec #12): _build.yml's sign-payload job builds the helper with the
+       target above (-t:RstBuildRemoveUserRst), signs it and hands it to the bundle job, which sets
+       RstPrebuiltHelpers=true (an environment variable) so no bundle build compiles over the signed
+       exe. Unset (every other build), nothing changes. -->
+  <Target Name="RstCheckPrebuiltHelpers" BeforeTargets="CoreCompile" Condition="'$(RstPrebuiltHelpers)' == 'true'">
+    <Error Condition="!Exists('$(RstRemoveUserRstExe)')" Text="RstPrebuiltHelpers=true but $(RstRemoveUserRstExe) is missing." />
+    <Message Importance="high" Text="RemoveUserRst helper: prebuilt (signed) $(RstRemoveUserRstExe)" />
+  </Target>
   <!-- The companion chain, its variables and the BA theme (one checkbox per
        shippable companion) are generated from the registry before every
        compile, into obj\gen\ (outside the default globs, never committed).

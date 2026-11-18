@@ -147,13 +147,15 @@
   <PropertyGroup>
     <RstFrameworkCsc>$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\csc.exe</RstFrameworkCsc>
     <RstEndTraysSource>$(MSBuildProjectDirectory)\helper\EndTrays.cs</RstEndTraysSource>
+    <!-- Company, product and description of every helper exe (feature #10). -->
+    <RstHelperInfoSource>$(MSBuildProjectDirectory)\helper\AssemblyInfo.cs</RstHelperInfoSource>
     <RstEndTraysExe>$(MSBuildProjectDirectory)\obj\machine\helper\RST.EndTrays.exe</RstEndTraysExe>
     <DefineConstants>$(DefineConstants);RstEndTraysExe=$(RstEndTraysExe)</DefineConstants>
   </PropertyGroup>
-  <Target Name="RstBuildEndTrays" BeforeTargets="CoreCompile" Condition="'$(RstScope)' == 'machine'" Inputs="$(RstEndTraysSource)" Outputs="$(RstEndTraysExe)">
+  <Target Name="RstBuildEndTrays" BeforeTargets="CoreCompile" Condition="'$(RstScope)' == 'machine' and '$(RstPrebuiltHelpers)' != 'true'" Inputs="$(RstEndTraysSource);$(RstHelperInfoSource)" Outputs="$(RstEndTraysExe)">
     <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstEndTraysExe)'))" />
-    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstEndTraysExe)&quot; &quot;$(RstEndTraysSource)&quot;" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /define:RST_HELPER_ENDTRAYS /out:&quot;$(RstEndTraysExe)&quot; &quot;$(RstEndTraysSource)&quot; &quot;$(RstHelperInfoSource)&quot;" />
   </Target>
 
   <!-- Both packages (SC-044): the custom action that starts the tray for the
@@ -167,10 +169,21 @@
     <RstStartTrayExe>$(MSBuildProjectDirectory)\obj\helper\RST.StartTray.exe</RstStartTrayExe>
     <DefineConstants>$(DefineConstants);RstStartTrayExe=$(RstStartTrayExe)</DefineConstants>
   </PropertyGroup>
-  <Target Name="RstBuildStartTray" BeforeTargets="CoreCompile" Inputs="$(RstStartTraySource)" Outputs="$(RstStartTrayExe)">
+  <Target Name="RstBuildStartTray" BeforeTargets="CoreCompile" Condition="'$(RstPrebuiltHelpers)' != 'true'" Inputs="$(RstStartTraySource);$(RstHelperInfoSource)" Outputs="$(RstStartTrayExe)">
     <Error Condition="!Exists('$(RstFrameworkCsc)')" Text="The .NET Framework 4 compiler was not found at $(RstFrameworkCsc) (Windows only)." />
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RstStartTrayExe)'))" />
-    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /out:&quot;$(RstStartTrayExe)&quot; &quot;$(RstStartTraySource)&quot;" />
+    <Exec Command="&quot;$(RstFrameworkCsc)&quot; /nologo /noconfig /target:exe /platform:x64 /optimize+ /warnaserror+ /r:System.dll /define:RST_HELPER_STARTTRAY /out:&quot;$(RstStartTrayExe)&quot; &quot;$(RstStartTraySource)&quot; &quot;$(RstHelperInfoSource)&quot;" />
+  </Target>
+
+  <!-- Tag releases (feature #10, spec #12): the helpers above are Authenticode-signed before they go
+       into an MSI. _build.yml's sign-payload job builds them with these same targets
+       (-t:RstBuildStartTray, and -t:RstBuildEndTrays -p:RstScope=machine), signs them and hands them
+       to msi-unified, which sets RstPrebuiltHelpers=true (an environment variable) so no build here
+       compiles over the signed exes. Unset (every other build), nothing changes. -->
+  <Target Name="RstCheckPrebuiltHelpers" BeforeTargets="CoreCompile" Condition="'$(RstPrebuiltHelpers)' == 'true'">
+    <Error Condition="!Exists('$(RstStartTrayExe)')" Text="RstPrebuiltHelpers=true but $(RstStartTrayExe) is missing." />
+    <Error Condition="'$(RstScope)' == 'machine' and !Exists('$(RstEndTraysExe)')" Text="RstPrebuiltHelpers=true but $(RstEndTraysExe) is missing." />
+    <Message Importance="high" Text="Installer helpers: prebuilt (signed) $(RstStartTrayExe)" />
   </Target>
 
   <Target Name="RstGenerateTray" BeforeTargets="CoreCompile">
