@@ -16,6 +16,10 @@ name: release
 #      version as an upgrade).
 #   4b. Also attaches RST-Machine.msi (feature #17): RST for everyone on
 #      the PC, per machine, built from the same sources at the same version.
+#   4c. Every file it attaches, and every DLL and EXE they install, is
+#      Authenticode-signed by AnJ Arch-Tech LLC and timestamped (feature #10,
+#      spec #12; installer/README.md "Code signing"). _build.yml's signatures
+#      job fails the build, so nothing is published, if any one is not.
 #   5. Also attaches SHA256SUMS.txt (feature #17, spec #20 §8), one line
 #      per asset. The release is created as a DRAFT, verified against
 #      GitHub's digests of the uploads, and only then published.
@@ -59,11 +63,21 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "MSI ProductVersion: $version (tag ${GITHUB_REF_NAME})"
 
+  # Code signing (feature #10, spec #12): sign: true runs _build.yml's
+  # sign-payload, sign-msi and sign-bundle jobs, in the `signing` environment
+  # (v* tags only), and makes its signatures job require every shipped file
+  # signed. id-token: write is granted here, and only here: a called workflow
+  # cannot exceed its caller's permissions, and the sign jobs log in to Azure
+  # with the run's OIDC token. build.yml (push/PR) passes neither.
   build:
     needs: prepare
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/_build.yml
     with:
       product_version: ${{ needs.prepare.outputs.version }}
+      sign: true
 
   release:
     name: GitHub Release

@@ -1,0 +1,81 @@
+name: Sign (Azure Artifact Signing)
+description: >-
+  Authenticode-signs files for an rst-c tag release (feature #10, spec #12; decision #131): an OIDC
+  login with the signing environment's Entra app, then Azure Artifact Signing with a SHA-256 file
+  digest, an RFC 3161 timestamp from timestamp.acs.microsoft.com and the description "Designs/OS",
+  then build/verify-signatures.ps1 -Files on what was signed. The ONE signing step every signing job
+  in .github/workflows/_build.yml uses. The calling job must declare `environment: signing` and
+  `id-token: write` (the federated credential's subject is the environment), so only a v* tag run
+  can sign. Windows runners only.
+
+inputs:
+  files:
+    description: Files to sign, one per line, relative to the workspace or absolute. Each must exist.
+    required: true
+  endpoint:
+    description: The Artifact Signing endpoint (environment variable SIGNING_ENDPOINT).
+    required: true
+  account:
+    description: The signing account (SIGNING_ACCOUNT).
+    required: true
+  profile:
+    description: The certificate profile (SIGNING_PROFILE).
+    required: true
+  client-id:
+    description: The Entra app's client ID (AZURE_CLIENT_ID).
+    required: true
+  tenant-id:
+    description: The Entra tenant ID (AZURE_TENANT_ID).
+    required: true
+  subscription-id:
+    description: The Azure subscription ID (AZURE_SUBSCRIPTION_ID).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Absolute paths (the signing action wants them), and a missing file fails here, before any signing.
+    - name: Files to sign
+      id: files
+      shell: pwsh
+      env:
+        FILES: ${{ inputs.files }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $list = @($env:FILES -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if (-not $list) { throw 'sign: no files given' }
+        $abs = @(foreach ($f in $list) { (Resolve-Path -LiteralPath $f).Path })
+        foreach ($a in $abs) { if ($a.Contains(',')) { throw "sign: a comma in a path cannot be passed to the signing action: $a" } }
+        $abs | ForEach-Object { Write-Host "  to sign: $_" }
+        "list=$($abs -join ',')" >> $env:GITHUB_OUTPUT
+        "paths<<RST_SIGN_EOF" >> $env:GITHUB_OUTPUT
+        $abs >> $env:GITHUB_OUTPUT
+        "RST_SIGN_EOF" >> $env:GITHUB_OUTPUT
+    # Logged in right before each signing call: the federated login's Azure token is short-lived, and
+    # some signing jobs sign twice (sign-bundle: the engine, then the bundle).
+    - name: Azure login (OIDC, environment signing)
+      uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+    - name: Sign
+      uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+      with:
+        endpoint: ${{ inputs.endpoint }}
+        signing-account-name: ${{ inputs.account }}
+        certificate-profile-name: ${{ inputs.profile }}
+        files: ${{ steps.files.outputs.list }}
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+        description: Designs/OS
+    # Each file just signed: Valid, signed by AnJ Arch-Tech LLC, SHA-256, timestamped, "Designs/OS".
+    - name: Check the signatures
+      shell: pwsh
+      env:
+        PATHS: ${{ steps.files.outputs.paths }}
+      run: |
+        $files = @($env:PATHS -split "`r?`n" | Where-Object { $_ })
+        & (Join-Path $env:GITHUB_WORKSPACE 'build/verify-signatures.ps1') -Files $files
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }

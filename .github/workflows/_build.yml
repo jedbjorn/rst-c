@@ -65,6 +65,28 @@ name: _build (reusable)
 #   • tray-selfupdate — Windows runner: RST updating itself through the
 #                    tray's updater copy, across three RST.msi builds of
 #                    this commit (installer/ci-tray-selfupdate.ps1, AC8).
+#   • signatures   — Windows runner: build/verify-signatures.ps1 over the
+#                    staged payload, both MSIs (and every PE file inside
+#                    them) and RST-Setup.exe (and every PE file in it).
+#                    Tag releases require every one signed; other builds
+#                    check the inventory and report them unsigned.
+#
+# Code signing (feature #10, spec #12; installer/README.md "Code signing").
+# Only release.yml passes `sign: true`. Then, and only then, three more jobs
+# run, each in the GitHub environment `signing` (v* tags only) with
+# id-token: write, all signing through .github/actions/codesign:
+#   • sign-payload — after stage/stage-tray: signs every PE file of
+#                    stage-R25/R26/R27/Tray and re-uploads them under the
+#                    same names, so every later job sees the same signed
+#                    bytes; also builds and signs the installer helpers
+#                    (artifact installer-helpers).
+#   • sign-msi     — after msi-unified: signs RST.msi and RST-Machine.msi
+#                    and re-uploads them; the bundle embeds those.
+#   • sign-bundle  — after bundle: wix burn detach, sign the engine, wix
+#                    burn reattach, sign RST-Setup.exe, re-upload.
+# On any other build they are skipped, and the jobs after them run exactly
+# as before: their `if: !cancelled() && !failure()` lets a skipped sign job
+# through, never a failed one.
 #
 # WiX MSI emission is officially Windows-only (installer/README.md). The
 # WiX SDK MSBuild path on Linux emits WIX0000 ("behavior is undefined")
@@ -83,6 +105,14 @@ on:
         type: string
         required: false
         default: ''
+      sign:
+        description: >-
+          Authenticode-sign the release (feature #10, spec #12). true only from
+          release.yml (v* tags): the sign-* jobs run in the `signing` environment,
+          which admits only v* tags. false (push/PR builds): nothing is signed.
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -262,9 +292,108 @@ jobs:
           path: build/Tray/
           if-no-files-found: error
 
+  # Tag releases only (feature #10, spec #12): signs the payload ONCE, before
+  # any MSI is built, and re-uploads stage-R25/R26/R27/Tray under the same
+  # names. Every later job (the MSI builds and their smokes, which compare
+  # installed files with these artifacts) then sees the same signed bytes.
+  # Also builds the installer helpers with the projects' own targets
+  # (installer/build-helpers.ps1), signs them and hands them on
+  # (installer-helpers) to msi-unified and bundle.
+  sign-payload:
+    name: Sign payload
+    if: inputs.sign
+    needs: [stage, stage-tray]
+    runs-on: windows-latest
+    environment: signing
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R25
+          path: build/R25/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R26
+          path: build/R26/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R27
+          path: build/R27/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-Tray
+          path: build/Tray/
+      - name: Build the installer helpers
+        id: helpers
+        shell: pwsh
+        run: installer/build-helpers.ps1 -GitHubOutput paths
+      # Every DLL and EXE staged: all RST's own (decision #33, checked by the stage jobs and again by signatures).
+      - name: Files to sign
+        id: files
+        shell: pwsh
+        env:
+          HELPERS: ${{ steps.helpers.outputs.paths }}
+        run: |
+          $pes = @(Get-ChildItem build/R25, build/R26, build/R27, build/Tray -Recurse -File | Where-Object { $_.Extension -in '.dll', '.exe' } | ForEach-Object FullName)
+          $pes += @($env:HELPERS -split "`r?`n" | Where-Object { $_ })
+          "files<<RST_FILES_EOF" >> $env:GITHUB_OUTPUT
+          $pes >> $env:GITHUB_OUTPUT
+          'RST_FILES_EOF' >> $env:GITHUB_OUTPUT
+      - uses: ./.github/actions/codesign
+        with:
+          files: ${{ steps.files.outputs.files }}
+          endpoint: ${{ vars.SIGNING_ENDPOINT }}
+          account: ${{ vars.SIGNING_ACCOUNT }}
+          profile: ${{ vars.SIGNING_PROFILE }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-R25
+          path: build/R25/
+          if-no-files-found: error
+          overwrite: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-R26
+          path: build/R26/
+          if-no-files-found: error
+          overwrite: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-R27
+          path: build/R27/
+          if-no-files-found: error
+          overwrite: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-Tray
+          path: build/Tray/
+          if-no-files-found: error
+          overwrite: true
+      # Paths kept from the workspace root (installer/obj/..., installer-bundle/obj/...): downloaded to `.`,
+      # each lands where its project expects it.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-helpers
+          path: |
+            installer/obj/helper/RST.StartTray.exe
+            installer/obj/machine/helper/RST.EndTrays.exe
+            installer-bundle/obj/helper/RST.RemoveUserRst.exe
+          if-no-files-found: error
+
   msi-unified:
     name: MSI (R25 + R26 + R27)
-    needs: [stage, stage-tray]
+    # sign-payload runs only on tag releases; skipped, it must not skip this job (nor may a failed one run it).
+    needs: [stage, stage-tray, sign-payload]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -289,6 +418,17 @@ jobs:
         with:
           name: stage-Tray
           path: build/Tray/
+      # Tag releases: the helpers sign-payload built and signed. RstPrebuiltHelpers (an environment variable,
+      # so every build below sees it) stops RST.Installer.wixproj compiling over them.
+      - uses: actions/download-artifact@v4
+        if: inputs.sign
+        with:
+          name: installer-helpers
+          path: .
+      - name: Use the signed installer helpers
+        if: inputs.sign
+        shell: pwsh
+        run: '"RstPrebuiltHelpers=true" >> $env:GITHUB_ENV'
       - run: dotnet build installer/RST.Installer.wixproj -c Release --nologo -p:RstMsiVersion=${{ inputs.product_version }}
       # Rebuild the same commit: same ProductVersion, new ProductCode. That
       # is the rc -> final case (release.yml strips -rc.N) the smoke below
@@ -352,6 +492,54 @@ jobs:
           path: msi-test/
           if-no-files-found: error
 
+  # Tag releases only (feature #10, spec #12): signs the RST.msi and
+  # RST-Machine.msi msi-unified uploaded (the same-version rebuild, the one
+  # released) and re-uploads them under the same names, before anything else
+  # takes them: msi-machine, msi-migrate and the bundle get the signed MSIs,
+  # and release.yml hashes them. The test-only builds (msi-test) stay unsigned.
+  sign-msi:
+    name: Sign MSIs
+    if: inputs.sign
+    needs: msi-unified
+    runs-on: windows-latest
+    environment: signing
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: msi/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Machine.msi
+          path: msi/
+      - uses: ./.github/actions/codesign
+        with:
+          files: |
+            msi/RST.msi
+            msi/RST-Machine.msi
+          endpoint: ${{ vars.SIGNING_ENDPOINT }}
+          account: ${{ vars.SIGNING_ACCOUNT }}
+          profile: ${{ vars.SIGNING_PROFILE }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST.msi
+          path: msi/RST.msi
+          if-no-files-found: error
+          overwrite: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST-Machine.msi
+          path: msi/RST-Machine.msi
+          if-no-files-found: error
+          overwrite: true
+
   # RST-Machine.msi (feature #17, spec #20 §7, AC9) on an administrator
   # runner (GitHub's Windows runners run as an administrator):
   # installer/ci-machine-smoke.ps1. Identity and component checks (no
@@ -366,7 +554,8 @@ jobs:
   # never restarted elevated), and a clean uninstall.
   msi-machine:
     name: MSI per machine (RST-Machine.msi)
-    needs: msi-unified
+    needs: [msi-unified, sign-msi]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -423,7 +612,8 @@ jobs:
   # release after each one (installer/README.md, "Untagged builds").
   msi-migrate:
     name: MSI upgrade from ${{ matrix.release }} (${{ matrix.from }})
-    needs: msi-unified
+    needs: [msi-unified, sign-msi]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -471,13 +661,24 @@ jobs:
   # bundle, and checks by /layout that each embeds exactly what it should.
   bundle:
     name: Bundle (RST-Setup.exe)
-    needs: msi-unified
+    needs: [msi-unified, sign-msi]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      # Tag releases: the RemoveUserRst helper sign-payload built and signed (RstPrebuiltHelpers: see msi-unified).
+      - uses: actions/download-artifact@v4
+        if: inputs.sign
+        with:
+          name: installer-helpers
+          path: .
+      - name: Use the signed installer helpers
+        if: inputs.sign
+        shell: pwsh
+        run: '"RstPrebuiltHelpers=true" >> $env:GITHUB_ENV'
       - uses: actions/download-artifact@v4
         with:
           name: RST.msi
@@ -505,6 +706,81 @@ jobs:
           path: installer-bundle/bin/ci/
           if-no-files-found: error
 
+  # Tag releases only (feature #10, spec #12): signs RST-Setup.exe as Burn
+  # requires: detach the engine, sign it, reattach it, sign the bundle. Then
+  # the signed bundle must embed exactly the payloads the bundle job checked
+  # (installer-bundle/ci-bundle-build.ps1), and it replaces the RST-Setup.exe
+  # artifact. The smoke's fixture bundle (bundle-test) stays unsigned.
+  sign-bundle:
+    name: Sign bundle (RST-Setup.exe)
+    if: inputs.sign
+    needs: bundle
+    runs-on: windows-latest
+    environment: signing
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: setup/
+      - name: Detach the Burn engine
+        shell: pwsh
+        run: |
+          $wix = Join-Path $env:RUNNER_TEMP 'wixtool\wix.exe'
+          dotnet tool install wix --version 6.0.2 --tool-path (Split-Path $wix)
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $wix burn extract setup/RST-Setup.exe -o "$env:RUNNER_TEMP/payloads-unsigned"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $wix burn detach setup/RST-Setup.exe -engine setup/engine.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: ./.github/actions/codesign
+        with:
+          files: setup/engine.exe
+          endpoint: ${{ vars.SIGNING_ENDPOINT }}
+          account: ${{ vars.SIGNING_ACCOUNT }}
+          profile: ${{ vars.SIGNING_PROFILE }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Reattach the signed engine
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force setup/signed | Out-Null
+          & (Join-Path $env:RUNNER_TEMP 'wixtool\wix.exe') burn reattach setup/RST-Setup.exe -engine setup/engine.exe -o setup/signed/RST-Setup.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: ./.github/actions/codesign
+        with:
+          files: setup/signed/RST-Setup.exe
+          endpoint: ${{ vars.SIGNING_ENDPOINT }}
+          account: ${{ vars.SIGNING_ACCOUNT }}
+          profile: ${{ vars.SIGNING_PROFILE }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: The signed bundle embeds the same payloads
+        shell: pwsh
+        run: |
+          $wix = Join-Path $env:RUNNER_TEMP 'wixtool\wix.exe'
+          & $wix burn extract setup/signed/RST-Setup.exe -o "$env:RUNNER_TEMP/payloads-signed"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          function Hashes([string]$Dir) { @(Get-ChildItem $Dir -Recurse -File | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash } | Sort-Object) -join '|' }
+          $before = Hashes "$env:RUNNER_TEMP/payloads-unsigned"
+          $after = Hashes "$env:RUNNER_TEMP/payloads-signed"
+          if (-not $before -or $before -ne $after) { throw "the signed RST-Setup.exe does not embed the payloads the bundle job checked" }
+          Write-Host "PASS: the signed RST-Setup.exe embeds the same $(($after -split '\|').Count) payloads"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: setup/signed/RST-Setup.exe
+          if-no-files-found: error
+          overwrite: true
+
   # Bundle smoke (feature #13 Phase 2, AC4/AC5), permanent. Stub Revit.exe
   # files let RST.msi's launch condition pass.
   #   Chain        the test bundle with the fixture companion: the spec's
@@ -530,7 +806,8 @@ jobs:
   #                locked "Just for me" while RST-Machine.msi is installed.
   bundle-smoke:
     name: Bundle smoke (${{ matrix.mode }})
-    needs: bundle
+    needs: [bundle, sign-bundle]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -601,7 +878,8 @@ jobs:
   # check refuses a wrong or missing digest, a missing or extra line, and a sums asset that differs.
   release-sums:
     name: Release SHA256SUMS.txt
-    needs: bundle
+    needs: [bundle, sign-bundle]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -706,13 +984,22 @@ jobs:
   # uninstall still removes it.
   tray-selfupdate:
     name: Tray self-update (RST.msi builds)
-    needs: [stage, stage-tray]
+    needs: [stage, stage-tray, sign-payload]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      # The helpers built on their own and every build below told to take them (RstPrebuiltHelpers), as on a
+      # tag release's msi-unified and bundle (unsigned here: these builds are test-only). So every build, not
+      # only a tag run, proves that path, including across -t:Rebuild.
+      - name: Build the installer helpers (as a tag release does)
+        shell: pwsh
+        run: |
+          installer/build-helpers.ps1
+          "RstPrebuiltHelpers=true" >> $env:GITHUB_ENV
       - uses: actions/download-artifact@v4
         with:
           name: stage-R25
@@ -787,3 +1074,57 @@ jobs:
             ${{ runner.temp }}/RST-3.1.9*.msi
             ${{ runner.temp }}/RST-Setup-3.1.9*.exe
           if-no-files-found: ignore
+
+  # Code signing check (feature #10, spec #12): build/verify-signatures.ps1
+  # over what a release ships, as the artifacts hold it: the staged payload,
+  # RST.msi and RST-Machine.msi with every PE file inside them (the File
+  # table, byte for byte the staged files, and RST's custom-action exes in
+  # the Binary table), and RST-Setup.exe with every PE file it embeds. Tag
+  # releases (-RequireSigned): each must be Valid, signed by AnJ Arch-Tech
+  # LLC, SHA-256, timestamped, "Designs/OS", or the run fails and release.yml
+  # publishes nothing. Other builds: the same inventory must be complete; the
+  # files are only reported unsigned.
+  signatures:
+    name: Signatures
+    needs: [sign-payload, msi-unified, sign-msi, bundle, sign-bundle]
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R25
+          path: stage/R25/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R26
+          path: stage/R26/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-R27
+          path: stage/R27/
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-Tray
+          path: stage/Tray/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST.msi
+          path: artifacts/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Machine.msi
+          path: artifacts/
+      - uses: actions/download-artifact@v4
+        with:
+          name: RST-Setup.exe
+          path: artifacts/
+      - name: Check signatures (required on tag releases)
+        shell: pwsh
+        run: >-
+          build/verify-signatures.ps1 -StageRoot stage
+          -Msi artifacts/RST.msi, artifacts/RST-Machine.msi -Bundle artifacts/RST-Setup.exe
+          -RequireSigned:$${{ inputs.sign }}
