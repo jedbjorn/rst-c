@@ -105,7 +105,7 @@
        exe. Unset (every other build), nothing changes. -->
   <Target Name="RstCheckPrebuiltHelpers" BeforeTargets="CoreCompile" Condition="'$(RstPrebuiltHelpers)' == 'true'">
     <Error Condition="!Exists('$(RstRemoveUserRstExe)')" Text="RstPrebuiltHelpers=true but $(RstRemoveUserRstExe) is missing." />
-    <Message Importance="high" Text="RemoveUserRst helper: prebuilt (signed) $(RstRemoveUserRstExe)" />
+    <Message Importance="high" Text="RemoveUserRst helper: prebuilt, not compiled here: $(RstRemoveUserRstExe)" />
   </Target>
   <!-- The companion chain, its variables and the BA theme (one checkbox per
        shippable companion) are generated from the registry before every

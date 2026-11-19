@@ -26,7 +26,7 @@
                        With -RequireSigned (tag releases) any file that does not pass fails the run.
                        Without it (push/PR builds, never signed) the same inventory is taken and must
                        be complete, each file's signature is only reported, and the checker itself is
-                       exercised on a Microsoft-signed file (dotnet.exe), so a tag run is never the
+                       exercised on a Microsoft-signed file (signtool.exe), so a tag run is never the
                        first run of this script.
 
   Third-party PE files (WiX's own custom-action DLLs in the Binary table) are listed, not checked:
@@ -201,12 +201,12 @@ $Msi = @($Msi | ForEach-Object { (Resolve-Path $_).Path })
 $Bundle = (Resolve-Path $Bundle).Path
 $wixExe = Get-Wix
 
-# The checker itself, on a file Microsoft signed (SHA-256, timestamped): a PR run exercises every
-# branch a tag run takes for a good signature, and the unsigned payload shows it rejects.
+# The checker itself, on a file Microsoft signed (the Windows SDK's signtool.exe: SHA-256, timestamped): a
+# PR run exercises every branch a tag run takes for a good signature, and the unsigned payload shows it
+# rejects. (Not dotnet.exe: its signer is CN=.NET.)
 if (-not $RequireSigned) {
-  $dotnet = (Get-Command dotnet).Source
-  $p = Get-SignatureProblems $dotnet 'Microsoft Corporation' ''
-  Assert-Inventory ($p.Count -eq 0) "checker self-test: $dotnet passes as signed by Microsoft Corporation$(if ($p.Count) { " ($($p -join '; '))" })"
+  $p = Get-SignatureProblems $SignTool 'Microsoft Corporation' ''
+  Assert-Inventory ($p.Count -eq 0) "checker self-test: $SignTool passes as signed by Microsoft Corporation$(if ($p.Count) { " ($($p -join '; '))" })"
 }
 
 # 1. The staged payload: every PE file, each RST's own (decision #33).

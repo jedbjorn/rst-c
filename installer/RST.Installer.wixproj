@@ -183,7 +183,7 @@
   <Target Name="RstCheckPrebuiltHelpers" BeforeTargets="CoreCompile" Condition="'$(RstPrebuiltHelpers)' == 'true'">
     <Error Condition="!Exists('$(RstStartTrayExe)')" Text="RstPrebuiltHelpers=true but $(RstStartTrayExe) is missing." />
     <Error Condition="'$(RstScope)' == 'machine' and !Exists('$(RstEndTraysExe)')" Text="RstPrebuiltHelpers=true but $(RstEndTraysExe) is missing." />
-    <Message Importance="high" Text="Installer helpers: prebuilt (signed) $(RstStartTrayExe)" />
+    <Message Importance="high" Text="Installer helpers: prebuilt, not compiled here: $(RstStartTrayExe)" />
   </Target>
 
   <Target Name="RstGenerateTray" BeforeTargets="CoreCompile">
