@@ -280,4 +280,34 @@ The row stays indefinitely, so if someone installs an old `RST-R27.msi` from a p
 
 ## Code signing
 
-Currently unsigned. `build/sign.targets` is a placeholder with `signtool` hooks scaffolded but the cert source (`SignAssemblies=true`, `SignCertThumbprint=…`) is not yet wired into CI. Tracked under RST-042; once that lands, the unsigned line in the project's top-level README intro can also be reverted.
+Tag releases (`v*`, `release.yml`) are Authenticode-signed by **AnJ Arch-Tech LLC** (the legal name in the certificate; the product-facing name is Designs/OS) with Azure Artifact Signing (feature #10, spec #12). Every signature uses a SHA-256 digest, is timestamped by `http://timestamp.acs.microsoft.com` (RFC 3161, so it stays valid after the short-lived signing certificate expires), and carries the description "Designs/OS", the program name Windows shows in a UAC prompt. What is signed:
+
+| File | Where it ships |
+|---|---|
+| `RST.Bootstrap.dll`, `RST.Engine.dll`, `RST.UI.dll`, `RST.Core.dll` (each Revit year) | inside both MSIs |
+| `RST.Tray.exe`, `RST.Tray.dll`, `RST.UI.dll`, `RST.Core.dll` (the tray) | inside both MSIs (the tray's `RST.TrayUpdater.exe` is a copy of `RST.Tray.exe`) |
+| `RST.StartTray.exe` (both MSIs), `RST.EndTrays.exe` (`RST-Machine.msi`) | the MSIs' custom actions (Binary table, never installed) |
+| `RST.msi`, `RST-Machine.msi` | release assets, and embedded in `RST-Setup.exe` |
+| `RST.RemoveUserRst.exe` | embedded in `RST-Setup.exe` |
+| `RST-Setup.exe` | release asset: its Burn engine is signed first (`wix burn detach`, sign, `wix burn reattach`), then the bundle |
+
+Third-party files are never re-signed (none ship: decision #33). The companion MSIs inside `RST-Setup.exe` are the companions' own release assets, embedded unmodified, with whatever signature their own repository gave them. The tray does not check signatures before it installs an update; it checks `SHA256SUMS.txt`, GitHub's digest and the MSI's identity ([Release checksums](../docs/tray.md#release-checksums)).
+
+**How to check a file.** In Explorer, right-click it → **Properties** → **Digital Signatures**: the signer is AnJ Arch-Tech LLC and the signature has a timestamp. Or in PowerShell:
+
+```powershell
+Get-AuthenticodeSignature .\RST-Setup.exe | Format-List Status, SignerCertificate, TimeStamperCertificate
+# Status Valid, SignerCertificate CN=AnJ Arch-Tech LLC, O=AnJ Arch-Tech LLC, L=Denver, S=Colorado, C=US
+```
+
+An installed RST's files can be checked the same way (`%AppData%\RST\R<NN>\app\RST.Engine.dll`, the tray's `RST.Tray.exe`), or with `signtool verify /pa /all /v <file>`.
+
+**How CI does it.** `_build.yml` signs only when `release.yml` calls it with `sign: true`. The jobs that sign (`sign-payload`, `sign-msi`, `sign-bundle`) run only then; each declares the GitHub environment `signing` (deployments from `v*` tags only), whose Entra federated credential is the only way to the signing account, and all use one step, `.github/actions/codesign`. In order:
+
+1. `sign-payload` signs the staged payload (`stage-R25`/`R26`/`R27`/`Tray`, re-uploaded under the same names) and the three helper exes, before any MSI is built, so every later job (the MSI builds, their smokes, the layout and upgrade checks) sees the same signed bytes.
+2. `msi-unified` builds both MSIs from them, with the signed helpers (`RstPrebuiltHelpers=true`, see `RST.Installer.wixproj`); `sign-msi` signs `RST.msi` and `RST-Machine.msi` and re-uploads them.
+3. `bundle` embeds the signed MSIs and the signed `RST.RemoveUserRst.exe`; `sign-bundle` signs the engine and the bundle, and checks the signed bundle still embeds exactly the same payloads.
+4. `Signatures` (`build/verify-signatures.ps1 -RequireSigned`) checks every file above, including the PE files it extracts from each MSI (`wix msi decompile -x`) and from the bundle (`wix burn extract`): Valid, signed by AnJ Arch-Tech LLC, SHA-256, timestamped, "Designs/OS". The release job runs only after it passes, so `SHA256SUMS.txt` hashes the signed files and nothing unsigned is published.
+
+**Local, push and PR builds are unsigned.** They never reach the signing environment. Their `Signatures` job takes the same inventory (every PE file present, each MSI carrying exactly the staged files) and only reports that the files are unsigned.
+

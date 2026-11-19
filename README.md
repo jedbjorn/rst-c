@@ -41,6 +41,7 @@ Latest release: **[github.com/jedbjorn/rst-c/releases/latest](https://github.com
 - `RST.msi` — Revit 2025, 2026 and 2027, for your Windows account
 - `RST-Setup.exe` — the same rst-c, plus optional Designs/OS add-ins ([Gantt-It](https://jedbjorn.github.io/gantt-it/), [Splash-It](https://jedbjorn.github.io/splash-it/), [Pick-It](https://jedbjorn.github.io/pick-it/)) as checkboxes
 - `RST-Machine.msi` — rst-c once for everyone on the PC, for IT (from v3.1; needs an administrator)
+- Every release file, and the DLLs and EXEs they install, is code-signed by AnJ Arch-Tech LLC (Designs/OS): see [Code signing](installer/README.md#code-signing)
 
 Per-user install; no admin rights required. Run `RST.msi` or `RST-Setup.exe`, then launch Revit — the RST tools appear on the Add-Ins tab. See [Install modes](#install-modes) for the per-machine option.
 

@@ -56,6 +56,4 @@
     <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.0" PrivateAssets="all" VersionOverride="2027.0.0" />
   </ItemGroup>
 
-  <Import Project="..\..\build\sign.targets" />
-
 </Project>

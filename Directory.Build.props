@@ -83,12 +83,6 @@
     <DebugSymbols Condition="'$(MSBuildProjectExtension)' != '.wixproj'">true</DebugSymbols>
   </PropertyGroup>
 
-  <!-- Code-signing hooks (no-ops in dev — wired up in RST-013). -->
-  <PropertyGroup>
-    <SignAssemblies Condition="'$(SignAssemblies)' == ''">false</SignAssemblies>
-    <SignTimestampUrl Condition="'$(SignTimestampUrl)' == ''">http://timestamp.digicert.com</SignTimestampUrl>
-  </PropertyGroup>
-
   <!-- InformationalVersion carries the commit as a short (7-character) hash, 3.2.0+abc1234, not
        the SDK's full 40-character one. Runs once the SDK has read the commit from the repository
        and before it appends it to InformationalVersion. -->
