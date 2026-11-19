@@ -8,9 +8,9 @@ This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a run
 
 | Companion | Repo | Status | Pin |
 |---|---|---|---|
-| Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `shippable` | `v1.1.0`, `GanttIt-1.1.0.msi` |
-| Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `shippable` | `v1.1.0`, `SplashIt-1.1.0.msi` |
-| Pick-It | [`jedbjorn/pick-it`](https://github.com/jedbjorn/pick-it) | `shippable` | `v1.0.0`, `PickIt-1.0.0.msi` |
+| Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `shippable` | `v1.1.2`, `GanttIt-1.1.2.msi` |
+| Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `shippable` | `v1.1.2`, `SplashIt-1.1.2.msi` |
+| Pick-It | [`jedbjorn/pick-it`](https://github.com/jedbjorn/pick-it) | `shippable` | `v1.0.1`, `PickIt-1.0.1.msi` |
 
 Pick-It's tray asset pattern (`PickIt-<version>.msi`) is in `ProductCatalog.AssetPatterns`; a new companion needs its own line there before the tray can install it.
 
