@@ -6,11 +6,13 @@
 // highlighted tool on a card; Up, Down, typing and Escape), a left or right press outside closes while
 // the middle button and the wheel do not, the keyboard taken back after a middle-button pan, another
 // application in front closes, and a click on a result closes the window first and then runs the
-// tool. Screenshots: search-it-*.
+// tool. Recently used: the chips show only with the box empty, no filter chips and the tools in, keep the list at eight
+// cards, and a click on one runs its tool through the result card's path. Screenshots: search-it-*.
 
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -77,6 +79,12 @@ public class SearchItTests
             Prepared++;
             LoadsAtPrepare = Loads;
         }
+
+        /// <summary>The recently used list the host keeps, newest first.</summary>
+        public IReadOnlyList<SearchRecent> Recents { get; set; } = [];
+        public Exception? RecentsError { get; set; }
+
+        public IReadOnlyList<SearchRecent> LoadRecents() => RecentsError is { } error ? throw error : Recents;
 
         public SearchList LoadTools()
         {
@@ -1831,6 +1839,201 @@ public class SearchItTests
             card.RunCommand.Execute(card);
             Assert.True(o.Window.ViewModel.HasMessage);
             Capture(o.Window, theme, "search-it-cant-run");
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    }, theme);
+
+    // ── recently used ────────────────────────────────────────────────────
+
+    private static SearchRecent Recent(string id) => new(id, "stored name of " + id);
+
+    private static readonly SearchTool Elevation = new("ID_VIEW_ELEVATION", "Elevation", "View", "Create")
+        { Mark = SearchToolMark.MustRunIn, MustRunIn = ["Floor Plan"] };
+
+    [Fact]
+    public void Recent_chips_show_only_with_the_box_empty_no_filter_chips_and_the_tools_in() => Sta(() =>
+    {
+        var backend = new FakeBackend
+        {
+            Tools = [.. Sample, Elevation],
+            Recents = [Recent("ID_OBJECTS_DOOR"), Recent("ID_GONE"), Recent("ID_VIEW_ELEVATION"), Recent("ID_ALIGN")],
+        };
+        var vm = new SearchItViewModel(backend, _ => { });
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        vm.BeginLoading();
+        Assert.False(vm.ShowRecents, "not while the tools load");
+        vm.Load();
+
+        // Only the tools this file lists and can run here, in the stored order: an id the list lacks and a Must Run In
+        // tool are hidden.
+        Assert.True(vm.ShowRecents);
+        Assert.Contains(nameof(SearchItViewModel.ShowRecents), changed);
+        Assert.Equal(["Door", "Align"], vm.Recents.Select(r => r.Name));
+        Assert.Equal("Architecture › Build", vm.Recents[0].ToolTip);
+        Assert.Equal("Modify › Modify", vm.Recents[1].ToolTip);
+
+        changed.Clear();
+        vm.Text = "w";
+        Assert.False(vm.ShowRecents, "typing hides them");
+        Assert.Contains(nameof(SearchItViewModel.ShowRecents), changed);
+        vm.Text = "";
+        Assert.True(vm.ShowRecents);
+
+        vm.Text = "wall";
+        Assert.True(vm.CommitChip());
+        Assert.True(vm.IsTextEmpty);
+        Assert.False(vm.ShowRecents, "a filter chip hides them");
+        Assert.True(vm.RemoveLastChip());
+        Assert.True(vm.ShowRecents);
+        Assert.Equal(2, vm.Recents.Count);
+    });
+
+    [Fact]
+    public void No_recent_chips_without_recents_and_a_failed_read_still_loads_the_tools() => Sta(() =>
+    {
+        var none = Loaded(new FakeBackend());
+        Assert.Empty(none.Recents);
+        Assert.False(none.ShowRecents);
+
+        var gone = Loaded(new FakeBackend { Recents = [Recent("ID_NOT_IN_THIS_FILE")] });
+        Assert.Empty(gone.Recents);
+        Assert.False(gone.ShowRecents);
+
+        var failing = Loaded(new FakeBackend { RecentsError = new IOException("locked"), Recents = [Recent("ID_ALIGN")] });
+        Assert.Equal(Sample.Length, failing.Results.Count);
+        Assert.Empty(failing.Recents);
+        Assert.False(failing.ShowRecents);
+
+        // More than five stored (a hand-edited file): five show.
+        var many = Loaded(new FakeBackend { Recents = Sample.Select(t => Recent(t.Id)).ToArray() });
+        Assert.Equal(SearchRecents.Max, many.Recents.Count);
+    });
+
+    [Fact]
+    public void A_recent_chip_runs_its_tool_as_its_result_card_does() => Sta(() =>
+    {
+        var order = new List<string>();
+        var posted = new List<Action>();
+        var backend = new FakeBackend { Recents = [Recent("ID_OBJECTS_DOOR")], OnRun = () => order.Add("run") };
+        var vm = Loaded(backend, posted);
+        vm.RequestClose += (_, _) => order.Add("close");
+        var chip = Assert.Single(vm.Recents);
+        chip.RunCommand.Execute(chip);
+        chip.RunCommand.Execute(chip); // a double click chooses once
+        Assert.Equal(["close"], order);
+        Assert.Same(chip.Tool, Assert.Single(backend.Checked));
+        Assert.Empty(backend.Ran);
+        Assert.Equal("ID_OBJECTS_DOOR", vm.Chosen?.Id);
+
+        Assert.Single(posted)();
+        Assert.Equal(["close", "run"], order);
+        Assert.Equal("ID_OBJECTS_DOOR", Assert.Single(backend.Ran).Id);
+    });
+
+    [Fact]
+    public void A_recent_chip_that_cannot_run_now_keeps_the_window_open_with_the_amber_message() => Sta(() =>
+    {
+        var posted = new List<Action>();
+        var backend = new FakeBackend { Tools = [.. Sample, SiteSettings], Recents = [Recent("ID_SITE_SETTINGS")], CanRun = _ => false };
+        var vm = Loaded(backend, posted);
+        var closed = false;
+        vm.RequestClose += (_, _) => closed = true;
+        var chip = Assert.Single(vm.Recents);
+        chip.RunCommand.Execute(chip);
+
+        Assert.False(closed);
+        Assert.Null(vm.Chosen);
+        Assert.Empty(posted);
+        Assert.Empty(backend.Ran);
+        Assert.Same(SiteSettings, Assert.Single(backend.Checked));
+        Assert.True(vm.HasMessage);
+        Assert.Equal("This tool can't be run with RST here: Site Settings (Massing & Site › Model Site).", vm.Message);
+        Assert.True(vm.ShowRecents, "the chips stay");
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_recent_chips_sit_under_the_count_and_eight_cards_still_show(bool cold) => Sta(() =>
+    {
+        var owner = OwnerOnScreen();
+        var backend = new FakeBackend
+        {
+            IsReady = !cold, DefersLoad = true, Tools = Sample.Concat(Many(40)).ToArray(),
+            Recents = [Recent("ID_OBJECTS_DOOR"), Recent("ID_ALIGN"), Recent("ID_EDIT_MOVE")],
+        };
+        try
+        {
+            Assert.True(SearchItLauncher.Show(new WindowInteropHelper(owner).Handle, backend, () => Idle));
+            var window = SearchItLauncher.Current!;
+            Assert.False(window.ViewModel.ShowRecents, "nothing read yet");
+            WindowCapture.DoEvents();
+
+            Assert.Equal(Visibility.Visible, window.RecentList.Visibility);
+            var chips = WindowCapture.Descendants<Button>(window.RecentList).ToList();
+            Assert.Equal(["Door", "Align", "Move"], chips.Select(c => ((SearchRecentItem)c.DataContext).Name));
+            Assert.All(chips, c => Assert.Equal("SearchIt.Recent", AutomationProperties.GetAutomationId(c)));
+            Assert.Equal("Architecture › Build", chips[0].ToolTip);
+
+            double Top(FrameworkElement e) => e.TranslatePoint(new Point(0, 0), window.Root).Y;
+            Assert.True(Top(window.RecentList) >= Top(window.Status) + window.Status.ActualHeight, "under the count");
+            Assert.True(Top(window.RecentList) + window.RecentList.ActualHeight <= Top(window.ResultsList), "above the results");
+            Near(SearchItLayout.ListHeight, window.ResultsList.ActualHeight);
+            Assert.Equal(8, FullyVisibleCards(window.ResultsList));
+
+            window.SearchBox.Text = "d";
+            WindowCapture.DoEvents();
+            Assert.NotEqual(Visibility.Visible, window.RecentList.Visibility);
+        }
+        finally
+        {
+            SearchItLauncher.Current?.Close();
+            owner.Close();
+        }
+    });
+
+    [Fact]
+    public void A_click_on_a_recent_chip_closes_the_window_and_runs_that_tool() => Sta(() =>
+    {
+        var o = Open(new FakeBackend { Recents = [Recent("ID_OBJECTS_WINDOW"), Recent("ID_OBJECTS_DOOR")] });
+        try
+        {
+            var closedWhenRun = false;
+            o.Backend.OnRun = () => closedWhenRun = o.Closed;
+            WindowCapture.DoEvents();
+            var chip = WindowCapture.Descendants<Button>(o.Window.RecentList).Last();
+            Assert.Equal("Door", ((SearchRecentItem)chip.DataContext).Name);
+            chip.Command.Execute(chip.CommandParameter);
+            Assert.True(o.Closed);
+            Assert.Empty(o.Backend.Ran); // queued behind the close
+            WindowCapture.DoEvents();
+            Assert.True(closedWhenRun, "the window is gone before the tool is posted");
+            Assert.Equal("chosen", o.Window.CloseReason);
+            Assert.Equal("ID_OBJECTS_DOOR", Assert.Single(o.Backend.Ran).Id);
+        }
+        finally
+        {
+            CloseIfOpen(o);
+        }
+    });
+
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void Screenshots_of_the_recent_chips(UiTheme theme) => Sta(() =>
+    {
+        var o = Open(new FakeBackend
+        {
+            Tools = Sample.Concat(Many(40)).ToArray(),
+            Recents = [Recent("ID_OBJECTS_WALL"), Recent("ID_ANNOTATIONS_DIMENSION_ALIGNED"), Recent("ID_OBJECTS_DOOR"),
+                Recent("ID_VIEW_NEW_3DVIEW"), Recent("ID_OBJECTS_ROOM_TAG")],
+        });
+        try
+        {
+            Capture(o.Window, theme, "search-it-recents");
         }
         finally
         {

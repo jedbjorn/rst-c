@@ -54,11 +54,12 @@ public static class SearchItLauncher
     /// When given, called inside the command (it may build the catalogue), and <paramref name="tools"/> is called later,
     /// on the dispatcher, once the command has returned (the file header's "Deferred").
     /// </param>
+    /// <param name="recents">The tools Search-It ran most recently, newest first: read with the tools, shown as chips.</param>
     public static bool Show(IntPtr owner, Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
-        Func<SearchTool, bool>? canRunNow = null, Action? prepare = null) =>
-        Show(owner, new SearchItBackend(tools, run, isReady, canRunNow, prepare));
+        Func<SearchTool, bool>? canRunNow = null, Action? prepare = null, Func<IReadOnlyList<SearchRecent>>? recents = null) =>
+        Show(owner, new SearchItBackend(tools, run, isReady, canRunNow, prepare, recents));
 
-    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?, Func{SearchTool, bool}?, Action?)"/>
+    /// <inheritdoc cref="Show(IntPtr, Func{SearchList}, Action{SearchTool}, Func{bool}?, Func{SearchTool, bool}?, Action?, Func{IReadOnlyList{SearchRecent}}?)"/>
     public static bool Show(IntPtr owner, ISearchItBackend backend) => Show(owner, backend, sampler: null);
 
     /// <param name="sampler">Tests only: the mouse reading the window's watch uses instead of Windows'.</param>

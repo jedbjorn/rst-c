@@ -1485,4 +1485,8 @@ The other profiles were changed and stay changed.</value>
     <value>{0} ({1})</value>
     <comment>A result card's tooltip when the tool sits in several places: where it is, then "+2 more places".</comment>
   </data>
+  <data name="SearchIt_Recents" xml:space="preserve">
+    <value>Recently used</value>
+    <comment>The accessible name of the row of chips for the tools Search-It ran most recently.</comment>
+  </data>
 </root>

@@ -260,7 +260,12 @@ public partial class SearchItWindow : Window
     /// made during the wait cannot land on a result card that appeared under it and run a tool the user
     /// never chose. Text typed meanwhile is kept: it was aimed at the search box, which is where it goes.
     /// </summary>
-    internal void MarkReady() => _readyTick = Environment.TickCount;
+    internal void MarkReady()
+    {
+        _readyTick = Environment.TickCount;
+        // The recent chips appear with the tools: the list is put back to eight cards (unless the user has sized it).
+        if (IsLoaded && SizeToContent == SizeToContent.Manual) UiGuard.Run("Search-It window: default size", LateSizeCorrection);
+    }
 
     /// <summary>Input stamped before <see cref="MarkReady"/> (or arriving while the tools still load) is stale.</summary>
     private bool IsStale(int timestamp) =>
