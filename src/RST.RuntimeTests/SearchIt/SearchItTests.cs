@@ -1903,7 +1903,7 @@ public class SearchItTests
         Assert.Empty(gone.Recents);
         Assert.False(gone.ShowRecents);
 
-        var failing = Loaded(new FakeBackend { RecentsError = new IOException("locked"), Recents = [Recent("ID_ALIGN")] });
+        var failing = Loaded(new FakeBackend { RecentsError = new System.IO.IOException("locked"), Recents = [Recent("ID_ALIGN")] });
         Assert.Equal(Sample.Length, failing.Results.Count);
         Assert.Empty(failing.Recents);
         Assert.False(failing.ShowRecents);
