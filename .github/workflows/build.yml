@@ -24,3 +24,16 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/_build.yml
+
+  # The post-release bump (installer/README.md, "Untagged builds"): fails when
+  # RstDevVersion is not above the latest published release, or msi-migrate has
+  # no leg for it. Here, not in _build.yml, so it never blocks a release run.
+  dev-version:
+    name: Dev version above latest release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check RstDevVersion and the msi-migrate leg
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 build/check-dev-version.py "$(gh release view -R "${{ github.repository }}" --json tagName -q .tagName)"
