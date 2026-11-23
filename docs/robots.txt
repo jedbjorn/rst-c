@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rst-c.designs-os.com/sitemap.xml
