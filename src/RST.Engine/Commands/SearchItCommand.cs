@@ -37,6 +37,10 @@
 // true again. A click that can't run says so (the window's amber message, or the same words in a dialog once the
 // window is gone): no click is silent.
 //
+// Recently used (RST.Core.Search.SearchRecents): a tool is recorded only once Run has dispatched it (PostCommand
+// accepted it, or the ribbon's command path ran it), never on a path that shows the can't-run message. The window
+// reads the list when it reads the tools, and shows those it lists as chips.
+//
 // Guards (SC-045 / SC-046): the window is shown through WindowGuard, so a fault on the UI thread
 // while it is open is logged and closes the window; everything here is caught and logged, and a
 // failure returns Result.Failed with a plain message. Nothing can take Revit down.
@@ -78,7 +82,8 @@ public sealed class SearchItCommand : IExternalCommand
                 run: tool => Run(uiApp, revitVersion, tool),
                 isReady: () => RstApplication.HasCatalog(revitVersion),
                 canRunNow: tool => CanRunNow(revitVersion, tool),
-                prepare: () => open.Read(uiApp));
+                prepare: () => open.Read(uiApp),
+                recents: () => SearchRecentsStore.Read());
             Log.Information(opened
                     ? "Search-It window shown in {Ms}ms; it stays open until the user closes it or picks a tool"
                     : "Search-It was already open; focused it ({Ms}ms)",
@@ -272,7 +277,8 @@ public sealed class SearchItCommand : IExternalCommand
             {
                 Log.Information("Search-It: running {Name} ({CommandId}) from {Location}{How}", tool.DisplayName, tool.Id, tool.Location,
                     decision.Route == ClickRoute.PostWithoutAsking ? " (only on tabs the user hid: posted without asking)" : "");
-                new SlotInvokeCommand(uiApp, new SlotTarget(SlotKind.Command, tool.Id, tool.DisplayName)).Execute(null);
+                if (new SlotInvokeCommand(uiApp, new SlotTarget(SlotKind.Command, tool.Id, tool.DisplayName)).Invoke())
+                    SearchRecentsStore.Record(tool);
                 return;
             }
             Log.Information("Search-It: running {Name} ({CommandId}) from {Location} through the ribbon's command path (not postable)",
@@ -287,6 +293,7 @@ public sealed class SearchItCommand : IExternalCommand
             if (SearchGate.AllowsExecute(answer))
             {
                 Log.Information("Search-It: {CommandId} returned from the ribbon's command path in {Ms}ms", tool.Id, sw.ElapsedMilliseconds);
+                SearchRecentsStore.Record(tool);
                 return;
             }
             Log.Warning(error, "Search-It: {Name} ({CommandId}) can't be run now ({Answer}); not run", tool.DisplayName, tool.Id, answer);
