@@ -57,7 +57,13 @@ internal sealed class SlotInvokeCommand : ICommand
     public event EventHandler? CanExecuteChanged { add { } remove { } }
     public bool CanExecute(object? parameter) => true;
 
-    public void Execute(object? parameter)
+    public void Execute(object? parameter) => Invoke();
+
+    /// <summary>
+    /// The click's dispatch. True when it went through (the URL was opened, or Revit accepted the PostCommand); false
+    /// when it could not, and the message saying so has been shown. Search-It records a tool it ran only on true.
+    /// </summary>
+    internal bool Invoke()
     {
         Log.Information("SlotInvokeCommand: {Kind} {Payload} (display={DisplayName})",
                         _target.Kind, _target.Payload, _target.DisplayName);
@@ -70,7 +76,7 @@ internal sealed class SlotInvokeCommand : ICommand
                     {
                         UseShellExecute = true,
                     });
-                    return;
+                    return true;
 
                 case SlotKind.Command:
                     var id = RevitCommandId.LookupCommandId(_target.Payload);
@@ -80,7 +86,7 @@ internal sealed class SlotInvokeCommand : ICommand
                                     _target.Payload, _target.DisplayName);
                         // An add-in's id: its add-in is missing. Any other id: a Revit tool add-ins can't run.
                         Show(SlotMessages.NotFound(_target.Payload, _target.DisplayName), "not-found");
-                        return;
+                        return false;
                     }
                     try
                     {
@@ -94,8 +100,9 @@ internal sealed class SlotInvokeCommand : ICommand
                         Log.Warning("SlotInvokeCommand: Revit doesn't let add-ins run {CommandId} (display={DisplayName}): {Error}",
                                     _target.Payload, _target.DisplayName, ex.Message);
                         Show(SlotMessages.NotPostable(_target.DisplayName), "not-postable");
+                        return false;
                     }
-                    return;
+                    return true;
             }
         }
         catch (Exception ex)
@@ -104,6 +111,7 @@ internal sealed class SlotInvokeCommand : ICommand
                       _target.Kind, _target.Payload, _target.DisplayName);
             Show(SlotMessages.Failure(_target.DisplayName, ex.Message), "failure");
         }
+        return false;
     }
 
     /// <summary>

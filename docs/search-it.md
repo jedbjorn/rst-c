@@ -78,6 +78,16 @@ If the tool cannot run right now, nothing starts and the window stays open with 
 
 If the tool still cannot start after the window has closed, RST tells you in a small dialog, the same way a profile button does when its add-in is not installed or is switched off.
 
+## Recently used
+
+Under the tool count, Search-It shows up to five chips for the tools you last ran **from Search-It**, the most recent first. Click one to run that tool, exactly as clicking its result would. Hover over a chip to see where the tool is on the ribbon.
+
+- Only tools Search-It started count. Searches, ribbon clicks and profile buttons do not. A tool that could not run is not added.
+- Running a tool again moves it to the front.
+- The chips show only while the search box is empty and there are no filter chips.
+- A recent tool that is not listed for the file or view you are in, or that must run in another view, is not shown. It comes back when you are somewhere it runs.
+- The list is kept for your Windows user, so it is still there after Revit restarts.
+
 ## Keys
 
 What **Enter** does depends on where you are.

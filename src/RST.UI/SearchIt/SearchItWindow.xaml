@@ -6,6 +6,8 @@
     The view-model is SearchItViewModel.
     Spec #35: a card's census badge sits right-aligned after its name and place (NOT IN GUI amber, Must Run In
     the neutral chip, its card dimmed), and a click that can't run shows the amber message above the hint.
+    Recently used: under the count, up to five chips for the tools Search-It ran last (no ×; a click runs the tool as
+    its result card does), only while the box is empty and there are no filter chips.
 -->
 <Window x:Class="RST.UI.SearchIt.SearchItWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -56,6 +58,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -98,12 +101,45 @@
         <TextBlock x:Name="Status" Grid.Row="2" Text="{Binding StatusText}" Style="{StaticResource MutedText}" FontSize="11"
                    Margin="14,8,12,4" MinHeight="15" AutomationProperties.AutomationId="SearchIt.Status" />
 
+        <!-- Recently used: the tools Search-It ran last, newest first. A click runs the tool as its result card does. -->
+        <ItemsControl x:Name="RecentList" Grid.Row="3" ItemsSource="{Binding Recents}" Margin="12,0,12,4" Focusable="False"
+                      Visibility="{Binding ShowRecents, Converter={StaticResource BoolToVisible}}"
+                      AutomationProperties.AutomationId="SearchIt.Recents"
+                      AutomationProperties.Name="{x:Static res:UiStrings.SearchIt_Recents}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Command="{Binding RunCommand}" CommandParameter="{Binding}" Margin="0,0,6,4" MinWidth="0" MinHeight="0" Cursor="Hand"
+                            Focusable="False" IsTabStop="False" ToolTip="{Binding ToolTip}"
+                            AutomationProperties.AutomationId="SearchIt.Recent" AutomationProperties.Name="{Binding Name}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <ContentControl x:Name="Chip" Style="{StaticResource Pill}" Padding="8,0">
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                                </ContentControl>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                        <Setter TargetName="Chip" Property="Foreground" Value="{StaticResource TextBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
         <!--
             The result cards: eight at the default size (the code-behind frees the height once the window has
             sized). The highlighted card (Down from the box, then Up and Down) is the selected one: the theme's
             selected row (AccentSoftBrush). Enter runs it; a click on any card runs that card.
         -->
-        <ListBox x:Name="ResultsList" Grid.Row="3" ItemsSource="{Binding Results}" Margin="6,0,6,0"
+        <ListBox x:Name="ResultsList" Grid.Row="4" ItemsSource="{Binding Results}" Margin="6,0,6,0"
                  Height="{x:Static search:SearchItLayout.ListHeight}"
                  BorderThickness="0" Background="Transparent" Focusable="False" IsTabStop="False"
                  SelectionMode="Single" PreviewKeyDown="OnResultsKeyDown" PreviewTextInput="OnResultsTextInput"
@@ -157,12 +193,12 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock Grid.Row="3" Text="{Binding EmptyText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+        <TextBlock Grid.Row="4" Text="{Binding EmptyText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" IsHitTestVisible="False"
                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisible}}"
                    AutomationProperties.AutomationId="SearchIt.Empty" />
 
-        <StackPanel Grid.Row="4">
+        <StackPanel Grid.Row="5">
             <!-- Spec #35: a click that can't run says so here, and the window stays open. -->
             <Border Style="{StaticResource WarningBanner}" Margin="12,6,12,0"
                     Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisible}}">
@@ -175,6 +211,6 @@
         </StackPanel>
 
         <!-- The first open of a session may build the catalogue: the overlay says so. Last, over everything. -->
-        <ContentControl Grid.RowSpan="5" Style="{StaticResource BusyOverlay}" Content="{Binding Busy}" />
+        <ContentControl Grid.RowSpan="6" Style="{StaticResource BusyOverlay}" Content="{Binding Busy}" />
     </Grid>
 </Window>

@@ -6,6 +6,10 @@
 // <views> (the theme's neutral chip; the card is dimmed and never runs: a click, a double-click or Enter on it leaves
 // the window open and runs nothing). A click on a runnable card that the host says can't run now leaves the window
 // open with the amber message naming the tool's ribbon place: no click is silent.
+//
+// Recently used (RST.Core.Search.SearchRecents): up to five chips for the tools Search-It ran most recently, shown
+// only while the box is empty, there are no filter chips and the tools are in. A click on one runs its tool exactly
+// as a click on its result card does (the same Run: the CanRunNow check, the close, then the queued run).
 
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -50,6 +54,18 @@ public sealed class SearchResultItem(SearchHit hit, ICommand runCommand)
     public string BadgeToolTip => IsMustRunIn ? SearchViews.MustRunInToolTip(Tool.MustRunIn) : "";
 }
 
+/// <summary>One recently used tool's chip: its name, its place as the tooltip; a click runs it.</summary>
+public sealed class SearchRecentItem(SearchTool tool, ICommand runCommand)
+{
+    public SearchTool Tool { get; } = tool;
+    public string Name { get; } = tool.DisplayName;
+    public string Location { get; } = tool.Location;
+
+    /// <summary>Where the tool is ("Tab › Panel"); null when that is not known (no empty tooltip).</summary>
+    public string? ToolTip => Location.Length > 0 ? Location : null;
+    public ICommand RunCommand { get; } = runCommand;
+}
+
 /// <summary>One chip: an exact filter on the tool name, with its × button.</summary>
 public sealed class SearchChipItem(string text, ICommand removeCommand)
 {
@@ -63,8 +79,11 @@ public sealed class SearchItViewModel : ObservableObject
     private readonly Action<Action> _post;
     private readonly RelayCommand<SearchResultItem> _run;
     private readonly RelayCommand<SearchChipItem> _removeChip;
+    private readonly RelayCommand<SearchRecentItem> _runRecent;
     private ToolSearch _search = new(null);
     private IReadOnlyList<SearchResultItem> _results = [];
+    private IReadOnlyList<SearchRecent> _recentUsed = [];
+    private IReadOnlyList<SearchRecentItem> _recents = [];
     private string _text = "";
     private string _status = "";
     private string _emptyText = "";
@@ -79,6 +98,7 @@ public sealed class SearchItViewModel : ObservableObject
         _post = post ?? PostToDispatcher;
         _run = new RelayCommand<SearchResultItem>(Run);
         _removeChip = new RelayCommand<SearchChipItem>(RemoveChip);
+        _runRecent = new RelayCommand<SearchRecentItem>(RunRecent);
     }
 
     /// <summary>Raised when the window should close (a result was clicked).</summary>
@@ -110,6 +130,16 @@ public sealed class SearchItViewModel : ObservableObject
     public bool IsTextEmpty => _text.Length == 0;
 
     public bool HasChips => Chips.Count > 0;
+
+    /// <summary>The recently used tools in the loaded list that can run here, newest first; at most five.</summary>
+    public IReadOnlyList<SearchRecentItem> Recents
+    {
+        get => _recents;
+        private set => SetField(ref _recents, value);
+    }
+
+    /// <summary>The recent chips show: the tools are in, the box is empty, there are no filter chips, and there is one to show.</summary>
+    public bool ShowRecents => !IsLoading && IsTextEmpty && !HasChips && _recents.Count > 0;
 
     /// <summary>True until the tools have been read (<see cref="Load"/>); the window shows the busy overlay.</summary>
     public bool IsLoading
@@ -176,6 +206,7 @@ public sealed class SearchItViewModel : ObservableObject
         try
         {
             var list = _backend.LoadTools();
+            _recentUsed = ReadRecents();
             SetTools(list.Tools, list.IsFamily);
         }
         finally
@@ -190,10 +221,26 @@ public sealed class SearchItViewModel : ObservableObject
     /// <param name="isFamily">The tools are a family's: the count line and the empty text say so (spec #33).</param>
     public void SetTools(IEnumerable<SearchTool>? tools, bool isFamily = false)
     {
-        _search = new ToolSearch(tools);
+        var all = tools as IReadOnlyList<SearchTool> ?? tools?.ToArray() ?? Array.Empty<SearchTool>();
+        _search = new ToolSearch(all);
         _isFamily = isFamily;
+        Recents = SearchRecents.Resolve(_recentUsed, all).Select(t => new SearchRecentItem(t, _runRecent)).ToArray();
         OnPropertyChanged(nameof(ToolCount));
         Refresh();
+    }
+
+    /// <summary>The recently used list from the backend; none, and a Warning, when it can't be read (the tools still load).</summary>
+    private IReadOnlyList<SearchRecent> ReadRecents()
+    {
+        try
+        {
+            return _backend.LoadRecents() ?? Array.Empty<SearchRecent>();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Search-It: the recently used tools could not be read; showing none");
+            return [];
+        }
     }
 
     /// <summary>Enter: the text becomes a chip and the box empties. Blank text, or a chip that already exists, adds none.</summary>
@@ -234,12 +281,24 @@ public sealed class SearchItViewModel : ObservableObject
     /// </summary>
     private void Run(SearchResultItem item)
     {
-        if (item is null || Chosen is not null || IsLoading) return;
-        var tool = item.Tool;
+        if (item is null) return;
+        Run(item.Tool, item.Name, item.Location, "a result card");
+    }
+
+    /// <summary>A click on a recent chip: the same as a click on the tool's result card.</summary>
+    private void RunRecent(SearchRecentItem item)
+    {
+        if (item is null) return;
+        Run(item.Tool, item.Name, item.Location, "a recent chip");
+    }
+
+    private void Run(SearchTool tool, string name, string location, string from)
+    {
+        if (Chosen is not null || IsLoading) return;
         if (!tool.CanRun)
         {
             // A Must Run In card: nothing runs and the window stays open; the badge and its tooltip say where it runs.
-            Log.Information("Search-It: {Name} ({CommandId}) must run in {Views}; not run", item.Name, tool.Id, string.Join(", ", tool.MustRunIn));
+            Log.Information("Search-It: {Name} ({CommandId}) must run in {Views}; not run", name, tool.Id, string.Join(", ", tool.MustRunIn));
             return;
         }
         bool canRun;
@@ -249,20 +308,20 @@ public sealed class SearchItViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Search-It: could not check whether {Name} ({CommandId}) can run", item.Name, tool.Id);
+            Log.Warning(ex, "Search-It: could not check whether {Name} ({CommandId}) can run", name, tool.Id);
             canRun = false;
         }
         if (!canRun)
         {
-            Message = SearchViews.CantRunHere(item.Name, item.Location);
+            Message = SearchViews.CantRunHere(name, location);
             Log.Information("Search-It: {Name} ({CommandId}) at {Location} can't be run with RST now; the window stays open with the message",
-                item.Name, tool.Id, item.Location);
+                name, tool.Id, location);
             return;
         }
         Message = "";
         Chosen = tool;
-        Log.Information("Search-It: chose {Name} ({CommandId}) at {Location}; text={Text}, chips={Chips}",
-            item.Name, tool.Id, item.Location, _text, Chips.Count);
+        Log.Information("Search-It: chose {Name} ({CommandId}) at {Location} from {From}; text={Text}, chips={Chips}",
+            name, tool.Id, location, from, _text, Chips.Count);
         RequestClose?.Invoke(this, EventArgs.Empty);
         _post(() => _backend.Run(tool));
     }
@@ -277,6 +336,7 @@ public sealed class SearchItViewModel : ObservableObject
     private void Refresh()
     {
         Message = "";
+        OnPropertyChanged(nameof(ShowRecents));
         if (IsLoading)
         {
             Results = [];

@@ -957,4 +957,6 @@ public static class UiStrings
     public static string SearchIt_MorePlaces(object? arg0) => Format(nameof(SearchIt_MorePlaces), arg0);
 
     public static string SearchIt_ToolTipMore(object? arg0, object? arg1) => Format(nameof(SearchIt_ToolTipMore), arg0, arg1);
+
+    public static string SearchIt_Recents => Get(nameof(SearchIt_Recents));
 }

@@ -40,12 +40,20 @@ public interface ISearchItBackend
     void Prepare()
     {
     }
+
+    /// <summary>
+    /// The tools Search-It ran most recently, newest first (<see cref="SearchRecents"/>): read with the tools, and shown
+    /// as chips when they are in the loaded list. None by default.
+    /// </summary>
+    IReadOnlyList<SearchRecent> LoadRecents() => Array.Empty<SearchRecent>();
 }
 
 /// <summary>The backend in Revit: the tools the ribbon is showing for the open file (<see cref="SearchShowing"/>).</summary>
 public sealed class SearchItBackend(Func<SearchList> tools, Action<SearchTool> run, Func<bool>? isReady = null,
-    Func<SearchTool, bool>? canRunNow = null, Action? prepare = null) : ISearchItBackend
+    Func<SearchTool, bool>? canRunNow = null, Action? prepare = null, Func<IReadOnlyList<SearchRecent>>? recents = null) : ISearchItBackend
 {
+    public IReadOnlyList<SearchRecent> LoadRecents() => recents?.Invoke() ?? Array.Empty<SearchRecent>();
+
     public bool CanRunNow(SearchTool tool) => canRunNow?.Invoke(tool) ?? true;
 
     public bool DefersLoad => prepare is not null;
