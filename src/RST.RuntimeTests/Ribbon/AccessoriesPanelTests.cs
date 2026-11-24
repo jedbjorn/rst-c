@@ -39,22 +39,24 @@ public sealed class AccessoriesPanelTests
     {
         // Load order differs from registry order, and another add-in sits between them.
         var pick = Button("Pick-It", "PickIt.Pick");
+        var drive = Button("Drive-It", "DriveIt.OpenOperator");
         var settings = Button("Splash-It", "SplashIt.OpenSettings");
         var group = Button("Splash-It", "SplashIt.GroupTabs");
         var gantt = Button("Gantt-It", "GanttIt.Open");
         var tab = Tab(
             Panel("External Tools", Button("External Tools", "x")),
+            Panel("Drive-It", drive),
             Panel("Pick-It", pick),
             Panel("RST", Button("RST", "RST_Builder")),
             Panel("Splash-It", settings, group),
             Panel("Other", Button("Other", "Other.Run")),
             Panel("Gantt-It", gantt));
 
-        AccessoriesPanel.Gather(tab, "RST").Should().Be(4);
+        AccessoriesPanel.Gather(tab, "RST").Should().Be(5);
 
         Titles(tab).Should().Equal("External Tools", "RST", AccessoryPanels.PanelTitle, "Other");
-        Accessories(tab).Items.Should().Equal(gantt, settings, group, pick); // the same objects, so ids and commands are unchanged
-        tab.Panels.Should().HaveCount(7, "emptied panels are hidden, not removed");
+        Accessories(tab).Items.Should().Equal(gantt, settings, group, pick, drive); // the same objects, so ids and commands are unchanged
+        tab.Panels.Should().HaveCount(8, "emptied panels are hidden, not removed");
     }
 
     [Fact]

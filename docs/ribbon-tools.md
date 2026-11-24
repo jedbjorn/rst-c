@@ -146,7 +146,7 @@ Stacks are built through the same AdWindows interface as the rest of the profile
 
 ## RST Accessories
 
-Gantt-It, Splash-It and Pick-It are separate Designs/OS add-ins, each with its own panel on the **Add-Ins** tab. When rst-c is installed too, it gathers their buttons into one panel, **RST Accessories**, right after the **RST** panel, in that order: Gantt-It, Splash-It, Pick-It. An add-in that is not installed simply has no button there, and with none of them installed there is no panel.
+Gantt-It, Splash-It, Pick-It and Drive-It are separate Designs/OS add-ins, each with its own panel on the **Add-Ins** tab. When rst-c is installed too, it gathers their buttons into one panel, **RST Accessories**, right after the **RST** panel, in that order: Gantt-It, Splash-It, Pick-It, Drive-It. An add-in that is not installed simply has no button there, and with none of them installed there is no panel.
 
 - **The buttons are the same buttons.** rst-c moves them once Revit has loaded every add-in; it does not copy or replace them. Each still runs its own add-in's command, and a profile button made from one keeps working.
 - **In the Builder,** these tools are listed under **Add-Ins › RST Accessories** instead of under each add-in's own panel.

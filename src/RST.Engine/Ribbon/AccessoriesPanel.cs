@@ -1,7 +1,7 @@
 // AccessoriesPanel.cs — gather the Designs/OS sister apps' buttons into one "RST Accessories" panel
 // (decision #79).
 //
-// Gantt-It, Splash-It and Pick-It each create their own panel on Revit's Add-Ins tab at OnStartup. Once every
+// Gantt-It, Splash-It, Pick-It and Drive-It each create their own panel on Revit's Add-Ins tab at OnStartup. Once every
 // add-in has loaded (ApplicationInitialized), RST moves those buttons into one panel placed right after the RST
 // tools panel, and hides each panel it emptied. The buttons are the same AdWindows items, only re-parented: their
 // ids, and so their commands, saved profile slots and the apps' own references to them, are unchanged. The sister
