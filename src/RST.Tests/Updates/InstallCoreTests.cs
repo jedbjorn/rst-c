@@ -66,6 +66,15 @@ public class InstallNamingTests
     }
 
     [Fact]
+    public void Drive_It_is_installable_from_its_pinned_release_name()
+    {
+        var drive = ProductCatalog.Default.Find("drive-it")!;
+        drive.AssetTemplate.Should().Be("DriveIt-{0}.msi");
+        drive.IsInstallable.Should().BeTrue();
+        InstallChecks.AssetName(drive, V120, out _).Should().Be("DriveIt-1.2.0.msi");
+    }
+
+    [Fact]
     public void Urls_are_built_from_the_repo_tag_and_name()
     {
         InstallChecks.DownloadUri("jedbjorn/gantt-it", V120, "GanttIt-1.2.0.msi").AbsoluteUri

@@ -120,6 +120,9 @@ internal sealed class ProductRowViewModel
 
     public string Description => Status.Product.Description;
 
+    /// <summary>companions.json marks it an alpha: the name carries an "Alpha" badge.</summary>
+    public bool IsAlpha => Status.Product.IsAlpha;
+
     public string InstalledText => Status.Installation.Kind switch
     {
         InstallKind.NotInstalled => TrayStrings.App_NotInstalled,

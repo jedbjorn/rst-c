@@ -1,7 +1,7 @@
 // rst-c's own (not vendored): the products the RST tray knows (spec #20 §4, §6; F17 WU3): RST itself, then each
 // shippable companion from companions/companions.json, which RST.Core embeds AT BUILD TIME
 // (RST.Core.csproj, LogicalName RST.Core.Updates.companions.json). Only the identity fields are read: id, name,
-// description, repo, release.upgradeCode and addinClientId, plus (F17 WU4) the FORM of the pinned asset's name
+// description, repo, release.upgradeCode, addinClientId and stage (the tray's Alpha badge), plus (F17 WU4) the FORM of the pinned asset's name
 // (GanttIt-1.1.0.msi gives GanttIt-{0}.msi), which must also match this file's hard-coded pattern for that id. The
 // pins themselves (tag, sha256, version) stay build-time only: the bundle is the offline baseline, and the tray
 // follows each repo's latest full release.
@@ -36,6 +36,7 @@ namespace RST.Core.Updates;
 /// <param name="AssetPattern">
 /// The hard-coded pattern that name must match (spec #20 §5; <see cref="ProductCatalog.AssetPatterns"/>). Null: not installable.
 /// </param>
+/// <param name="IsAlpha">companions.json's <c>stage</c> is <c>alpha</c>: the tray badges it "Alpha".</param>
 public sealed record ProductInfo(
     string Id,
     string Name,
@@ -44,7 +45,8 @@ public sealed record ProductInfo(
     IReadOnlyList<string> UpgradeCodes,
     string? AddinClientId,
     string? AssetTemplate = null,
-    string? AssetPattern = null)
+    string? AssetPattern = null,
+    bool IsAlpha = false)
 {
     public bool IsRst => string.Equals(Id, ProductCatalog.RstId, StringComparison.Ordinal);
 
@@ -100,6 +102,7 @@ public sealed class ProductCatalog
         // pattern is here ahead of the pin: once the entry is shippable with asset PickIt-<version>.msi, the tray
         // can install it without a further change to this file.
         ["pick-it"] = @"^PickIt-[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}\.msi\z",
+        ["drive-it"] = @"^DriveIt-[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}\.msi\z",
     };
 
     private static readonly Regex AssetStemPattern = new(@"^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z][A-Za-z0-9]*)*\z",
@@ -243,7 +246,7 @@ public sealed class ProductCatalog
         var template = AssetTemplateFrom(Text(release, "asset"), Text(release, "version"));
         AssetPatterns.TryGetValue(id, out var pattern);
         return new ProductInfo(id, name!.Trim(), Text(entry, "description")?.Trim() ?? "", repo!, new[] { upgradeCode }, clientId,
-                               template, pattern);
+                               template, pattern, IsAlpha: Text(entry, "stage") == "alpha");
     }
 
     private static string? Text(JsonElement obj, string property) =>

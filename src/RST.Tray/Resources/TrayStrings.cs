@@ -305,6 +305,8 @@ public static class TrayStrings
 
     public static string App_ManualNote => Get(nameof(App_ManualNote));
 
+    public static string App_Alpha => Get(nameof(App_Alpha));
+
     public static string App_LatestNotChecked => Get(nameof(App_LatestNotChecked));
 
     public static string App_LatestFailed => Get(nameof(App_LatestFailed));
