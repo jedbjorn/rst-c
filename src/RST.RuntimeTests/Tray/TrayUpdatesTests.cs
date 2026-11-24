@@ -391,6 +391,48 @@ public class TrayUpdatesScreenshotTests
             window.Close();
         }
     });
+
+    [Theory]
+    [InlineData(UiTheme.Light)]
+    [InlineData(UiTheme.Dark)]
+    public void An_alpha_app_is_badged_Alpha_wherever_its_name_shows(UiTheme theme) => Sta(theme, () =>
+    {
+        // companions.json marks Drive-It stage "alpha"; Gantt-It is not. RST just updated, so the offer card lists
+        // Drive-It too: the Updates page shows its name twice (companion line, offer), the Apps page once.
+        var snapshot = new UpdateSnapshot(new[]
+        {
+            Scenarios.S("rst", InstallKind.Installer, "3.1.1", "3.1.1"),
+            Scenarios.S("gantt-it", InstallKind.Installer, "1.1.0", "1.1.0"),
+            Scenarios.S("drive-it", InstallKind.NotInstalled, null, "0.2.0"),
+        }, Scenarios.Today0914, Checking: false, AutomaticChecks: true, Detected: true, SisterOffer: true);
+        var host = new FakeUpdatesHost { Current = snapshot };
+        var settings = new FakeTrayHost { UpdateChecks = new UpdateChecksState(true, false) };
+
+        var updates = new TrayWindow(new TrayViewModel(settings, TrayPage.Updates, host));
+        try
+        {
+            Capture(updates, Name("updates", "alpha", theme));
+            Assert.True(ById(updates, "Tray.Offer.drive-it").IsVisible);
+            Assert.Equal(2, Texts(updates.UpdatesPage).Count(t => t == TrayStrings.App_Alpha));
+        }
+        finally
+        {
+            updates.Close();
+        }
+
+        var apps = new TrayWindow(new TrayViewModel(new FakeTrayHost(), TrayPage.Apps, host));
+        try
+        {
+            Capture(apps, Name("apps", "alpha", theme));
+            Assert.Equal(new[] { false, false, true }, apps.ViewModel.Updates.Rows.Select(r => r.IsAlpha));
+            Assert.Equal(1, Texts(apps.AppsPage).Count(t => t == TrayStrings.App_Alpha));
+            Assert.Equal("Install", ((Button)ById(apps, "Tray.App.drive-it.Action")).Content);
+        }
+        finally
+        {
+            apps.Close();
+        }
+    });
 }
 
 public class UpdatesViewModelTests
@@ -551,7 +593,7 @@ public class UpdatesViewModelTests
 /// </summary>
 public sealed class TrayUpdateChecksTests : IDisposable
 {
-    /// <summary>One feed request per product in the catalog: RST, Gantt-It, Splash-It, Pick-It.</summary>
+    /// <summary>One feed request per product in the catalog: RST, Gantt-It, Splash-It, Pick-It, Drive-It.</summary>
     private static readonly int Feeds = ProductCatalog.Default.Products.Count;
 
     private static readonly DateTimeOffset Start = new(2026, 10, 30, 8, 0, 0, TimeSpan.Zero);
@@ -592,7 +634,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         handler ??= new CountingHandler(CountingHandler.Redirect(new Dictionary<string, string>
         {
             ["jedbjorn/rst-c"] = "v3.1.1", ["jedbjorn/gantt-it"] = "v1.1.0", ["jedbjorn/splash-it"] = "v1.1.0",
-            ["jedbjorn/pick-it"] = "v1.0.0",
+            ["jedbjorn/pick-it"] = "v1.0.0", ["jedbjorn/drive-it"] = "v0.2.0",
         }));
         installed ??= new FakeInstalledProducts().With(ProductCatalog.RstUpgradeCode, "3.1.0");
         policy ??= TrayUpdates.SettingsAndPresetPolicy(SettingsPath, WindowsState.UpdateChecksPresets);
@@ -658,7 +700,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
         Assert.True(failed.LastCheckFailed);
         Assert.Equal(ProductState.Installed, failed.Rst!.State); // never "up to date" after a failure
         Assert.Equal("3.1.0", failed.Rst.Latest.ToString());
-        Assert.Equal(new[] { ProductState.UpdateAvailable, ProductState.NotInstalled, ProductState.NotInstalled }, failed.Companions.Select(c => c.State));
+        Assert.Equal(new[] { ProductState.UpdateAvailable, ProductState.NotInstalled, ProductState.NotInstalled, ProductState.NotInstalled }, failed.Companions.Select(c => c.State));
 
         // Exactly what the screenshot fixture shows: "RST 3.1.0", "3.1.0 (couldn't check)", "Last successful check …".
         var vm = new UpdatesViewModel(new FakeUpdatesHost { Current = failed, UtcNow = Start.AddHours(24).AddMinutes(5) },
@@ -889,7 +931,7 @@ public sealed class TrayUpdateChecksTests : IDisposable
             Assert.Equal("3.1.1", announced[0].Latest.ToString());
             var snapshot = h.Updates.Current;
             Assert.Equal(ProductState.UpdateAvailable, snapshot.Rst!.State);
-            Assert.Equal(new[] { ProductState.NotInstalled, ProductState.NotInstalled, ProductState.NotInstalled }, snapshot.Companions.Select(c => c.State));
+            Assert.Equal(new[] { ProductState.NotInstalled, ProductState.NotInstalled, ProductState.NotInstalled, ProductState.NotInstalled }, snapshot.Companions.Select(c => c.State));
             Assert.NotNull(snapshot.LastCheckedUtc);
         }
 

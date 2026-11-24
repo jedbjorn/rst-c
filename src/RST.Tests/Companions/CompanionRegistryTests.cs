@@ -10,7 +10,8 @@
 //     64-hex sha256, GUID upgradeCode, version), a non-null addinClientId
 //     and VendorId DSOS (C6);
 //   - no upgradeCode or addinClientId is rst-c's own, and no two companions
-//     share one.
+//     share one;
+//   - stage is null or "alpha" (the setup checkbox and the tray badge it).
 // The validator lives here, not in RST.Core: rst-c has no runtime awareness
 // of companions (spec #15 Out of Scope).
 
@@ -35,9 +36,11 @@ internal static class CompanionRegistryValidator
 {
     public static readonly string[] Statuses = { "in_development", "shippable", "retired" };
 
+    public static readonly string[] Stages = { "alpha" };
+
     private static readonly string[] EntryFields =
         { "id", "name", "description", "repo", "status", "revitYears",
-          "addinClientId", "vendorId", "defaultSelected", "release" };
+          "addinClientId", "vendorId", "defaultSelected", "stage", "release" };
 
     private static readonly string[] ReleaseFields =
         { "tag", "asset", "sha256", "upgradeCode", "version" };
@@ -178,6 +181,10 @@ internal static class CompanionRegistryValidator
             && ds.ValueKind != JsonValueKind.True && ds.ValueKind != JsonValueKind.False)
             errors.Add($"{at}: defaultSelected must be true or false");
 
+        if (e.TryGetProperty("stage", out var stage) && stage.ValueKind != JsonValueKind.Null
+            && (stage.ValueKind != JsonValueKind.String || !Stages.Contains(stage.GetString())))
+            errors.Add($"{at}: stage must be null or one of {string.Join(", ", Stages)}");
+
         if (!e.TryGetProperty("release", out var release) || release.ValueKind == JsonValueKind.Null)
         {
             if (shippable)
@@ -258,6 +265,7 @@ public class CompanionRegistryTests
 
     private const string GanttItClientId = "9920fb42-542b-4ce1-9659-a078489af6b0";
     private const string SplashItClientId = "0b1cc712-e936-4da1-9680-2d9a95f88271";
+    private const string DriveItClientId = "297ec490-5eed-4e02-92c6-766c1f725deb";
 
     private static readonly Regex AddinClientId = new(@"<ClientId>\s*\{?([0-9A-Fa-f-]{36})\}?\s*</ClientId>");
 
@@ -374,6 +382,14 @@ public class CompanionRegistryTests
         ((string?)splash["repo"]).Should().Be("jedbjorn/splash-it");
         ((string?)splash["addinClientId"]).Should().Be(SplashItClientId);
         ((string?)splash["vendorId"]).Should().Be("DSOS");
+        splash["stage"].Should().BeNull();
+
+        // Drive-It's .addin carries <AddInId>, not <ClientId>; Revit and RST's parser accept either.
+        var drive = companions.Single(c => (string?)c!["id"] == "drive-it")!;
+        ((string?)drive["repo"]).Should().Be("jedbjorn/drive-it");
+        ((string?)drive["addinClientId"]).Should().Be(DriveItClientId);
+        ((string?)drive["vendorId"]).Should().Be("DSOS");
+        ((string?)drive["stage"]).Should().Be("alpha");
     }
 
     [Fact]
@@ -448,7 +464,7 @@ public class CompanionRegistryTests
               "repo": "jedbjorn/gantt-it", "status": "in_development",
               "revitYears": [2025, 2026, 2027],
               "addinClientId": "9920fb42-542b-4ce1-9659-a078489af6b0",
-              "vendorId": "DSOS", "defaultSelected": false, "release": null
+              "vendorId": "DSOS", "defaultSelected": false, "stage": null, "release": null
             },
             {
               "id": "splash-it", "name": "Splash-It",
@@ -456,7 +472,7 @@ public class CompanionRegistryTests
               "repo": "jedbjorn/splash-it", "status": "in_development",
               "revitYears": [2025, 2026, 2027],
               "addinClientId": "0b1cc712-e936-4da1-9680-2d9a95f88271",
-              "vendorId": "DSOS", "defaultSelected": false, "release": null
+              "vendorId": "DSOS", "defaultSelected": false, "stage": null, "release": null
             }
           ]
         }
@@ -485,6 +501,15 @@ public class CompanionRegistryTests
     public void A_complete_shippable_entry_validates()
     {
         Validate(ShippableRegistry().ToJsonString()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void An_alpha_stage_validates()
+    {
+        var registry = ShippableRegistry();
+        Companion(registry, "gantt-it")["stage"] = "alpha";
+
+        Validate(registry.ToJsonString()).Should().BeEmpty();
     }
 
     [Fact]
@@ -519,6 +544,8 @@ public class CompanionRegistryTests
     [InlineData("shares-upgradecode-between-companions", "upgradeCode is already used by 'gantt-it'")]
     [InlineData("shares-clientid-between-companions", "addinClientId is already used by 'gantt-it'")]
     [InlineData("unknown-status", "status must be one of")]
+    [InlineData("unknown-stage", "stage must be null or one of alpha")]
+    [InlineData("stage-not-a-string", "stage must be null or one of alpha")]
     [InlineData("unknown-field", "unknown field 'relase'")]
     [InlineData("missing-field", "missing field 'defaultSelected'")]
     [InlineData("schema-version-2", "schemaVersion must be the number 1")]
@@ -556,6 +583,8 @@ public class CompanionRegistryTests
                 break;
             case "shares-clientid-between-companions": splash["addinClientId"] = GanttItClientId; break;
             case "unknown-status": splash["status"] = "beta"; break;
+            case "unknown-stage": splash["stage"] = "Alpha"; break;
+            case "stage-not-a-string": splash["stage"] = true; break;
             case "unknown-field": splash["relase"] = null; break;
             case "missing-field": splash.Remove("defaultSelected"); break;
             case "schema-version-2": registry["schemaVersion"] = 2; break;

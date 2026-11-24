@@ -4,15 +4,16 @@ Designs/OS builds other Revit add-ins beside rst-c. Each one lives in its own re
 
 The setup bundle (`RST-Setup.exe`, feature #13 Phase 2) is generated from this file. It always installs rst-c, and offers each `shippable` companion as a checkbox. Ticking one runs that companion's own MSI silently. After that, every product is a stock install: its own Add/Remove Programs entry, its own upgrades, no runtime link to rst-c. Uninstalling rst-c leaves the companions installed.
 
-This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a runtime lookup the Builder uses for download links on a profile's required add-ins. This registry is used at build time. From v3.1 one part of it is also used at runtime: RST.Core embeds the file when it is built, and the RST tray reads only each shippable companion's identity fields (`id`, `name`, `description`, `repo`, `release.upgradeCode`, `addinClientId`) to detect it and check its latest release ([`docs/tray.md`](../docs/tray.md#updates)). The pins (`tag`, `asset`, `sha256`, `version`) stay build-time only: the bundle installs the pinned release, and the tray follows each repo's latest full release.
+This is **not** `src/RST.UI/Assets/lookup/addin_lookup.json`. That file is a runtime lookup the Builder uses for download links on a profile's required add-ins. This registry is used at build time. From v3.1 one part of it is also used at runtime: RST.Core embeds the file when it is built, and the RST tray reads only each shippable companion's identity fields (`id`, `name`, `description`, `repo`, `release.upgradeCode`, `addinClientId`) and its `stage` to detect it and check its latest release ([`docs/tray.md`](../docs/tray.md#updates)). The pins (`tag`, `asset`, `sha256`, `version`) stay build-time only: the bundle installs the pinned release, and the tray follows each repo's latest full release.
 
 | Companion | Repo | Status | Pin |
 |---|---|---|---|
 | Gantt-It | [`jedbjorn/gantt-it`](https://github.com/jedbjorn/gantt-it) | `shippable` | `v1.1.2`, `GanttIt-1.1.2.msi` |
 | Splash-It | [`jedbjorn/splash-it`](https://github.com/jedbjorn/splash-it) | `shippable` | `v1.1.2`, `SplashIt-1.1.2.msi` |
 | Pick-It | [`jedbjorn/pick-it`](https://github.com/jedbjorn/pick-it) | `shippable` | `v1.0.1`, `PickIt-1.0.1.msi` |
+| Drive-It (alpha) | [`jedbjorn/drive-it`](https://github.com/jedbjorn/drive-it) | `shippable` | `v0.2.0`, `DriveIt-0.2.0.msi` |
 
-Pick-It's tray asset pattern (`PickIt-<version>.msi`) is in `ProductCatalog.AssetPatterns`; a new companion needs its own line there before the tray can install it.
+Each companion's tray asset pattern (`PickIt-<version>.msi`, `DriveIt-<version>.msi`, …) is in `ProductCatalog.AssetPatterns`; a new companion needs its own line there before the tray can install it.
 
 How the bundle is built and tested: [`installer-bundle/README.md`](../installer-bundle/README.md).
 
@@ -34,6 +35,7 @@ How the bundle is built and tested: [`installer-bundle/README.md`](../installer-
       "addinClientId": "9920fb42-542b-4ce1-9659-a078489af6b0",
       "vendorId": "DSOS",
       "defaultSelected": false,
+      "stage": null,
       "release": {
         "tag": "v1.1.0",
         "asset": "GanttIt-1.1.0.msi",
@@ -57,6 +59,7 @@ How the bundle is built and tested: [`installer-bundle/README.md`](../installer-
 | `addinClientId` | The ClientId in the companion's `.addin`. `null` until known; required when `shippable`. |
 | `vendorId` | The VendorId in the companion's `.addin`. Must be `DSOS` when `shippable` (C6). |
 | `defaultSelected` | Whether the checkbox starts ticked. `false` for every companion: installing one is opt-in. |
+| `stage` | `null` for a released product, or `"alpha"` for an early one. An alpha's setup checkbox reads `Drive-It 0.2.0 Alpha (Revit 2026)` and the tray shows an **Alpha** badge beside its name. Set it back to `null` when the companion leaves alpha. |
 | `release` | The pinned release, or `null`. Required when `shippable`; when present it must be complete: `tag`, `asset` (an `.msi`), `sha256` (64 lowercase hex), `upgradeCode` (GUID), `version`. |
 
 Every field is present on every entry (use `null` where a value is not known yet). Unknown fields are rejected, so a misspelt field fails the build instead of being ignored.
@@ -68,6 +71,7 @@ Every field is present on every entry (use `null` where a value is not known yet
 - the file is not valid JSON, has an unknown or missing field, or a field has the wrong type;
 - an `id` is not kebab-case or is used twice (or a `name` is used twice);
 - a `shippable` entry has no complete `release`, no `addinClientId`, or a VendorId other than `DSOS`;
+- a `stage` is anything but `null` or `"alpha"`;
 - any `upgradeCode` or `addinClientId` is rst-c's own (`RST.msi`'s `AF0331FC-5280-492A-94BD-95EDF108BE74`, `RST-R27.msi`'s `02BE4399-A563-4B15-BD12-ECF5D8486FB3`, or the UpgradeCode declared on the `<Package>` or `<Bundle>` of any other `.wxs` source under `installer*/` (build output in `bin/` and `obj/` is skipped), or the ClientId in `src/RST.Bootstrap/RST.addin`), or two companions share one.
 
 Run it locally:
@@ -80,7 +84,7 @@ The test checks the file's shape. It cannot check that a pin matches the real re
 
 ## The companion contract
 
-A companion repo must meet all seven before rst-c marks it `shippable`. Gantt-It, Splash-It and Pick-It build their installers to this.
+A companion repo must meet all seven before rst-c marks it `shippable`. Gantt-It, Splash-It, Pick-It and Drive-It build their installers to this.
 
 | # | Requirement | Why |
 |---|---|---|
@@ -92,7 +96,7 @@ A companion repo must meet all seven before rst-c marks it `shippable`. Gantt-It
 | C6 | Installs its own `.addin` per Revit year under `%AppData%\Autodesk\Revit\Addins\<year>\`, with its own ClientId and VendorId `DSOS`; no files under `%AppData%\RST\`. | No overlap with rst-c's files. |
 | C7 | No dependency on rst-c being installed, and rst-c has none on it. | Everything stays stock after setup. |
 
-Known behavior of the current companions, relevant to C4: both MSIs carry a launch condition that needs Revit 2025, 2026 or 2027 to be installed (`Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND`). On a machine with none of them, the silent install fails with that message instead of installing nothing. The bundle marks companions non-vital, so this never rolls back rst-c. CI runners have no Revit, so the bundle smoke creates stub `Revit.exe` files in `C:\Program Files\Autodesk\Revit <year>\` (the companions' default-folder detection, as for `RST.msi`); the install-order mechanics run against a test-only fixture MSI.
+Known behavior of the current companions, relevant to C4: Gantt-It, Splash-It and Pick-It carry a launch condition that needs Revit 2025, 2026 or 2027 to be installed (`Installed OR REVIT2025FOUND OR REVIT2026FOUND OR REVIT2027FOUND`); Drive-It's needs Revit 2026 (`Installed OR REVIT2026FOUND`). Drive-It's install also runs its own registration script, which checks its bundled Node.js and Python runtimes, needs the .NET 8 runtime (downloading it from `dot.net` if no copy is found), and adds a `drive-it` entry to the user's Claude Desktop, Claude Code and Codex MCP configurations. On a machine with none of them, the silent install fails with that message instead of installing nothing. The bundle marks companions non-vital, so this never rolls back rst-c. CI runners have no Revit, so the bundle smoke creates stub `Revit.exe` files in `C:\Program Files\Autodesk\Revit <year>\` (the companions' default-folder detection, as for `RST.msi`); the install-order mechanics run against a test-only fixture MSI.
 
 ## Bumping a pin
 
@@ -145,7 +149,7 @@ Each check runs against the **downloaded asset** from step 3, not a local build 
 | C3 | The `Upgrade` table holds exactly the two `MajorUpgrade` rows for the companion's UpgradeCode: `WIX_UPGRADE_DETECTED` removes older versions, and `WIX_DOWNGRADE_DETECTED` only detects newer versions, which the downgrade message then blocks (`msiinfo export <asset> Upgrade`). `inspect-msi.ps1` checks both rows. Both current companions also set `AllowSameVersionUpgrades="yes"`, so their removal row includes the same version too; C3 does not require that. |
 | C4 | On Windows with a Revit year installed (the W10C-Testing VM, skill `rst_c_vm`): `msiexec /i <asset> /qn /l*v install.log`, then `msiexec /x <asset> /qn /l*v uninstall.log`. Both exit `0` (not `3010`, which means a reboot), and neither shows a window. |
 | C5 | Step 1–3: the asset is on a full GitHub Release of `repo` under exactly the recorded name. |
-| C6 | After the C4 install: the companion's manifest (`GanttIt.addin`, `SplashIt.addin`, `PickIt.addin`) exists in `%AppData%\Autodesk\Revit\Addins\<year>\` for each detected year, its `<ClientId>` equals `addinClientId` and its `<VendorId>` is `DSOS`; nothing was written under `%AppData%\RST\`. The validation test separately ensures the ClientId is not rst-c's. |
+| C6 | After the C4 install: the companion's manifest (`GanttIt.addin`, `SplashIt.addin`, `PickIt.addin`, `DriveIt.addin`) exists in `%AppData%\Autodesk\Revit\Addins\<year>\` for each detected year, its `<ClientId>` (Drive-It: `<AddInId>`, which Revit treats the same) equals `addinClientId` and its `<VendorId>` is `DSOS`; nothing was written under `%AppData%\RST\`. The validation test separately ensures the ClientId is not rst-c's. |
 | C7 | The C4 install succeeds with rst-c **not** installed. Open Revit: the companion loads with no RST tab present. Then install rst-c and uninstall it through Add/Remove Programs: the companion still loads. |
 
 **These checks are the bump author's job, every time.** rst-c's CI re-checks only part of it on the real MSIs. The `bundle` job checks that the pinned asset exists and that its sha256, UpgradeCode and ProductVersion match the pin. The `bundle-smoke (Companions)` leg installs the real companions through `RST-Setup.exe` with stub Revit folders: silent install and uninstall with exit 0 (C4), the `.addin` ClientId and VendorId per year and nothing under `%AppData%\RST\` (C6), and a standalone install with no rst-c (the install half of C7). Nothing there starts Revit, so a companion that installs cleanly but fails to load is not caught. The install-order mechanics (upgrade, newer installed, re-run) are proven on a test-only fixture MSI, not on the real companions. Acceptance check AC6 (both companions installed through `RST-Setup.exe` on the VM, then loaded in Revit) runs only on the Phase 2 PR and the v3.0.0 release candidate, not on every pin bump or release. Put the C1–C7 results for the new pin in the bump PR.

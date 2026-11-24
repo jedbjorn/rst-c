@@ -55,6 +55,13 @@
                 </Grid>
             </DataTemplate>
 
+            <!-- "Alpha" beside an app's name when companions.json marks it stage "alpha" (Drive-It). The data is a
+                 ProductRowViewModel. -->
+            <DataTemplate x:Key="AlphaBadge">
+                <ContentControl Style="{StaticResource WarningPill}" Content="{x:Static res:TrayStrings.App_Alpha}" Margin="8,0,0,0"
+                                Visibility="{Binding IsAlpha, Converter={StaticResource BoolToVisible}}" />
+            </DataTemplate>
+
             <!-- Installed and Latest, one per line (the Updates page's RST panel). -->
             <DataTemplate x:Key="InstalledAndLatest">
                 <Grid>
@@ -225,7 +232,11 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AlphaBadge}"
+                                                                Focusable="False" IsTabStop="False" />
+                                            </StackPanel>
                                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
                                             <!-- The install's progress or outcome, as text: the Apps page's row has the banner and the log link. -->
                                             <TextBlock Text="{Binding NoteText}" Style="{StaticResource Hint}" TextWrapping="Wrap"
@@ -274,16 +285,22 @@
                 <Border Style="{StaticResource Panel}" Padding="16,12" AutomationProperties.AutomationId="Tray.CompanionsPanel">
                     <StackPanel>
                         <TextBlock Text="{x:Static res:TrayStrings.Updates_OtherApps}" Style="{StaticResource SectionText}" FontSize="13" />
-                        <ItemsControl x:Name="CompanionLines" ItemsSource="{Binding Companions}" Margin="0,4,0,0" Focusable="False">
+                        <ItemsControl x:Name="CompanionLines" ItemsSource="{Binding Companions}" Margin="0,4,0,0" Focusable="False"
+                                      Grid.IsSharedSizeScope="True">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,4,0,0" AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Update.{0}}">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="96" />
+                                            <!-- Shared: every line's name column takes the widest name (and its badge). -->
+                                            <ColumnDefinition Width="Auto" MinWidth="96" SharedSizeGroup="CompanionName" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AlphaBadge}"
+                                                            Focusable="False" IsTabStop="False" />
+                                        </StackPanel>
                                         <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource InstalledAndLatestInline}"
                                                         VerticalAlignment="Center" Focusable="False" IsTabStop="False" />
                                         <ContentControl Grid.Column="2" Content="{Binding}" ContentTemplate="{StaticResource StatePill}"
@@ -298,7 +315,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Apps (F17 WU3): RST, Gantt-It and Splash-It, one row each, with Install / Update / Reinstall and the
+        <!-- Apps (F17 WU3): RST and each companion, one row each, with Install / Update / Reinstall and the
              install's note (F17 WU4). -->
 
         <ScrollViewer x:Name="AppsPage" Grid.Row="1" Style="{StaticResource Page}"
@@ -329,6 +346,8 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AlphaBadge}"
+                                                            Focusable="False" IsTabStop="False" />
                                             <ContentControl Content="{Binding}" ContentTemplate="{StaticResource StatePill}" Margin="10,0,0,0"
                                                             Focusable="False" IsTabStop="False" />
                                         </StackPanel>

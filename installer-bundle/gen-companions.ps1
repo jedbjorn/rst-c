@@ -11,7 +11,8 @@
       failed companion never rolls back RST), InstallCondition
       "Install<Id> = 1". Nothing else: no MSI properties, no transforms.
     - a Checkbox named Install<Id> on the theme's Install page, with the
-      companion's name, Revit years and one-line description.
+      companion's name, version, "Alpha" when its stage is "alpha", Revit
+      years and one-line description.
   <Id> is the registry id in PascalCase: gantt-it -> GanttIt -> InstallGanttIt.
 
   "= 1" and not the bare variable: a command-line value arrives as a
@@ -78,7 +79,7 @@ foreach ($c in $shippable) {
   $items += [pscustomobject]@{
     Id = $pid_; Var = "Install$pid_"; Msi = $msi; Asset = $r.asset
     Default = $(if ($c.defaultSelected) { 1 } else { 0 })
-    Label = "$($c.name) $($r.version) (Revit $(@($c.revitYears) -join ', '))"
+    Label = "$($c.name) $($r.version)$(if ($c.stage -eq 'alpha') { ' Alpha' }) (Revit $(@($c.revitYears) -join ', '))"
     Description = [string]$c.description
   }
   Write-Host "gen-companions: $($c.id) -> MsiPackage $pid_ ($($r.asset), sha256 ok), variable Install$pid_ (default $(if ($c.defaultSelected) { 1 } else { 0 }))"

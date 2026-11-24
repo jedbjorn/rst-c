@@ -144,7 +144,7 @@ $testRegistry = [ordered]@{
     [ordered]@{
       id = 'companion-fixture'; name = 'RST Companion Fixture'; description = 'Test-only fixture companion, never shipped'
       repo = 'jedbjorn/rst-c'; status = 'shippable'; revitYears = @(2025, 2026, 2027)
-      addinClientId = '00000000-0000-4000-8000-00000000f1f1'; vendorId = 'DSOS'; defaultSelected = $false
+      addinClientId = '00000000-0000-4000-8000-00000000f1f1'; vendorId = 'DSOS'; defaultSelected = $false; stage = $null
       release = [ordered]@{
         tag = 'ci-fixture'; asset = 'RST-CompanionFixture-1.1.0.msi'
         sha256 = (Get-FileHash $fixtureMsi -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -154,7 +154,7 @@ $testRegistry = [ordered]@{
     [ordered]@{
       id = 'not-shipped'; name = 'Not Shipped'; description = 'In development: must not be embedded'
       repo = 'jedbjorn/rst-c'; status = 'in_development'; revitYears = @(2027)
-      addinClientId = $null; vendorId = 'DSOS'; defaultSelected = $false; release = $null
+      addinClientId = $null; vendorId = 'DSOS'; defaultSelected = $false; stage = $null; release = $null
     }
   )
 }

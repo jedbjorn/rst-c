@@ -266,7 +266,7 @@ public class ProductCatalogTests
         var logged = new List<string>();
         var catalog = ProductCatalog.FromEmbedded(logged.Add);
         logged.Should().BeEmpty();
-        catalog.Products.Select(p => p.Id).Should().Equal("rst", "gantt-it", "splash-it", "pick-it");
+        catalog.Products.Select(p => p.Id).Should().Equal("rst", "gantt-it", "splash-it", "pick-it", "drive-it");
 
         catalog.Rst.Name.Should().Be("RST");
         catalog.Rst.Repo.Should().Be("jedbjorn/rst-c");
@@ -287,6 +287,14 @@ public class ProductCatalogTests
         pick.Repo.Should().Be("jedbjorn/pick-it");
         pick.UpgradeCodes.Should().Equal("9AED4E11-5334-46F6-971D-5344A97134B7");
         pick.AddinClientId.Should().Be("4ba74feb-9790-415b-943c-d1a5a95e4acc");
+        pick.IsAlpha.Should().BeFalse();
+        var drive = catalog.Find("drive-it")!;
+        drive.Name.Should().Be("Drive-It");
+        drive.Repo.Should().Be("jedbjorn/drive-it");
+        drive.UpgradeCodes.Should().Equal("6561188A-BD8D-43A9-B116-BA0894F8001B");
+        drive.AddinClientId.Should().Be("297ec490-5eed-4e02-92c6-766c1f725deb");
+        drive.IsAlpha.Should().BeTrue("companions.json marks Drive-It stage alpha");
+        catalog.Products.Where(p => p.IsAlpha).Select(p => p.Id).Should().Equal("drive-it");
         ProductCatalog.Default.Products.Select(p => p.Id).Should().Equal(catalog.Products.Select(p => p.Id));
     }
 
@@ -772,7 +780,7 @@ public sealed class UpdateCheckLoopTests
         using var client = new HttpClient(handler);
         var time = new ManualTimeProvider(Start);
         var repos = ProductCatalog.Default.Products.Select(p => p.Repo).ToList();
-        repos.Should().HaveCount(4, "RST, Gantt-It, Splash-It and Pick-It");
+        repos.Should().HaveCount(5, "RST, Gantt-It, Splash-It, Pick-It and Drive-It");
         var expected = checks * repos.Count;
         using var loop = new UpdateCheckLoop(time, () => on, async (_, cancel) =>
         {

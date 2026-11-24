@@ -29,11 +29,11 @@ A same-version bundle (an rc and its final, both `3.0.0`) replaces the installed
 | `RST-Machine.msi` (`RSTMachine`), first in the chain | "Everyone on this PC" only | per machine, vital, `Visible="yes"`, `RSTFROMSETUP=1` | its own `RST (all users)` entry, which every administrator sees |
 | `RST.RemoveUserRst.exe` (`RemoveUserRst`, from `helper\RemoveUserRst.cs`), after `RST-Machine.msi` | "Everyone on this PC" only: checks Revit is closed and every copy can be removed, then removes the user's own `RST.msi` (any version) and the retired 2027 preview, unelevated. A stop rolls `RST-Machine.msi` back | `PerMachine="no"`, `Permanent="yes"`, `Vital="yes"`, no detection, `Cache="remove"` | none |
 | `RST.msi` (`RST`) | "Just for me" (the default). On "Everyone on this PC", Burn removes it if this version is installed for the user (the helper already has) | vital (a failure fails the setup and rolls back) | hidden behind the bundle's `RST` entry |
-| each shippable companion (`GanttIt-1.1.0.msi`, `SplashIt-1.1.0.msi`, `PickIt-1.0.0.msi`) | only when its box is ticked, on either path, for the installing user | `Permanent="yes"`, `Visible="yes"`, `Vital="no"`, `InstallCondition="Install<Id> = 1"` | its own entry |
+| each shippable companion (`GanttIt-1.1.2.msi`, `SplashIt-1.1.2.msi`, `PickIt-1.0.1.msi`, `DriveIt-0.2.0.msi`) | only when its box is ticked, on either path, for the installing user | `Permanent="yes"`, `Visible="yes"`, `Vital="no"`, `InstallCondition="Install<Id> = 1"` | its own entry |
 
 Everything is embedded: `RST-Setup.exe` is one offline file, and nothing is downloaded at install time.
 
-`RST.msi`'s Revit check still applies: a first install fails when no Revit 2025, 2026 or 2027 is found, and so does the setup. Both current companions carry the same check. A companion is non-vital, so its failure is reported in the log but never rolls back rst-c.
+`RST.msi`'s Revit check still applies: a first install fails when no Revit 2025, 2026 or 2027 is found, and so does the setup. Every current companion carries the same check for the years it supports; Drive-It's needs Revit 2026. A companion is non-vital, so its failure is reported in the log but never rolls back rst-c.
 
 "Unmodified" means the companion's released MSI file is embedded byte for byte (sha256-pinned) and run with no transform and no properties of ours. Burn itself passes its usual properties to every MSI it runs (for example `REBOOT=ReallySuppress`, `MSIFASTINSTALL`), as it does for `RST.msi`.
 
@@ -69,11 +69,11 @@ They set the Burn variable `InstallScope` to `user` or `machine`. **The user alw
 
 ## Silent install (IT)
 
-Each checkbox is a Burn variable named after the companion's registry id: `gantt-it` → `InstallGanttIt`, `splash-it` → `InstallSplashIt`, `pick-it` → `InstallPickIt`. `1` ticks it; anything else (or leaving it out) does not. Variable names are case-insensitive.
+Each checkbox is a Burn variable named after the companion's registry id: `gantt-it` → `InstallGanttIt`, `splash-it` → `InstallSplashIt`, `pick-it` → `InstallPickIt`, `drive-it` → `InstallDriveIt`. `1` ticks it; anything else (or leaving it out) does not. Variable names are case-insensitive.
 
 ```powershell
 # rst-c + every companion, no UI
-RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1 InstallPickIt=1
+RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1 InstallPickIt=1 InstallDriveIt=1
 
 # rst-c only (same as the bare RST.msi)
 RST-Setup.exe /quiet /norestart
@@ -84,7 +84,7 @@ RST-Setup.exe /quiet /norestart
 RST-Setup.exe /quiet /norestart InstallScope=machine InstallGanttIt=1
 
 # with a log
-RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1 InstallPickIt=1 /log "%TEMP%\RST-Setup.log"
+RST-Setup.exe /quiet /norestart InstallGanttIt=1 InstallSplashIt=1 InstallPickIt=1 InstallDriveIt=1 /log "%TEMP%\RST-Setup.log"
 
 # uninstall rst-c (companions stay)
 RST-Setup.exe /uninstall /quiet /norestart
