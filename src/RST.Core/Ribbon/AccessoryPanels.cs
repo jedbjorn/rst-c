@@ -13,12 +13,13 @@ public static class AccessoryPanels
 
     // In companions/companions.json order, which is the order the buttons take on the panel. Panel: the title
     // of the panel the app creates on Add-Ins (its App.PanelName). ButtonPrefix: how its PushButtonData names
-    // start (GanttIt.Open, SplashIt.OpenSettings, SplashIt.GroupTabs, PickIt.Pick).
+    // start (GanttIt.Open, SplashIt.OpenSettings, SplashIt.GroupTabs, PickIt.Pick, DriveIt.OpenOperator).
     private static readonly (string Panel, string ButtonPrefix)[] Apps =
     [
         ("Gantt-It", "GanttIt."),
         ("Splash-It", "SplashIt."),
         ("Pick-It", "PickIt."),
+        ("Drive-It", "DriveIt."),
     ];
 
     /// <summary>The sister apps' own panel titles, in the order their buttons are gathered.</summary>
