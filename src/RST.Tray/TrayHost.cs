@@ -303,6 +303,9 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _updates.NewVersionsFound += (_, found) => Announce(found);
         _updates.Changed += (_, _) =>
         {
+            // Spec #38: a companion removed here and installed again since drops its "removed" note.
+            _installs?.Detected(_updates.Current.Products
+                .Where(p => p.Installation.Kind == InstallKind.Installer).Select(p => p.Product.Id));
             Changed?.Invoke(this, EventArgs.Empty);
             PresentSelfUpdateResult();
         };

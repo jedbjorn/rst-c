@@ -211,7 +211,8 @@ internal sealed class ProductRowViewModel
 
     /// <summary>
     /// Remove (spec #38): a companion (never RST) that Windows Installer installed for this user only, idle. Not on
-    /// a row installed for everyone, by hand, or not known, nor while anything runs for it or once it was removed.
+    /// a row installed for everyone, by hand, or not known, nor while anything runs for it or once it was removed (until
+    /// detection finds it installed again: InstallCoordinator.Detected).
     /// </summary>
     public bool CanRemove => IsKnown
                              && !Status.Product.IsRst

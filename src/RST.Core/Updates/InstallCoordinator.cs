@@ -308,6 +308,33 @@ public sealed class InstallCoordinator : IDisposable
         lock (_gate) return _progress.TryGetValue(productId, out var p) ? p : InstallProgress.Idle;
     }
 
+    /// <summary>
+    /// Detection found these products installed by Windows Installer. A finished removal of one of them no longer
+    /// describes it (it was installed again outside the tray), so its row goes back to idle and offers Remove again.
+    /// </summary>
+    public void Detected(IEnumerable<string> installedIds)
+    {
+        ArgumentNullException.ThrowIfNull(installedIds);
+        TaskCompletionSource changed;
+        lock (_gate)
+        {
+            var superseded = installedIds
+                .Where(id => _progress.TryGetValue(id, out var p) && p is { Removal: true, Phase: InstallPhase.Installed })
+                .ToList();
+            if (superseded.Count == 0) return;
+            _progress = new Dictionary<string, InstallProgress>(_progress, StringComparer.Ordinal);
+            foreach (var id in superseded)
+            {
+                _progress.Remove(id);
+                _log($"remove: {id} is installed again; its removal is no longer shown");
+            }
+            changed = _changed;
+            _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        changed.TrySetResult();
+        if (!_disposed) _post(() => Changed?.Invoke(this, EventArgs.Empty));
+    }
+
     /// <summary>Install or Update: <paramref name="version"/> of <paramref name="product"/>. Never throws.</summary>
     public Task InstallAsync(ProductInfo product, ReleaseVersion version) => RunAsync(product, version, RunMode.Install);
 

@@ -776,6 +776,41 @@ public sealed class InstallCoordinatorTests : IDisposable
         _github.Count.Should().Be(0);
     }
 
+    [Fact]
+    public async Task A_removed_companion_detected_installed_again_goes_back_to_idle()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        RemovingUninstalls();
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        var notified = 0;
+        c.Changed += (_, _) => notified++;
+
+        c.Detected([]);
+        c.Detected(["splash-it"]);
+        c.For("gantt-it").Should().Match<InstallProgress>(p => p.Removal && p.Phase == InstallPhase.Installed,
+            "detection after the removal found it gone: the row says it was removed");
+        notified.Should().Be(0);
+
+        c.Detected(["gantt-it"]); // installed again outside the tray
+        c.For("gantt-it").Should().Be(InstallProgress.Idle, "Remove is offered again, with no \"removed\" note");
+        notified.Should().Be(1);
+        _log.Should().Contain("remove: gantt-it is installed again; its removal is no longer shown");
+    }
+
+    [Fact]
+    public async Task Detection_keeps_a_failed_removal()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        _msiexec.Then(1603);
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        var failed = c.For("gantt-it");
+
+        c.Detected(["gantt-it"]);
+        c.For("gantt-it").Should().BeSameAs(failed, "a failed removal left it installed: Remove again, with its log");
+    }
+
     [Theory]
     [InlineData(3010)]
     [InlineData(1641)]
