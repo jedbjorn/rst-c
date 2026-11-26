@@ -746,6 +746,193 @@ public sealed class InstallCoordinatorTests : IDisposable
         }
     }
 
+    // Remove (spec #38): a companion installed for this user only, on the same queue.
+
+    private string GanttUpgradeCode => _gantt.UpgradeCodes[0];
+
+    /// <summary>msiexec /x with exit 0 or 3010/1641 takes it out of the fake Windows Installer.</summary>
+    private void RemovingUninstalls() => _msiexec.OnRemove = (code, exit) =>
+    {
+        if (MsiExit.Installed(exit)) _installed.ByUpgradeCode.Remove(GanttUpgradeCode);
+    };
+
+    [Fact]
+    public async Task Remove_runs_msiexec_x_on_the_per_user_ProductCode_and_reports_it_removed()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        var productCode = _installed.ByUpgradeCode[GanttUpgradeCode][0].ProductCode;
+        RemovingUninstalls();
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+
+        var call = _msiexec.Removals.Should().ContainSingle().Subject;
+        call.ProductCode.Should().Be(productCode);
+        Path.GetFileName(call.Log).Should().MatchRegex(@"^remove-gantt-it-\d{8}-\d{6}\.log$");
+        Path.GetDirectoryName(call.Log).Should().Be(Paths.LogsDir, "beside the install logs");
+        _msiexec.Calls.Should().BeEmpty("nothing is downloaded or installed");
+        c.For("gantt-it").Should().Match<InstallProgress>(p =>
+            p.Removal && p.Phase == InstallPhase.Installed && !p.RestartNeeded && p.ExitCode == 0 && p.LogPath == call.Log && p.Previous == null);
+        _changes.Should().Be(1, "detection runs again after a removal");
+        _github.Count.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(3010)]
+    [InlineData(1641)]
+    public async Task Remove_exit_3010_or_1641_is_removed_with_a_restart_to_finish(int exit)
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        _msiexec.Then(exit);
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        c.For("gantt-it").Should().Match<InstallProgress>(p => p.Removal && p.Phase == InstallPhase.Installed && p.RestartNeeded && p.ExitCode == exit);
+    }
+
+    [Fact]
+    public async Task Remove_failing_keeps_the_log_and_detects_again()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        _msiexec.Then(1603);
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        c.For("gantt-it").Should().Match<InstallProgress>(p =>
+            p.Removal && p.Phase == InstallPhase.Failed && p.Problem == InstallProblem.InstallFailed && p.ExitCode == 1603
+            && p.LogPath != null && p.Previous == null);
+        _changes.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Remove_exit_1618_is_tried_again_and_gives_up_after_three_runs()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        _msiexec.Then(1618, 1618, 1618);
+        using var c = Make();
+        var remove = c.RemoveAsync(_gantt);
+        for (var i = 0; i < 2; i++)
+        {
+            await WaitFor(() => c.For("gantt-it").Phase == InstallPhase.RetryLater && _msiexec.Removals.Count == i + 1 && _time.ArmedTimers > 0);
+            c.For("gantt-it").Removal.Should().BeTrue();
+            _time.Advance(InstallCoordinator.BusyRetryDelay);
+        }
+        await remove;
+        _msiexec.Removals.Should().HaveCount(3);
+        c.For("gantt-it").Should().Match<InstallProgress>(p => p.Removal && p.Phase == InstallPhase.Failed && p.Problem == InstallProblem.InstallerBusy);
+    }
+
+    [Theory]
+    [InlineData(InstallContext.Machine)]
+    [InlineData(InstallContext.UserManaged)]
+    public async Task Remove_refuses_anything_but_this_users_own_install(InstallContext context)
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0", context);
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        _msiexec.Removals.Should().BeEmpty("never /x on a product the tray did not classify as per-user");
+        c.For("gantt-it").Should().Match<InstallProgress>(p => p.Removal && p.Phase == InstallPhase.Refused && p.Problem == InstallProblem.NotPerUser);
+    }
+
+    [Fact]
+    public async Task Remove_refuses_when_a_per_machine_install_sits_beside_the_per_user_one()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0").With(GanttUpgradeCode, "1.0.0", InstallContext.Machine);
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        _msiexec.Removals.Should().BeEmpty();
+        c.For("gantt-it").Problem.Should().Be(InstallProblem.NotPerUser);
+    }
+
+    [Fact]
+    public async Task Remove_refuses_when_Windows_Installer_cannot_be_read()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        _installed.Unreadable = true;
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        _msiexec.Removals.Should().BeEmpty();
+        c.For("gantt-it").Should().Match<InstallProgress>(p => p.Removal && p.Phase == InstallPhase.Refused && p.Problem == InstallProblem.DetectionFailed);
+    }
+
+    [Fact]
+    public async Task Remove_of_something_no_longer_installed_runs_nothing_and_detects_again()
+    {
+        using var c = Make();
+        await c.RemoveAsync(_gantt);
+        _msiexec.Removals.Should().BeEmpty();
+        c.For("gantt-it").Should().Be(InstallProgress.Idle);
+        _changes.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RST_is_never_removed_from_the_tray()
+    {
+        _installed.With(ProductCatalog.RstUpgradeCode, "3.1.0");
+        using var c = Make();
+        await c.RemoveAsync(_rst);
+        _msiexec.Removals.Should().BeEmpty();
+        c.For("rst").Should().Be(InstallProgress.Idle);
+        _installed.Queries.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_removed_companion_no_longer_offers_a_failed_upgrades_previous_version()
+    {
+        InstallCache.RecordFailedUpgrade(Paths.CacheRoot, "gantt-it",
+            new FailedUpgrade("1.1.0", "1.2.0", 1603, Path.Combine(Paths.LogsDir, "install.log"), Start));
+        _installed.With(GanttUpgradeCode, "1.1.0"); // it came back (e.g. the user reinstalled it by hand)
+        RemovingUninstalls();
+        using (var c = Make())
+        {
+            c.For("gantt-it").Previous.Should().NotBeNull();
+            await c.RemoveAsync(_gantt);
+            c.For("gantt-it").Previous.Should().BeNull();
+        }
+        InstallCache.ReadState(Paths.CacheRoot, "gantt-it").FailedUpgrade.Should().BeNull();
+        using var next = Make();
+        next.For("gantt-it").Should().Be(InstallProgress.Idle, "after a restart the row offers the plain Install");
+    }
+
+    [Fact]
+    public async Task Remove_waits_its_turn_behind_an_install_and_a_second_click_is_ignored()
+    {
+        _installed.With(GanttUpgradeCode, "1.1.0");
+        RemovingUninstalls();
+        var splash = ProductCatalog.Default.Find("splash-it")!;
+        var release = new TaskCompletionSource();
+        _msiexec.OnRun = null; // installing Splash-It leaves Gantt-It as it is
+        // Hold the queue: a Splash-It msiexec that does not return until released.
+        var blocking = new BlockingMsiexec(_msiexec, release.Task);
+        using var held = new InstallCoordinator(
+            ProductCatalog.Default.Products, new HttpClient(_github), _installed, FakeMsiReader.FromText(), new FakeBundleReader(), blocking, _self, Paths,
+            _time, action => action(), _log.Add, () => _quits++, () => _changes++);
+        _github.Add(splash.Repo, "v1.1.0", "SplashIt-1.1.0.msi", FakeMsi.Bytes(splash.UpgradeCodes[0], "1.1.0"));
+        var install = held.InstallAsync(splash, new ReleaseVersion(1, 1, 0));
+        await WaitFor(() => held.For("splash-it").Phase == InstallPhase.Installing);
+        var remove = held.RemoveAsync(_gantt);
+        await WaitFor(() => held.For("gantt-it").Phase == InstallPhase.Queued);
+        held.For("gantt-it").Removal.Should().BeTrue();
+        await held.RemoveAsync(_gantt); // busy: ignored
+        _msiexec.Removals.Should().BeEmpty();
+        release.SetResult();
+        await install;
+        await remove;
+        _msiexec.Removals.Should().ContainSingle();
+        held.For("gantt-it").Phase.Should().Be(InstallPhase.Installed);
+    }
+
+    /// <summary>Installs wait for <paramref name="gate"/>; removals pass straight through.</summary>
+    private sealed class BlockingMsiexec(FakeMsiexec inner, Task gate) : IMsiexec
+    {
+        public async Task<int> InstallAsync(string msiPath, string logPath, CancellationToken cancel)
+        {
+            await gate.ConfigureAwait(false);
+            return await inner.InstallAsync(msiPath, logPath, cancel).ConfigureAwait(false);
+        }
+
+        public Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel) => inner.RunBundleAsync(exePath, logPath, cancel);
+
+        public Task<int> UninstallAsync(string productCode, string logPath, CancellationToken cancel) => inner.UninstallAsync(productCode, logPath, cancel);
+    }
+
     private static async Task WaitFor(Func<bool> condition)
     {
         for (var i = 0; i < 500 && !condition(); i++) await Task.Delay(10);
