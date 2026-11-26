@@ -25,7 +25,7 @@ public class ModalFocusSourceTests
         new("src/RST.UI/Dialogs/DialogService.cs", "SaveFileDialog", 1, "ShowNative wraps the native dialog in Around when ReturnsFocus."),
         new("src/RST.UI/Loader/LoaderDialogs.cs", "ShowDialog", 1, "ShowModal's false branch keeps tray WPF behaviour, decision #62."),
         new("src/RST.Tray/TrayHost.cs", "ShowDialog", 1, "Tray shadow notice keeps WPF behaviour."),
-        new("src/RST.Tray/TrayHost.cs", "DialogService without ReturnsFocus", 1, "Tray opt-out, decision #62."),
+        new("src/RST.Tray/TrayHost.cs", "DialogService without ReturnsFocus", 2, "Tray opt-out, decision #62 (the Add-ins and Health pages' messages and the Apps page's \"Remove {app}?\", spec #38)."),
         new("src/RST.Tray/TrayHost.cs", "LoaderDialogs without ReturnsFocus", 1, "Tray opt-out, decision #62."),
         new("src/RST.Tray/Windows/TrayViewModel.cs", "DialogService without ReturnsFocus", 2, "Tray placeholder page services also keep WPF behaviour, decision #62."),
         new("src/RST.UI/Swatches/ColorPickerDialog.xaml.cs", "NativeColorDialog", 1, "Native More colours dialog returns to its picker HWND through Windows."),
