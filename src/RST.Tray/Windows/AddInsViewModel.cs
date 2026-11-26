@@ -1,10 +1,12 @@
 // rst-c's own (not vendored): the RST tray's Add-ins page (spec #20 §3; F17 WU2). It shows the active profile and,
-// per installed Revit year, what RST switched off and what it cannot switch back on, and runs Apply profile and
-// Restore All through the Profile Loader's own code (RST.Core's TrayAddinService) and the Loader's own dialogs:
+// per installed Revit year, what RST switched off and what it cannot switch back on, and runs Apply profile and the
+// two launches through the Profile Loader's own code (RST.Core's TrayAddinService) and the Loader's own dialogs:
 //   Apply profile    the Loader's Load Profile: "Adopt RSTify Presets?" when the Loader would ask it, the plan,
 //                    Confirm Add-in Changes when add-ins would change (the Loader's rule: Disable unused is on,
 //                    or the plan changes something), then the Add-in Check;
-//   Restore All      the Loader's Restore All Add-ins and its report.
+//   Launch with Profile   Apply profile, then a new Revit of that year;
+//   Launch           (spec #38) the Loader's Restore All in every year, its report only when an add-in was switched
+//                    back on or could not be, the blank active profile, then a new Revit of that year.
 // Every report ends with the Loader's "Add-in changes apply the next time Revit starts.", plus "Revit <year> is
 // open: restart it to see the change." for each Revit open now. The files and the plans run off the UI thread;
 // the dialogs are modal on it. Built lazily: the page reads the disk when it is first shown, after each action and
@@ -42,6 +44,13 @@ internal sealed class AddInsYearViewModel(TrayAddinYear year, AddInsViewModel ow
     public TrayAddinYear Year { get; } = year;
 
     public ICommand LaunchCommand { get; } = new AsyncRelayCommand(() => owner.LaunchAsync(year.Year), () => owner.CanApply);
+
+    /// <summary>Launch (clean): needs no profile (spec #38).</summary>
+    public ICommand CleanLaunchCommand { get; } = new AsyncRelayCommand(() => owner.CleanLaunchAsync(year.Year), () => owner.CanLaunchClean);
+
+    public string CleanLaunchAutomationId => "Tray.AddIns.CleanLaunch" + Year.Year.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    public string CleanLaunchHint => AddInsStrings.CleanLaunchHint(Year.Year);
 
     public string LaunchAutomationId => "Tray.AddIns.Launch" + Year.Year.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -105,13 +114,10 @@ internal sealed class AddInsViewModel : ObservableObject
         _work = work;
         _inline = runInline;
         ApplyCommand = new AsyncRelayCommand(ApplyAsync, () => CanApply);
-        RestoreAllCommand = new AsyncRelayCommand(RestoreAllAsync, () => IsIdle && _isLoaded);
         RefreshCommand = new AsyncRelayCommand(() => RefreshAsync(), () => IsIdle);
     }
 
     public ICommand ApplyCommand { get; }
-
-    public ICommand RestoreAllCommand { get; }
 
     public ICommand RefreshCommand { get; }
 
@@ -208,6 +214,9 @@ internal sealed class AddInsViewModel : ObservableObject
 
     public bool CanApply => IsIdle && _isLoaded && _selected is not null;
 
+    /// <summary>Launch (clean) needs only a read page that is idle: no profile at all (spec #38).</summary>
+    public bool CanLaunchClean => IsIdle && _isLoaded;
+
     /// <summary>
     /// The warning banner: the last action's failure, which stays until the next action (a read after it does not
     /// clear it; review B3), else why the add-ins could not be read.
@@ -278,10 +287,13 @@ internal sealed class AddInsViewModel : ObservableObject
             var snapshot = await Run(() =>
             {
                 var running = _backend.RunningYears();
-                return (Status: _backend.Status(running), Profiles: _backend.Profiles(), Prefs: _backend.Prefs());
+                var status = _backend.Status(running);
+                // A profile loaded anywhere, the Loader in Revit included, is the one Launch with Profile offers next.
+                if (status.Error is null && !string.IsNullOrEmpty(status.ActiveProfile)) Remember(status.ActiveProfile, status.ActiveProfileId);
+                return (Status: status, Profiles: _backend.Profiles(), Prefs: _backend.Prefs(), Remembered: _backend.RememberedProfile());
             });
             _prefs = snapshot.Prefs;
-            Show(snapshot.Status, snapshot.Profiles);
+            Show(snapshot.Status, snapshot.Profiles, snapshot.Remembered);
         }
         catch (Exception ex)
         {
@@ -290,7 +302,20 @@ internal sealed class AddInsViewModel : ObservableObject
         }
     }
 
-    private void Show(TrayAddinStatus status, IReadOnlyList<ProfileEntry> profiles)
+    /// <summary>Remembers the last loaded profile. Off the UI thread. A failed write is logged: it only costs the default pick.</summary>
+    private void Remember(string name, string? id)
+    {
+        try
+        {
+            _backend.RememberLoadedProfile(name, id);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "profiles: the last loaded profile {Name} was not remembered", name);
+        }
+    }
+
+    private void Show(TrayAddinStatus status, IReadOnlyList<ProfileEntry> profiles, LastLoadedProfile? remembered)
     {
         if (status.Error is not null)
         {
@@ -307,9 +332,10 @@ internal sealed class AddInsViewModel : ObservableObject
 
         var keep = _selected;
         var options = profiles.Select(p => new ProfileOption(p)).ToList();
-        // Keep the user's pick; else the active profile; else the first.
+        // Keep the user's pick; else the active profile; else the last loaded one (gone: skipped); else the first.
         var pick = options.FirstOrDefault(o => keep is not null && Same(o, keep))
                    ?? options.FirstOrDefault(o => _activeProfile is not null && o.Name == _activeProfile)
+                   ?? RememberedOption(options, remembered)
                    ?? options.FirstOrDefault();
         var kept = pick is not null && keep is not null && Same(pick, keep);
         IsLoaded = true;
@@ -344,6 +370,14 @@ internal sealed class AddInsViewModel : ObservableObject
         Log.Information("add-ins: page read: active={Active} years={Years} profiles={Profiles}",
             _activeProfile ?? "(none)", string.Join(",", status.Years.Select(y => y.Year + (y.Running ? " (open)" : "") + ":" + y.SwitchedOff.Count + " off, " + y.CouldNotChange.Count + " blocked")),
             options.Count);
+    }
+
+    /// <summary>The remembered profile among <paramref name="options"/>, found as the Loader finds one (ProfileStore.Resolve): id first, then name.</summary>
+    private static ProfileOption? RememberedOption(IReadOnlyList<ProfileOption> options, LastLoadedProfile? remembered)
+    {
+        if (remembered is null) return null;
+        return (string.IsNullOrEmpty(remembered.Id) ? null : options.FirstOrDefault(o => string.Equals(o.Id, remembered.Id, StringComparison.Ordinal)))
+               ?? options.FirstOrDefault(o => string.Equals(o.Name, remembered.Name, StringComparison.Ordinal));
     }
 
     private static bool Same(ProfileOption a, ProfileOption b) =>
@@ -474,6 +508,11 @@ internal sealed class AddInsViewModel : ObservableObject
             return;
         }
 
+        await Run(() =>
+        {
+            Remember(entry.Profile.ProfileName, entry.Profile.Id);
+            return true;
+        });
         var report = result.Report;
         if (planFailure is not null) report = report with { Notes = [planFailure, .. report.Notes] };
         report = TrayAddinService.WithRunningNotes(report, running);
@@ -504,13 +543,24 @@ internal sealed class AddInsViewModel : ObservableObject
     }
 
 
-    /// <summary>Restore All Add-ins: the Loader's, with its report and the running-Revit notes.</summary>
-    public async Task RestoreAllAsync()
+    /// <summary>
+    /// Launch (clean, spec #38): the Loader's Restore All in every installed year (the blank active profile is shared
+    /// by every year, so none is left half-restored); its report, with the running-Revit notes, only when an add-in
+    /// was switched back on or could not be; the blank active profile; then a new Revit of that year. A restore or a
+    /// blank that fails starts nothing and stays on the page. The remembered last profile is kept.
+    /// </summary>
+    public async Task CleanLaunchAsync(int year)
     {
-        if (!IsIdle || !_isLoaded) return;
+        if (!CanLaunchClean || !Years.Any(y => y.Year.Year == year)) return;
         await JoinRefresh();
+        try { await CleanLaunchCoreAsync(year); }
+        finally { Idle(); }
+    }
+
+    private async Task CleanLaunchCoreAsync(int year)
+    {
         StartAction();
-        Log.Information("add-ins: Restore All");
+        Log.Information("profiles: clean launch of Revit {Year}", year);
         Busy(AddInsStrings.BusyRestoring);
         RestoreOutcome outcome;
         IReadOnlyList<int> running;
@@ -521,19 +571,58 @@ internal sealed class AddInsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "add-ins: Restore All threw");
+            Log.Error(ex, "profiles: clean launch: Restore All threw; Revit {Year} not started", year);
             Idle();
             FailAction(UiStrings.Loader_RestoreError(ex.Message));
+            Busy(AddInsStrings.Loading);
+            await RefreshAsync(fresh: true);
             return;
         }
-        Idle();
         if (!outcome.Ok || outcome.Addins is null)
         {
+            Log.Warning("profiles: clean launch: Restore All failed; Revit {Year} not started", year);
+            Idle();
             FailAction(UiStrings.Loader_RestoreFailedText(string.IsNullOrEmpty(outcome.Error) ? UiStrings.Loader_UnknownError : outcome.Error));
+            Busy(AddInsStrings.Loading);
+            await RefreshAsync(fresh: true);
             return;
         }
-        _dialogs.ShowAddinReport(AddinReportModel.ForRestoreAll(TrayAddinService.WithRunningNotes(outcome.Addins, running)));
-        ResultText = AddInsStrings.Restored;
+        // Something happened: an add-in was switched back on, or one could not be. The report says which; after it
+        // the launch goes on. The page stays busy under the report, so no second launch starts meanwhile.
+        Busy(AddInsStrings.BusyLaunching(year));
+        if (outcome.Addins.Outcomes.Count > 0)
+            _dialogs.ShowAddinReport(AddinReportModel.ForRestoreAll(TrayAddinService.WithRunningNotes(outcome.Addins, running)));
+
+        try
+        {
+            await Run(() =>
+            {
+                _backend.ClearActiveProfile();
+                return true;
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "profiles: clean launch: the blank active profile was not written; Revit {Year} not started", year);
+            Idle();
+            FailAction(UiStrings.Loader_UnloadError(ex.Message));
+            Busy(AddInsStrings.Loading);
+            await RefreshAsync(fresh: true);
+            return;
+        }
+        try
+        {
+            var pid = await Run(() => _backend.LaunchRevit(year));
+            Log.Information("profiles: started Revit {Year} with no profile (pid {Pid})", year, pid);
+            _launchSucceeded = true;
+            ResultText = AddInsStrings.CleanLaunched(year);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "profiles: Revit {Year} could not start after the clean launch's restore", year);
+            FailAction(AddInsStrings.CleanLaunchFailed(year, ex.Message));
+        }
+        Busy(AddInsStrings.Loading);
         await RefreshAsync(fresh: true);
     }
 

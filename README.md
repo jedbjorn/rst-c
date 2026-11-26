@@ -116,7 +116,7 @@ From v3.1, RST installs a small tray app, `RST.Tray.exe`, in the Windows notific
 - **Health:** this PC's health and every model you have worked on (below).
 - **Settings:** the theme, automatic update checks, and the version and log folder.
 
-![The RST tray on its RST Profiles page: choose and apply a profile, disable unused add-ins, restore all add-ins, or launch an installed Revit year with the selected profile](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/tray-profiles.png)
+![The RST tray on its RST Profiles page: choose and apply a profile, disable unused add-ins, or launch an installed Revit year clean or with the selected profile](https://raw.githubusercontent.com/jedbjorn/rst-c/main/docs/images/tray-profiles.png)
 
 Once a day the tray asks GitHub whether a newer release is out, and shows a notification when one is; it sends nothing about you, your PC or your models. To stop the checks, turn off **Check for updates automatically** in its Settings (IT can turn them off for every user with one registry value). Installing RST shows no welcome or first-run popups: what each feature does, and how to turn it off, is in the docs.
 

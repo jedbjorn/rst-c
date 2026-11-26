@@ -344,3 +344,73 @@ public sealed class TrayAddinRulesTests
         TrayAddinService.RevitYearOf(exe, major, installed).Should().Be(expected);
     }
 }
+
+/// <summary>Spec #38: the tray's blank active profile and the remembered last loaded profile.</summary>
+public sealed class TrayLastLoadedProfileTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "rst-last-profile-" + Guid.NewGuid().ToString("N"));
+    private readonly LoaderPaths _paths;
+    private readonly TrayAddinService _service;
+
+    public TrayLastLoadedProfileTests()
+    {
+        _paths = LoaderPaths.Under(_root);
+        _service = new TrayAddinService(_paths, new FakeAddinSwitching());
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); }
+        catch (IOException) { }
+    }
+
+    private string FilePath => Path.Combine(_root, LastLoadedProfile.FileName);
+
+    [Fact]
+    public void Nothing_is_remembered_until_a_profile_is()
+    {
+        _service.LastLoaded().Should().BeNull();
+        _service.RememberLoaded("Office", "id-1");
+        _service.LastLoaded().Should().Be(new LastLoadedProfile("Office", "id-1"));
+        File.ReadAllText(FilePath).Should().Contain("\"profile\": \"Office\"").And.Contain("\"profile_id\": \"id-1\"");
+        File.Exists(FilePath + ".rsttmp").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Remembering_the_same_profile_again_does_not_rewrite_the_file()
+    {
+        _service.RememberLoaded("Office", "id-1");
+        var written = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(FilePath, written);
+        _service.RememberLoaded("Office", "id-1");
+        File.GetLastWriteTimeUtc(FilePath).Should().Be(written);
+        _service.RememberLoaded("Office", "");
+        _service.LastLoaded().Should().Be(new LastLoadedProfile("Office", null));
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("{}")]
+    [InlineData("{\"profile\": \"\"}")]
+    public void An_unreadable_or_empty_file_remembers_nothing(string text)
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(FilePath, text);
+        _service.LastLoaded().Should().BeNull();
+    }
+
+    [Fact]
+    public void Clearing_writes_the_blank_active_profile_and_keeps_the_remembered_one()
+    {
+        var profile = TempLoaderRoot.Profile("Office", "id-1", "Office");
+        ActiveProfile.FromProfile(profile, "Office.json").Write(_paths.ActiveProfileFile);
+        _service.Status().ActiveProfileId.Should().Be("id-1");
+        _service.RememberLoaded("Office", "id-1");
+
+        _service.ClearActive();
+
+        ActiveProfile.Read(_paths.ActiveProfileFile).IsBlank.Should().BeTrue();
+        _service.Status().ActiveProfile.Should().BeNull();
+        _service.LastLoaded().Should().Be(new LastLoadedProfile("Office", "id-1"));
+    }
+}

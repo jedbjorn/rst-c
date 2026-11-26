@@ -142,6 +142,11 @@ public sealed class TrayMatchesTheLoaderTests : IDisposable
         await tray.ApplyAsync();
         var trayDisk = Disk();
 
+        // The one file the Loader never writes: the tray's remembered profile (spec #38 default pick).
+        var remembered = Assert.Single(trayDisk.Keys, k => Path.GetFileName(k) == LastLoadedProfile.FileName);
+        trayDisk.Remove(remembered);
+        Assert.Equal(OfficeId, LastLoadedProfile.Read(Path.Combine(_paths.Root, LastLoadedProfile.FileName))?.Id);
+
         // The same question, asked once each.
         var asked = Assert.Single(trayDialogs.Confirms);
         Assert.Equal(Assert.Single(loaderDialogs.Confirms), asked);

@@ -43,7 +43,9 @@ public sealed record TrayAddinYear(
 /// <param name="Years">The installed Revit years, oldest first.</param>
 /// <param name="Error">Why the add-ins could not be read; null when they could.</param>
 /// <param name="ActiveProfileUnreadable">active_profile.json exists but could not be read (locked): which profile is active is not known.</param>
-public sealed record TrayAddinStatus(string? ActiveProfile, IReadOnlyList<TrayAddinYear> Years, string? Error = null, bool ActiveProfileUnreadable = false)
+/// <param name="ActiveProfileId">The loaded profile's id, when it has one.</param>
+public sealed record TrayAddinStatus(string? ActiveProfile, IReadOnlyList<TrayAddinYear> Years, string? Error = null, bool ActiveProfileUnreadable = false,
+    string? ActiveProfileId = null)
 {
     public static TrayAddinStatus Empty { get; } = new(null, []);
 }
@@ -96,10 +98,15 @@ public sealed class TrayAddinService
     public TrayAddinStatus Status(IReadOnlyCollection<int>? runningYears = null)
     {
         string? active = null;
+        string? activeId = null;
         try
         {
             var ap = _library.GetActive();
-            if (!ap.IsBlank) active = ap.ProfileName;
+            if (!ap.IsBlank)
+            {
+                active = ap.ProfileName;
+                activeId = ap.ProfileId;
+            }
             // ActiveProfile.Read gives "blank" for a file it cannot open too; the page must not claim "none" then.
             var unreadable = active is null && CannotOpen(_paths.ActiveProfileFile);
             var inventory = _switching.Inventory();
@@ -108,11 +115,11 @@ public sealed class TrayAddinService
             var years = inventory.Years
                 .Select(y => YearStatus(y.Year, plan, ledger, runningYears?.Contains(y.Year) == true))
                 .ToList();
-            return new TrayAddinStatus(active, years, ActiveProfileUnreadable: unreadable);
+            return new TrayAddinStatus(active, years, ActiveProfileUnreadable: unreadable, ActiveProfileId: activeId);
         }
         catch (Exception ex)
         {
-            return new TrayAddinStatus(active, [], ex.Message);
+            return new TrayAddinStatus(active, [], ex.Message, ActiveProfileId: activeId);
         }
     }
 
@@ -225,6 +232,21 @@ public sealed class TrayAddinService
 
     /// <summary>Restore All Add-ins: switches back on only what RST switched off, in every installed year.</summary>
     public RestoreOutcome RestoreAll() => _addins.RestoreAll();
+
+    /// <summary>The "no profile" active_profile.json every Revit year reads (the RST tab shows only the Loader). Throws when it cannot be written.</summary>
+    public void ClearActive() => ActiveProfile.WriteBlank(_paths.ActiveProfileFile);
+
+    /// <summary>The profile the tray last saw loaded (spec #38), or null when none is remembered or the file cannot be read.</summary>
+    public LastLoadedProfile? LastLoaded() => LastLoadedProfile.Read(Path.Combine(_paths.Root, LastLoadedProfile.FileName));
+
+    /// <summary>Remembers <paramref name="name"/> as the last loaded profile; only writes when it changed. Throws when it cannot be written.</summary>
+    public void RememberLoaded(string name, string? id)
+    {
+        var path = Path.Combine(_paths.Root, LastLoadedProfile.FileName);
+        var next = new LastLoadedProfile(name, string.IsNullOrEmpty(id) ? null : id);
+        if (LastLoadedProfile.Read(path) == next) return;
+        next.Write(path);
+    }
 
     /// <summary>The required-add-in part of the Apply report: the plan's required add-ins left off (no running year, so nothing is "missing").</summary>
     public static QaCheck QaFor(ProfileEntry entry, ActivationPlan? plan)
