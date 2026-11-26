@@ -3,6 +3,8 @@
 // the network or Windows Installer itself. Install and Update run through the host (InstallCoordinator), with
 // close-Revit advice on the pages; a product installed for everyone on this PC gets no button, only who
 // can update it; after a failed companion upgrade that left nothing installed, "Reinstall previous version (x.y.z)".
+// Remove (spec #38) is offered only on an idle companion Windows Installer installed for this user; the host asks
+// "Remove {app}?" (Yes/No) and queues it on the same coordinator.
 // Every failure is said in plain words (TrayStrings.Problem); the detail is in the logs (WU3 review D3).
 
 using System.Globalization;
@@ -50,6 +52,12 @@ internal interface ITrayUpdatesHost
     /// <summary>Stops an install that is downloading, queued or waiting to retry.</summary>
     void CancelInstall(ProductInfo product) { }
 
+    /// <summary>Asks "Remove {app}?" (Yes/No). True on Yes.</summary>
+    bool ConfirmRemove(ProductInfo product) => false;
+
+    /// <summary>Removes a companion installed for this user (spec #38). Never blocks.</summary>
+    void Remove(ProductInfo product) { }
+
     /// <summary>Opens an msiexec log in Notepad.</summary>
     void OpenLog(string path) { }
 
@@ -60,9 +68,9 @@ internal interface ITrayUpdatesHost
 }
 
 /// <summary>The commands a row's buttons and links run.</summary>
-internal sealed record RowCommands(ICommand ReleasePage, ICommand Act, ICommand Cancel, ICommand OpenLog)
+internal sealed record RowCommands(ICommand ReleasePage, ICommand Act, ICommand Cancel, ICommand OpenLog, ICommand? Remove = null)
 {
-    private static readonly ICommand None = new RelayCommand(() => { }, () => false);
+    internal static readonly ICommand None = new RelayCommand(() => { }, () => false);
 
     public static RowCommands ReleasePageOnly(ICommand releasePage) => new(releasePage, None, None, None);
 }
@@ -201,8 +209,20 @@ internal sealed class ProductRowViewModel
     public bool CanCancel => Progress.Phase is InstallPhase.Downloading or InstallPhase.Queued
                              or InstallPhase.RetryLater;
 
+    /// <summary>
+    /// Remove (spec #38): a companion (never RST) that Windows Installer installed for this user only, idle. Not on
+    /// a row installed for everyone, by hand, or not known, nor while anything runs for it or once it was removed.
+    /// </summary>
+    public bool CanRemove => IsKnown
+                             && !Status.Product.IsRst
+                             && Status.Installation is { Kind: InstallKind.Installer, Installed.Context: InstallContext.User }
+                             && !Progress.IsBusy
+                             && !(Progress.Removal && Progress.Phase == InstallPhase.Installed);
+
+    public string RemoveToolTip => TrayStrings.App_RemoveToolTip(Name);
+
     /// <summary>The right-hand column shows a button.</summary>
-    public bool HasButtons => HasAction || CanCancel;
+    public bool HasButtons => HasAction || CanCancel || CanRemove;
 
     public bool ShowManualNote => IsManual;
 
@@ -213,6 +233,7 @@ internal sealed class ProductRowViewModel
         {
             if (!IsKnown) return null;
             var name = Name;
+            if (Progress.Removal) return RemovalText(name);
             var version = Progress.Version?.ToString() ?? Status.Latest?.ToString() ?? "";
             switch (Progress.Phase)
             {
@@ -283,6 +304,21 @@ internal sealed class ProductRowViewModel
 
     public ICommand OpenLogCommand => Commands.OpenLog;
 
+    public ICommand RemoveCommand => Commands.Remove ?? RowCommands.None;
+
+    /// <summary>A removal's status line (spec #38): the same slots as an install's, its own words.</summary>
+    private string? RemovalText(string name) => Progress.Phase switch
+    {
+        InstallPhase.Queued => TrayStrings.Remove_Queued(name),
+        InstallPhase.Installing => TrayStrings.Remove_Removing(name),
+        InstallPhase.RetryLater => TrayStrings.Remove_RetryLater(name),
+        InstallPhase.Installed => Progress.RestartNeeded ? TrayStrings.Remove_DoneRestart(name) : TrayStrings.Remove_Done(name),
+        InstallPhase.Refused => TrayStrings.Remove_Refused(name, TrayStrings.Problem(Progress.Problem)),
+        InstallPhase.Failed when Progress.Problem == InstallProblem.InstallerBusy => TrayStrings.Remove_Busy(name),
+        InstallPhase.Failed => TrayStrings.Remove_Failed(name, Progress.ExitCode ?? 0),
+        _ => null,
+    };
+
     private string PerMachineText(string name, string version) =>
         Status.Product.IsRst ? TrayStrings.Install_PerMachineRst(name, version) : TrayStrings.Install_PerMachine(name, version);
 
@@ -319,7 +355,8 @@ internal sealed class UpdatesViewModel : ObservableObject
             new RelayCommand<ProductRowViewModel>(row =>
             {
                 if (row.LogPath is { } log) _host.OpenLog(log);
-            }));
+            }),
+            new RelayCommand<ProductRowViewModel>(Remove));
         CheckNowCommand = new RelayCommand(() =>
         {
             if (!IsChecking) _host.CheckNow();
@@ -441,6 +478,14 @@ internal sealed class UpdatesViewModel : ObservableObject
         if (!row.CanAct) return;
         if (row.ReinstallVersion is not null) _host.ReinstallPrevious(row.Status.Product);
         else _host.Install(row.Status.Product);
+    }
+
+    /// <summary>Remove: asks Yes/No first; No changes nothing.</summary>
+    private void Remove(ProductRowViewModel row)
+    {
+        if (!row.CanRemove) return;
+        if (!_host.ConfirmRemove(row.Status.Product)) return;
+        _host.Remove(row.Status.Product);
     }
 
     private IReadOnlyList<ProductRowViewModel> Build(UpdateSnapshot snapshot)

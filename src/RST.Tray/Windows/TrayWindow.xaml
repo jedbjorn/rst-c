@@ -364,6 +364,11 @@
                                                 IsEnabled="{Binding CanAct}" MinWidth="96"
                                                 Visibility="{Binding HasAction, Converter={StaticResource BoolToVisible}}"
                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Action}" />
+                                        <!-- Remove (spec #38): under Install/Update, or alone; only on an idle companion installed for this user. -->
+                                        <Button Content="{x:Static res:TrayStrings.App_Remove}" Command="{Binding RemoveCommand}" CommandParameter="{Binding}"
+                                                ToolTip="{Binding RemoveToolTip}" MinWidth="96" Margin="0,6,0,0"
+                                                Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisible}}"
+                                                AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Remove}" />
                                         <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding CancelCommand}" CommandParameter="{Binding}"
                                                 MinWidth="96" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Cancel}" />
