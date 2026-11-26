@@ -102,11 +102,27 @@ internal sealed class ScriptedAddinsBackend(TrayAddinService service) : ITrayAdd
         return _real.AdoptPresets(entry, adopt);
     }
 
+    public Exception? RestoreThrows { get; set; }
+
     public RestoreOutcome RestoreAll()
     {
         Calls.Add("RestoreAll");
+        if (RestoreThrows is not null) throw RestoreThrows;
         return RestoreFails ? new RestoreOutcome(false, "the record is locked", null) : _real.RestoreAll();
     }
+
+    public Exception? ClearThrows { get; set; }
+
+    public void ClearActiveProfile()
+    {
+        Calls.Add("Clear");
+        if (ClearThrows is not null) throw ClearThrows;
+        _real.ClearActiveProfile();
+    }
+
+    public LastLoadedProfile? RememberedProfile() => _real.RememberedProfile();
+
+    public void RememberLoadedProfile(string name, string? id) => _real.RememberLoadedProfile(name, id);
 }
 
 /// <summary>A machine with Revit 2026 and 2027, two profiles, and some of RST's own switches.</summary>
@@ -626,28 +642,239 @@ public class AddInsViewModelTests
         Assert.Equal("Add-in changes apply the next time Revit starts.", report.NextStartNote);
     }
 
+    // ── Spec #38: Launch (clean) ──────────────────────────────────────────────
+
     [Fact]
-    public async Task Restore_All_reports_with_the_Loaders_report_and_the_running_Revit_note()
+    public async Task Clean_launch_restores_every_year_reports_blanks_the_profile_then_starts_Revit()
     {
+        // AC2: add-ins RST switched off in 2026 and 2027; Launch on 2027.
         using var f = new AddInsFixture();
-        f.Backend.Running = [2026, 2027];
+        f.Backend.Running = [2026];
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        var card = vm.Years.Single(y => y.Year.Year == 2027);
+        Assert.True(card.CleanLaunchCommand.CanExecute(null));
+        f.Dialogs.DuringAddinReport = () =>
+        {
+            Assert.Empty(f.Backend.Launched); // the report comes before Revit starts
+            Assert.False(vm.CanLaunchClean);
+        };
+        f.Backend.OnLaunch = year =>
+        {
+            Assert.Equal(2027, year);
+            Assert.True(ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).IsBlank);
+            Assert.All(vm.Years, y => Assert.False(y.CleanLaunchCommand.CanExecute(null))); // a second click waits
+            Assert.All(vm.Years, y => Assert.False(y.LaunchCommand.CanExecute(null)));
+        };
+
+        await vm.CleanLaunchAsync(2027);
+
+        Assert.Equal(new[] { "RestoreAll", "Clear", "Launch" }, f.Backend.Calls.Where(c => c is "RestoreAll" or "Clear" or "Launch" or "Apply"));
+        Assert.Empty(f.Dialogs.AddinChanges);
+        var report = Assert.Single(f.Dialogs.AddinReports);
+        Assert.Equal("Restore All Add-ins", report.Title);
+        Assert.Equal(new[] { "RST-Probe (2026, 2027)", "DiRoots.One (2026)" }, report.SwitchedOn); // both years
+        Assert.Equal(new[] { "Revizto (2027): locked off by your administrator" }, report.NotChanged);
+        Assert.Contains("Revit 2026 is open: restart it to see the change.", report.Notes);
+        Assert.Equal(PlanAction.Enable, f.Switching.Executed.Single().Changes.Select(c => c.Action).Distinct().Single());
+        Assert.Equal(new[] { 2027 }, f.Backend.Launched);
+        Assert.Equal(AddInsStrings.CleanLaunched(2027), vm.ResultText);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal(AddInsStrings.ActiveProfileNone, vm.ActiveProfileText); // the page read again
+        Assert.True(vm.Years[0].IsClear);
+        Assert.Empty(vm.Years[1].SwitchedOff);
+        Assert.True(Directory.Exists(f.Root.Paths.ProfilesDir));
+        Assert.Equal(3, vm.Profiles.Count); // the profile files are untouched
+        Assert.True(vm.IsIdle);
+    }
+
+    [Fact]
+    public async Task Clean_launch_shows_no_report_when_nothing_needed_restoring()
+    {
+        // AC3.
+        using var f = new AddInsFixture();
+        f.Switching.Ledger = new ActivationLedger(); // nothing of RST's is switched off
         var vm = f.ViewModel();
         await vm.RefreshAsync();
 
-        await vm.RestoreAllAsync();
+        await vm.CleanLaunchAsync(2026);
 
-        Assert.Empty(f.Dialogs.AddinChanges); // as in the Loader: no Confirm before Restore All
-        var report = Assert.Single(f.Dialogs.AddinReports);
-        Assert.Equal("Restore All Add-ins", report.Title);
-        Assert.Equal(new[] { "RST-Probe (2026, 2027)", "DiRoots.One (2026)" }, report.SwitchedOn);
-        Assert.Equal(new[] { "Revizto (2027): locked off by your administrator" }, report.NotChanged);
-        Assert.Equal(new[] { "Revit 2026 is open: restart it to see the change.", "Revit 2027 is open: restart it to see the change." },
-                     report.Notes.Where(n => n.Contains("is open")));
-        Assert.Equal(PlanAction.Enable, f.Switching.Executed.Single().Changes.Select(c => c.Action).Distinct().Single());
-        Assert.Equal(AddInsStrings.Restored, vm.ResultText);
+        Assert.Empty(f.Dialogs.AddinReports);
+        Assert.Equal(new[] { 2026 }, f.Backend.Launched);
+        Assert.True(ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).IsBlank);
+        Assert.Equal(AddInsStrings.CleanLaunched(2026), vm.ResultText);
+    }
+
+    [Theory]
+    [InlineData("restore-throws")]
+    [InlineData("restore-fails")]
+    [InlineData("blank-fails")]
+    public async Task A_failed_restore_or_blank_write_starts_nothing_and_shows_the_banner(string failure)
+    {
+        // AC4.
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        if (failure == "restore-throws") f.Backend.RestoreThrows = new IOException("the record is in use");
+        if (failure == "restore-fails") f.Backend.RestoreFails = true;
+        if (failure == "blank-fails") f.Backend.ClearThrows = new UnauthorizedAccessException("access denied");
+
+        await vm.CleanLaunchAsync(2026);
+
+        Assert.Empty(f.Backend.Launched);
+        Assert.DoesNotContain("Launch", f.Backend.Calls);
+        Assert.Equal(failure switch
+        {
+            "restore-throws" => "Error restoring add-ins: the record is in use",
+            "restore-fails" => "Failed to restore add-ins: the record is locked",
+            _ => "Error unloading profile: access denied",
+        }, vm.ErrorText);
+        Assert.False(vm.HasResult);
+        if (failure != "blank-fails") Assert.DoesNotContain("Clear", f.Backend.Calls);
+        Assert.Equal("F16 Needs Probe", vm.ActiveProfileText); // nothing blanked
+        Assert.True(vm.IsIdle);
+    }
+
+    [Fact]
+    public async Task Clean_launch_that_cannot_start_Revit_says_so_and_keeps_the_restore()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        f.Backend.OnLaunch = _ => throw new IOException("executable missing");
+
+        await vm.CleanLaunchAsync(2026);
+
+        Assert.Equal(AddInsStrings.CleanLaunchFailed(2026, "executable missing"), vm.ErrorText);
+        Assert.False(vm.HasResult);
+        Assert.True(ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).IsBlank);
         Assert.True(vm.Years[0].IsClear);
-        Assert.Empty(vm.Years[1].SwitchedOff);
-        Assert.Equal(new[] { "Revizto (2027): locked off by your administrator" }, vm.Years[1].CouldNotChange);
+        Assert.True(vm.IsIdle);
+    }
+
+    [Fact]
+    public async Task Clean_launch_works_with_no_profiles_at_all()
+    {
+        // AC1: a user with no profiles can still start Revit from the tray.
+        using var f = new AddInsFixture();
+        foreach (var p in f.Service.Profiles()) File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, p.FileName));
+        File.Delete(f.Root.Paths.ActiveProfileFile);
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        Assert.True(vm.ShowNoProfiles);
+        Assert.All(vm.Years, y => Assert.False(y.LaunchCommand.CanExecute(null))); // Launch with Profile stays off
+        Assert.All(vm.Years, y => Assert.True(y.CleanLaunchCommand.CanExecute(null)));
+
+        await vm.CleanLaunchAsync(2026);
+
+        Assert.Equal(new[] { 2026 }, f.Backend.Launched);
+        Assert.True(ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).IsBlank);
+        Assert.Equal(AddInsStrings.CleanLaunched(2026), vm.ResultText);
+    }
+
+    [Fact]
+    public async Task Clean_launch_needs_a_read_page_and_a_card_for_the_year()
+    {
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.CleanLaunchAsync(2026); // not read yet
+        await vm.RefreshAsync();
+        await vm.CleanLaunchAsync(2025); // not installed
+        Assert.Empty(f.Backend.Launched);
+        Assert.DoesNotContain("RestoreAll", f.Backend.Calls);
+    }
+
+    // ── Spec #38: Launch with Profile's default pick ──────────────────────────
+
+    [Fact]
+    public async Task After_a_clean_launch_and_a_tray_restart_the_picker_shows_the_last_loaded_profile()
+    {
+        // AC5: apply A, clean-launch, then a new page (the tray restarted).
+        using var f = new AddInsFixture();
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "F16 Lean");
+        await vm.ApplyAsync();
+        await vm.CleanLaunchAsync(2026);
+        Assert.True(ActiveProfile.Read(f.Root.Paths.ActiveProfileFile).IsBlank);
+        Assert.Equal(new LastLoadedProfile("F16 Lean", AddInsFixture.LeanId), f.Service.LastLoaded()); // never cleared
+
+        var restarted = f.ViewModel();
+        await restarted.RefreshAsync();
+
+        Assert.Equal(AddInsStrings.ActiveProfileNone, restarted.ActiveProfileText);
+        Assert.Equal("F16 Lean", restarted.SelectedProfile!.Name);
+        Assert.True(restarted.DisableUnused); // seeded from F16 Lean's saved choice, as a pick is
+    }
+
+    [Fact]
+    public async Task A_profile_loaded_elsewhere_is_remembered_when_the_page_reads_it()
+    {
+        // The Loader inside Revit loaded "F16 Needs Probe": the page's read remembers it.
+        using var f = new AddInsFixture();
+        Assert.Null(f.Service.LastLoaded());
+        var vm = f.ViewModel();
+
+        await vm.RefreshAsync();
+
+        Assert.Equal(new LastLoadedProfile("F16 Needs Probe", AddInsFixture.ProbeId), f.Service.LastLoaded());
+        Assert.True(File.Exists(Path.Combine(f.Root.Paths.Root, LastLoadedProfile.FileName)));
+    }
+
+    [Fact]
+    public async Task The_remembered_profile_is_found_by_id_then_name_and_skipped_when_gone()
+    {
+        using var f = new AddInsFixture();
+        File.Delete(f.Root.Paths.ActiveProfileFile); // no active profile: the remembered one decides
+
+        // By id, though its name changed.
+        f.Service.RememberLoaded("Old Lean name", AddInsFixture.LeanId);
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        Assert.Equal("F16 Lean", vm.SelectedProfile!.Name);
+
+        // By name, when it has no id.
+        f.Service.RememberLoaded("Office", null);
+        vm = f.ViewModel();
+        await vm.RefreshAsync();
+        Assert.Equal("Office", vm.SelectedProfile!.Name);
+
+        // Deleted: skipped, so the first profile.
+        var office = vm.Profiles.Single(p => p.Name == "Office");
+        File.Delete(Path.Combine(f.Root.Paths.ProfilesDir, office.Entry.FileName));
+        vm = f.ViewModel();
+        await vm.RefreshAsync();
+        Assert.Same(vm.Profiles[0], vm.SelectedProfile);
+        Assert.NotEqual("Office", vm.SelectedProfile!.Name);
+    }
+
+    [Fact]
+    public async Task The_active_profile_still_wins_over_the_remembered_one_and_a_pick_over_both()
+    {
+        using var f = new AddInsFixture();
+        f.Service.RememberLoaded("F16 Lean", AddInsFixture.LeanId);
+        var vm = f.ViewModel();
+        await vm.RefreshAsync();
+        Assert.Equal("F16 Needs Probe", vm.SelectedProfile!.Name); // active
+
+        vm.SelectedProfile = vm.Profiles.Single(p => p.Name == "Office");
+        await vm.RefreshAsync();
+        Assert.Equal("Office", vm.SelectedProfile!.Name); // the user's pick in this window
+    }
+
+    [Fact]
+    public async Task A_remembered_profile_that_cannot_be_written_only_costs_the_default()
+    {
+        using var f = new AddInsFixture();
+        var path = Path.Combine(f.Root.Paths.Root, LastLoadedProfile.FileName);
+        Directory.CreateDirectory(path); // a folder where the file goes: the write fails
+        var vm = f.ViewModel();
+
+        await vm.RefreshAsync();
+
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("F16 Needs Probe", vm.ActiveProfileText);
+        Assert.Null(f.Service.LastLoaded());
     }
 
     [Fact]
@@ -664,9 +891,10 @@ public class AddInsViewModelTests
         await vm.RefreshAsync();
         Assert.Null(vm.ErrorText);
         f.Backend.RestoreFails = true;
-        await vm.RestoreAllAsync();
+        await vm.CleanLaunchAsync(2026);
         Assert.Equal("Failed to restore add-ins: the record is locked", vm.ErrorText);
         Assert.Empty(f.Dialogs.AddinReports);
+        Assert.Empty(f.Backend.Launched);
     }
 
     [Fact]
@@ -889,6 +1117,9 @@ public class AddInsViewModelTests
         Assert.StartsWith("“F16 Lean” is your profile now.", AddInsStrings.Applied("F16 Lean"));
         Assert.Equal("RST could not read your add-ins: x", AddInsStrings.ReadFailed("x"));
         Assert.Equal("The profile was not applied: x", AddInsStrings.ApplyFailed("x"));
+        Assert.Equal("Launch", AddInsStrings.CleanLaunchButton);
+        Assert.Equal("Start Revit 2026 with every add-in switched back on and no profile loaded.", AddInsStrings.CleanLaunchHint(2026));
+        Assert.Equal("Started Revit 2026 with no profile.", AddInsStrings.CleanLaunched(2026));
     }
 }
 
@@ -1006,6 +1237,26 @@ public class AddInsPageScreenshotTests
                 var right = button.TranslatePoint(new Point(button.ActualWidth, 0), row).X;
                 Assert.InRange(Math.Abs(row.ActualWidth - right), 0, 1);
                 Assert.Equal(card.LaunchHint, System.Windows.Automation.AutomationProperties.GetName(button));
+            }
+            // AC6: no Switch back on card; each row has Launch immediately left of Launch with Profile.
+            Assert.DoesNotContain(RST.UI.Resources.UiStrings.Loader_RestoreAll, texts);
+            Assert.DoesNotContain(RST.UI.Resources.UiStrings.Loader_RestoreAll, WindowCapture.Descendants<Button>(window.AddInsView).Select(b => b.Content as string));
+            var clean = WindowCapture.Descendants<Button>(window.AddInsView.YearCards)
+                .Where(b => Equals(b.Content, AddInsStrings.CleanLaunchButton)).ToList();
+            Assert.Equal(2, clean.Count);
+            foreach (var button in clean)
+            {
+                var card = Assert.IsType<AddInsYearViewModel>(button.DataContext);
+                Assert.True(button.IsVisible);
+                Assert.True(button.IsEnabled);
+                Assert.Same(card.CleanLaunchCommand, button.Command);
+                Assert.Equal(card.CleanLaunchHint, button.ToolTip);
+                Assert.Equal(card.CleanLaunchHint, System.Windows.Automation.AutomationProperties.GetName(button));
+                var row = Assert.IsType<DockPanel>(button.Parent);
+                var withProfile = buttons.Single(b => ReferenceEquals(b.Parent, row));
+                var gap = withProfile.TranslatePoint(new Point(0, 0), row).X - button.TranslatePoint(new Point(button.ActualWidth, 0), row).X;
+                Assert.InRange(gap, 11, 13); // immediately left: the one 12 px margin between them
+                Assert.Equal(button.Style, withProfile.Style); // the page's existing button style
             }
             foreach (var button in buttons) button.Command.Execute(null);
             Assert.Equal(new[] { 2026, 2027 }, f.Backend.Launched);
@@ -1140,14 +1391,21 @@ public class AddInsPageScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void After_Restore_All_and_its_report(UiTheme theme) => Sta(theme, () =>
+    public void After_a_clean_launch_and_its_report(UiTheme theme) => Sta(theme, () =>
     {
         using var f = new AddInsFixture();
         f.Backend.Running = [2026, 2027];
         var vm = f.ViewModel();
         vm.RefreshAsync().GetAwaiter().GetResult();
-        vm.RestoreAllAsync().GetAwaiter().GetResult();
+        vm.CleanLaunchAsync(2027).GetAwaiter().GetResult();
 
+        Capture(vm, theme, "clean-launch", window =>
+        {
+            var texts = Visible(window.AddInsView).Select(t => t.Text).ToList();
+            Assert.Contains(AddInsStrings.CleanLaunched(2027), texts);
+            Assert.Equal(AddInsStrings.ActiveProfileNone, window.AddInsView.ActiveProfile.Text);
+            Assert.Contains(AddInsStrings.YearClear, texts);
+        });
         CaptureDialog(new AddinReportWindow(f.Dialogs.AddinReports.Single()), theme, "report-restore");
     });
 
@@ -1204,7 +1462,7 @@ public class AddInsPageScreenshotTests
             var texts = Visible(window.AddInsView).Select(t => t.Text).ToList();
             Assert.Contains(AddInsStrings.ReadFailed("Access to the path 'AddInsSettings.json' is denied."), texts);
             Assert.DoesNotContain(AddInsStrings.ActiveProfileNone, texts); // nothing is known: nothing is claimed
-            Assert.False(window.AddInsView.RestoreAllButton.IsVisible);
+            Assert.Empty(window.AddInsView.YearCards.Items); // no year, so no Launch
         });
     });
 }

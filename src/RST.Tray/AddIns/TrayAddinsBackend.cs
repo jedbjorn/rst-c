@@ -37,6 +37,15 @@ internal interface ITrayAddinsBackend
     /// <summary>The Loader's Restore All Add-ins.</summary>
     RestoreOutcome RestoreAll();
 
+    /// <summary>Writes the "no profile" active_profile.json shared by every Revit year. Throws when it cannot.</summary>
+    void ClearActiveProfile();
+
+    /// <summary>The profile the tray last saw loaded; null when none is remembered.</summary>
+    LastLoadedProfile? RememberedProfile();
+
+    /// <summary>Remembers the last loaded profile (name and id). Throws when it cannot be written.</summary>
+    void RememberLoadedProfile(string name, string? id);
+
     /// <summary>Records the answer to the Loader's "Adopt RSTify Presets?" and returns what was recorded.</summary>
     (bool DisableUnused, IReadOnlyList<string> HiddenTabs) AdoptPresets(ProfileEntry entry, bool adopt);
 }
@@ -67,6 +76,12 @@ internal sealed class TrayAddinsBackend : ITrayAddinsBackend
 
     public RestoreOutcome RestoreAll() => _service.RestoreAll();
 
+    public void ClearActiveProfile() => _service.ClearActive();
+
+    public LastLoadedProfile? RememberedProfile() => _service.LastLoaded();
+
+    public void RememberLoadedProfile(string name, string? id) => _service.RememberLoaded(name, id);
+
     /// <summary>The Revit years open in this session (the tray's one "is Revit running" read).</summary>
     public IReadOnlyList<int> RunningYears() => RunningRevit.Years();
 
@@ -94,6 +109,16 @@ internal sealed class NoTrayAddinsBackend : ITrayAddinsBackend
     public int LaunchRevit(int year) => throw new InvalidOperationException(Resources.AddInsStrings.RevitNotFound(year));
 
     public RestoreOutcome RestoreAll() => new(true, null, ActivationReport.Empty(ActivationIntent.RestoreAll));
+
+    public void ClearActiveProfile()
+    {
+    }
+
+    public LastLoadedProfile? RememberedProfile() => null;
+
+    public void RememberLoadedProfile(string name, string? id)
+    {
+    }
 
     public (bool DisableUnused, IReadOnlyList<string> HiddenTabs) AdoptPresets(ProfileEntry entry, bool adopt) => (false, []);
 }

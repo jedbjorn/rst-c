@@ -1,9 +1,9 @@
 <!--
     rst-c's own (not vendored). The RST tray's Add-ins page (spec #20 §3; F17 WU2), on RST.UI's family kit
     (Theme.xaml; the tray window's Panel cards, banners and pills). Top to bottom: the active profile; Apply a
-    profile (the picker, the Loader's "Disable unused add-ins" switch, Apply profile…); Restore All Add-ins; then one
-    card per installed Revit year: "Open now" while it runs, what RST switched off, what it can't switch back on
-    (the reports' wording) and the year's notes. The Loader's own Confirm Add-in Changes and report dialogs show the
+    profile (the picker, the Loader's "Disable unused add-ins" switch, Apply profile…); then one card per installed
+    Revit year with Launch and Launch with Profile (spec #38): "Open now" while it runs, what RST switched off, what it
+    can't switch back on (the reports' wording) and the year's notes. The Loader's own Confirm Add-in Changes and report dialogs show the
     plan and the result. The view-model is AddInsViewModel; TrayWindow hosts it in its AddInsPage.
 -->
 <UserControl x:Class="RST.Tray.Windows.AddInsView" x:ClassModifier="internal"
@@ -94,24 +94,6 @@
             </StackPanel>
         </Border>
 
-        <!-- Restore All Add-ins: only RST's own switches. -->
-        <Border Style="{StaticResource Panel}" Padding="16,12" Margin="0,0,0,10" AutomationProperties.AutomationId="Tray.AddIns.RestorePanel"
-                Visibility="{Binding IsLoaded, Converter={StaticResource BoolToVisible}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock Text="{x:Static res:AddInsStrings.RestoreHeading}" Style="{StaticResource SectionText}" FontSize="13" />
-                    <TextBlock Text="{x:Static ui:UiStrings.Loader_RestoreReportSubtitle}" Style="{StaticResource Hint}" Margin="0,2,0,0" />
-                </StackPanel>
-                <Button x:Name="RestoreAllButton" Grid.Column="1" Content="{x:Static ui:UiStrings.Loader_RestoreAll}" Command="{Binding RestoreAllCommand}"
-                        MinWidth="140" Margin="16,0,0,0" VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Tray.AddIns.RestoreAll" />
-            </Grid>
-        </Border>
-
         <!-- Per installed Revit year. -->
         <DockPanel Margin="0,4,0,4" LastChildFill="False">
             <TextBlock Text="{x:Static res:AddInsStrings.YearsHeading}" Style="{StaticResource SectionText}" FontSize="13" DockPanel.Dock="Left" />
@@ -134,6 +116,11 @@
                                         DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
                                         ToolTip="{Binding LaunchHint}" AutomationProperties.Name="{Binding LaunchHint}"
                                         AutomationProperties.AutomationId="{Binding LaunchAutomationId}" />
+                                <!-- Docked right after Launch with Profile, so it sits immediately to its left (redline #245). -->
+                                <Button Content="{x:Static res:AddInsStrings.CleanLaunchButton}" Command="{Binding CleanLaunchCommand}"
+                                        DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                        ToolTip="{Binding CleanLaunchHint}" AutomationProperties.Name="{Binding CleanLaunchHint}"
+                                        AutomationProperties.AutomationId="{Binding CleanLaunchAutomationId}" />
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     <ContentControl Style="{StaticResource InfoPill}" Content="{x:Static res:AddInsStrings.YearRunning}" Margin="10,0,0,0"

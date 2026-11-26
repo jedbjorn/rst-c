@@ -39,8 +39,6 @@ public static class AddInsStrings
 
     public static string NoProfiles => Get(nameof(NoProfiles));
 
-    public static string RestoreHeading => Get(nameof(RestoreHeading));
-
     public static string YearsHeading => Get(nameof(YearsHeading));
 
     public static string YearRunning => Get(nameof(YearRunning));
@@ -63,8 +61,6 @@ public static class AddInsStrings
 
     public static string Applied(object? profile) => Format(nameof(Applied), profile);
 
-    public static string Restored => Get(nameof(Restored));
-
     public static string ReadFailed(object? reason) => Format(nameof(ReadFailed), reason);
 
     public static string ApplyFailed(object? reason) => Format(nameof(ApplyFailed), reason);
@@ -78,6 +74,14 @@ public static class AddInsStrings
     public static string Launched(object? year, object? profile) => Format(nameof(Launched), year, profile);
 
     public static string LaunchFailed(object? year, object? reason) => Format(nameof(LaunchFailed), year, reason);
+
+    public static string CleanLaunchButton => Get(nameof(CleanLaunchButton));
+
+    public static string CleanLaunchHint(object? year) => Format(nameof(CleanLaunchHint), year);
+
+    public static string CleanLaunched(object? year) => Format(nameof(CleanLaunched), year);
+
+    public static string CleanLaunchFailed(object? year, object? reason) => Format(nameof(CleanLaunchFailed), year, reason);
 
     public static string RevitNotFound(object? year) => Format(nameof(RevitNotFound), year);
 

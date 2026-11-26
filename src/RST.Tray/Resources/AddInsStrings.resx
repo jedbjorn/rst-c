@@ -50,9 +50,6 @@
   <data name="NoProfiles" xml:space="preserve">
     <value>No profiles yet. Create or import one in Revit: RST tab › Loader or Builder.</value>
   </data>
-  <data name="RestoreHeading" xml:space="preserve">
-    <value>Switch back on</value>
-  </data>
   <data name="YearsHeading" xml:space="preserve">
     <value>By Revit year</value>
   </data>
@@ -87,9 +84,6 @@
   <data name="Applied" xml:space="preserve">
     <value>“{0}” is your profile now. Revit uses it, and any add-in changes, the next time it starts.</value>
   </data>
-  <data name="Restored" xml:space="preserve">
-    <value>Done. Add-in changes apply the next time Revit starts.</value>
-  </data>
   <data name="ReadFailed" xml:space="preserve">
     <value>RST could not read your add-ins: {0}</value>
   </data>
@@ -113,6 +107,19 @@
   </data>
   <data name="LaunchFailed" xml:space="preserve">
     <value>The profile was applied, but Revit {0} could not start: {1}</value>
+  </data>
+  <data name="CleanLaunchButton" xml:space="preserve">
+    <value>Launch</value>
+    <comment>Left of "Launch with Profile" on each Revit year row (spec #38).</comment>
+  </data>
+  <data name="CleanLaunchHint" xml:space="preserve">
+    <value>Start Revit {0} with every add-in switched back on and no profile loaded.</value>
+  </data>
+  <data name="CleanLaunched" xml:space="preserve">
+    <value>Started Revit {0} with no profile.</value>
+  </data>
+  <data name="CleanLaunchFailed" xml:space="preserve">
+    <value>Add-ins were switched back on and no profile is loaded, but Revit {0} could not start: {1}</value>
   </data>
   <data name="RevitNotFound" xml:space="preserve">
     <value>The Revit {0} executable could not be found. Check its installation and try again.</value>

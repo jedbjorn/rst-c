@@ -16,7 +16,7 @@ From v3.1, `RST.msi` and `RST-Machine.msi` also install **RST.Tray.exe**, a smal
 
 The tray shows which versions of RST, Gantt-It, Splash-It, Pick-It and Drive-It are installed, tells you when a newer one is out, and installs it when you click (see [Installing and updating](#installing-and-updating)). It also switches your profile and Revit add-ins before you start Revit (see [RST Profiles](#rst-profiles)), and shows this PC's health and every model you have worked on (see [Health page](#health-page)). Its window has five pages, in this order (Feature #17, decisions #76 and #77):
 
-- **RST Profiles:** the active profile, **Apply profile…** and **Restore All Add-ins**, with the Profile Loader's own switching, and per installed Revit year what RST switched off and what it can't switch back on. See [RST Profiles](#rst-profiles).
+- **RST Profiles:** the active profile and **Apply profile…**, with the Profile Loader's own switching, and per installed Revit year what RST switched off, what it can't switch back on, **Launch** and **Launch with Profile**. See [RST Profiles](#rst-profiles).
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It, Splash-It, Pick-It and Drive-It. See [Updates](#updates).
 - **Apps:** one row each for RST, Gantt-It, Splash-It, Pick-It and Drive-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. An early release carries an **Alpha** badge beside its name (Drive-It, which needs Revit 2026), here, on the Updates page and in the setup's checkbox. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub.
 - **Health:** **Device**, this PC's snapshot and junk file cleanup without Revit, and **Models**, every model you have worked on on this PC, across Revit versions, with each model's activity and health. See [Health page](#health-page).
@@ -29,7 +29,7 @@ The notification icon is a white **R** on an RST-blue tile with a light rim, dra
 
 A non-hidden start, an icon click or menu **Open RST** opens a fresh window on **RST Profiles**, even if you last closed it on another page. If the window is already shown, an icon click or **Open RST** brings it forward and keeps its current page. Menu **Check for updates** and an update notification click always select **Updates**; menu **Settings** always selects **Settings**. Starting the app again uses the same ordinary-open rule, except that a launch with an accepted, not-yet-presented self-update result targets **Updates**. This includes a result already consumed by a hidden tray before the later launch signals it. Damaged results, results more than a day old, and results more than five minutes in the future do not change navigation. Once Updates has shown the result in RST’s row, later ordinary opens return to **RST Profiles**. Changing the theme preserves the current page.
 
-A fresh window clears the previous **Starting Revit** success banner; activating an already shown window keeps it. Launch errors keep their existing behaviour (they survive refresh in the same window; closing the window discards its view model). Each successful Launch with Profile records the Revit year, profile name and process id in the tray log.
+A fresh window clears the previous **Starting Revit** success banner; activating an already shown window keeps it. Launch errors keep their existing behaviour (they survive refresh in the same window; closing the window discards its view model). Each successful Launch or Launch with Profile records the Revit year, the profile name (or "no profile") and the process id in the tray log.
 
 RST Profiles reads its data once per fresh window when it is shown; revisiting the tab does not read it again unless you refresh. Health loads only when you show Health.
 
@@ -183,9 +183,17 @@ When Revit 2025 or later starts with RST, RST checks once whether your tray is r
 
 ## RST Profiles
 
-The **RST Profiles** page switches your profile and add-ins before you start Revit, with the Profile Loader's own switching: the same plan in **Confirm Add-in Changes**, the same report, the same record of what RST switched off, and the Loader's **Adopt RSTify Presets?** question the first time a profile with presets is used. Per installed Revit year it lists what RST switched off and what it can't switch back on. **Restore All Add-ins** switches back on only what RST switched off. Every change applies the next time that Revit starts. If a Revit is open, the report says so: restart it to see the change.
+The **RST Profiles** page switches your profile and add-ins before you start Revit, with the Profile Loader's own switching: the same plan in **Confirm Add-in Changes**, the same report, the same record of what RST switched off, and the Loader's **Adopt RSTify Presets?** question the first time a profile with presets is used. Per installed Revit year it lists what RST switched off and what it can't switch back on, with **Launch** and then **Launch with Profile**. Every change applies the next time that Revit starts. If a Revit is open, the report says so: restart it to see the change.
+
+**Launch** starts that Revit year clean, with no profile. It needs no profile, so you can start Revit to build your first one. It switches back on everything RST switched off, in **every** installed Revit year (the active profile is one file for all years, so no year is left half-restored), and shows the **Restore All Add-ins** report only when an add-in was switched back on or could not be. It then clears the active profile, so the RST tab shows only the Loader, and starts a new instance of that Revit year. Your profile files are kept. If the add-ins can't be restored or the active profile can't be cleared, Revit is not started and the error stays on the page.
 
 **Launch with Profile** applies the selected profile and the **Disable unused** choice through the Loader’s confirmation and report flow, then starts a new instance of that Revit year. Cancelling or a failed apply means Revit is not launched. Errors appear inline on RST Profiles.
+
+The profile picker starts on, in this order: the profile you picked in this window; the active profile; the profile last loaded; the first profile. The tray remembers the last loaded profile (its name and id) in `%AppData%\RST\tray_last_profile.json` whenever it applies one or finds one active, a profile loaded by the Loader inside Revit included. A clean **Launch** never clears it, so after a clean session **Launch with Profile** offers your usual profile again, also after the tray restarts. A remembered profile you have since deleted is skipped.
+
+Each click on either button starts a new instance, also when that year is **Open now**. While a launch runs the page is busy, so a second click waits.
+
+There is no separate **Restore All Add-ins** button on the tray (decision #136). To get your add-ins back, click **Launch**, then close Revit if you don't need it.
 
 Things to know when Revits of several years are open:
 
