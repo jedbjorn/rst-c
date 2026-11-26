@@ -166,12 +166,12 @@ If RST, or Gantt-It, Splash-It, Pick-It or Drive-It, is installed for everyone o
 
 Click **Remove**, then **Yes** at "Remove {app}?". **No** changes nothing. Removals take their turn with installs and updates, one at a time. In its turn, the tray looks the app up again by its UpgradeCode (from the tray's catalog, `companions/companions.json`) and checks that it is still one install for your Windows user only; otherwise it removes nothing and says so. It then runs `C:\Windows\System32\msiexec.exe /x {ProductCode} /qn /norestart /l*v <log> MSIRESTARTMANAGERCONTROL=Disable`, with its log beside the install logs (`remove-<app>-<date>-<time>.log`, **Open log** on the row). Once it runs it can't be cancelled.
 
-- **Removed** (msiexec 0): the row says "{app} removed." and shows **Not installed** with the plain **Install** button, never "Reinstall previous version".
-- **Restart needed** (3010 or 1641): removed; Windows finishes after a restart, for example files Revit had open. The tray never restarts the PC.
+- **Removed** (msiexec 0): the row says "{app} removed." and shows **Not installed** with the plain **Install** button, never "Reinstall previous version". This includes an app Revit has loaded: Windows Installer deletes its files, and Revit keeps the copy it loaded until it closes.
+- **Restart needed** (3010 or 1641): removed; Windows finishes after a restart. The tray never restarts the PC.
 - **Another installation is running** (1618): the tray tries again after three minutes, three times in all, as installs do.
 - **Anything else:** "Couldn't remove {app}:" with the error number, and **Open log** shows the details.
 
-Removal doesn't wait for Revit or close it; the page's close-Revit advice covers it. Only what the app's installer put there goes: its settings and logs under `%AppData%` stay. A removed app is treated as never installed, so the Apps page offers **Install** again.
+Removal doesn't wait for Revit or close it; the page's close-Revit advice covers it. Only what the app's installer put there goes: its settings and logs under `%AppData%` stay. A removed app is treated as never installed, so the Apps page offers **Install** again. If it is installed again outside RST, the row drops "{app} removed." and offers **Remove** again as soon as the tray finds it.
 
 ## Quitting it
 
