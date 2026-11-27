@@ -270,9 +270,12 @@ public class TrayInstallScreenshotTests
                     Assert.Equal("install:splash-it", host.Calls[^1]);
                     break;
                 case "progress":
-                    Assert.Contains("Downloading and checking RST 3.1.1…", texts);
-                    Assert.Contains("Waiting its turn: Gantt-It 1.2.0 installs when the installation before it has finished.", texts);
-                    Assert.Contains("Installing Splash-It 1.1.0…", texts);
+                    // Issue #250: progress is the button's words, never a line of text.
+                    Assert.Equal("Updating…", Button(window, "Tray.App.rst.Busy").Content);
+                    Assert.Equal("Updating…", Button(window, "Tray.App.gantt-it.Busy").Content);
+                    Assert.Equal("Installing…", Button(window, "Tray.App.splash-it.Busy").Content);
+                    Assert.All(new[] { "rst", "gantt-it", "splash-it" }, id => Assert.False(Button(window, $"Tray.App.{id}.Busy").IsEnabled));
+                    Assert.DoesNotContain("Installing Splash-It 1.1.0…", texts);
                     Assert.True(Button(window, "Tray.App.gantt-it.Cancel").IsVisible);
                     Assert.True(Button(window, "Tray.App.rst.Cancel").IsVisible);
                     Assert.False(Button(window, "Tray.App.splash-it.Cancel").IsVisible, "msiexec is not cancelled once it runs");
@@ -282,19 +285,19 @@ public class TrayInstallScreenshotTests
                     break;
                 case "done":
                     Assert.Contains("RST 3.1.1 is installed. Restart Windows to finish; RST never restarts it for you.", texts);
-                    Assert.Contains("Gantt-It 1.2.0 is installed.", texts);
+                    Assert.DoesNotContain("Gantt-It 1.2.0 is installed.", texts); // issue #250: success is the pill's
                     // Review N5: the wording offers only what the page offers (Reinstall), nothing else.
                     Assert.Contains("Couldn't update Splash-It to 1.1.0: Windows Installer stopped with error 1603, and Splash-It is no longer installed. Reinstall the previous version to get it back; the log has the details.", texts);
                     var reinstall = Button(window, "Tray.App.splash-it.Action");
                     Assert.Equal("Reinstall previous version (1.0.0)", reinstall.Content);
                     reinstall.Command.Execute(window.ViewModel.Updates.Rows[2]);
                     Assert.Equal("reinstall:splash-it", host.Calls[^1]);
-                    Assert.Equal(3, texts.Count(t => t == "Open log")); // each finished install links its msiexec log
+                    Assert.DoesNotContain("Open log", texts); // issue #250: no links
                     break;
                 case "queue":
-                    Assert.Contains("RST 3.1.1 updates once the other installs have finished, so none of them is lost when RST restarts.", texts);
-                    Assert.Contains("Installing Gantt-It 1.2.0…", texts);
-                    Assert.Contains("Waiting its turn: Splash-It 1.1.0 installs when the installation before it has finished.", texts);
+                    Assert.Equal("Updating…", Button(window, "Tray.App.rst.Busy").Content);
+                    Assert.Equal("Updating…", Button(window, "Tray.App.gantt-it.Busy").Content);
+                    Assert.Equal("Installing…", Button(window, "Tray.App.splash-it.Busy").Content);
                     Assert.True(Button(window, "Tray.App.splash-it.Cancel").IsVisible, "a queued install can be cancelled");
                     Assert.True(Button(window, "Tray.App.rst.Cancel").IsVisible);
                     Assert.False(Button(window, "Tray.App.gantt-it.Cancel").IsVisible);
@@ -304,7 +307,7 @@ public class TrayInstallScreenshotTests
                     Assert.Contains("Gantt-It 1.2.0 is available. It's installed for everyone on this PC, so ask whoever manages software here to update it.", texts);
                     Assert.False(Button(window, "Tray.App.rst.Action").IsVisible, "a per-user tray never installs over a per-machine install");
                     Assert.False(Button(window, "Tray.App.gantt-it.Action").IsVisible);
-                    Assert.Contains("Release page", texts);
+                    Assert.DoesNotContain("Release page", texts); // issue #250: no links
                     Assert.False(Button(window, "Tray.App.rst.Remove").IsVisible, "never RST");
                     Assert.False(Button(window, "Tray.App.gantt-it.Remove").IsVisible, "never an install for everyone");
                     Assert.True(Button(window, "Tray.App.splash-it.Remove").IsVisible);
@@ -316,15 +319,16 @@ public class TrayInstallScreenshotTests
                     Assert.Equal("Remove", remove.Content);
                     Assert.Equal("Remove Gantt-It for your Windows user.", remove.ToolTip);
                     Assert.False(Button(window, "Tray.App.rst.Remove").IsVisible, "never RST");
-                    Assert.Contains("Removing Splash-It…", texts);
+                    Assert.Equal("Removing…", Button(window, "Tray.App.splash-it.Busy").Content);
+                    Assert.DoesNotContain("Removing Splash-It…", texts);
                     Assert.False(Button(window, "Tray.App.splash-it.Remove").IsVisible, "not while it is removed");
                     Assert.False(Button(window, "Tray.App.splash-it.Cancel").IsVisible, "msiexec is not cancelled once it runs");
-                    Assert.Contains("Drive-It removed.", texts);
+                    Assert.DoesNotContain("Drive-It removed.", texts); // the pill says Not installed
                     Assert.Equal("Install", Button(window, "Tray.App.drive-it.Action").Content);
                     Assert.False(Button(window, "Tray.App.drive-it.Remove").IsVisible);
                     Assert.Contains("Couldn't remove Pick-It: Windows Installer stopped with error 1603. The log has the details.", texts);
                     Assert.True(Button(window, "Tray.App.pick-it.Remove").IsVisible, "a failed removal can be tried again");
-                    Assert.Equal(2, texts.Count(t => t == "Open log"));
+                    Assert.DoesNotContain("Open log", texts);
                     // No changes nothing; Yes queues it.
                     remove.Command.Execute(window.ViewModel.Updates.Rows[1]);
                     Assert.Equal(new[] { "confirm-remove:gantt-it" }, host.Calls);
@@ -353,7 +357,8 @@ public class TrayInstallScreenshotTests
             Assert.Contains(TrayStrings.Install_CloseRevitAdvice, texts);
             if (scenario == "handoff")
             {
-                Assert.Contains("Updating RST to 3.1.1. RST closes now and opens again when it is done.", texts);
+                Assert.DoesNotContain("Updating RST to 3.1.1. RST closes now and opens again when it is done.", texts);
+                Assert.Equal("Updating…", Button(window, "Tray.RstBusy").Content);
                 Assert.False(window.RstUpdateButton.IsVisible);
             }
             else
@@ -361,7 +366,7 @@ public class TrayInstallScreenshotTests
                 Assert.Equal("RST 3.1.1 is available", window.RstHeadline.Text);
                 Assert.Contains("RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here.", texts);
                 Assert.False(window.RstUpdateButton.IsVisible);
-                Assert.Contains("Release page", texts);
+                Assert.DoesNotContain("Release page", texts);
             }
         }
         finally
@@ -572,12 +577,11 @@ public class TrayInstallWordingTests
         var host = InstallScenarios.Host("advice");
         var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
         Assert.Equal(new[] { "Update", "Update", "Install" }, vm.Rows.Select(r => r.ActionText));
-        Assert.True(vm.ShowRstInstallNote);
+        Assert.Equal(new[] { true, true, false }, vm.Rows.Select(r => r.IsUpdateAction)); // blue on hover; Install is green
 
         var machine = new UpdatesViewModel(InstallScenarios.Host("permachine"), () => new UpdateChecksState(true, false));
         Assert.Null(machine.Rst.ActionText);
-        Assert.False(machine.ShowRstInstallNote);
-        Assert.True(machine.Rst.ShowNoteReleasePage);
+        Assert.True(machine.Rst.ShowNote, "who can update an install for everyone is the one idle line");
 
         // A per-machine TRAY (Program Files) never installs RST, even when Windows Installer reports a per-user one.
         var tray = InstallScenarios.Host("advice");
@@ -591,10 +595,8 @@ public class TrayInstallWordingTests
 /// <summary>Remove on the Apps page (spec #38; AC8 and the Remove outcomes): which rows offer it, the question, the words.</summary>
 public class TrayRemoveTests
 {
-    private static readonly System.Windows.Input.ICommand Nothing = new RST.UI.Mvvm.RelayCommand(() => { });
-
     private static ProductRowViewModel Row(ProductStatus status, InstallProgress? progress = null, bool detected = true) =>
-        new(status, RowCommands.ReleasePageOnly(Nothing), detected, progress, perMachineTray: false);
+        new(status, RowCommands.Inert, detected, progress, perMachineTray: false);
 
     private static ProductStatus Drive(InstallKind kind = InstallKind.Installer, InstallContext context = InstallContext.User) =>
         Scenarios.S("drive-it", kind, kind == InstallKind.Installer ? "0.2.0" : null, "0.2.0", context: context);
@@ -661,19 +663,25 @@ public class TrayRemoveTests
         var removed = Row(Drive(InstallKind.NotInstalled), new InstallProgress(InstallPhase.Installed, version, ExitCode: 0, LogPath: log, Removal: true));
         Assert.Equal("Drive-It removed.", removed.NoteText);
         Assert.Equal(RowNoteKind.Success, removed.NoteKind);
+        Assert.False(removed.ShowNote, "success is the pill's, not a line of text (issue #250)");
         Assert.Equal("Install", removed.ActionText);
         Assert.Null(removed.ReinstallVersion);
-        Assert.Equal(log, removed.LogPath);
         Assert.Equal("Not installed", removed.StateText);
 
         Assert.Equal("Drive-It removed. Restart Windows to finish; RST never restarts it for you.",
             Note(new InstallProgress(InstallPhase.Installed, version, ExitCode: 3010, LogPath: log, RestartNeeded: true, Removal: true), InstallKind.NotInstalled));
+        Assert.True(Row(Drive(InstallKind.NotInstalled), new InstallProgress(InstallPhase.Installed, version, ExitCode: 3010, RestartNeeded: true, Removal: true)).ShowNote,
+            "a restart to finish is still said");
         Assert.Equal("Drive-It removed. Restart Windows to finish; RST never restarts it for you.",
             Note(new InstallProgress(InstallPhase.Installed, version, ExitCode: 1641, LogPath: log, RestartNeeded: true, Removal: true), InstallKind.NotInstalled));
 
         Assert.Equal("Waiting its turn: Drive-It is removed when the installation before it has finished.",
             Note(new InstallProgress(InstallPhase.Queued, Removal: true)));
         Assert.Equal("Removing Drive-It…", Note(new InstallProgress(InstallPhase.Installing, version, Removal: true)));
+        var removing = Row(Drive(), new InstallProgress(InstallPhase.Installing, version, Removal: true));
+        Assert.Equal("Removing…", removing.BusyText);
+        Assert.True(removing.HasButtons);
+        Assert.False(removing.ShowNote);
         Assert.Equal("Another installation is running. RST tries removing Drive-It again in a few minutes.",
             Note(new InstallProgress(InstallPhase.RetryLater, version, ExitCode: 1618, LogPath: log, Removal: true)));
         Assert.Equal("Another installation kept running, so Drive-It wasn't removed. Try again later.",
@@ -682,7 +690,7 @@ public class TrayRemoveTests
         var failed = Row(Drive(), new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallFailed, ExitCode: 1603, LogPath: log, Removal: true));
         Assert.Equal("Couldn't remove Drive-It: Windows Installer stopped with error 1603. The log has the details.", failed.NoteText);
         Assert.Equal(RowNoteKind.Error, failed.NoteKind);
-        Assert.True(failed.HasLog);
+        Assert.True(failed.ShowNote, "a failure is the one line a row still shows");
         Assert.Null(failed.ReinstallVersion);
 
         Assert.Equal("RST didn't remove Drive-It: RST couldn't tell what is installed. Nothing was changed.",

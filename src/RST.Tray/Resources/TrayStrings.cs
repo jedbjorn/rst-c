@@ -271,8 +271,6 @@ public static class TrayStrings
 
     public static string State_Unknown => Get(nameof(State_Unknown));
 
-    public static string Updates_RstUpdateNote => Get(nameof(Updates_RstUpdateNote));
-
     public static string Offer_Heading => Get(nameof(Offer_Heading));
 
     public static string Offer_Text => Get(nameof(Offer_Text));
@@ -282,8 +280,6 @@ public static class TrayStrings
     public static string Updates_OtherApps => Get(nameof(Updates_OtherApps));
 
     public static string Updates_OtherAppsHint => Get(nameof(Updates_OtherAppsHint));
-
-    public static string Apps_InstallsNote => Get(nameof(Apps_InstallsNote));
 
     public static string Apps_Detecting => Get(nameof(Apps_Detecting));
 
@@ -303,8 +299,6 @@ public static class TrayStrings
 
     public static string App_InstalledManually => Get(nameof(App_InstalledManually));
 
-    public static string App_ManualNote => Get(nameof(App_ManualNote));
-
     public static string App_Alpha => Get(nameof(App_Alpha));
 
     public static string App_LatestNotChecked => Get(nameof(App_LatestNotChecked));
@@ -321,11 +315,13 @@ public static class TrayStrings
 
     public static string App_ReinstallPrevious(string version) => Format(nameof(App_ReinstallPrevious), version);
 
+    public static string App_Installing => Get(nameof(App_Installing));
+
+    public static string App_Updating => Get(nameof(App_Updating));
+
+    public static string App_Removing => Get(nameof(App_Removing));
+
     public static string App_Cancel => Get(nameof(App_Cancel));
-
-    public static string App_OpenLog => Get(nameof(App_OpenLog));
-
-    public static string App_ReleasePage => Get(nameof(App_ReleasePage));
 
     public static string State_UpToDate => Get(nameof(State_UpToDate));
 

@@ -6,6 +6,9 @@
 // Remove (spec #38) is offered only on an idle companion Windows Installer installed for this user; the host asks
 // "Remove {app}?" (Yes/No) and queues it on the same coordinator.
 // Every failure is said in plain words (TrayStrings.Problem); the detail is in the logs (WU3 review D3).
+// The pages stay quiet (issue #250): a row shows its pill and one button (Install green, Update blue, Remove amber on
+// hover; "Installing…" while busy). Only a failure, a restart to finish, or who updates an install for everyone adds
+// a line of text.
 
 using System.Globalization;
 using System.Windows.Input;
@@ -34,9 +37,6 @@ internal interface ITrayUpdatesHost
     /// <summary>Checks now (Check now). Never blocks.</summary>
     void CheckNow();
 
-    /// <summary>Opens <c>https://github.com/&lt;repo&gt;/releases/latest</c> in the browser (a URL built from the catalog).</summary>
-    void OpenReleasePage(ProductInfo product);
-
     /// <summary>Each product's install state (F17 WU4); absent is idle.</summary>
     IReadOnlyDictionary<string, InstallProgress> Installs => EmptyInstalls;
 
@@ -58,21 +58,19 @@ internal interface ITrayUpdatesHost
     /// <summary>Removes a companion installed for this user (spec #38). Never blocks.</summary>
     void Remove(ProductInfo product) { }
 
-    /// <summary>Opens an msiexec log in Notepad.</summary>
-    void OpenLog(string path) { }
-
     /// <summary>The user dismissed the offer of sister apps shown after an RST update (decision #79).</summary>
     void DismissSisterOffer() { }
 
     internal static readonly IReadOnlyDictionary<string, InstallProgress> EmptyInstalls = new Dictionary<string, InstallProgress>();
 }
 
-/// <summary>The commands a row's buttons and links run.</summary>
-internal sealed record RowCommands(ICommand ReleasePage, ICommand Act, ICommand Cancel, ICommand OpenLog, ICommand? Remove = null)
+/// <summary>The commands a row's buttons run.</summary>
+internal sealed record RowCommands(ICommand Act, ICommand Cancel, ICommand? Remove = null)
 {
     internal static readonly ICommand None = new RelayCommand(() => { }, () => false);
 
-    public static RowCommands ReleasePageOnly(ICommand releasePage) => new(releasePage, None, None, None);
+    /// <summary>No button acts (tests that only read a row).</summary>
+    public static RowCommands Inert { get; } = new(None, None);
 }
 
 /// <summary>How a row's status line looks.</summary>
@@ -91,11 +89,6 @@ internal sealed class ProductRowViewModel
     /// <param name="detected">Detection has run. Before it has, the row claims no state: no pill, no button.</param>
     /// <param name="progress">Its install state (null: idle).</param>
     /// <param name="perMachineTray">The tray runs from a per-machine install (RST is then never installed from it).</param>
-    public ProductRowViewModel(ProductStatus status, ICommand releasePage, bool detected = true)
-        : this(status, RowCommands.ReleasePageOnly(releasePage), detected, null, false)
-    {
-    }
-
     public ProductRowViewModel(ProductStatus status, RowCommands commands, bool detected, InstallProgress? progress,
                                bool perMachineTray)
     {
@@ -202,6 +195,17 @@ internal sealed class ProductRowViewModel
 
     public bool HasAction => ActionText is not null;
 
+    /// <summary>The button is Update (blue on hover); otherwise Install or Reinstall (green).</summary>
+    public bool IsUpdateAction => HasAction && State == ProductState.UpdateAvailable;
+
+    /// <summary>Something runs for it: the button reads "Installing…", "Updating…" or "Removing…", disabled.</summary>
+    public bool IsBusy => IsKnown && Progress.IsBusy;
+
+    public string? BusyText => !IsBusy ? null
+        : Progress.Removal ? TrayStrings.App_Removing
+        : Status.Installation.Kind == InstallKind.Installer ? TrayStrings.App_Updating
+        : TrayStrings.App_Installing;
+
     /// <summary>The button acts (it is shown only when it can).</summary>
     public bool CanAct => HasAction;
 
@@ -223,11 +227,12 @@ internal sealed class ProductRowViewModel
     public string RemoveToolTip => TrayStrings.App_RemoveToolTip(Name);
 
     /// <summary>The right-hand column shows a button.</summary>
-    public bool HasButtons => HasAction || CanCancel || CanRemove;
+    public bool HasButtons => HasAction || IsBusy || CanCancel || CanRemove;
 
-    public bool ShowManualNote => IsManual;
-
-    /// <summary>The status line under the row: what the install is doing or how it ended; who updates a per-machine install.</summary>
+    /// <summary>
+    /// What the install is doing or how it ended; who updates a per-machine install. The window opens on it after an
+    /// RST update (TrayNavigation), but shows it only when it needs the user's attention (ShowNote).
+    /// </summary>
     public string? NoteText
     {
         get
@@ -268,6 +273,7 @@ internal sealed class ProductRowViewModel
 
     public RowNoteKind NoteKind => !HasNote ? RowNoteKind.None : Progress.Phase switch
     {
+        InstallPhase.Installed when Progress.RestartNeeded => RowNoteKind.Warning,
         InstallPhase.Installed => RowNoteKind.Success,
         InstallPhase.Failed => RowNoteKind.Error,
         InstallPhase.Refused when Progress.Problem == InstallProblem.PerMachine => RowNoteKind.Warning,
@@ -276,34 +282,14 @@ internal sealed class ProductRowViewModel
         _ => RowNoteKind.Progress,
     };
 
-    public bool IsNoteProgress => NoteKind == RowNoteKind.Progress;
-
-    public bool IsNoteSuccess => NoteKind == RowNoteKind.Success;
-
-    public bool IsNoteWarning => NoteKind == RowNoteKind.Warning;
-
     public bool IsNoteError => NoteKind == RowNoteKind.Error;
 
-    /// <summary>An msiexec log to open (a finished or failed install).</summary>
-    public string? LogPath => Progress.Phase is InstallPhase.Failed or InstallPhase.Installed ? Progress.LogPath : null;
-
-    public bool HasLog => !string.IsNullOrEmpty(LogPath);
-
-    /// <summary>The per-machine note carries the Release page link (spec #20 §5: "with the release link").</summary>
-    public bool ShowNoteReleasePage => HasNote && IsForEveryone && State == ProductState.UpdateAvailable && !HasAction;
-
-    public bool HasNoteLinks => HasLog || ShowNoteReleasePage;
-
-    /// <summary>The release page link: beside every button, and with the per-machine note.</summary>
-    public bool ShowReleasePage => HasAction || (IsForEveryone && State == ProductState.UpdateAvailable);
-
-    public ICommand ReleasePageCommand => Commands.ReleasePage;
+    /// <summary>The one line a row may show: a failure (error); a restart to finish, or who updates an install for everyone (warning).</summary>
+    public bool ShowNote => NoteKind is RowNoteKind.Error or RowNoteKind.Warning;
 
     public ICommand ActCommand => Commands.Act;
 
     public ICommand CancelCommand => Commands.Cancel;
-
-    public ICommand OpenLogCommand => Commands.OpenLog;
 
     public ICommand RemoveCommand => Commands.Remove ?? RowCommands.None;
 
@@ -350,13 +336,8 @@ internal sealed class UpdatesViewModel : ObservableObject
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _checks = checks ?? throw new ArgumentNullException(nameof(checks));
         _commands = new RowCommands(
-            new RelayCommand<ProductRowViewModel>(row => _host.OpenReleasePage(row.Status.Product)),
             new RelayCommand<ProductRowViewModel>(Act),
             new RelayCommand<ProductRowViewModel>(row => _host.CancelInstall(row.Status.Product)),
-            new RelayCommand<ProductRowViewModel>(row =>
-            {
-                if (row.LogPath is { } log) _host.OpenLog(log);
-            }),
             new RelayCommand<ProductRowViewModel>(Remove));
         CheckNowCommand = new RelayCommand(() =>
         {
@@ -422,9 +403,6 @@ internal sealed class UpdatesViewModel : ObservableObject
             };
         }
     }
-
-    /// <summary>RST can be updated from here: the note beside the Update button, with the Release page link.</summary>
-    public bool ShowRstInstallNote => Rst.IsUpdateAvailable && Rst.HasAction;
 
     /// <summary>Automatic checks are off (the setting or the preset).</summary>
     public bool ShowChecksOff => !_snapshot.AutomaticChecks;

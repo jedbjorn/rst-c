@@ -55,8 +55,6 @@ internal sealed class FakeUpdatesHost : ITrayUpdatesHost
 
     public void CheckNow() => Calls.Add("check");
 
-    public void OpenReleasePage(ProductInfo product) => Calls.Add("release:" + product.Id);
-
     // F17 WU4.
 
     public IReadOnlyDictionary<string, InstallProgress> Installs { get; set; } = new Dictionary<string, InstallProgress>();
@@ -69,8 +67,6 @@ internal sealed class FakeUpdatesHost : ITrayUpdatesHost
     public void ReinstallPrevious(ProductInfo product) => Calls.Add("reinstall:" + product.Id);
 
     public void CancelInstall(ProductInfo product) => Calls.Add("cancel:" + product.Id);
-
-    public void OpenLog(string path) => Calls.Add("log:" + path);
 
     public void DismissSisterOffer() => Calls.Add("dismiss-offer");
 
@@ -246,13 +242,11 @@ public class TrayUpdatesScreenshotTests
             var texts = Texts(window.UpdatesPage);
             var failed = ById(window, "Tray.CheckFailed");
             var off = ById(window, "Tray.ChecksOff");
-            var note = ById(window, "Tray.RstInstallNote");
             switch (scenario)
             {
                 case "available":
                     Assert.Equal("RST 3.1.1 is available", window.RstHeadline.Text);
                     Assert.Equal("Last checked today at 09:14", window.LastChecked.Text);
-                    Assert.True(note.IsVisible);
                     Assert.True(ById(window, "Tray.RstUpdate").IsEnabled, "Update installs on click (WU4)");
                     Assert.Equal("Update", ((Button)ById(window, "Tray.RstUpdate")).Content);
                     Assert.Contains("Update available", texts);
@@ -261,7 +255,6 @@ public class TrayUpdatesScreenshotTests
                 case "current":
                     Assert.Equal("RST is up to date", window.RstHeadline.Text);
                     Assert.Equal("Last checked yesterday at 09:14", window.LastChecked.Text);
-                    Assert.False(note.IsVisible);
                     Assert.Contains(texts, t => t.Contains("1.1.0, for everyone on this PC"));
                     break;
                 case "off":
@@ -309,7 +302,7 @@ public class TrayUpdatesScreenshotTests
             var rows = window.ViewModel.Updates.Rows;
             Assert.Equal(new[] { "RST", "Gantt-It", "Splash-It" }, rows.Select(r => r.Name));
             var texts = Texts(window.AppsPage);
-            Assert.Contains(TrayStrings.Apps_InstallsNote, texts);
+            Assert.DoesNotContain(texts, t => t.Contains("Release page") || t.Contains("Open log")); // issue #250: no links
             Assert.False(ById(window, "Tray.AppsDetecting").IsVisible);
             foreach (var row in rows.Where(r => r.HasAction))
                 Assert.True(ById(window, $"Tray.App.{row.Id}.Action").IsEnabled, "Install and Update act on click (WU4)");
@@ -318,7 +311,6 @@ public class TrayUpdatesScreenshotTests
             {
                 Assert.Equal(new[] { ProductState.UpdateAvailable, ProductState.InstalledManually, ProductState.NotInstalled },
                              rows.Select(r => r.State));
-                Assert.Contains(TrayStrings.App_ManualNote, texts);
                 Assert.Equal("Update", rows[0].ActionText);
                 Assert.Null(rows[1].ActionText);
                 Assert.Equal("Install", rows[2].ActionText);
@@ -337,13 +329,11 @@ public class TrayUpdatesScreenshotTests
                 Assert.Contains(TrayStrings.State_Unknown, texts);
                 Assert.DoesNotContain("Not installed", texts);
                 Assert.DoesNotContain("Installed manually", texts);
-                Assert.DoesNotContain(TrayStrings.App_ManualNote, texts);
             }
             else
             {
                 Assert.Equal(new[] { ProductState.UpToDate, ProductState.UpdateAvailable, ProductState.UpToDate },
                              rows.Select(r => r.State));
-                Assert.DoesNotContain(TrayStrings.App_ManualNote, texts);
                 Assert.Contains(texts, t => t.Contains("1.1.0, for everyone on this PC"));
             }
             Assert.Equal(scenario == "unknown", ById(window, "Tray.DetectionFailed").IsVisible);
@@ -459,7 +449,6 @@ public class UpdatesViewModelTests
         Assert.Equal("Update available", rst.StateText);
         Assert.True(rst.IsUpdateAvailable);
         Assert.Equal("Installed manually", gantt.InstalledText);
-        Assert.True(gantt.ShowManualNote);
         Assert.True(gantt.IsManual);
         Assert.Equal("Not installed", splash.InstalledText);
         Assert.Equal("Install", splash.ActionText);
@@ -535,7 +524,8 @@ public class UpdatesViewModelTests
         host.Publish(Scenarios.Mixed with { SisterOffer = true });
         row = Assert.Single(vm.OfferRows);
         Assert.Null(row.ActionText);
-        Assert.True(row.HasNote);
+        Assert.Equal("Installing…", row.BusyText);
+        Assert.False(row.ShowNote, "progress is the button's, not a line of text (issue #250)");
         host.Installs = new Dictionary<string, InstallProgress>();
         host.Publish(Scenarios.Current with { SisterOffer = true });
         Assert.False(vm.ShowOffer);
@@ -560,9 +550,6 @@ public class UpdatesViewModelTests
         Assert.False(vm.CheckNowCommand.CanExecute(null));
         vm.CheckNowCommand.Execute(null);
         Assert.Single(host.Calls);
-
-        vm.Rows[2].ReleasePageCommand.Execute(vm.Rows[2]);
-        Assert.Equal("release:splash-it", host.Calls[^1]);
     }
 
     [Fact]
