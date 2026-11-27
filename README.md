@@ -13,6 +13,7 @@ purpose: Native Revit add-in for curated ribbon profiles
 [![Latest release](https://img.shields.io/github/v/release/jedbjorn/rst-c?sort=semver&display_name=tag&label=latest%20release&color=2ea44f&style=flat-square)](https://github.com/jedbjorn/rst-c/releases/latest)
 [![Release date](https://img.shields.io/github/release-date/jedbjorn/rst-c?style=flat-square&color=2ea44f)](https://github.com/jedbjorn/rst-c/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/jedbjorn/rst-c/total?style=flat-square&color=6b46c1)](https://github.com/jedbjorn/rst-c/releases)
+[![Unique cloners in the last 14 days](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjedbjorn%2Fsubfloor%2Fclone-traffic%2Funique-cloners.json&query=%24%5B%27rst-c%27%5D.unique_cloners_14d&label=unique%20cloners%20%2814d%29&color=blue&style=flat-square)](https://github.com/jedbjorn/subfloor/blob/clone-traffic/unique-cloners.json)
 [![License: MIT](https://img.shields.io/github/license/jedbjorn/rst-c?style=flat-square&color=blue)](https://github.com/jedbjorn/rst-c/blob/main/LICENSE)
 
 [![Revit 2025 · 2026 · 2027](https://img.shields.io/badge/Revit-2025%20%C2%B7%202026%20%C2%B7%202027-0696D7?style=flat-square&logo=autodeskrevit&logoColor=white)](#install)
