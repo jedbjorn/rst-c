@@ -211,7 +211,5 @@ internal sealed class TrayViewModel : ObservableObject
         public TimeZoneInfo TimeZone => TimeZoneInfo.Local;
 
         public void CheckNow() { }
-
-        public void OpenReleasePage(ProductInfo product) { }
     }
 }

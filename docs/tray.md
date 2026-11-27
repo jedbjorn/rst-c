@@ -18,7 +18,7 @@ The tray shows which versions of RST, Gantt-It, Splash-It, Pick-It and Drive-It 
 
 - **RST Profiles:** the active profile and **Apply profile…**, with the Profile Loader's own switching, and per installed Revit year what RST switched off, what it can't switch back on, **Launch** and **Launch with Profile**. See [RST Profiles](#rst-profiles).
 - **Updates:** RST's installed and latest versions, **Check now**, and when it last checked; then Gantt-It, Splash-It, Pick-It and Drive-It. See [Updates](#updates).
-- **Apps:** one row each for RST, Gantt-It, Splash-It, Pick-It and Drive-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. An early release carries an **Alpha** badge beside its name (Drive-It, which needs Revit 2026), here, on the Updates page and in the setup's checkbox. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you; **Release page** opens the app's latest release on GitHub. **Remove** takes away a companion installed for your Windows user (see [Removing a companion](#removing-a-companion)).
+- **Apps:** one row each for RST, Gantt-It, Splash-It, Pick-It and Drive-It. Each row shows the installed version, the latest version and a state: **Up to date**, **Update available**, **Not installed**, **Installed manually**, or **Unknown (couldn't read installed apps)** when Windows Installer can't be asked. A repo with no full release yet says **No release yet**. An early release carries an **Alpha** badge beside its name (Drive-It, which needs Revit 2026), here, on the Updates page and in the setup's checkbox. **Update** (an update is out) and **Install** (Gantt-It or Splash-It not installed yet) install it for you. **Remove** takes away a companion installed for your Windows user (see [Removing a companion](#removing-a-companion)). On hover, Install tints green, Update blue and Remove amber. While one runs, its button reads **Installing…**, **Updating…** or **Removing…**. The row stays quiet otherwise: the state pill says how it went, and a line of text appears only for a failure, a restart Windows needs, or an install for everyone on this PC.
 - **Health:** **Device**, this PC's snapshot and junk file cleanup without Revit, and **Models**, every model you have worked on on this PC, across Revit versions, with each model's activity and health. See [Health page](#health-page).
 - **Settings:**
   - **Theme:** System (follows your Windows app theme), Light or Dark.
@@ -137,12 +137,12 @@ This advisory-only policy (decision #73) replaces the Revit wait in Feature #17 
 
 Installs run one at a time: an app asked for while another installs says it is waiting its turn. Right before it runs, the tray checks the file's SHA256 and identity once more, and what is installed (no downgrade), and keeps the file open so nothing can change it until the install has finished.
 
-The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file> /qn /norestart MSIRESTARTMANAGERCONTROL=Disable`, and disables Restart Manager application shutdown. It keeps its log in `%LocalAppData%\RST\Tray\logs\install-<app>-<date>-<time>.log` (**Open log** on the row).
+The tray runs Windows' own installer, `C:\Windows\System32\msiexec.exe /i <file> /qn /norestart MSIRESTARTMANAGERCONTROL=Disable`, and disables Restart Manager application shutdown. It keeps its log in `%LocalAppData%\RST\Tray\logs\install-<app>-<date>-<time>.log`.
 
-- **Installed:** the row says so.
-- **Restart needed** (msiexec 3010): the app is installed, and Windows asks for a restart to finish. The tray never restarts the PC.
+- **Installed:** the row's pill shows the new state.
+- **Restart needed** (msiexec 3010): the app is installed, and the row says Windows needs a restart to finish. The tray never restarts the PC.
 - **Another installation is running** (1618): the tray tries again after three minutes, three times in all. During a self-update's retries (up to two 3-minute waits plus the installer runs), the updater deliberately keeps the tray's single-instance mutex, so no tray can start until it finishes (SC-017 DN3).
-- **Anything else:** the row gives the error number, and **Open log** shows the details.
+- **Anything else:** the row gives the error number; the log has the details.
 
 The tray keeps each app's last installed file in `%LocalAppData%\RST\Tray\cache\<app>\<version>\`. Gantt-It, Splash-It, Pick-It and Drive-It remove their old version before they install the new one, so a failed upgrade can leave neither installed. The row then offers **Reinstall previous version (x.y.z)**: from the cache, or, if the tray didn't install that version itself, downloaded and checked the same four ways.
 
@@ -158,20 +158,20 @@ The tray hands over only when no other install is running, waiting or queued: th
 
 ### Installed for everyone on this PC
 
-If RST, or Gantt-It, Splash-It, Pick-It or Drive-It, is installed for everyone on the PC, a tray running for your account doesn't install over it. The row says, for example: "RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here," with the release page link.
+If RST, or Gantt-It, Splash-It, Pick-It or Drive-It, is installed for everyone on the PC, a tray running for your account doesn't install over it. The row says, for example: "RST 3.1.1 is available. It's installed for everyone on this PC, so run RST-Setup.exe as an administrator or ask whoever manages software here."
 
 ### Removing a companion
 
 **Remove** sits under the row's Install or Update button (or alone when there is none). Hover it for "Remove {app} for your Windows user." It is offered only for Gantt-It, Splash-It, Pick-It or Drive-It when Windows Installer installed it **for your Windows user**, and only while nothing is installing, updating or removing it. It is never offered for RST (remove RST in **Settings → Apps**), nor for an app installed for everyone on this PC, installed manually, or in an unknown state.
 
-Click **Remove**, then **Yes** at "Remove {app}?". **No** changes nothing. Removals take their turn with installs and updates, one at a time. In its turn, the tray looks the app up again by its UpgradeCode (from the tray's catalog, `companions/companions.json`) and checks that it is still one install for your Windows user only; otherwise it removes nothing and says so. It then runs `C:\Windows\System32\msiexec.exe /x {ProductCode} /qn /norestart /l*v <log> MSIRESTARTMANAGERCONTROL=Disable`, with its log beside the install logs (`remove-<app>-<date>-<time>.log`, **Open log** on the row). Once it runs it can't be cancelled.
+Click **Remove**, then **Yes** at "Remove {app}?". **No** changes nothing. Removals take their turn with installs and updates, one at a time. In its turn, the tray looks the app up again by its UpgradeCode (from the tray's catalog, `companions/companions.json`) and checks that it is still one install for your Windows user only; otherwise it removes nothing and says so. It then runs `C:\Windows\System32\msiexec.exe /x {ProductCode} /qn /norestart /l*v <log> MSIRESTARTMANAGERCONTROL=Disable`, with its log beside the install logs (`remove-<app>-<date>-<time>.log`). Once it runs it can't be cancelled.
 
-- **Removed** (msiexec 0): the row says "{app} removed." and shows **Not installed** with the plain **Install** button, never "Reinstall previous version". This includes an app Revit has loaded: Windows Installer deletes its files, and Revit keeps the copy it loaded until it closes.
-- **Restart needed** (3010 or 1641): removed; Windows finishes after a restart. The tray never restarts the PC.
+- **Removed** (msiexec 0): the row shows **Not installed** with the plain **Install** button, never "Reinstall previous version". This includes an app Revit has loaded: Windows Installer deletes its files, and Revit keeps the copy it loaded until it closes.
+- **Restart needed** (3010 or 1641): removed; the row says Windows finishes after a restart. The tray never restarts the PC.
 - **Another installation is running** (1618): the tray tries again after three minutes, three times in all, as installs do.
-- **Anything else:** "Couldn't remove {app}:" with the error number, and **Open log** shows the details.
+- **Anything else:** "Couldn't remove {app}:" with the error number; the log has the details.
 
-Removal doesn't wait for Revit or close it; the page's close-Revit advice covers it. Only what the app's installer put there goes: its settings and logs under `%AppData%` stay. A removed app is treated as never installed, so the Apps page offers **Install** again. If it is installed again outside RST, the row drops "{app} removed." and offers **Remove** again as soon as the tray finds it.
+Removal doesn't wait for Revit or close it; the page's close-Revit advice covers it. Only what the app's installer put there goes: its settings and logs under `%AppData%` stay. A removed app is treated as never installed, so the Apps page offers **Install** again. If it is installed again outside RST, the row offers **Remove** again as soon as the tray finds it.
 
 ## Quitting it
 

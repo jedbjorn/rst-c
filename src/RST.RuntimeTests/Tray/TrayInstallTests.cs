@@ -572,12 +572,11 @@ public class TrayInstallWordingTests
         var host = InstallScenarios.Host("advice");
         var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
         Assert.Equal(new[] { "Update", "Update", "Install" }, vm.Rows.Select(r => r.ActionText));
-        Assert.True(vm.ShowRstInstallNote);
+        Assert.Equal(new[] { true, true, false }, vm.Rows.Select(r => r.IsUpdateAction)); // blue on hover; Install is green
 
         var machine = new UpdatesViewModel(InstallScenarios.Host("permachine"), () => new UpdateChecksState(true, false));
         Assert.Null(machine.Rst.ActionText);
-        Assert.False(machine.ShowRstInstallNote);
-        Assert.True(machine.Rst.ShowNoteReleasePage);
+        Assert.True(machine.Rst.ShowNote, "who can update an install for everyone is the one idle line");
 
         // A per-machine TRAY (Program Files) never installs RST, even when Windows Installer reports a per-user one.
         var tray = InstallScenarios.Host("advice");
@@ -591,10 +590,8 @@ public class TrayInstallWordingTests
 /// <summary>Remove on the Apps page (spec #38; AC8 and the Remove outcomes): which rows offer it, the question, the words.</summary>
 public class TrayRemoveTests
 {
-    private static readonly System.Windows.Input.ICommand Nothing = new RST.UI.Mvvm.RelayCommand(() => { });
-
     private static ProductRowViewModel Row(ProductStatus status, InstallProgress? progress = null, bool detected = true) =>
-        new(status, RowCommands.ReleasePageOnly(Nothing), detected, progress, perMachineTray: false);
+        new(status, RowCommands.Inert, detected, progress, perMachineTray: false);
 
     private static ProductStatus Drive(InstallKind kind = InstallKind.Installer, InstallContext context = InstallContext.User) =>
         Scenarios.S("drive-it", kind, kind == InstallKind.Installer ? "0.2.0" : null, "0.2.0", context: context);
@@ -661,19 +658,25 @@ public class TrayRemoveTests
         var removed = Row(Drive(InstallKind.NotInstalled), new InstallProgress(InstallPhase.Installed, version, ExitCode: 0, LogPath: log, Removal: true));
         Assert.Equal("Drive-It removed.", removed.NoteText);
         Assert.Equal(RowNoteKind.Success, removed.NoteKind);
+        Assert.False(removed.ShowNote, "success is the pill's, not a line of text (issue #250)");
         Assert.Equal("Install", removed.ActionText);
         Assert.Null(removed.ReinstallVersion);
-        Assert.Equal(log, removed.LogPath);
         Assert.Equal("Not installed", removed.StateText);
 
         Assert.Equal("Drive-It removed. Restart Windows to finish; RST never restarts it for you.",
             Note(new InstallProgress(InstallPhase.Installed, version, ExitCode: 3010, LogPath: log, RestartNeeded: true, Removal: true), InstallKind.NotInstalled));
+        Assert.True(Row(Drive(InstallKind.NotInstalled), new InstallProgress(InstallPhase.Installed, version, ExitCode: 3010, RestartNeeded: true, Removal: true)).ShowNote,
+            "a restart to finish is still said");
         Assert.Equal("Drive-It removed. Restart Windows to finish; RST never restarts it for you.",
             Note(new InstallProgress(InstallPhase.Installed, version, ExitCode: 1641, LogPath: log, RestartNeeded: true, Removal: true), InstallKind.NotInstalled));
 
         Assert.Equal("Waiting its turn: Drive-It is removed when the installation before it has finished.",
             Note(new InstallProgress(InstallPhase.Queued, Removal: true)));
         Assert.Equal("Removing Drive-It…", Note(new InstallProgress(InstallPhase.Installing, version, Removal: true)));
+        var removing = Row(Drive(), new InstallProgress(InstallPhase.Installing, version, Removal: true));
+        Assert.Equal("Removing…", removing.BusyText);
+        Assert.True(removing.HasButtons);
+        Assert.False(removing.ShowNote);
         Assert.Equal("Another installation is running. RST tries removing Drive-It again in a few minutes.",
             Note(new InstallProgress(InstallPhase.RetryLater, version, ExitCode: 1618, LogPath: log, Removal: true)));
         Assert.Equal("Another installation kept running, so Drive-It wasn't removed. Try again later.",
@@ -682,7 +685,7 @@ public class TrayRemoveTests
         var failed = Row(Drive(), new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallFailed, ExitCode: 1603, LogPath: log, Removal: true));
         Assert.Equal("Couldn't remove Drive-It: Windows Installer stopped with error 1603. The log has the details.", failed.NoteText);
         Assert.Equal(RowNoteKind.Error, failed.NoteKind);
-        Assert.True(failed.HasLog);
+        Assert.True(failed.ShowNote, "a failure is the one line a row still shows");
         Assert.Null(failed.ReinstallVersion);
 
         Assert.Equal("RST didn't remove Drive-It: RST couldn't tell what is installed. Nothing was changed.",

@@ -95,44 +95,65 @@
                 </WrapPanel>
             </DataTemplate>
 
-            <!-- A row's install note (F17 WU4): what the install is doing (info), how it ended (success or error), or
-                 who can update an install for everyone on this PC (warning). Open log after msiexec ran; the
-                 Release page with the per-machine note. The data is a ProductRowViewModel. -->
-            <DataTemplate x:Key="RowNoteText">
-                <StackPanel>
-                    <TextBlock Text="{Binding NoteText}" TextWrapping="Wrap" />
-                    <WrapPanel Margin="0,3,0,0" Visibility="{Binding HasNoteLinks, Converter={StaticResource BoolToVisible}}">
-                        <TextBlock Margin="0,0,14,0" Visibility="{Binding HasLog, Converter={StaticResource BoolToVisible}}">
-                            <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding OpenLogCommand}" CommandParameter="{Binding}"
-                                       AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.OpenLog}">
-                                <Run Text="{x:Static res:TrayStrings.App_OpenLog}" />
-                            </Hyperlink>
-                        </TextBlock>
-                        <TextBlock Visibility="{Binding ShowNoteReleasePage, Converter={StaticResource BoolToVisible}}">
-                            <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding ReleasePageCommand}" CommandParameter="{Binding}">
-                                <Run Text="{x:Static res:TrayStrings.App_ReleasePage}" />
-                            </Hyperlink>
-                        </TextBlock>
-                    </WrapPanel>
-                </StackPanel>
-            </DataTemplate>
+            <!-- A row's one line of text (issue #250): only a failure (error), a restart to finish, or who can update
+                 an install for everyone on this PC (muted). Progress and success are the button's and the pill's. -->
             <DataTemplate x:Key="RowNote">
-                <Grid Margin="0,8,0,0" Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}"
-                      AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Note}">
-                    <Border Style="{StaticResource InfoBanner}" Visibility="{Binding IsNoteProgress, Converter={StaticResource BoolToVisible}}">
-                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
-                    </Border>
-                    <Border Style="{StaticResource SuccessBanner}" Visibility="{Binding IsNoteSuccess, Converter={StaticResource BoolToVisible}}">
-                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
-                    </Border>
-                    <Border Style="{StaticResource WarningBanner}" Visibility="{Binding IsNoteWarning, Converter={StaticResource BoolToVisible}}">
-                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
-                    </Border>
-                    <Border Style="{StaticResource ErrorBanner}" Visibility="{Binding IsNoteError, Converter={StaticResource BoolToVisible}}">
-                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNoteText}" Focusable="False" IsTabStop="False" />
-                    </Border>
-                </Grid>
+                <TextBlock Text="{Binding NoteText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Visibility="{Binding ShowNote, Converter={StaticResource BoolToVisible}}"
+                           AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Note}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsNoteError}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </DataTemplate>
+
+            <!-- The app buttons (issue #250): plain at rest; on hover Install tints green, Update blue, Remove amber. -->
+            <Style x:Key="InstallButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="MinWidth" Value="96" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource SuccessSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource SuccessBorderBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="UpdateButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="MinWidth" Value="96" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource InfoBorderBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="RemoveButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="MinWidth" Value="96" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource WarningBorderBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <!-- A row's action button: Install's green, or Update's blue when the row's button is Update. -->
+            <Style x:Key="AppActionButton" TargetType="Button" BasedOn="{StaticResource InstallButton}">
+                <Style.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                            <Condition Binding="{Binding IsUpdateAction}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource InfoBorderBrush}" />
+                    </MultiDataTrigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -196,8 +217,12 @@
                                     AutomationProperties.AutomationId="Tray.CheckNow" />
                             <Button x:Name="RstUpdateButton" Content="{Binding Rst.ActionText}" Command="{Binding Rst.ActCommand}"
                                     CommandParameter="{Binding Rst}" IsEnabled="{Binding Rst.CanAct}" MinWidth="110" Margin="0,8,0,0"
+                                    Style="{StaticResource UpdateButton}"
                                     Visibility="{Binding Rst.HasAction, Converter={StaticResource BoolToVisible}}"
                                     AutomationProperties.AutomationId="Tray.RstUpdate" />
+                            <Button Content="{Binding Rst.BusyText}" IsEnabled="False" MinWidth="110" Margin="0,8,0,0"
+                                    Visibility="{Binding Rst.IsBusy, Converter={StaticResource BoolToVisible}}"
+                                    AutomationProperties.AutomationId="Tray.RstBusy" />
                             <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding Rst.CancelCommand}"
                                     CommandParameter="{Binding Rst}" MinWidth="110" Margin="0,8,0,0"
                                     Visibility="{Binding Rst.CanCancel, Converter={StaticResource BoolToVisible}}"
@@ -238,19 +263,18 @@
                                                                 Focusable="False" IsTabStop="False" />
                                             </StackPanel>
                                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
-                                            <!-- The install's progress or outcome, as text: the Apps page's row has the banner and the log link. -->
-                                            <TextBlock Text="{Binding NoteText}" Style="{StaticResource Hint}" TextWrapping="Wrap"
-                                                       Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}"
-                                                       AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Note}" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0"
                                                     Visibility="{Binding HasButtons, Converter={StaticResource BoolToVisible}}">
                                             <Button Content="{Binding ActionText}" Command="{Binding ActCommand}" CommandParameter="{Binding}"
-                                                    IsEnabled="{Binding CanAct}" MinWidth="96" Style="{StaticResource PrimaryButton}"
+                                                    IsEnabled="{Binding CanAct}" Style="{StaticResource InstallButton}"
                                                     Visibility="{Binding HasAction, Converter={StaticResource BoolToVisible}}"
                                                     AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Action}" />
+                                            <Button Content="{Binding BusyText}" IsEnabled="False" MinWidth="96"
+                                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisible}}"
+                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Busy}" />
                                             <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding CancelCommand}" CommandParameter="{Binding}"
-                                                    MinWidth="96" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
+                                                    MinWidth="96" Margin="0,6,0,0" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
                                                     AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.Offer.{0}.Cancel}" />
                                         </StackPanel>
                                     </Grid>
@@ -269,17 +293,6 @@
                         Visibility="{Binding ShowChecksOff, Converter={StaticResource BoolToVisible}}"
                         AutomationProperties.AutomationId="Tray.ChecksOff">
                     <TextBlock Text="{Binding ChecksOffText}" TextWrapping="Wrap" />
-                </Border>
-                <Border Style="{StaticResource InfoBanner}" Margin="0,0,0,10" HorizontalAlignment="Stretch"
-                        Visibility="{Binding ShowRstInstallNote, Converter={StaticResource BoolToVisible}}"
-                        AutomationProperties.AutomationId="Tray.RstInstallNote">
-                    <TextBlock TextWrapping="Wrap">
-                        <Run Text="{x:Static res:TrayStrings.Updates_RstUpdateNote}" />
-                        <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding Rst.ReleasePageCommand}" CommandParameter="{Binding Rst}"
-                                   AutomationProperties.AutomationId="Tray.RstReleasePage">
-                            <Run Text="{x:Static res:TrayStrings.App_ReleasePage}" />
-                        </Hyperlink>
-                    </TextBlock>
                 </Border>
 
                 <Border Style="{StaticResource Panel}" Padding="16,12" AutomationProperties.AutomationId="Tray.CompanionsPanel">
@@ -315,8 +328,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Apps (F17 WU3): RST and each companion, one row each, with Install / Update / Reinstall and the
-             install's note (F17 WU4). -->
+        <!-- Apps (F17 WU3): RST and each companion, one row each: the pill, and Install / Update / Remove (issue #250). -->
 
         <ScrollViewer x:Name="AppsPage" Grid.Row="1" Style="{StaticResource Page}"
                       Visibility="{Binding IsAppsPage, Converter={StaticResource BoolToVisible}}">
@@ -354,40 +366,31 @@
                                         <TextBlock Text="{Binding Description}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,0" />
                                         <ContentControl Content="{Binding}" ContentTemplate="{StaticResource InstalledAndLatestInline}" Margin="0,6,0,0"
                                                         Focusable="False" IsTabStop="False" />
-                                        <TextBlock Text="{x:Static res:TrayStrings.App_ManualNote}" Style="{StaticResource Hint}"
-                                                   Visibility="{Binding ShowManualNote, Converter={StaticResource BoolToVisible}}" />
                                         <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RowNote}" Focusable="False" IsTabStop="False" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0"
                                                 Visibility="{Binding HasButtons, Converter={StaticResource BoolToVisible}}">
                                         <Button Content="{Binding ActionText}" Command="{Binding ActCommand}" CommandParameter="{Binding}"
-                                                IsEnabled="{Binding CanAct}" MinWidth="96"
+                                                IsEnabled="{Binding CanAct}" Style="{StaticResource AppActionButton}"
                                                 Visibility="{Binding HasAction, Converter={StaticResource BoolToVisible}}"
                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Action}" />
+                                        <Button Content="{Binding BusyText}" IsEnabled="False" MinWidth="96"
+                                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisible}}"
+                                                AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Busy}" />
                                         <!-- Remove (spec #38): under Install/Update, or alone; only on an idle companion installed for this user. -->
                                         <Button Content="{x:Static res:TrayStrings.App_Remove}" Command="{Binding RemoveCommand}" CommandParameter="{Binding}"
-                                                ToolTip="{Binding RemoveToolTip}" MinWidth="96" Margin="0,6,0,0"
+                                                ToolTip="{Binding RemoveToolTip}" Style="{StaticResource RemoveButton}" Margin="0,6,0,0"
                                                 Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisible}}"
                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Remove}" />
                                         <Button Content="{x:Static res:TrayStrings.App_Cancel}" Command="{Binding CancelCommand}" CommandParameter="{Binding}"
-                                                MinWidth="96" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
+                                                MinWidth="96" Margin="0,6,0,0" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisible}}"
                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=Tray.App.{0}.Cancel}" />
-                                        <TextBlock HorizontalAlignment="Center" Margin="0,4,0,0" FontSize="11"
-                                                   Visibility="{Binding ShowReleasePage, Converter={StaticResource BoolToVisible}}">
-                                            <Hyperlink Style="{StaticResource LoaderLink}" Command="{Binding ReleasePageCommand}" CommandParameter="{Binding}">
-                                                <Run Text="{x:Static res:TrayStrings.App_ReleasePage}" />
-                                            </Hyperlink>
-                                        </TextBlock>
                                     </StackPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Border Style="{StaticResource InfoBanner}" HorizontalAlignment="Stretch" Margin="0,2,0,0"
-                        AutomationProperties.AutomationId="Tray.InstallsNote">
-                    <TextBlock Text="{x:Static res:TrayStrings.Apps_InstallsNote}" TextWrapping="Wrap" />
-                </Border>
             </StackPanel>
         </ScrollViewer>
 

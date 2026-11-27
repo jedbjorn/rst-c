@@ -146,23 +146,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _updates?.DismissSisterOffer();
     }
 
-    /// <summary>Opens one of the tray's msiexec logs in Notepad (only a file in the tray's install-log folder).</summary>
-    public void OpenLog(string path)
-    {
-        try
-        {
-            var full = Path.GetFullPath(path);
-            if (!SelfUpdater.IsUnder(full, TrayPaths.InstallLogsDir) || !File.Exists(full)) return;
-            var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "notepad.exe")) { UseShellExecute = false };
-            start.ArgumentList.Add(full);
-            Process.Start(start)?.Dispose();
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "could not open the install log {Path}", path);
-        }
-    }
-
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
 
     public TimeZoneInfo TimeZone => TimeZoneInfo.Local;
@@ -173,21 +156,6 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         if (_quitting || _updates is null) return;
         Log.Information("check for updates now (asked by the user)");
         _updates.CheckNowAsync().Forget("tray: check for updates now");
-    }
-
-    /// <summary>The product's latest release page on github.com, built from the catalog's repo (never from data).</summary>
-    public void OpenReleasePage(ProductInfo product)
-    {
-        try
-        {
-            var uri = ReleaseFeed.LatestUri(product.Repo);
-            if (!UpdateHosts.IsAllowed(uri, UpdateHostUse.Feed)) return;
-            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "could not open the release page for {Product}", product.Name);
-        }
     }
 
     /// <summary>
