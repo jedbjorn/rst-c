@@ -8,7 +8,7 @@ upgrade a released install ("A newer version of RST is already installed."), and
 left on an older release no longer proves a dev build upgrades the current one. v3.3.0 to v3.6.0
 shipped with RstDevVersion still 3.2.99.
 
-Checks, against the latest published full release (a tag such as v3.8.0):
+Checks, against the latest published full release (a tag such as v3.8.1):
   - RstDevVersion sorts above its numeric a.b.c;
   - _build.yml has a msi-migrate leg `- release: <that tag>`.
 
