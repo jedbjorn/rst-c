@@ -51,7 +51,7 @@
          .wixproj fallbacks read this property). It must sort above the latest release and below
          the next: Windows Installer does not install a file older than the one on disk (and the
          MajorUpgrade then removes the old one, leaving none: the tray lost on a dev build over
-         v3.1.1, whose tray files are 3.1.1.0; the latest release is v3.8.0), and an MSI refuses to install over a newer
+         v3.1.1, whose tray files are 3.1.1.0; the latest release is v3.8.1), and an MSI refuses to install over a newer
          ProductVersion. Bump it after each release (installer/README.md, "Untagged builds"). -->
     <RstDevVersion>3.8.99</RstDevVersion>
     <Version Condition="'$(Version)' == ''">$(RstDevVersion)-dev</Version>

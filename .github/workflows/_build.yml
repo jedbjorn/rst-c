@@ -626,8 +626,8 @@ jobs:
   # 3.0.99, flag SC-004) must upgrade it in place. It is also the last tray-less
   # release, so the Migrate smoke's tray checks prove the first tray-carrying
   # RST.msi over it (feature #17, review N3).
-  # v3.8.0 is the latest release. Since v3.1.1 a release's tray files carry its
-  # FileVersion (v3.8.0's are 3.8.0.0): an untagged build's files must not be
+  # v3.8.1 is the latest release. Since v3.1.1 a release's tray files carry its
+  # FileVersion (v3.8.1's are 3.8.1.0): an untagged build's files must not be
   # older, or Windows Installer skips them and the MajorUpgrade removes the old
   # ones, leaving no tray. -TrayStaged checks every staged tray file is
   # installed after the upgrade, byte for byte. Move this leg to the newest
@@ -652,7 +652,7 @@ jobs:
           - release: v3.0.0
             from: Unified
             asset: RST.msi
-          - release: v3.8.0
+          - release: v3.8.1
             from: Unified
             asset: RST.msi
     steps:
