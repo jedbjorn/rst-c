@@ -1,12 +1,14 @@
 // Adapted from splash-it src/SplashIt.UI/Dialogs/DialogService.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/DialogService.cs, gantt-it commit a96d0a1), MIT, same owner.
 // Changes: namespaces (SplashIt.* to RST.*); comments say RST; SaveFile's default extension comes from the suggested file name (rst-c exports .zip, splash-it .json); Choose added (a three-way MessageDialog);
 // EscapeCancels (decision #62: the add-in's dialogs take Escape by EscapeGuard's rules; the tray app's keep WPF's own);
-// ReturnsFocus (v3.1.1, rc.3 VM finding F2: keyboard focus goes back inside the owner when a dialog closes, FocusReturn).
+// ReturnsFocus (v3.1.1, rc.3 VM finding F2: keyboard focus goes back inside the owner when a dialog closes, FocusReturn);
+// AskYesNo (a Yes/No question: the tray's "Remove {app}?", spec #38).
 
 using System.Windows;
 using System.Windows.Input;
 using Microsoft.Win32;
 using RST.Core.Colors;
+using RST.UI.Resources;
 using RST.UI.Swatches;
 
 namespace RST.UI.Dialogs;
@@ -39,6 +41,10 @@ public sealed class DialogService : IDialogService
 
     public bool Confirm(string title, string message, IReadOnlyList<string> items, string confirmText, bool danger, string automationId) =>
         Show(new MessageDialogModel(title, title, message, items, confirmText, HasCancel: true, Danger: danger), automationId);
+
+    public bool AskYesNo(string title, string question, bool danger, string automationId) =>
+        Show(new MessageDialogModel(title, question, "", [], UiStrings.Common_Yes, HasCancel: true, Danger: danger)
+             { CancelText = UiStrings.Common_No }, automationId);
 
     public DialogChoice Choose(string title, string message, string primaryText, string secondaryText, string automationId)
     {

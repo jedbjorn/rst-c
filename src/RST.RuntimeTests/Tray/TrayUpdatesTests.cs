@@ -74,6 +74,17 @@ internal sealed class FakeUpdatesHost : ITrayUpdatesHost
 
     public void DismissSisterOffer() => Calls.Add("dismiss-offer");
 
+    // Spec #38: Remove. The answer to "Remove {app}?".
+    public bool RemoveAnswer { get; set; }
+
+    public bool ConfirmRemove(ProductInfo product)
+    {
+        Calls.Add("confirm-remove:" + product.Id);
+        return RemoveAnswer;
+    }
+
+    public void Remove(ProductInfo product) => Calls.Add("remove:" + product.Id);
+
     public void Publish(UpdateSnapshot snapshot)
     {
         Current = snapshot;

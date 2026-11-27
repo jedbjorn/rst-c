@@ -571,6 +571,42 @@ To use the shared one, remove "RST" in Settings &gt; Apps, and keep "RST (all us
   <data name="Install_PerMachine" xml:space="preserve">
     <value>{0} {1} is available. It's installed for everyone on this PC, so ask whoever manages software here to update it.</value>
   </data>
+  <data name="App_Remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="App_RemoveToolTip" xml:space="preserve">
+    <value>Remove {0} for your Windows user.</value>
+  </data>
+  <data name="Remove_Confirm" xml:space="preserve">
+    <value>Remove {0}?</value>
+  </data>
+  <data name="Remove_Queued" xml:space="preserve">
+    <value>Waiting its turn: {0} is removed when the installation before it has finished.</value>
+  </data>
+  <data name="Remove_Removing" xml:space="preserve">
+    <value>Removing {0}…</value>
+  </data>
+  <data name="Remove_RetryLater" xml:space="preserve">
+    <value>Another installation is running. RST tries removing {0} again in a few minutes.</value>
+  </data>
+  <data name="Remove_Done" xml:space="preserve">
+    <value>{0} removed.</value>
+  </data>
+  <data name="Remove_DoneRestart" xml:space="preserve">
+    <value>{0} removed. Restart Windows to finish; RST never restarts it for you.</value>
+  </data>
+  <data name="Remove_Refused" xml:space="preserve">
+    <value>RST didn't remove {0}: {1}. Nothing was changed.</value>
+  </data>
+  <data name="Remove_Failed" xml:space="preserve">
+    <value>Couldn't remove {0}: Windows Installer stopped with error {1}. The log has the details.</value>
+  </data>
+  <data name="Remove_Busy" xml:space="preserve">
+    <value>Another installation kept running, so {0} wasn't removed. Try again later.</value>
+  </data>
+  <data name="Problem_NotPerUser" xml:space="preserve">
+    <value>it isn't installed by Windows Installer for your Windows user only</value>
+  </data>
   <data name="Problem_NotInstallable" xml:space="preserve">
     <value>RST doesn't know this app's installer</value>
   </data>

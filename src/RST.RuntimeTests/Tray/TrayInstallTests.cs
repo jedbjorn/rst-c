@@ -5,6 +5,9 @@
 //     install under way, done, a failed upgrade with "Reinstall previous version", a per-machine install, and every
 //     failure message in plain words (one gallery);
 //   - every InstallProblem and NetFailure has its plain wording, and none of it is exception text;
+//   - Remove (spec #38, AC8): offered only on an idle companion Windows Installer installed for this user (never RST,
+//     for everyone, by hand, unknown or busy); asked Yes/No first; each removal outcome in plain words, and a removed
+//     companion offers the plain Install, never "Reinstall previous version";
 //   - AC6 (TrayInstallFixtureTests, run by installer/ci-tray-install.ps1): the real InstallCoordinator with the real
 //     msi.dll (MsiDatabase, MsiProducts), System32's msiexec without a Revit.exe gate, against a fake GitHub
 //     serving spec #15's fixture companion MSI: each of the eight refusals with its logged reason, the good fixture
@@ -91,6 +94,22 @@ internal static class InstallScenarios
             case "handoff":
                 host.Installs = new Dictionary<string, InstallProgress> { ["rst"] = new(InstallPhase.HandingOff, V311) };
                 break;
+            case "remove":
+                // Spec #38: Remove alone (Gantt-It), removing (Splash-It), removed (Drive-It: Install again), a failed
+                // removal (Pick-It: Remove again, with its log). RST never offers Remove.
+                host.Current = Snapshot(
+                    S("rst", InstallKind.Installer, "3.1.0", "3.1.1"),
+                    S("gantt-it", InstallKind.Installer, "1.2.0", "1.2.0"),
+                    S("splash-it", InstallKind.Installer, "1.1.0", "1.1.0"),
+                    S("drive-it", InstallKind.NotInstalled, null, "0.2.0"),
+                    S("pick-it", InstallKind.Installer, "1.0.0", "1.0.0"));
+                host.Installs = new Dictionary<string, InstallProgress>
+                {
+                    ["splash-it"] = new(InstallPhase.Installing, V110, Removal: true),
+                    ["drive-it"] = new(InstallPhase.Installed, new ReleaseVersion(0, 2, 0), ExitCode: 0, LogPath: Log("drive-it", "remove"), Removal: true),
+                    ["pick-it"] = new(InstallPhase.Failed, V100, InstallProblem.InstallFailed, ExitCode: 1603, LogPath: Log("pick-it", "remove"), Removal: true),
+                };
+                break;
             case "queue":
                 // Review B1: one install at a time; RST's self-update goes last.
                 host.Installs = new Dictionary<string, InstallProgress>
@@ -104,7 +123,7 @@ internal static class InstallScenarios
         return host;
     }
 
-    private static string Log(string id) => $@"C:\Users\modeller\AppData\Local\RST\Tray\logs\install-{id}-20261030-091500.log";
+    private static string Log(string id, string action = "install") => $@"C:\Users\modeller\AppData\Local\RST\Tray\logs\{action}-{id}-20261030-091500.log";
 
     /// <summary>Every failure message the pages can show, each on its own Gantt-It (or RST) row.</summary>
     public static (UpdateSnapshot Snapshot, Dictionary<string, InstallProgress> Installs, List<string> Labels) Failures()
@@ -117,7 +136,7 @@ internal static class InstallScenarios
         foreach (var problem in Enum.GetValues<InstallProblem>())
         {
             if (problem is InstallProblem.None or InstallProblem.Network or InstallProblem.PerMachine or InstallProblem.InstallFailed
-                or InstallProblem.InstallerBusy or InstallProblem.UpdaterFailed) continue;
+                or InstallProblem.InstallerBusy or InstallProblem.UpdaterFailed or InstallProblem.NotPerUser) continue;
             Add("Refused: " + problem, new InstallProgress(InstallPhase.Refused, V120, problem));
         }
         foreach (var net in Enum.GetValues<NetFailure>())
@@ -130,6 +149,11 @@ internal static class InstallScenarios
         // The one RST row (the pages need exactly one); RST's per-machine wording is in tray-*-permachine-*.png.
         Add("Failed: the updater did not start", new InstallProgress(InstallPhase.Failed, V311, InstallProblem.UpdaterFailed), rst: true);
         Add("Per machine: a companion", InstallProgress.Idle, context: InstallContext.Machine);
+        Add("Remove refused: not for this user only", new InstallProgress(InstallPhase.Refused, Problem: InstallProblem.NotPerUser, Removal: true));
+        Add("Remove refused: couldn't tell", new InstallProgress(InstallPhase.Refused, Problem: InstallProblem.DetectionFailed, Removal: true));
+        Add("Remove failed: msiexec 1603", new InstallProgress(InstallPhase.Failed, V110, InstallProblem.InstallFailed, ExitCode: 1603,
+                                                               LogPath: Log("gantt-it", "remove"), Removal: true));
+        Add("Remove failed: 1618 after three tries", new InstallProgress(InstallPhase.Failed, V110, InstallProblem.InstallerBusy, ExitCode: 1618, Removal: true));
 
         var products = new List<ProductStatus>();
         var installs = new Dictionary<string, InstallProgress>();
@@ -179,7 +203,7 @@ public class TrayInstallScreenshotTests
     public static TheoryData<string, UiTheme> AppsScenarios()
     {
         var data = new TheoryData<string, UiTheme>();
-        foreach (var s in new[] { "advice", "progress", "queue", "done", "permachine" })
+        foreach (var s in new[] { "advice", "progress", "queue", "done", "permachine", "remove" })
             foreach (var t in new[] { UiTheme.Light, UiTheme.Dark })
                 data.Add(s, t);
         return data;
@@ -281,6 +305,32 @@ public class TrayInstallScreenshotTests
                     Assert.False(Button(window, "Tray.App.rst.Action").IsVisible, "a per-user tray never installs over a per-machine install");
                     Assert.False(Button(window, "Tray.App.gantt-it.Action").IsVisible);
                     Assert.Contains("Release page", texts);
+                    Assert.False(Button(window, "Tray.App.rst.Remove").IsVisible, "never RST");
+                    Assert.False(Button(window, "Tray.App.gantt-it.Remove").IsVisible, "never an install for everyone");
+                    Assert.True(Button(window, "Tray.App.splash-it.Remove").IsVisible);
+                    break;
+                case "remove":
+                    var remove = Button(window, "Tray.App.gantt-it.Remove");
+                    Assert.True(remove.IsVisible, "Remove alone when there is no Install/Update");
+                    Assert.False(Button(window, "Tray.App.gantt-it.Action").IsVisible);
+                    Assert.Equal("Remove", remove.Content);
+                    Assert.Equal("Remove Gantt-It for your Windows user.", remove.ToolTip);
+                    Assert.False(Button(window, "Tray.App.rst.Remove").IsVisible, "never RST");
+                    Assert.Contains("Removing Splash-It…", texts);
+                    Assert.False(Button(window, "Tray.App.splash-it.Remove").IsVisible, "not while it is removed");
+                    Assert.False(Button(window, "Tray.App.splash-it.Cancel").IsVisible, "msiexec is not cancelled once it runs");
+                    Assert.Contains("Drive-It removed.", texts);
+                    Assert.Equal("Install", Button(window, "Tray.App.drive-it.Action").Content);
+                    Assert.False(Button(window, "Tray.App.drive-it.Remove").IsVisible);
+                    Assert.Contains("Couldn't remove Pick-It: Windows Installer stopped with error 1603. The log has the details.", texts);
+                    Assert.True(Button(window, "Tray.App.pick-it.Remove").IsVisible, "a failed removal can be tried again");
+                    Assert.Equal(2, texts.Count(t => t == "Open log"));
+                    // No changes nothing; Yes queues it.
+                    remove.Command.Execute(window.ViewModel.Updates.Rows[1]);
+                    Assert.Equal(new[] { "confirm-remove:gantt-it" }, host.Calls);
+                    host.RemoveAnswer = true;
+                    remove.Command.Execute(window.ViewModel.Updates.Rows[1]);
+                    Assert.Equal(new[] { "confirm-remove:gantt-it", "confirm-remove:gantt-it", "remove:gantt-it" }, host.Calls);
                     break;
             }
         }
@@ -348,6 +398,8 @@ public class TrayInstallScreenshotTests
             Assert.Contains(rows, r => r.NoteText == "RST didn't install Gantt-It 1.2.0: the download doesn't match its checksum. Nothing was changed.");
             Assert.Contains(rows, r => r.NoteText == "RST didn't install Gantt-It 1.2.0: couldn't reach GitHub. Nothing was changed.");
             Assert.Contains(rows, r => r.NoteText == "RST didn't install Gantt-It 1.2.0: GitHub answered HTTP 503. Nothing was changed.");
+            Assert.Contains(rows, r => r.NoteText == "RST didn't remove Gantt-It: it isn't installed by Windows Installer for your Windows user only. Nothing was changed.");
+            Assert.Contains(rows, r => r.NoteText == "Another installation kept running, so Gantt-It wasn't removed. Try again later.");
         }
         finally
         {
@@ -536,6 +588,108 @@ public class TrayInstallWordingTests
     }
 }
 
+/// <summary>Remove on the Apps page (spec #38; AC8 and the Remove outcomes): which rows offer it, the question, the words.</summary>
+public class TrayRemoveTests
+{
+    private static readonly System.Windows.Input.ICommand Nothing = new RST.UI.Mvvm.RelayCommand(() => { });
+
+    private static ProductRowViewModel Row(ProductStatus status, InstallProgress? progress = null, bool detected = true) =>
+        new(status, RowCommands.ReleasePageOnly(Nothing), detected, progress, perMachineTray: false);
+
+    private static ProductStatus Drive(InstallKind kind = InstallKind.Installer, InstallContext context = InstallContext.User) =>
+        Scenarios.S("drive-it", kind, kind == InstallKind.Installer ? "0.2.0" : null, "0.2.0", context: context);
+
+    [Fact]
+    public void Remove_is_offered_only_on_an_idle_companion_Windows_Installer_installed_for_this_user()
+    {
+        Assert.True(Row(Drive()).CanRemove);
+        Assert.True(Row(Scenarios.S("gantt-it", InstallKind.Installer, "1.1.0", "1.2.0")).CanRemove, "beside Update too");
+
+        Assert.False(Row(Scenarios.S("rst", InstallKind.Installer, "3.1.0", "3.1.0")).CanRemove, "never RST");
+        Assert.False(Row(Drive(context: InstallContext.Machine)).CanRemove, "never an install for everyone");
+        Assert.False(Row(Drive(context: InstallContext.UserManaged)).CanRemove, "never a per-user install by policy");
+        Assert.False(Row(Drive(InstallKind.Manual)).CanRemove, "never a copy put there by hand");
+        Assert.False(Row(Drive(InstallKind.Unknown)).CanRemove, "never when Windows Installer can't be read");
+        Assert.False(Row(Drive(InstallKind.NotInstalled)).CanRemove);
+        Assert.False(Row(Drive(), detected: false).CanRemove, "not before detection has run");
+
+        var version = new ReleaseVersion(0, 2, 0);
+        foreach (var phase in new[] { InstallPhase.Downloading, InstallPhase.Queued, InstallPhase.Installing, InstallPhase.RetryLater })
+        {
+            Assert.False(Row(Drive(), new InstallProgress(phase, version)).CanRemove, $"not while an install is {phase}");
+            Assert.False(Row(Drive(), new InstallProgress(phase, version, Removal: true)).CanRemove, $"not while a removal is {phase}");
+        }
+        Assert.False(Row(Drive(), new InstallProgress(InstallPhase.Installed, version, ExitCode: 0, Removal: true)).CanRemove,
+            "not again once removed (detection catches up)");
+        Assert.True(Row(Drive(), new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallFailed, ExitCode: 1603, Removal: true)).CanRemove,
+            "a failed removal can be tried again");
+        Assert.True(Row(Drive(), new InstallProgress(InstallPhase.Installed, version, ExitCode: 0)).CanRemove, "after an install");
+        Assert.True(Row(Drive()).HasButtons, "the button column shows for Remove alone");
+    }
+
+    [Fact]
+    public void Remove_asks_Yes_or_No_first_and_No_changes_nothing()
+    {
+        var host = new FakeUpdatesHost
+        {
+            Current = new UpdateSnapshot(new[] { Scenarios.S("rst", InstallKind.Installer, "3.1.0", "3.1.0"), Drive() },
+                                         Scenarios.Today0914, Checking: false, AutomaticChecks: true, Detected: true),
+        };
+        var vm = new UpdatesViewModel(host, () => new UpdateChecksState(true, false));
+        var rst = vm.Rows[0];
+        var drive = vm.Rows[1];
+
+        rst.RemoveCommand.Execute(rst);
+        Assert.Empty(host.Calls); // not offered, so not asked
+
+        drive.RemoveCommand.Execute(drive);
+        Assert.Equal(new[] { "confirm-remove:drive-it" }, host.Calls);
+
+        host.RemoveAnswer = true;
+        drive.RemoveCommand.Execute(drive);
+        Assert.Equal(new[] { "confirm-remove:drive-it", "confirm-remove:drive-it", "remove:drive-it" }, host.Calls);
+    }
+
+    [Fact]
+    public void Each_removal_outcome_in_plain_words_and_a_removed_companion_offers_the_plain_Install()
+    {
+        var version = new ReleaseVersion(0, 2, 0);
+        const string log = @"C:\Users\modeller\AppData\Local\RST\Tray\logs\remove-drive-it-20261030-091500.log";
+        string? Note(InstallProgress p, InstallKind kind = InstallKind.Installer) => Row(Drive(kind), p).NoteText;
+
+        // 0: removed; detection shows it not installed, with Install (latest), never "Reinstall previous version".
+        var removed = Row(Drive(InstallKind.NotInstalled), new InstallProgress(InstallPhase.Installed, version, ExitCode: 0, LogPath: log, Removal: true));
+        Assert.Equal("Drive-It removed.", removed.NoteText);
+        Assert.Equal(RowNoteKind.Success, removed.NoteKind);
+        Assert.Equal("Install", removed.ActionText);
+        Assert.Null(removed.ReinstallVersion);
+        Assert.Equal(log, removed.LogPath);
+        Assert.Equal("Not installed", removed.StateText);
+
+        Assert.Equal("Drive-It removed. Restart Windows to finish; RST never restarts it for you.",
+            Note(new InstallProgress(InstallPhase.Installed, version, ExitCode: 3010, LogPath: log, RestartNeeded: true, Removal: true), InstallKind.NotInstalled));
+        Assert.Equal("Drive-It removed. Restart Windows to finish; RST never restarts it for you.",
+            Note(new InstallProgress(InstallPhase.Installed, version, ExitCode: 1641, LogPath: log, RestartNeeded: true, Removal: true), InstallKind.NotInstalled));
+
+        Assert.Equal("Waiting its turn: Drive-It is removed when the installation before it has finished.",
+            Note(new InstallProgress(InstallPhase.Queued, Removal: true)));
+        Assert.Equal("Removing Drive-It…", Note(new InstallProgress(InstallPhase.Installing, version, Removal: true)));
+        Assert.Equal("Another installation is running. RST tries removing Drive-It again in a few minutes.",
+            Note(new InstallProgress(InstallPhase.RetryLater, version, ExitCode: 1618, LogPath: log, Removal: true)));
+        Assert.Equal("Another installation kept running, so Drive-It wasn't removed. Try again later.",
+            Note(new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallerBusy, ExitCode: 1618, LogPath: log, Removal: true)));
+
+        var failed = Row(Drive(), new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallFailed, ExitCode: 1603, LogPath: log, Removal: true));
+        Assert.Equal("Couldn't remove Drive-It: Windows Installer stopped with error 1603. The log has the details.", failed.NoteText);
+        Assert.Equal(RowNoteKind.Error, failed.NoteKind);
+        Assert.True(failed.HasLog);
+        Assert.Null(failed.ReinstallVersion);
+
+        Assert.Equal("RST didn't remove Drive-It: RST couldn't tell what is installed. Nothing was changed.",
+            Note(new InstallProgress(InstallPhase.Refused, Problem: InstallProblem.DetectionFailed, Removal: true)));
+    }
+}
+
 /// <summary>Runs only when installer/ci-tray-install.ps1 has set RST_TRAY_INSTALL_FIXTURES (Windows CI, the tray-install job).</summary>
 public sealed class TrayInstallFixtureFactAttribute : FactAttribute
 {
@@ -649,6 +803,12 @@ public sealed class TrayInstallFixtureTests : IDisposable
         {
             Interlocked.Increment(ref Runs);
             return inner.RunBundleAsync(exePath, logPath, cancel);
+        }
+
+        public Task<int> UninstallAsync(string productCode, string logPath, CancellationToken cancel)
+        {
+            Interlocked.Increment(ref Runs);
+            return inner.UninstallAsync(productCode, logPath, cancel);
         }
     }
 

@@ -21,6 +21,12 @@
 //        else  failed, with the log path; if it was an upgrade and the product is now gone (the companions'
 //              afterInstallValidate MajorUpgrade removes the old version first), "Reinstall previous version"
 //
+// Remove (spec #38, App Manager — Remove) takes the same queue: a companion only, never RST. Inside its turn the
+// product is looked up again by the catalog's UpgradeCodes and must be exactly one per-user (unmanaged) install;
+// anything else is refused and nothing runs. Then msiexec /x {ProductCode} /qn /norestart /l*v <log>
+// MSIRESTARTMANAGERCONTROL=Disable, not cancellable once it runs: 0 removed; 3010/1641 removed, restart to finish;
+// 1618 tried again as installs are; else failed, with the log. A removal never offers "Reinstall previous version".
+//
 // The pages read Current (an immutable map) and are told through Changed, raised through post (the tray's
 // dispatcher). Pure apart from its interfaces, so RST.Tests drives every path on Linux.
 
@@ -75,6 +81,10 @@ public enum InstallPhase
 /// <param name="LogPath">msiexec's verbose log.</param>
 /// <param name="RestartNeeded">Installed, Windows asks for a restart (3010).</param>
 /// <param name="Previous">After a failed upgrade that left nothing installed: the version to reinstall.</param>
+/// <param name="Removal">
+/// A removal (Remove), not an install: the phases are the same steps of msiexec /x (Installing: removing; Installed:
+/// removed). <paramref name="Version"/> is then the version being removed.
+/// </param>
 public sealed record InstallProgress(
     InstallPhase Phase,
     ReleaseVersion? Version = null,
@@ -84,7 +94,8 @@ public sealed record InstallProgress(
     int? ExitCode = null,
     string? LogPath = null,
     bool RestartNeeded = false,
-    ReleaseVersion? Previous = null)
+    ReleaseVersion? Previous = null,
+    bool Removal = false)
 {
     public static InstallProgress Idle { get; } = new(InstallPhase.Idle);
 
@@ -103,6 +114,9 @@ public interface IMsiexec
 
     /// <summary>RST-Setup.exe /quiet /norestart RstRestartManagerControl=Disable /log &lt;log&gt;: per-user, no companion switches (decision #34).</summary>
     Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel);
+
+    /// <summary>msiexec /x {ProductCode} /qn /norestart /l*v &lt;log&gt; MSIRESTARTMANAGERCONTROL=Disable (Remove, spec #38).</summary>
+    Task<int> UninstallAsync(string productCode, string logPath, CancellationToken cancel);
 }
 
 /// <summary>RST updating itself (RST.Tray: the updater copy).</summary>
@@ -130,12 +144,12 @@ public interface ISelfUpdater
 public sealed record InstallPaths(string CacheRoot, string LogsDir, string SelfUpdateResultFile)
 {
     /// <summary>
-    /// <c>install-&lt;product&gt;-&lt;yyyyMMdd-HHmmss&gt;.log</c>; a second install in the same second (a quick reinstall
-    /// after a failure) gets <c>…-2.log</c>, so msiexec never overwrites the failed install's log.
+    /// <c>install-&lt;product&gt;-&lt;yyyyMMdd-HHmmss&gt;.log</c> (<c>remove-…</c> for a removal); a second run in the same
+    /// second (a quick reinstall after a failure) gets <c>…-2.log</c>, so msiexec never overwrites the failed run's log.
     /// </summary>
-    public string LogFor(string productId, DateTimeOffset at)
+    public string LogFor(string productId, DateTimeOffset at, string action = "install")
     {
-        var stem = string.Create(CultureInfo.InvariantCulture, $"install-{productId}-{at.ToLocalTime():yyyyMMdd-HHmmss}");
+        var stem = string.Create(CultureInfo.InvariantCulture, $"{action}-{productId}-{at.ToLocalTime():yyyyMMdd-HHmmss}");
         var path = Path.Combine(LogsDir, stem + ".log");
         for (var n = 2; File.Exists(path) && n < 100; n++)
             path = Path.Combine(LogsDir, string.Create(CultureInfo.InvariantCulture, $"{stem}-{n}.log"));
@@ -294,6 +308,33 @@ public sealed class InstallCoordinator : IDisposable
         lock (_gate) return _progress.TryGetValue(productId, out var p) ? p : InstallProgress.Idle;
     }
 
+    /// <summary>
+    /// Detection found these products installed by Windows Installer. A finished removal of one of them no longer
+    /// describes it (it was installed again outside the tray), so its row goes back to idle and offers Remove again.
+    /// </summary>
+    public void Detected(IEnumerable<string> installedIds)
+    {
+        ArgumentNullException.ThrowIfNull(installedIds);
+        TaskCompletionSource changed;
+        lock (_gate)
+        {
+            var superseded = installedIds
+                .Where(id => _progress.TryGetValue(id, out var p) && p is { Removal: true, Phase: InstallPhase.Installed })
+                .ToList();
+            if (superseded.Count == 0) return;
+            _progress = new Dictionary<string, InstallProgress>(_progress, StringComparer.Ordinal);
+            foreach (var id in superseded)
+            {
+                _progress.Remove(id);
+                _log($"remove: {id} is installed again; its removal is no longer shown");
+            }
+            changed = _changed;
+            _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        changed.TrySetResult();
+        if (!_disposed) _post(() => Changed?.Invoke(this, EventArgs.Empty));
+    }
+
     /// <summary>Install or Update: <paramref name="version"/> of <paramref name="product"/>. Never throws.</summary>
     public Task InstallAsync(ProductInfo product, ReleaseVersion version) => RunAsync(product, version, RunMode.Install);
 
@@ -327,18 +368,7 @@ public sealed class InstallCoordinator : IDisposable
     private async Task RunAsync(ProductInfo product, ReleaseVersion version, RunMode mode)
     {
         ArgumentNullException.ThrowIfNull(product);
-        CancellationTokenSource cts;
-        lock (_gate)
-        {
-            if (_disposed || _running.ContainsKey(product.Id) || For(product.Id).IsBusy) return;
-            if (_handingOff)
-            {
-                _log($"install: {product.Name} not started: RST is updating itself, and the tray starts again afterwards");
-                return;
-            }
-            cts = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
-            _running[product.Id] = cts;
-        }
+        if (Claim(product) is not { } cts) return;
         var before = For(product.Id);
         var previous = before.Previous;
         try
@@ -361,16 +391,170 @@ public sealed class InstallCoordinator : IDisposable
         }
         finally
         {
-            TaskCompletionSource changed;
-            lock (_gate)
-            {
-                _running.Remove(product.Id);
-                changed = _changed;
-                _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            }
-            changed.TrySetResult(); // wake a hand-off waiting for the registered request (SC-017 DN1)
-            cts.Dispose();
+            Unclaim(product, cts);
         }
+    }
+
+    /// <summary>
+    /// Remove: a companion Windows Installer installed for this user only (spec #38). Never RST. Never throws.
+    /// The page has asked the user; this queues the removal and re-checks what it removes in its turn.
+    /// </summary>
+    public async Task RemoveAsync(ProductInfo product)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+        if (product.IsRst)
+        {
+            _log("remove: RST is never removed from the tray (Windows Settings only)");
+            return;
+        }
+        if (Claim(product) is not { } cts) return;
+        try
+        {
+            _log($"remove: {product.Name} asked for");
+            await RemoveCoreAsync(product, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            var stopping = _stop.IsCancellationRequested;
+            _log($"remove: {product.Name} {(stopping ? "stopped: the tray is closing" : "cancelled")}");
+            if (!stopping) Set(product, InstallProgress.Idle);
+        }
+        catch (Exception ex)
+        {
+            _log($"remove: {product.Name} failed unexpectedly: {ex}");
+            Set(product, new InstallProgress(InstallPhase.Failed, Problem: InstallProblem.InstallFailed, Removal: true));
+        }
+        finally
+        {
+            Unclaim(product, cts);
+        }
+    }
+
+    /// <summary>Registers the product's one request; null when it is busy, the tray is closing or RST is handing off.</summary>
+    private CancellationTokenSource? Claim(ProductInfo product)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _running.ContainsKey(product.Id) || For(product.Id).IsBusy) return null;
+            if (_handingOff)
+            {
+                _log($"install: {product.Name} not started: RST is updating itself, and the tray starts again afterwards");
+                return null;
+            }
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+            _running[product.Id] = cts;
+            return cts;
+        }
+    }
+
+    private void Unclaim(ProductInfo product, CancellationTokenSource cts)
+    {
+        TaskCompletionSource changed;
+        lock (_gate)
+        {
+            _running.Remove(product.Id);
+            changed = _changed;
+            _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        changed.TrySetResult(); // wake a hand-off waiting for the registered request (SC-017 DN1)
+        cts.Dispose();
+    }
+
+    /// <summary>
+    /// The removal's turn in the queue: find and verify the per-user product, msiexec /x, and the outcome. 1618 tries again.
+    /// </summary>
+    private async Task RemoveCoreAsync(ProductInfo product, CancellationToken cancel)
+    {
+        var runs = 0;
+        while (true)
+        {
+            if (_queue.CurrentCount == 0)
+            {
+                _log($"remove: {product.Name} waits its turn: another installation is running");
+                Set(product, new InstallProgress(InstallPhase.Queued, Removal: true));
+            }
+            await _queue.WaitAsync(cancel).ConfigureAwait(false);
+            int code;
+            string logPath;
+            ReleaseVersion? version;
+            try
+            {
+                // Find and verify in the turn itself: exactly one install of the catalog's UpgradeCode, for this user only.
+                var found = ProductDetection.Query(_installed, product, _log);
+                if (found is null)
+                {
+                    RefuseRemoval(product, InstallProblem.DetectionFailed, "Windows Installer could not be read");
+                    return;
+                }
+                if (found.Count == 0)
+                {
+                    _log($"remove: {product.Name} is not installed; nothing to remove");
+                    Set(product, InstallProgress.Idle);
+                    _installsChanged();
+                    return;
+                }
+                var target = found[0];
+                if (found.Count > 1 || target.Context != InstallContext.User)
+                {
+                    RefuseRemoval(product, InstallProblem.NotPerUser,
+                        $"Windows Installer reports {string.Join(", ", found.Select(p => $"{p.ProductCode} {p.VersionText} {p.Context}"))}");
+                    return;
+                }
+                if (ProductCatalog.NormalizeGuid(target.ProductCode) is not { } productCode)
+                {
+                    RefuseRemoval(product, InstallProblem.DetectionFailed, $"the ProductCode '{target.ProductCode}' is not a GUID");
+                    return;
+                }
+
+                version = target.Version;
+                Set(product, new InstallProgress(InstallPhase.Installing, version, Removal: true));
+                Directory.CreateDirectory(_paths.LogsDir);
+                logPath = _paths.LogFor(product.Id, _time.GetUtcNow(), "remove");
+                productCode = "{" + productCode + "}";
+                _log($"remove: msiexec /x {productCode} /qn /norestart /l*v \"{logPath}\" MSIRESTARTMANAGERCONTROL=Disable ({product.Name} {target.VersionText})");
+                // Not cancellable once started: msiexec runs to its end and its result is recorded.
+                code = await _msiexec.UninstallAsync(productCode, logPath, CancellationToken.None).ConfigureAwait(false);
+                runs++;
+            }
+            finally
+            {
+                _queue.Release();
+            }
+            _log($"remove: msiexec exited {code} for {product.Name} (log {logPath})");
+
+            if (MsiExit.Installed(code))
+            {
+                // Removed: a failed upgrade's "previous version" no longer applies (the row offers the plain Install).
+                InstallCache.ClearFailedUpgrade(_paths.CacheRoot, product.Id, _log);
+                Set(product, new InstallProgress(InstallPhase.Installed, version, ExitCode: code, LogPath: logPath,
+                                                 RestartNeeded: code != MsiExit.Success, Removal: true));
+                _installsChanged();
+                return;
+            }
+            if (code == MsiExit.AnotherInstallRunning)
+            {
+                if (runs < BusyAttempts)
+                {
+                    _log($"remove: another installation is running; trying {product.Name} again in {BusyRetryDelay.TotalMinutes:0} minutes");
+                    Set(product, new InstallProgress(InstallPhase.RetryLater, version, ExitCode: code, LogPath: logPath, Removal: true));
+                    await Task.Delay(BusyRetryDelay, _time, cancel).ConfigureAwait(false);
+                    continue;
+                }
+                Set(product, new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallerBusy, ExitCode: code,
+                                                 LogPath: logPath, Removal: true));
+                return;
+            }
+            Set(product, new InstallProgress(InstallPhase.Failed, version, InstallProblem.InstallFailed, ExitCode: code,
+                                             LogPath: logPath, Removal: true));
+            _installsChanged();
+            return;
+        }
+    }
+
+    private void RefuseRemoval(ProductInfo product, InstallProblem problem, string detail)
+    {
+        _log($"remove: refused {product.Name}: {problem}: {detail}");
+        Set(product, new InstallProgress(InstallPhase.Refused, Problem: problem, Removal: true));
     }
 
     private async Task RunCoreAsync(ProductInfo product, ReleaseVersion version, RunMode mode, ReleaseVersion? previous, CancellationToken cancel)

@@ -228,6 +228,20 @@ internal sealed class FakeMsiexec : IMsiexec
 
     /// <summary>RST-Setup.exe runs, recorded in Calls too (the path ends in .exe).</summary>
     public Task<int> RunBundleAsync(string exePath, string logPath, CancellationToken cancel) => InstallAsync(exePath, logPath, cancel);
+
+    /// <summary>msiexec /x runs, recorded in Removals (and answering from the same script).</summary>
+    public List<(string ProductCode, string Log)> Removals { get; } = new();
+
+    /// <summary>Runs after each removal with its exit code (a test updates the fake Windows Installer here).</summary>
+    public Action<string, int>? OnRemove { get; set; }
+
+    public Task<int> UninstallAsync(string productCode, string logPath, CancellationToken cancel)
+    {
+        var code = _codes.Count > 0 ? _codes.Dequeue() : 0;
+        Removals.Add((productCode, logPath));
+        OnRemove?.Invoke(productCode, code);
+        return Task.FromResult(code);
+    }
 }
 
 /// <summary>A bundle's version resource, read from fake bundle bytes (<see cref="FakeMsi.Bundle"/>).</summary>

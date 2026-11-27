@@ -4,7 +4,8 @@
 //               (decision #73: advise closing Revit, never close it for the user). Waited on by ITS OWN process
 //               handle: no redirected output (whose end-of-stream would wait for every child) and no job object.
 //               Windows Installer's Restart Manager starts the RST tray again as msiexec's child at the end of an
-//               install (WU1's hang notes), and that child must never hold the wait.
+//               install (WU1's hang notes), and that child must never hold the wait. Remove (spec #38) runs
+//               /x {ProductCode} the same way.
 
 using System.Diagnostics;
 using System.IO;
@@ -33,6 +34,30 @@ internal sealed class Msiexec : IMsiexec
     public async Task<int> InstallAsync(string msiPath, string logPath, CancellationToken cancel)
     {
         using var process = Process.Start(InstallStartInfo(msiPath, logPath)) ?? throw new InvalidOperationException("msiexec did not start");
+        await process.WaitForExitAsync(cancel).ConfigureAwait(false);
+        return process.ExitCode;
+    }
+
+    /// <summary>
+    /// Remove (spec #38): msiexec /x {ProductCode} /qn /norestart /l*v &lt;log&gt; MSIRESTARTMANAGERCONTROL=Disable, the
+    /// ProductCode the coordinator has just verified as this user's install of the catalog's UpgradeCode.
+    /// </summary>
+    internal static ProcessStartInfo UninstallStartInfo(string productCode, string logPath)
+    {
+        var start = new ProcessStartInfo(ExePath)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Environment.SystemDirectory,
+        };
+        foreach (var arg in new[] { "/x", productCode, "/qn", "/norestart", "/l*v", logPath, "MSIRESTARTMANAGERCONTROL=Disable" })
+            start.ArgumentList.Add(arg);
+        return start;
+    }
+
+    public async Task<int> UninstallAsync(string productCode, string logPath, CancellationToken cancel)
+    {
+        using var process = Process.Start(UninstallStartInfo(productCode, logPath)) ?? throw new InvalidOperationException("msiexec did not start");
         await process.WaitForExitAsync(cancel).ConfigureAwait(false);
         return process.ExitCode;
     }

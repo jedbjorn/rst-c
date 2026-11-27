@@ -377,6 +377,30 @@ public static class TrayStrings
 
     public static string Install_PerMachine(string app, string version) => Format(nameof(Install_PerMachine), app, version);
 
+    // Remove (spec #38): {0} the app.
+
+    public static string App_Remove => Get(nameof(App_Remove));
+
+    public static string App_RemoveToolTip(string app) => Format(nameof(App_RemoveToolTip), app);
+
+    public static string Remove_Confirm(string app) => Format(nameof(Remove_Confirm), app);
+
+    public static string Remove_Queued(string app) => Format(nameof(Remove_Queued), app);
+
+    public static string Remove_Removing(string app) => Format(nameof(Remove_Removing), app);
+
+    public static string Remove_RetryLater(string app) => Format(nameof(Remove_RetryLater), app);
+
+    public static string Remove_Done(string app) => Format(nameof(Remove_Done), app);
+
+    public static string Remove_DoneRestart(string app) => Format(nameof(Remove_DoneRestart), app);
+
+    public static string Remove_Refused(string app, string reason) => Format(nameof(Remove_Refused), app, reason);
+
+    public static string Remove_Failed(string app, int code) => Format(nameof(Remove_Failed), app, code);
+
+    public static string Remove_Busy(string app) => Format(nameof(Remove_Busy), app);
+
     /// <summary>
     /// A refusal or failure in plain words (WU3 review D3): never an exception's text. The detail is in the tray log.
     /// <paramref name="net"/> and <paramref name="status"/> refine <see cref="InstallProblem.Network"/>.

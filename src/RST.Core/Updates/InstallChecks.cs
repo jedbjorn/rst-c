@@ -97,6 +97,9 @@ public enum InstallProblem
     /// <summary>The tray was closing, or the user cancelled.</summary>
     Cancelled,
 
+    /// <summary>Remove: Windows Installer does not report exactly one install of it for this user only (spec #38).</summary>
+    NotPerUser,
+
 }
 
 /// <summary>What the tray installs a release with (decision #34).</summary>

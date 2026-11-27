@@ -1,7 +1,9 @@
 // Adapted from splash-it src/SplashIt.UI/Dialogs/IDialogService.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/IDialogService.cs, gantt-it commit a96d0a1), MIT, same owner.
-// Changes: namespaces (SplashIt.* to RST.*); comments say RST; Choose added (a three-way choice: the Builder's unsaved-changes prompt).
+// Changes: namespaces (SplashIt.* to RST.*); comments say RST; Choose added (a three-way choice: the Builder's unsaved-changes prompt);
+// AskYesNo added (the tray's "Remove {app}?", spec #38).
 
 using RST.Core.Colors;
+using RST.UI.Resources;
 
 namespace RST.UI.Dialogs;
 
@@ -13,6 +15,13 @@ public interface IDialogService
 
     /// <summary>A confirmation listing <paramref name="items"/>. True when the user confirms.</summary>
     bool Confirm(string title, string message, IReadOnlyList<string> items, string confirmText, bool danger, string automationId);
+
+    /// <summary>
+    /// A Yes/No <paramref name="question"/>. True on Yes; No, Escape or closing the dialog is false. Doubles that only
+    /// record confirmations get it as a Confirm with Yes.
+    /// </summary>
+    bool AskYesNo(string title, string question, bool danger, string automationId) =>
+        Confirm(title, question, [], UiStrings.Common_Yes, danger, automationId);
 
     /// <summary>
     /// A three-way choice: <paramref name="primaryText"/> (the default button), <paramref name="secondaryText"/>,

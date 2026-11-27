@@ -6,7 +6,8 @@
 // and the activity fold worker's (F19 #24 WU3, ActivityFoldWorker): folds the add-in's local session logs into rollups
 // on its own below-normal thread, 1–3 minutes after start, then every 15 minutes; it reads and writes local files only.
 // Installs (F17 WU4, InstallCoordinator) run only on a click: verified download, advice to close Revit, msiexec for
-// a companion, and for RST itself the updater copy (SelfUpdater), after which the tray quits.
+// a companion, and for RST itself the updater copy (SelfUpdater), after which the tray quits. Remove (spec #38) runs
+// only on a click and a Yes: msiexec /x for a companion installed for this user, on the same queue.
 
 using System.Diagnostics;
 using System.IO;
@@ -119,6 +120,25 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
     }
 
     public void CancelInstall(ProductInfo product) => _installs?.Cancel(product.Id);
+
+    /// <summary>The Apps page's "Remove {app}?" (spec #38), owned by the window.</summary>
+    public const string RemoveDialogId = "TrayRemoveDialog";
+
+    public bool ConfirmRemove(ProductInfo product)
+    {
+        if (_quitting || _window is null) return false;
+        var yes = new DialogService(_window).AskYesNo(TrayStrings.Notice_Title, TrayStrings.Remove_Confirm(product.Name), danger: true, RemoveDialogId);
+        Log.Information("remove {Product}: {Answer}", product.Name, yes ? "yes" : "no");
+        return yes;
+    }
+
+    /// <summary>Remove: a companion installed for this user, through the install queue (InstallCoordinator). Never blocks.</summary>
+    public void Remove(ProductInfo product)
+    {
+        if (_quitting || _installs is null) return;
+        Log.Information("remove {Product} (asked by the user)", product.Name);
+        _installs.RemoveAsync(product).Forget("tray: remove " + product.Name);
+    }
 
     public void DismissSisterOffer()
     {
@@ -283,6 +303,9 @@ internal sealed class TrayHost : ITraySettingsHost, ITrayUpdatesHost, IDisposabl
         _updates.NewVersionsFound += (_, found) => Announce(found);
         _updates.Changed += (_, _) =>
         {
+            // Spec #38: a companion removed here and installed again since drops its "removed" note.
+            _installs?.Detected(_updates.Current.Products
+                .Where(p => p.Installation.Kind == InstallKind.Installer).Select(p => p.Product.Id));
             Changed?.Invoke(this, EventArgs.Empty);
             PresentSelfUpdateResult();
         };

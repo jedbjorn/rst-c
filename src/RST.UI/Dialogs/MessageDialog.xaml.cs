@@ -1,7 +1,8 @@
 // Adapted from splash-it src/SplashIt.UI/Dialogs/MessageDialog.xaml.cs (splash-it commit ba86a71; originally gantt-it src/GanttIt.Revit/UI/Dialogs/MessageDialog.xaml.cs, gantt-it commit a96d0a1), MIT, same owner.
 // Changes: namespaces (SplashIt.* to RST.*); splash-it's DiscardChangesId is kept (the Builder's unsaved-changes prompt);
 // an optional second action button between Confirm and Cancel (MessageDialogModel.SecondaryText) and the Choice it records
-// (IDialogService.Choose, the Builder's Save & Exit / Discard & Exit / Cancel prompt).
+// (IDialogService.Choose, the Builder's Save & Exit / Discard & Exit / Cancel prompt); the cancel button's text
+// (MessageDialogModel.CancelText: No for IDialogService.AskYesNo, the tray's "Remove {app}?").
 
 using System.Windows;
 using System.Windows.Automation;
@@ -72,4 +73,7 @@ public sealed record MessageDialogModel(
 
     /// <summary>The confirm button's text: as given, or OK in the UI language.</summary>
     public string ConfirmText { get; init; } = ConfirmText ?? UiStrings.Common_OK;
+
+    /// <summary>The cancel button's text: Cancel, or No for a Yes/No question.</summary>
+    public string CancelText { get; init; } = UiStrings.Common_Cancel;
 }

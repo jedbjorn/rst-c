@@ -28,6 +28,10 @@ public static class UiStrings
 
     public static string Common_Cancel => Get(nameof(Common_Cancel));
 
+    public static string Common_Yes => Get(nameof(Common_Yes));
+
+    public static string Common_No => Get(nameof(Common_No));
+
     // SC-048 item 5: in-Revit messages share one title, independent of the last command.
     public static string Common_RstTitle => Get(nameof(Common_RstTitle));
 
